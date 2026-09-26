@@ -9,6 +9,88 @@ relationships.
 > for the supplied dataset. Preserve table and column names exactly as
 > written when generating SQL, code, mappings, or data contracts.
 
+## Dimension Tables
+
+The executable contracts define these CSV columns and required fields. Every column is
+stored as text in CSV; SQL widths and detailed semantic types for these five tables
+are not specified in the available definitions. `CSV string` records the verified
+storage type without implying an undocumented SQL type.
+
+### Customers
+
+**Type:** Dimension table\
+**Rows:** 150,000\
+**Source:** `data_foundation/src/contracts.py`
+
+| Column | Type | Constraints |
+|---|---|---|
+| `customer_id` | CSV string | PK, NOT NULL |
+| `document_number` | CSV string | - |
+| `country` | CSV string | NOT NULL |
+| `segment` | CSV string | - |
+| `customer_status` | CSV string | NOT NULL |
+| `accepts_marketing` | CSV string | - |
+| `registration_branch_id` | CSV string | FK |
+
+### Products
+
+**Type:** Dimension table\
+**Rows:** 400,000\
+**Source:** `data_foundation/src/contracts.py`
+
+| Column | Type | Constraints |
+|---|---|---|
+| `product_id` | CSV string | PK, NOT NULL |
+| `customer_id` | CSV string | FK, NOT NULL |
+| `product_type` | CSV string | NOT NULL |
+| `currency` | CSV string | NOT NULL |
+| `product_status` | CSV string | NOT NULL |
+| `opening_channel` | CSV string | - |
+| `has_linked_app` | CSV string | - |
+| `last_transaction_date` | CSV string | - |
+
+### Branches
+
+**Type:** Dimension table\
+**Rows:** 350\
+**Source:** `data_foundation/src/contracts.py`
+
+| Column | Type | Constraints |
+|---|---|---|
+| `branch_id` | CSV string | PK, NOT NULL |
+| `country` | CSV string | NOT NULL |
+| `branch_status` | CSV string | NOT NULL |
+
+### Service Agents
+
+**Type:** Dimension table\
+**Rows:** 1,200\
+**Source:** `data_foundation/src/contracts.py`
+
+| Column | Type | Constraints |
+|---|---|---|
+| `agent_id` | CSV string | PK, NOT NULL |
+| `assigned_branch_id` | CSV string | FK |
+| `agent_status` | CSV string | NOT NULL |
+
+### Marketing Campaigns
+
+**Type:** Dimension table\
+**Rows:** 200\
+**Source:** `data_foundation/src/contracts.py`
+
+| Column | Type | Constraints |
+|---|---|---|
+| `campaign_id` | CSV string | PK, NOT NULL |
+| `campaign_type` | CSV string | - |
+| `campaign_objective` | CSV string | - |
+| `promoted_product` | CSV string | - |
+| `target_segment` | CSV string | - |
+| `target_country` | CSV string | - |
+| `start_date` | CSV string | - |
+| `end_date` | CSV string | - |
+| `campaign_status` | CSV string | NOT NULL |
+
 ## Fact Tables
 
 Transactional and event data tables containing 7 fact tables.
@@ -20,6 +102,7 @@ Transactional and event data tables containing 7 fact tables.
 **Source:** `Core Banking`\
 **Partition:** `daily`
 
+```text
   ---------------------------------------------------------------------------
   Column                   Type              Description      Constraints
   ------------------------ ----------------- ---------------- ---------------
@@ -99,6 +182,7 @@ Transactional and event data tables containing 7 fact tables.
   `longitude`              `DECIMAL(10,7)`   Transaction      \-
                                              longitude        
   ---------------------------------------------------------------------------
+```
 
 ## Call Center Interactions
 
@@ -107,6 +191,7 @@ Transactional and event data tables containing 7 fact tables.
 **Source:** `Contact Center`\
 **Partition:** `daily`
 
+```text
   ---------------------------------------------------------------------------------
   Column                       Type             Description         Constraints
   ---------------------------- ---------------- ------------------- ---------------
@@ -176,6 +261,7 @@ Transactional and event data tables containing 7 fact tables.
 
   `has_recording`              `BOOLEAN`        Has audio recording NOT NULL
   ---------------------------------------------------------------------------------
+```
 
 ## Call Transcripts
 
@@ -184,6 +270,7 @@ Transactional and event data tables containing 7 fact tables.
 **Source:** `Contact Center`\
 **Partition:** `daily`
 
+```text
   ------------------------------------------------------------------------
   Column                  Type             Description     Constraints
   ----------------------- ---------------- --------------- ---------------
@@ -246,6 +333,7 @@ Transactional and event data tables containing 7 fact tables.
 
   `duration_seconds`      `INTEGER`        Call duration   NOT NULL
   ------------------------------------------------------------------------
+```
 
 ## Satisfaction Surveys
 
@@ -254,6 +342,7 @@ Transactional and event data tables containing 7 fact tables.
 **Source:** `Contact Center`\
 **Partition:** `daily`
 
+```text
   ---------------------------------------------------------------------------
   Column                     Type             Description     Constraints
   -------------------------- ---------------- --------------- ---------------
@@ -320,6 +409,7 @@ Transactional and event data tables containing 7 fact tables.
                                               response rate   
                                               (%)             
   ---------------------------------------------------------------------------
+```
 
 ## Digital Events
 
@@ -328,6 +418,7 @@ Transactional and event data tables containing 7 fact tables.
 **Source:** `Digital Banking`\
 **Partition:** `daily`
 
+```text
   -------------------------------------------------------------------------
   Column               Type              Description       Constraints
   -------------------- ----------------- ----------------- ----------------
@@ -406,6 +497,7 @@ Transactional and event data tables containing 7 fact tables.
 
   `utm_campaign`       `VARCHAR(100)`    UTM campaign      \-
   -------------------------------------------------------------------------
+```
 
 ## Complaints
 
@@ -414,6 +506,7 @@ Transactional and event data tables containing 7 fact tables.
 **Source:** `PQR`\
 **Partition:** `daily`
 
+```text
   -------------------------------------------------------------------------------
   Column                      Type              Description       Constraints
   --------------------------- ----------------- ----------------- ---------------
@@ -501,6 +594,7 @@ Transactional and event data tables containing 7 fact tables.
                                                 complaints in     
                                                 last 90 days      
   -------------------------------------------------------------------------------
+```
 
 ## Campaign Sends
 
@@ -509,6 +603,7 @@ Transactional and event data tables containing 7 fact tables.
 **Source:** `Internal`\
 **Partition:** `daily`
 
+```text
   ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   Column                                                                          Type                                                                                Description                               Constraints
   ------------------------------------------------------------------------------- ----------------------------------------------------------------------------------- ----------------------------------------- ----------------------------------
@@ -557,48 +652,8 @@ Transactional and event data tables containing 7 fact tables.
 
   `send_cost`                                                                     `DECIMAL(10,4)`                                                                     Individual send cost                      \-
 
-  `Reference data for lookups and conversions.`                                   `Daily Exchange Rates [REFERENCE]`                                                  Rows: 3,000                               Source: Reference
-
-  `Column`                                                                        `Type`                                                                              Description                               Constraints
-
-  `date`                                                                          `DATE`                                                                              Exchange rate date                        PK, NOT NULL
-
-  `source_currency`                                                               `VARCHAR(3)`                                                                        Source currency                           PK, NOT NULL
-
-  `target_currency`                                                               `VARCHAR(3)`                                                                        Target currency                           PK, NOT NULL
-
-  `exchange_rate`                                                                 `DECIMAL(12,6)`                                                                     Exchange rate                             NOT NULL
-
-  `buy_rate`                                                                      `DECIMAL(12,6)`                                                                     Bank buy rate                             \-
-
-  `sell_rate`                                                                     `DECIMAL(12,6)`                                                                     Bank sell rate                            \-
-
-  `source`                                                                        `VARCHAR(50)`                                                                       Exchange rate source                      \-
-
-  `The following foreign key relationships exist between tables:`                 `customers`                                                                         • products.customer_id →                  • transactions.customer_id →
-                                                                                                                                                                      customers.customer_id                     customers.customer_id
-
-  `• call_center_interactions.customer_id → customers.customer_id`                `• call_transcripts.customer_id → customers.customer_id`                            • satisfaction_surveys.customer_id →      • digital_events.customer_id →
-                                                                                                                                                                      customers.customer_id                     customers.customer_id
-
-  `• complaints.customer_id → customers.customer_id`                              `• campaign_sends.customer_id → customers.customer_id`                              branches                                  • customers.registration_branch_id
-                                                                                                                                                                                                                → branches.branch_id
-
-  `• products.opening_branch_id → branches.branch_id`                             `• service_agents.assigned_branch_id → branches.branch_id`                          • transactions.branch_id →                • complaints.related_branch_id →
-                                                                                                                                                                      branches.branch_id                        branches.branch_id
-
-  `service_agents`                                                                `• call_center_interactions.agent_id → service_agents.agent_id`                     • call_transcripts.agent_id →             • satisfaction_surveys.agent_id →
-                                                                                                                                                                      service_agents.agent_id                   service_agents.agent_id
-
-  `• complaints.assigned_agent_id → service_agents.agent_id`                      `products`                                                                          • transactions.product_id →               • digital_events.product_id →
-                                                                                                                                                                      products.product_id                       products.product_id
-
-  `• complaints.affected_product_id → products.product_id`                        `marketing_campaigns`                                                               • campaign_sends.campaign_id →            call_center_interactions
-                                                                                                                                                                      marketing_campaigns.campaign_id           
-
-  `• call_transcripts.interaction_id → call_center_interactions.interaction_id`   `• satisfaction_surveys.interaction_id → call_center_interactions.interaction_id`   • complaints.origin_interaction_id →      \-
-                                                                                                                                                                      call_center_interactions.interaction_id   
   ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+```
 
 ## Reference Tables
 
@@ -613,6 +668,7 @@ Reference data for lookups and conversions.
 
 Daily exchange rates for currency conversion.
 
+```text
   Column              Type              Description            Constraints
   ------------------- ----------------- ---------------------- --------------
   `date`              `DATE`            Exchange rate date     PK, NOT NULL
@@ -622,6 +678,7 @@ Daily exchange rates for currency conversion.
   `buy_rate`          `DECIMAL(12,6)`   Bank buy rate          \-
   `sell_rate`         `DECIMAL(12,6)`   Bank sell rate         \-
   `source`            `VARCHAR(50)`     Exchange rate source   \-
+```
 
 ## Foreign Key Relationships
 

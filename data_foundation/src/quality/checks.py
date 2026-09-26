@@ -10,14 +10,7 @@ import sqlite3
 import tempfile
 from typing import Any
 
-from data_foundation.src.contracts import CONTRACTS, TableContract
-
-PARENT_TABLES = {
-    foreign_key.parent_table
-    for contract in CONTRACTS.values()
-    for foreign_key in contract.foreign_keys
-}
-
+from data_foundation.src.contracts import TableContract
 
 class DiskKeySet:
     """Bounded-memory, disk-backed set for tracking unique string keys using SQLite."""
@@ -34,13 +27,21 @@ class DiskKeySet:
         self._conn = sqlite3.connect(self._path)
         self._conn.execute("PRAGMA synchronous = OFF")
         self._conn.execute("PRAGMA journal_mode = OFF")
-        self._conn.execute("CREATE TABLE IF NOT EXISTS keys (key TEXT PRIMARY KEY)")
+        self._conn.execute("CREATE TABLE IF NOT EXISTS keys (key TEXT PRIMARY KEY, origin TEXT)")
         self._cur = self._conn.cursor()
 
     def add(self, key: str) -> bool:
         """Add key. Return True if new, False if already present (duplicate)."""
-        self._cur.execute("INSERT OR IGNORE INTO keys VALUES (?)", (key,))
+        self._cur.execute("INSERT OR IGNORE INTO keys (key) VALUES (?)", (key,))
         return self._cur.rowcount > 0
+
+    def first_origin(self, key: str, origin: str) -> str | None:
+        """Record a key's first file and return its earlier file, if any."""
+        self._cur.execute("INSERT OR IGNORE INTO keys (key, origin) VALUES (?, ?)", (key, origin))
+        if self._cur.rowcount:
+            return None
+        self._cur.execute("SELECT origin FROM keys WHERE key = ?", (key,))
+        return self._cur.fetchone()[0]
 
     def __contains__(self, key: str) -> bool:
         self._cur.execute("SELECT 1 FROM keys WHERE key = ?", (key,))
@@ -115,7 +116,7 @@ def row_checks(
 
     is_large_fact = contract.partition_field is not None
     if retain_keys is None:
-        retain_in_memory = (contract.name in PARENT_TABLES) or not is_large_fact
+        retain_in_memory = not is_large_fact
     else:
         retain_in_memory = retain_keys
 

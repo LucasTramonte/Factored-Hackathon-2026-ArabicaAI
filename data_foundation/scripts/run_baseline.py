@@ -78,7 +78,7 @@ def run(data_root: Path, output_root: Path, selected_tables: set[str] | None = N
                 elif is_fact_table:
                     table_tracker = DiskKeySet()
                 else:
-                    table_tracker = set()
+                    table_tracker = {}
 
                 table_keys: set[str] = set()
                 cross_partition_duplicates = 0
@@ -116,17 +116,13 @@ def run(data_root: Path, output_root: Path, selected_tables: set[str] | None = N
                                 key = "|".join(key_values)
                                 if key:
                                     if isinstance(table_tracker, DiskKeySet):
-                                        if not table_tracker.add(key):
-                                            cross_partition_duplicates += 1
-                                            if cross_partition_sample is None:
-                                                cross_partition_sample = key
+                                        first_file = table_tracker.first_origin(key, str(path))
                                     else:
-                                        if key in table_tracker:
-                                            cross_partition_duplicates += 1
-                                            if cross_partition_sample is None:
-                                                cross_partition_sample = key
-                                        else:
-                                            table_tracker.add(key)
+                                        first_file = table_tracker.setdefault(key, str(path))
+                                    if first_file is not None and first_file != str(path):
+                                        cross_partition_duplicates += 1
+                                        if cross_partition_sample is None:
+                                            cross_partition_sample = key
                                 yield row
 
                         row_results, file_keys = row_checks(contract, tracked_rows_generator(read_rows(path)), expected_partition)

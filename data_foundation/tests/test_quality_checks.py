@@ -18,7 +18,7 @@ class QualityChecksTests(unittest.TestCase):
             {"interaction_id": "INT-1", "interaction_date": "2026-01-01T10:00:00", "process_date": "2026-01-01", "customer_id": "", "interaction_type": "Chat", "channel": "Phone", "contact_reason": "Transaccional", "reason_category": "Transaccional", "requires_followup": "False", "was_escalated": "False", "has_transcript": "False"},
         ]
         results, keys = row_checks(contract, rows, "2026-01-01")
-        self.assertEqual(keys, {"INT-1"})
+        self.assertEqual(keys, set())
         self.assertEqual(next(r["numerator"] for r in results if r["check"] == "duplicate_primary_keys"), 1)
         self.assertEqual(next(r["numerator"] for r in results if r["field"] == "customer_id"), 1)
 
@@ -191,6 +191,29 @@ class BaselineRunnerTests(unittest.TestCase):
             self.assertEqual(cross_dup["severity"], "error")
             self.assertEqual(cross_dup["numerator"], 1)
             self.assertEqual(cross_dup["sample"], "TXN-SHARED")
+
+    def test_same_file_duplicates_stay_out_of_cross_file_count(self):
+        """Repeated keys in one file affect only the per-file duplicate check."""
+        import csv
+        import tempfile
+        from data_foundation.scripts.run_baseline import run
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_dir = Path(temp_dir) / "data"
+            out_dir = Path(temp_dir) / "runs"
+            partition = data_dir / "transactions" / "year=2026" / "month=01" / "day=01"
+            partition.mkdir(parents=True)
+            cols = CONTRACTS["transactions"].expected_columns
+            row = {c: "Val" for c in cols}
+            row.update({"transaction_id": "TXN-1", "process_date": "2026-01-01", "transaction_date": "2026-01-01T10:00:00"})
+            with (partition / "data.csv").open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=cols)
+                writer.writeheader()
+                writer.writerows([row, row])
+
+            results = run(data_dir, out_dir, selected_tables={"transactions"}, run_id="same_file_run")
+            self.assertEqual(next(r["numerator"] for r in results if r["check"] == "duplicate_primary_keys"), 1)
+            self.assertEqual(next(r["numerator"] for r in results if r["check"] == "duplicate_primary_keys_across_partitions"), 0)
 
     def test_run_baseline_unscanned_parent_distinction(self):
         """Focused scan loads available parent dimension rather than marking 100% orphans."""

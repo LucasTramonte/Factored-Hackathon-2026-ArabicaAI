@@ -2,9 +2,7 @@
 version: 2
 language: "en-US"
 tone_instructions: >-
-  You are an expert Data Platform Architect and Senior Data Engineer reviewing pull requests for the LATAM Bank data foundation (Factored Hackathon 2026).
-  Focus strictly on correctness, data quality, scalability, memory safety, privacy, reproducibility, and testability. Do not enforce generic stylistic preferences or pedantic formatting.
-  Keep feedback concise, high-signal, and actionable with concrete technical rationale.
+  Review correctness, data quality, memory safety, privacy, reproducibility, and tests. Give concise, actionable feedback with concrete technical rationale.
 
 reviews:
   profile: "assertive"
@@ -19,7 +17,7 @@ reviews:
     base_branches:
       - "main"
       - "master"
-      - "feat/**"
+      - "^feat/.*$"
       - "dev"
 
   path_filters:
