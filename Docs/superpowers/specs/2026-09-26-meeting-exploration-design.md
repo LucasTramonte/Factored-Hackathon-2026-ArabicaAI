@@ -1,10 +1,12 @@
 # ArabicaAI meeting exploration
 
-Status: conversational design approved; written specification awaiting review.
+Status: approved to proceed to planning after the user's scope and schema review.
 
 ## Purpose and scope
 
 Give Roberto and the team reproducible evidence for selecting one customer-service workflow. Work on the existing `feat/roberto-data-exploration` branch. Produce one executed Jupyter notebook and a one-page meeting brief comparing two or three candidates. Cover contact demand, complaint impact, and transaction fraud; an early meeting readout may use complete service tables, but completion of this task includes the transaction analysis.
+
+The user's confirmed primary areas are contact-center information and fraud prevention. Complaints and transcripts support those areas. Fraud prevention analysis must distinguish descriptive patterns from information actually available before a transaction decision.
 
 Dispute intake is a hypothesis, with account/payment inquiries as comparators. The analysis may conclude that the evidence does not distinguish candidates. It must not manufacture a winning workflow or claim business improvement from synthetic descriptive data.
 
@@ -35,10 +37,11 @@ Keep exact-value tables beside readable charts: contact demand, contact outcomes
 - Preserve source field names. Read UTF-8 BOM safely. Missing or invalid booleans stay unknown rather than becoming false.
 - Use interaction, complaint and transaction grains separately. Report raw row counts, distinct nonblank IDs, duplicate/conflicting IDs, and eligible analytical counts.
 - Exclude every occurrence of a duplicated primary ID from primary entity-level metrics, rather than choosing an arbitrary record. Report the number and share excluded; compare raw-row rankings to reveal sensitivity to this policy. Blank IDs are also excluded and counted. Document this conservative rule visibly.
-- Rates use eligible records with valid known values for the relevant field; display numerator, denominator, unknown count and total eligible population. A null outcome is not a successful or unsuccessful outcome. `was_resolved` describes recorded resolution, not proven first-contact resolution.
+- Rates use eligible records with valid known values for the relevant field; display numerator, denominator, unknown count and total eligible population. A null outcome is not a successful or unsuccessful outcome. The dictionary describes `was_resolved` as resolved on first call: label it documented FCR, and distinguish the supplied flag from independently validated repeat-contact behavior.
 - Use event dates for analysis and `process_date` for physical coverage. Include all available verified partitions for the descriptive baseline; report invalid event dates separately and omit them only from date-based views. Do not invent a period filter or ignore late arrivals.
 - Use medians and appropriate upper percentiles for valid nonnegative durations. Separate unresolved/open complaints from observed resolution durations; do not assign them zero duration.
 - Sum local amounts only within currency. USD comparisons use valid `amount_usd` and show conversion coverage. Do not substitute zero for missing conversion values.
+- Treat `is_fraud` as the target, never a predictor. `fraud_score` requires provenance and timing verification before use as a baseline or feature. Treat `transaction_status` and `response_code` as potentially post-decision information. Any proposed historical feature must use only prior transactions. Fraud-labeled amounts are exposure, not proven realized loss.
 - Validate dimension key uniqueness before enrichment; ambiguous or absent matches remain explicit unknown groups. Snapshot customer attributes are not historical attributes at event time.
 - A complaint may reference an interaction through `origin_interaction_id`; validate both uniqueness and link coverage before use, and aggregate complaints before attaching them to interactions. Never join facts directly on `customer_id` or infer a disputed transaction from that key. A complaint-to-transaction relationship is not established by the dictionary.
 - Do not use undocumented score weights. Compare demand, customer impact, data sufficiency, automation boundaries, handoff and evaluability side by side; describe judgment separately from measured evidence.
