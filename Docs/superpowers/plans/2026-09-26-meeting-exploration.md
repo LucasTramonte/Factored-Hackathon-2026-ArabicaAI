@@ -75,3 +75,11 @@
 ## Completion audit
 
 Verify branch, fixtures, complete input coverage, full clean-kernel execution, fraud and contact-center findings, generated visual inspection, quality/denominator traceability, and all three deliverable links. Download progress or a source notebook alone is not completion. Preserve unrelated existing AGENTS/README/source-document changes.
+
+## Completion evidence — 26 September 2026
+
+Completed on `feat/roberto-data-exploration`. Twelve regression tests and compilation passed. Synthetic, smoke, controlled and full clean-kernel notebook runs passed; the final full run verified 4,389 CSVs (1,150,192,216 bytes), produced eight figures, and matched all five source-header inventories to the original dictionary. Independent review found no analytical correctness blocker; the missing schema audit and category/repeat-complainer displays were added and verified in the executed output. Presentation fixes were checked visually. Full dataset download separately reconciled all 7,671 inventory objects by name and size.
+
+Implementation decisions: reused the existing dedicated branch and partition helper; used bounded batches with disk-backed SQLite; retained fixed descriptive amount bands/hour groups without optimizing thresholds; raised notebook Python minimum to 3.11 for pinned dependencies (executed on 3.12.14); normalized fixture paths for macOS symlinks. These choices trade disk/runtime and environment setup for reproducibility, without changing raw data. The inherited scanner, unrelated context/source changes, predictive effectiveness and ROI remain outside this analysis. No review findings remain deferred.
+
+Delivered outside Git in the task's `outputs/` directory: executed notebook, HTML report and meeting brief. Source notebook outputs remain cleared; dated interpretations must be revisited after changing inputs.
