@@ -122,6 +122,36 @@ class ExplorationTests(unittest.TestCase):
         self.assertEqual(links, {'ambiguous': 2, 'matched': 1, 'missing': 1})
         self.assertEqual(next(r for r in result['coverage'] if r['table'] == 'call_center_interactions')['dated'], 4)
 
+    def test_prevention_bands_and_empty_population(self):
+        """Amount/time grouping must preserve unknowns and not depend on labels."""
+        connection = self.connection()
+        for table in analysis.FIELDS:
+            rows = [] if table != 'transactions' else [
+                {'transaction_id': '1', 'transaction_date': '2026-01-01 23:00:00', 'amount_usd': '99.99', 'is_fraud': 'True'},
+                {'transaction_id': '2', 'transaction_date': 'bad', 'amount_usd': '100.00', 'is_fraud': 'False'},
+                {'transaction_id': '3', 'amount_usd': 'NaN', 'is_fraud': ''}]
+            analysis.load_table(connection, table, [self.csv(table, rows)])
+        result = analysis.summarize(connection)
+        bands = {r['label']: r for r in result['rates'] if r['table']=='transactions' and r['dimension']=='usd_band'}
+        self.assertEqual(set(bands), {'0–<100 USD', '100–<1,000 USD', 'Unknown'})
+        self.assertEqual(bands['0–<100 USD']['numerator'], 1)
+        self.assertIsNone(bands['Unknown']['rate'])
+        hours = {r['label']: r['eligible'] for r in result['rates'] if r['table']=='transactions' and r['dimension']=='event_hour'}
+        self.assertEqual(hours, {'23': 1, 'Unknown': 2})
+        empty = next(r for r in result['rates'] if r['table']=='call_center_interactions' and r['dimension']=='all')
+        self.assertEqual(empty['eligible'], 0)
+        self.assertIsNone(empty['rate'])
+
+    def test_partition_date_mismatch_remains_visible(self):
+        """A valid process date in the wrong physical day is a quality issue."""
+        path = self.csv('transactions', [
+            {'transaction_id': '1', 'process_date': '2026-01-02'},
+            {'transaction_id': '2', 'process_date': 'not-a-date'}],
+            name='year=2026/month=01/day=01/part.csv')
+        quality = analysis.load_table(self.connection(), 'transactions', [path])
+        self.assertEqual(quality['fields']['process_date:partition_mismatch'], 1)
+        self.assertEqual(quality['fields']['process_date:invalid'], 1)
+
 
 if __name__ == '__main__':
     unittest.main()

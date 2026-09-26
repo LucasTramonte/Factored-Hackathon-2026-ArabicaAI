@@ -18,6 +18,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from .contracts import CONTRACTS, discover_files
+from ..scripts.run_baseline import partition_date_from_path
 
 
 FIELDS = {
@@ -55,7 +56,7 @@ manifest paths. Size checks establish download coverage, not content checksums.
     expected = {}
     for item in manifest:
         path = root / item['path']
-        if not path.resolve().is_relative_to(root) or path.is_absolute() and Path(item['path']).is_absolute():
+        if Path(item['path']).is_absolute() or not path.resolve().is_relative_to(root):
             raise ValueError('Manifest path must stay relative to data root')
         if path in expected or not isinstance(item['size'], int) or item['size'] < 0:
             raise ValueError('Invalid or duplicate manifest entry')
@@ -136,6 +137,7 @@ unneeded text. Returns auditable raw/eligible and field-quality counts.
         insert = f'INSERT INTO {table} VALUES ({",".join("?" for _ in range(len(fields) + 1))})'
         batch = []
         for index, path in enumerate(files):
+            partition = partition_date_from_path(path)
             with path.open(encoding='utf-8-sig', newline='') as stream:
                 reader = csv.DictReader(stream)
                 header = reader.fieldnames or []
@@ -149,6 +151,8 @@ unneeded text. Returns auditable raw/eligible and field-quality counts.
                         value, state = _value(field, row[field])
                         if state != 'valid':
                             counts[f'{field}:{state}'] += 1
+                        if field == 'process_date' and value is not None and partition and value != partition:
+                            counts['process_date:partition_mismatch'] += 1
                         values.append(value)
                     digest = hashlib.sha256(json.dumps(row, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
                     batch.append((*values, digest))
@@ -206,7 +210,7 @@ customer enrichment uses unique dimension keys and preserves fact grain.
                                     ['was_resolved', 'requires_followup', 'was_escalated', 'has_transcript']),
         'complaints': ('creation_date', ['category', 'subcategory', 'status'], ['sla_breached', 'is_repeat_complainer']),
         'transactions': ('transaction_date', ['transaction_type', 'transaction_category', 'channel',
-                                             'transaction_country', 'transaction_status'], ['is_fraud']),
+                                             'transaction_country', 'transaction_status', 'usd_band', 'event_hour'], ['is_fraud']),
     }
     for table, (date_field, dimensions, flags) in settings.items():
         connection.execute(f'DROP VIEW IF EXISTS analysis_{table}')
@@ -223,19 +227,26 @@ customer enrichment uses unique dimension keys and preserves fact grain.
             f'sum(CASE WHEN substr({date_field},1,10)>process_date THEN 1 ELSE 0 END) AS event_after_process '
             f'FROM eligible_{table}')]
         for dimension in ['all', *dimensions, 'month']:
-            expression = "'All'" if dimension == 'all' else (
-                f"coalesce(substr({date_field},1,7),'Unknown')" if dimension == 'month'
-                else f"coalesce({dimension},'Unknown')")
+            expressions = {
+                'all': "'All'",
+                'month': f"coalesce(substr({date_field},1,7),'Unknown')",
+                'event_hour': f"coalesce(substr({date_field},12,2),'Unknown')",
+                'usd_band': "CASE WHEN amount_usd IS NULL THEN 'Unknown' WHEN amount_usd<0 THEN 'Negative USD' "
+                            "WHEN amount_usd<10000 THEN '0–<100 USD' WHEN amount_usd<100000 THEN '100–<1,000 USD' "
+                            "ELSE '1,000+ USD' END",
+            }
+            expression = expressions.get(dimension, f"coalesce({dimension},'Unknown')")
+            grouping = '' if dimension == 'all' else 'GROUP BY label'
             for population, source in [('eligible', f'analysis_{table}'), ('raw', table)]:
                 if population == 'raw' and dimension == 'country':
                     continue
                 rows = _query(connection, f'SELECT {expression} AS label, count(*) AS rows '
-                              f'FROM {source} GROUP BY label ORDER BY rows DESC,label LIMIT 100')
+                              f'FROM {source} {grouping} ORDER BY rows DESC,label LIMIT 100')
                 result['volumes'] += [dict(table=table, dimension=dimension, population=population, **r) for r in rows]
             for flag in flags:
                 rows = _query(connection, f'SELECT {expression} AS label, count(*) AS eligible, '
                     f'coalesce(sum({flag}=1),0) AS numerator, count({flag}) AS denominator '
-                    f'FROM analysis_{table} GROUP BY label ORDER BY eligible DESC,label LIMIT 100')
+                    f'FROM analysis_{table} {grouping} ORDER BY eligible DESC,label LIMIT 100')
                 for row in rows:
                     row['unknown'] = row['eligible'] - row['denominator']
                     row['rate'] = row['numerator'] / row['denominator'] if row['denominator'] else None
