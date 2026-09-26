@@ -183,3 +183,102 @@ unneeded text. Returns auditable raw/eligible and field-quality counts.
         connection.execute('ROLLBACK TO load_table')
         connection.execute('RELEASE load_table')
         raise
+
+
+def _query(connection, sql):
+    cursor = connection.execute(sql)
+    names = [field[0] for field in cursor.description]
+    return [dict(zip(names, row)) for row in cursor]
+
+
+def summarize(connection: sqlite3.Connection) -> dict[str, list[dict]]:
+    """Return bounded, denominator-explicit summaries of the loaded tables.
+
+Groups are capped at the 100 largest per dimension; overall totals are never
+truncated. Median averages the central two values; p95 is nearest rank.
+Local money remains grouped by currency and integer minor units. All
+customer enrichment uses unique dimension keys and preserves fact grain.
+"""
+    result = {name: [] for name in ('rates', 'volumes', 'durations', 'coverage',
+                                  'money', 'enrichment', 'languages', 'consistency')}
+    settings = {
+        'call_center_interactions': ('interaction_date', ['contact_reason', 'reason_category', 'channel', 'country'],
+                                    ['was_resolved', 'requires_followup', 'was_escalated', 'has_transcript']),
+        'complaints': ('creation_date', ['category', 'subcategory', 'status'], ['sla_breached', 'is_repeat_complainer']),
+        'transactions': ('transaction_date', ['transaction_type', 'transaction_category', 'channel',
+                                             'transaction_country', 'transaction_status'], ['is_fraud']),
+    }
+    for table, (date_field, dimensions, flags) in settings.items():
+        connection.execute(f'DROP VIEW IF EXISTS analysis_{table}')
+        connection.execute(f'CREATE TEMP VIEW analysis_{table} AS SELECT t.*, c.country '
+                           f'FROM eligible_{table} t LEFT JOIN eligible_customers c ON t.customer_id=c.customer_id')
+        result['enrichment'] += [dict(table=table, **row) for row in _query(connection,
+            f"SELECT CASE WHEN k.id IS NULL THEN 'missing' WHEN k.n>1 THEN 'ambiguous' ELSE 'matched' END "
+            f"AS match_status, count(*) AS rows FROM eligible_{table} t LEFT JOIN keys_customers k "
+            'ON t.customer_id=k.id GROUP BY match_status')]
+        result['coverage'] += [dict(table=table, **row) for row in _query(connection,
+            f'SELECT count(*) AS eligible, count({date_field}) AS dated, min({date_field}) AS first_event, '
+            f'max({date_field}) AS last_event, min(process_date) AS first_process, '
+            f'max(process_date) AS last_process, sum(CASE WHEN substr({date_field},1,10)<process_date THEN 1 ELSE 0 END) AS later_process, '
+            f'sum(CASE WHEN substr({date_field},1,10)>process_date THEN 1 ELSE 0 END) AS event_after_process '
+            f'FROM eligible_{table}')]
+        for dimension in ['all', *dimensions, 'month']:
+            expression = "'All'" if dimension == 'all' else (
+                f"coalesce(substr({date_field},1,7),'Unknown')" if dimension == 'month'
+                else f"coalesce({dimension},'Unknown')")
+            for population, source in [('eligible', f'analysis_{table}'), ('raw', table)]:
+                if population == 'raw' and dimension == 'country':
+                    continue
+                rows = _query(connection, f'SELECT {expression} AS label, count(*) AS rows '
+                              f'FROM {source} GROUP BY label ORDER BY rows DESC,label LIMIT 100')
+                result['volumes'] += [dict(table=table, dimension=dimension, population=population, **r) for r in rows]
+            for flag in flags:
+                rows = _query(connection, f'SELECT {expression} AS label, count(*) AS eligible, '
+                    f'coalesce(sum({flag}=1),0) AS numerator, count({flag}) AS denominator '
+                    f'FROM analysis_{table} GROUP BY label ORDER BY eligible DESC,label LIMIT 100')
+                for row in rows:
+                    row['unknown'] = row['eligible'] - row['denominator']
+                    row['rate'] = row['numerator'] / row['denominator'] if row['denominator'] else None
+                    result['rates'].append(dict(table=table, dimension=dimension, metric=flag, **row))
+        print(f'{table}: grouped counts complete', flush=True)
+
+    for table, metric, dimension in [
+        ('call_center_interactions', 'duration_seconds', 'all'),
+        ('call_center_interactions', 'duration_seconds', 'contact_reason'),
+        ('call_center_interactions', 'wait_time_seconds', 'all'),
+        ('call_center_interactions', 'wait_time_seconds', 'contact_reason'),
+        ('complaints', 'resolution_days', 'all'),
+        ('complaints', 'resolution_days', 'category'),
+        ('transactions', 'fraud_score', 'is_fraud'),
+    ]:
+        label = "'All'" if dimension == 'all' else f"coalesce(cast({dimension} AS TEXT),'Unknown')"
+        where = f'{metric} IS NOT NULL'
+        if table == 'complaints':
+            where += " AND status IN ('Resolved','Closed') AND resolution_date IS NOT NULL "
+            where += 'AND creation_date IS NOT NULL AND resolution_date>=creation_date'
+        rows = _query(connection, f'WITH sorted AS (SELECT {label} AS label, {metric} AS value, '
+            f'row_number() OVER (PARTITION BY {label} ORDER BY {metric}) AS rn, '
+            f'count(*) OVER (PARTITION BY {label}) AS n FROM eligible_{table} WHERE {where}) '
+            'SELECT label, max(n) AS known, avg(CASE WHEN rn IN ((n+1)/2,(n+2)/2) THEN value END) AS median, '
+            'max(CASE WHEN rn=(95*n+99)/100 THEN value END) AS p95 FROM sorted GROUP BY label '
+            'ORDER BY known DESC,label LIMIT 100')
+        result['durations'] += [dict(table=table, metric=metric, dimension=dimension, **r) for r in rows]
+
+    result['money'] = _query(connection,
+        'SELECT currency, is_fraud, count(*) AS eligible, count(amount) AS amount_known, '
+        'CASE WHEN currency IS NOT NULL THEN sum(amount) END AS amount_cents, '
+        'count(amount_usd) AS usd_known, sum(amount_usd) AS amount_usd_cents, '
+        'sum(abs(amount_usd)) AS absolute_usd_cents FROM eligible_transactions '
+        'GROUP BY currency,is_fraud ORDER BY eligible DESC LIMIT 100')
+    result['languages'] = _query(connection,
+        "SELECT coalesce(detected_language,'Unknown') AS language, count(*) AS transcripts, "
+        "sum(CASE WHEN k.id IS NULL THEN 1 ELSE 0 END) AS missing_interaction, "
+        "sum(CASE WHEN k.n>1 THEN 1 ELSE 0 END) AS ambiguous_interaction "
+        'FROM eligible_call_transcripts t LEFT JOIN keys_call_center_interactions k ON t.interaction_id=k.id '
+        'GROUP BY language ORDER BY transcripts DESC LIMIT 100')
+    result['consistency'] = _query(connection,
+        'SELECT count(*) AS eligible_interactions, '
+        'sum(CASE WHEN was_resolved=1 AND requires_followup=1 THEN 1 ELSE 0 END) AS resolved_with_followup, '
+        'sum(CASE WHEN was_resolved IS NOT NULL AND requires_followup IS NOT NULL THEN 1 ELSE 0 END) AS known_both '
+        'FROM eligible_call_center_interactions')
+    return result
