@@ -11,7 +11,7 @@ checks primary-key duplicates, and reports partition/date consistency.
 - `src/quality/checks.py` contains streaming schema and row checks.
 - `scripts/run_baseline.py` orchestrates scans and report generation.
 - `tests/` contains dependency-free fixtures and regression tests.
-- `reports/` contains generated JSON, CSV, and Markdown outputs and is ignored by Git.
+- `runs/data-quality-baseline/<run_id>/` contains immutable audit-run outputs and is ignored by Git.
 
 Python contracts remain the runtime source of truth until YAML loading is deliberately
 wired and contract parity is tested.
@@ -24,13 +24,22 @@ From the repository root:
 python -m analysis.scripts.run_baseline
 ```
 
-Reports are written to `analysis/reports/`. They are generated artifacts and are ignored by Git.
-The scan uses streaming CSV reads and projected columns where possible.
+Each run is written to `analysis/runs/data-quality-baseline/<run_id>/`. The UTC `run_id`
+defaults to `YYYYMMDDTHHMMSSZ`; pass `--run-id` when a named smoke or controlled run is
+useful. Generated artifacts are ignored by Git.
+
+Each audit run contains:
+
+- `run_manifest.json` — run ID, timestamp, command, data root, tables, counts, and artifact list.
+- `quality_results.json` — machine-readable check results.
+- `file_inventory.csv` — discovered files, partitions, row counts, and column counts.
+- `quality_report.md` — concise human-readable summary.
+- `run.log` — UTC table/file progress and completion status.
 
 For a focused scan:
 
 ```powershell
-python -m analysis.scripts.run_baseline --table customers --table products --output-root analysis/reports/smoke
+python -m analysis.scripts.run_baseline --table customers --table products --output-root analysis/runs/data-quality-baseline --run-id controlled-20260926T120000Z
 ```
 
 ## Validation progression

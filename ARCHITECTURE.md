@@ -8,7 +8,7 @@ The current system is a read-only baseline scanner for the LATAM Bank CSV datase
 
 - `analysis/src/contracts.py` contains executable `TableContract` and `ForeignKey` definitions plus file discovery. Contracts define the Python runtime schema authority.
 - `analysis/src/quality/checks.py` contains CSV row iteration, schema checks, required-field checks, domain checks, duplicate-key checks, date parsing, partition checks, and result normalization.
-- `analysis/scripts/run_baseline.py` orchestrates table scans, retains key sets only for tables used as foreign-key parents, performs relationship checks, and writes JSON, CSV, and Markdown reports.
+- `analysis/scripts/run_baseline.py` orchestrates table scans, retains key sets only for tables used as foreign-key parents, performs relationship checks, and writes timestamped audit runs.
 - `analysis/config/data_quality_contracts.yaml` is a human-readable audit registry. It mirrors the executable contracts but is not loaded by Python yet.
 - `analysis/tests/` contains dependency-free fixture tests for the quality checks.
 
@@ -21,7 +21,7 @@ data/ CSV files
     -> row-level quality checks
     -> dimension key materialization for FK parents
     -> streaming FK membership checks
-    -> JSON / CSV / Markdown reports
+    -> timestamped audit run: manifest / results / inventory / report / log
 ```
 
 The scanner does not modify raw files and does not silently deduplicate records.
@@ -42,7 +42,7 @@ Contracts are declarative in shape, even though the executable registry currentl
 
 ## Reporting And Artifacts
 
-Reports include machine-readable check results, a file inventory, and a concise Markdown summary. Reports are generated artifacts and are ignored by Git. The report is evidence of observed data quality, not an automatic repair process.
+Each run under `analysis/runs/data-quality-baseline/<run_id>/` contains a manifest, machine-readable check results, a file inventory, a Markdown summary, and a UTC progress log. The run ID and command make a result traceable without relying on ambiguous names such as `full2` or `smoke2`. Runs are generated artifacts and are ignored by Git. The report is evidence of observed data quality, not an automatic repair process.
 
 ## Testing Strategy
 

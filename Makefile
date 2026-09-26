@@ -11,10 +11,10 @@ compile:
 	$(PYTHON) -m compileall -q analysis
 
 smoke:
-	$(PYTHON) -m analysis.scripts.run_baseline --table customers --table products --table branches --table service_agents --table marketing_campaigns --output-root analysis/reports/smoke
+	$(PYTHON) -m analysis.scripts.run_baseline --table customers --table products --table branches --table service_agents --table marketing_campaigns --output-root analysis/runs/data-quality-baseline
 
 baseline:
-	$(PYTHON) -m analysis.scripts.run_baseline --output-root analysis/reports/full
+	$(PYTHON) -m analysis.scripts.run_baseline --output-root analysis/runs/data-quality-baseline
 
 aws-sync:
 	aws s3 sync $(DATA_BUCKET) ./data/ --profile $(AWS_PROFILE)
