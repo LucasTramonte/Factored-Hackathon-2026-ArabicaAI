@@ -25,9 +25,9 @@ The dataset is stored primarily as CSV files and contains transactional, custome
 
 Before working with the raw CSV files, consult:
 
-- `LATAM_BANK_DATA_DICTIONARY.md` — canonical schema and relationships.
-- `LATAM_BANK_DATASET.md` — dataset overview, scope, and known characteristics.
-- `FACTORED_HACKATHON_2026.md` — hackathon requirements, evaluation criteria, and constraints.
+- `Docs/LATAM_BANK_DATA_DICTIONARY.md` — canonical schema and relationships.
+- `Docs/LATAM_BANK_DATASET.md` — dataset overview, scope, and known characteristics.
+- `Docs/FACTORED_HACKATHON_2026.md` — hackathon requirements, evaluation criteria, and constraints.
 
 The data dictionary is the primary source of truth for table names, column names, types, and relationships.
 
@@ -43,7 +43,7 @@ For every data-related request:
 
 1. Identify the business concept.
 2. Map the concept to the relevant table.
-3. Confirm the required columns in `LATAM_BANK_DATA_DICTIONARY.md`.
+3. Confirm the required columns in `Docs/LATAM_BANK_DATA_DICTIONARY.md`.
 4. Locate the corresponding CSV file.
 5. Read only the required columns and rows.
 6. Apply filters as early as possible.
@@ -295,7 +295,7 @@ daily_exchange_rates
 
 # Key Relationships
 
-Use the documented foreign keys in `LATAM_BANK_DATA_DICTIONARY.md`.
+Use the documented foreign keys in `Docs/LATAM_BANK_DATA_DICTIONARY.md`.
 
 ## Customer
 
@@ -617,9 +617,9 @@ When generating SQL or Python, prefer the exact dataset column names.
 
 Use the following priority when resolving dataset questions:
 
-1. `LATAM_BANK_DATA_DICTIONARY.md`
+1. `Docs/LATAM_BANK_DATA_DICTIONARY.md`
 2. Actual CSV headers
-3. `LATAM_BANK_DATASET.md`
+3. `Docs/LATAM_BANK_DATASET.md`
 4. Derived observations from the data
 
 Do not invent missing schema information.

@@ -1,0 +1,120 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+version: "2"
+language: "en-US"
+tone_instructions: >-
+  You are an expert Data Platform Architect and Senior Data Engineer reviewing pull requests
+  for the LATAM Bank data foundation (Factored Hackathon 2026).
+  Focus strictly on correctness, data quality, scalability, memory safety, privacy, reproducibility,
+  and testability. Do not enforce generic stylistic preferences or pedantic formatting.
+  Keep feedback concise, high-signal, and actionable with concrete technical rationale.
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "main"
+      - "master"
+      - "feat/**"
+      - "dev"
+
+  path_filters:
+    - "!data/**"
+    - "!data_foundation/runs/**"
+    - "!**/*.csv"
+    - "!**/*.parquet"
+    - "!**/*.log"
+    - "!**/__pycache__/**"
+    - "!**/.pytest_cache/**"
+    - "!**/*.db"
+
+  path_instructions:
+    - path: "data_foundation/**"
+      instructions: >-
+        Review against core data platform architecture and reliability standards:
+
+        1. Memory Model: Processing of large partitioned fact tables (e.g. `transactions`,
+        `digital_events`, `call_center_interactions`, `campaign_sends`) must use memory bounded
+        relative to total dataset size, preferably O(chunk_size) or O(1). Small bounded dimension
+        tables (`branches`, `service_agents`, `marketing_campaigns`, `customers`, `products`)
+        may use in-memory structures when justified by their size. Do not force disk-backed storage
+        where it provides no meaningful benefit, but flag any unbounded in-memory accumulation of
+        fact records or fact keys (e.g. `set()` of keys across millions of rows).
+
+        2. Cross-Partition Deduplication: Verify that primary-key uniqueness is tracked across all
+        partitions and files for a table, not just within single files. For large fact tables,
+        ensure cross-partition key tracking uses bounded or disk-backed state while preserving
+        existing per-file check results.
+
+        3. Streaming & Single-Pass Efficiency: Process partitioned fact CSVs in streaming chunks
+        or row generators. Project columns early, filter partitions before loading, and avoid multiple
+        scans or duplicate in-memory copies of the same fact files.
+
+        4. Referential Integrity & Focused Scans: Declare analytical grains and aggregate fact tables
+        before joins to prevent many-to-many row explosion. In referential checks, evaluate all tables
+        declaring foreign keys. Distinguish unscanned parent tables from scanned parents with zero keys:
+        for focused scans, load parent dimension keys on demand if parent files are present, or mark
+        the check SKIPPED/INFO with clear messaging if parent files are absent. Never report 100% false
+        orphans due to unscanned parents.
+
+        5. Schema & Quality Rules: Column and table names must strictly conform to
+        `Docs/LATAM_BANK_DATA_DICTIONARY.md`. Verify that headers are checked for duplicate column names
+        before set deduplication and that row validation is skipped for schema-corrupt files. Evaluate
+        late-arrival signals strictly as business date before process partition (event_date < process_date)
+        while excluding future-dated events. Ensure blank primary keys are not double-counted across null checks.
+
+        6. Partition & Path Validation: Validate that partitioned file paths contain complete, valid date
+        components (YYYY-MM-DD). Malformed or incomplete partition paths on partitioned contracts must emit
+        an error and fail the scan.
+
+        7. Failure Semantics & Observability: Malformed, missing, unsupported, or skipped data must never
+        be silently ignored or dropped. Explicitly distinguish ERROR, WARNING, INFO, and SKIPPED states,
+        preserving sufficient evidence (samples, counts, fields, reasons) explaining why a check ran,
+        failed, or was skipped.
+
+        8. Determinism & Reproducibility: Quality scans and audit runs must be fully deterministic. File
+        discovery and processing order must be sorted and deterministic, timestamps must use explicit UTC,
+        and behavior must never rely on unordered filesystem iteration, ambient locale, unseeded randomness,
+        or transient process state.
+
+        9. Privacy & Data Boundaries: Never expose raw customer records, credentials, secrets, or restricted
+        dataset content through external APIs, LLM prompts, logs, telemetry, snapshots, or generated
+        artifacts unless explicitly approved. Log summaries, aggregates, or masked samples only.
+
+        10. Integration Boundaries: Orchestration changes must be reviewed across the full execution chain:
+        partition discovery -> schema checks -> row checks -> key tracking -> relationship validation ->
+        result reporting. Ensure state handoffs between stages remain coherent, memory-bounded, and validated
+        beyond isolated unit tests.
+
+        11. Architecture Boundaries: `data_foundation` must remain strictly independent from application-layer
+        LLM, API, UI, and deployment concerns. The quality baseline must remain usable offline against the
+        supplied dataset without requiring paid external services, network connectivity, or application-stack
+        frameworks.
+
+        12. Raw Data Immutability: Raw input data under `data/` is strictly read-only. Audit runs and outputs
+        must write only to isolated, immutable run directories without in-place modification of source files.
+
+    - path: "data_foundation/tests/**"
+      instructions: >-
+        1. Risk-Based Coverage: Verify comprehensive test coverage for contract parsers, schema validation,
+        row checks, composite keys, cross-partition deduplication, partition path parsing, and referential checks.
+
+        2. Isolation & Speed: Ensure tests use small synthetic fixtures, mocks, or temporary directories without
+        depending on full-dataset execution.
+
+        3. Resource Safety: Ensure all file handlers (loggers, database connections, temporary file handles)
+        are cleanly closed in `finally` blocks to guarantee portability and avoid Windows file-locking errors during teardown.
+
+    - path: "Docs/**"
+      instructions: >-
+        Ensure documentation matches the canonical schema in `Docs/LATAM_BANK_DATA_DICTIONARY.md`
+        and reflects dataset constraints, relationships, and regional variations accurately.
+
+chat:
+  auto_reply: true
