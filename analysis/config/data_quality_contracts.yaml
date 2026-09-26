@@ -1,0 +1,57 @@
+# Human-readable audit registry for the executable contracts.
+# Python definitions in analysis/src/contracts.py remain the runtime source of truth
+# until YAML loading is deliberately wired and contract parity is tested.
+version: 1
+tables:
+  customers:
+    path: customers.csv
+    primary_key: [customer_id]
+  products:
+    path: products.csv
+    primary_key: [product_id]
+    foreign_keys:
+      - field: customer_id
+        references: customers.customer_id
+  branches:
+    path: branches.csv
+    primary_key: [branch_id]
+  service_agents:
+    path: service_agents.csv
+    primary_key: [agent_id]
+  marketing_campaigns:
+    path: marketing_campaigns.csv
+    primary_key: [campaign_id]
+  daily_exchange_rates:
+    path: daily_exchange_rates.csv
+    primary_key: [date, source_currency, target_currency]
+  call_center_interactions:
+    path: call_center_interactions
+    primary_key: [interaction_id]
+    partition_field: process_date
+  call_transcripts:
+    path: call_transcripts
+    primary_key: [transcript_id]
+    partition_field: process_date
+  satisfaction_surveys:
+    path: satisfaction_surveys
+    primary_key: [survey_id]
+    partition_field: process_date
+  complaints:
+    path: complaints
+    primary_key: [complaint_id]
+    partition_field: process_date
+  campaign_sends:
+    path: campaign_sends
+    primary_key: [send_id]
+    partition_field: process_date
+  digital_events:
+    path: digital_events
+    primary_key: [event_id]
+    partition_field: process_date
+  transactions:
+    path: transactions
+    primary_key: [transaction_id]
+    partition_field: process_date
+relationships:
+  intent: Validate child references by materializing small parent dimensions and streaming child rows.
+  grain_rule: Aggregate fact tables to the required analytical grain before joining multiple facts.
