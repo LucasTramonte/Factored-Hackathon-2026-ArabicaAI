@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from analysis.src.contracts import TableContract
+from data_foundation.src.contracts import TableContract
 
 
 def result(check: str, table: str, severity: str, numerator: int, denominator: int, message: str, field: str | None = None, sample: Any = None) -> dict[str, Any]:

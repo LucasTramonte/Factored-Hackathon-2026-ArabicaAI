@@ -1,17 +1,22 @@
-# Data Quality Baseline
+# Shared Data Foundation
 
-This package profiles the supplied LATAM Bank CSV data without changing raw files.
-It inventories files and partitions, validates declared contracts, measures completeness,
-checks primary-key duplicates, and reports partition/date consistency.
+This package provides reusable data contracts, quality checks, CSV processing utilities,
+and test conventions for future analytical use cases. It is not the final business
+analysis and does not select a customer-service workflow.
+
+The first concrete capability is a data-quality baseline that profiles the supplied
+LATAM Bank CSV data without changing raw files.
 
 ## Layout
 
-- `config/data_quality_contracts.yaml` is the human-readable audit registry.
-- `src/contracts.py` contains the executable Python contracts and file discovery.
-- `src/quality/checks.py` contains streaming schema and row checks.
-- `scripts/run_baseline.py` orchestrates scans and report generation.
-- `tests/` contains dependency-free fixtures and regression tests.
+- `config/` contains shared data contracts and future foundation configuration.
+- `src/` contains reusable contracts and quality-check components.
+- `scripts/` contains runnable foundation utilities, not business-specific analyses.
+- `tests/` contains dependency-free fixtures and regression tests for shared behavior.
 - `runs/data-quality-baseline/<run_id>/` contains immutable audit-run outputs and is ignored by Git.
+
+Future use cases should add separate modules with their own contracts, tests, outputs,
+and documentation. Business-specific reports should not be placed in this package.
 
 Python contracts remain the runtime source of truth until YAML loading is deliberately
 wired and contract parity is tested.
@@ -21,10 +26,10 @@ wired and contract parity is tested.
 From the repository root:
 
 ```powershell
-python -m analysis.scripts.run_baseline
+python -m data_foundation.scripts.run_baseline
 ```
 
-Each run is written to `analysis/runs/data-quality-baseline/<run_id>/`. The UTC `run_id`
+Each run is written to `data_foundation/runs/data-quality-baseline/<run_id>/`. The UTC `run_id`
 defaults to `YYYYMMDDTHHMMSSZ`; pass `--run-id` when a named smoke or controlled run is
 useful. Generated artifacts are ignored by Git.
 
@@ -39,7 +44,7 @@ Each audit run contains:
 For a focused scan:
 
 ```powershell
-python -m analysis.scripts.run_baseline --table customers --table products --output-root analysis/runs/data-quality-baseline --run-id controlled-20260926T120000Z
+python -m data_foundation.scripts.run_baseline --table customers --table products --output-root data_foundation/runs/data-quality-baseline --run-id controlled-20260926T120000Z
 ```
 
 ## Validation progression

@@ -20,10 +20,10 @@ jobs:
           python-version: "3.10"
 
       - name: Run tests
-        run: python -m unittest discover -s analysis/tests -v
+        run: python -m unittest discover -s data_foundation/tests -v
 
       - name: Compile analysis package
-        run: python -m compileall -q analysis
+        run: python -m compileall -q data_foundation
 
       - name: Build code-only test image
         run: docker build --tag latam-bank-analysis:test .

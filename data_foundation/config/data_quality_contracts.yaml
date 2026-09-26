@@ -1,5 +1,5 @@
 # Human-readable audit registry for the executable contracts.
-# Python definitions in analysis/src/contracts.py remain the runtime source of truth
+# Python definitions in data_foundation/src/contracts.py remain the runtime source of truth
 # until YAML loading is deliberately wired and contract parity is tested.
 version: 1
 tables:

@@ -18,11 +18,11 @@ The repository does not contain credentials, AWS profiles, raw data, generated r
 From the repository root:
 
 ```powershell
-python -m unittest discover -s analysis/tests -v
-python -m compileall -q analysis
+python -m unittest discover -s data_foundation/tests -v
+python -m compileall -q data_foundation
 ```
 
-The quality scanner uses relative defaults: `data/` for input and `analysis/runs/data-quality-baseline/` for generated audit runs. It does not depend on the developer's home directory, current AWS profile, or machine-specific path.
+The shared foundation uses relative defaults: `data/` for input and `data_foundation/runs/data-quality-baseline/` for generated audit runs. It does not depend on the developer's home directory, current AWS profile, or machine-specific path.
 
 ## Downloading the dataset
 
@@ -92,5 +92,5 @@ requirement for local development.
 - Python behavior is pinned by the supported major/minor version, but no third-party dependency installation is currently required.
 - Dataset contents depend on the organizer's S3 bucket and the participant's authorized read-only access.
 - Raw data is local input and is never modified by the scanner.
-- Audit runs are generated under `analysis/runs/data-quality-baseline/<run_id>/` and ignored by Git.
+- Audit runs are generated under `data_foundation/runs/data-quality-baseline/<run_id>/` and ignored by Git.
 - Results should record the data source, scan command, timestamp, table selection, and relevant contract version.

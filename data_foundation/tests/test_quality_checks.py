@@ -3,9 +3,9 @@
 import unittest
 from pathlib import Path
 
-from analysis.src.contracts import CONTRACTS
-from analysis.src.quality.checks import row_checks, schema_checks
-from analysis.scripts.run_baseline import partition_date_from_path
+from data_foundation.src.contracts import CONTRACTS
+from data_foundation.src.quality.checks import row_checks, schema_checks
+from data_foundation.scripts.run_baseline import partition_date_from_path
 
 
 class QualityChecksTests(unittest.TestCase):

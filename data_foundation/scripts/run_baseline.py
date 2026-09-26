@@ -14,11 +14,11 @@ import re
 import sys
 import time
 
-from analysis.src.contracts import CONTRACTS, discover_files
-from analysis.src.quality.checks import read_rows, result, row_checks, schema_checks
+from data_foundation.src.contracts import CONTRACTS, discover_files
+from data_foundation.src.quality.checks import read_rows, result, row_checks, schema_checks
 
 
-LOGGER = logging.getLogger("analysis.data_quality")
+LOGGER = logging.getLogger("data_foundation.data_quality")
 RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 
 
@@ -184,7 +184,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Run the LATAM Bank data quality baseline")
     parser.add_argument("--data-root", type=Path, default=Path("data"))
-    parser.add_argument("--output-root", type=Path, default=Path("analysis/runs/data-quality-baseline"), help="Base directory for immutable audit runs")
+    parser.add_argument("--output-root", type=Path, default=Path("data_foundation/runs/data-quality-baseline"), help="Base directory for immutable audit runs")
     parser.add_argument("--run-id", help="Optional unique run identifier; defaults to UTC timestamp")
     parser.add_argument("--table", action="append", dest="tables")
     args = parser.parse_args()
