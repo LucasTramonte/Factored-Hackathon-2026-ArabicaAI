@@ -1,25 +1,3 @@
 # Testing Data Pipelines
 
-## Purpose
-Choose fast, risk-appropriate validation before expensive data scans.
-
-## When to use
-Use for parsers, contracts, quality rules, transformations, aggregations, joins, and scanner changes.
-
-## Workflow
-Use this progression:
-
-```text
-unit tests -> small fixtures -> integration tests -> smoke test -> controlled dataset -> full dataset
-```
-
-For core checks, parsing, keys, partitions, joins, bug fixes, and memory-sensitive code, use test-first development where practical: RED, GREEN, REFACTOR. Add a regression fixture when a real defect is found.
-
-## Constraints
-Tests must assert outcomes and invariants. Streaming code should produce the same result across chunk sizes when mathematically appropriate. Full-dataset execution is not a substitute for tests.
-
-## Validation
-Include malformed rows, missing columns, duplicate keys, orphans, empty inputs, boundary dates, and chunk-boundary cases when the failure is plausible and costly.
-
-## Anti-patterns
-Do not debug only by rerunning the full dataset, require ceremony for trivial documentation changes, or assert an incidental implementation order.
+Progress through unit tests, small CSV fixtures, controlled Bronze/Silver tables, one real partition or small dimension, then the full S3 snapshot. Core keys, partition refreshes, duplicate handling, typing, joins, FX, and quality gates need regression fixtures. Test a corrected and a removed old partition under `--full-refresh`; test incremental reruns and partial failures. Compare quality results on the same input snapshot before replacing a prior checker. Run `make test`, `make compile`, `make docker-test` and the full quality gate before a reviewed data release. A full run alone is not a test.

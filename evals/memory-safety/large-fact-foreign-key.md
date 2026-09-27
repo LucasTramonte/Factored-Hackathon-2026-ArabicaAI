@@ -4,8 +4,8 @@
 Validate that every transaction references an existing customer.
 
 ## Expected invariants
-- The customer dimension is the materialized small side.
-- Transactions are streamed or processed in bounded chunks.
+- The customer dimension is the small build side of a DuckDB anti-join.
+- DuckDB executes projected Bronze/Silver scans with a memory limit and disk spill.
 - Memory does not grow with all transaction rows or transaction IDs.
 - Orphan counts include numerator and denominator.
 
