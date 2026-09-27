@@ -1,0 +1,1136 @@
+{
+  "monthly_series": [
+    {
+      "month": "2023-06",
+      "year": "2023",
+      "approved_tx": 52898,
+      "unrec_complaints": 297,
+      "dispute_rate_per_10k": 56.15,
+      "dispute_sla_breach_rate": 19.53,
+      "campaign_sends": 0,
+      "campaign_conversions": 0,
+      "campaign_conv_rate": 0.0,
+      "campaign_cost": 0,
+      "campaign_cpa": 0.0,
+      "digital_events": 193035,
+      "digital_error_rate": 2.25,
+      "unrec_by_channel": {
+        "Call Center": 147,
+        "Email": 64,
+        "Web": 39,
+        "App": 30,
+        "Branch": 15
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 49,
+        "Tarjeta Débito": 19,
+        "Cuenta Ahorro": 58,
+        "Cuenta Corriente": 51,
+        "No_Product_Linked": 96
+      }
+    },
+    {
+      "month": "2023-07",
+      "year": "2023",
+      "approved_tx": 111449,
+      "unrec_complaints": 723,
+      "dispute_rate_per_10k": 64.87,
+      "dispute_sla_breach_rate": 23.24,
+      "campaign_sends": 47741,
+      "campaign_conversions": 352,
+      "campaign_conv_rate": 0.784,
+      "campaign_cost": 1971.51,
+      "campaign_cpa": 5.6,
+      "digital_events": 515918,
+      "digital_error_rate": 2.3,
+      "unrec_by_channel": {
+        "Call Center": 360,
+        "Email": 125,
+        "Web": 115,
+        "App": 78,
+        "Branch": 32
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 118,
+        "Tarjeta Débito": 55,
+        "Cuenta Ahorro": 143,
+        "Cuenta Corriente": 116,
+        "No_Product_Linked": 239
+      }
+    },
+    {
+      "month": "2023-08",
+      "year": "2023",
+      "approved_tx": 117628,
+      "unrec_complaints": 699,
+      "dispute_rate_per_10k": 59.42,
+      "dispute_sla_breach_rate": 21.6,
+      "campaign_sends": 52184,
+      "campaign_conversions": 410,
+      "campaign_conv_rate": 0.835,
+      "campaign_cost": 2718.29,
+      "campaign_cpa": 6.63,
+      "digital_events": 442166,
+      "digital_error_rate": 2.29,
+      "unrec_by_channel": {
+        "Call Center": 327,
+        "Email": 144,
+        "Web": 106,
+        "App": 81,
+        "Branch": 32
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 125,
+        "Tarjeta Débito": 35,
+        "Cuenta Ahorro": 135,
+        "Cuenta Corriente": 126,
+        "No_Product_Linked": 224
+      }
+    },
+    {
+      "month": "2023-09",
+      "year": "2023",
+      "approved_tx": 109341,
+      "unrec_complaints": 661,
+      "dispute_rate_per_10k": 60.45,
+      "dispute_sla_breach_rate": 20.27,
+      "campaign_sends": 46221,
+      "campaign_conversions": 307,
+      "campaign_conv_rate": 0.708,
+      "campaign_cost": 2359.89,
+      "campaign_cpa": 7.69,
+      "digital_events": 442136,
+      "digital_error_rate": 2.31,
+      "unrec_by_channel": {
+        "Call Center": 339,
+        "Email": 126,
+        "Web": 95,
+        "App": 72,
+        "Branch": 20
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 110,
+        "Tarjeta Débito": 50,
+        "Cuenta Ahorro": 125,
+        "Cuenta Corriente": 111,
+        "No_Product_Linked": 215
+      }
+    },
+    {
+      "month": "2023-10",
+      "year": "2023",
+      "approved_tx": 117805,
+      "unrec_complaints": 688,
+      "dispute_rate_per_10k": 58.4,
+      "dispute_sla_breach_rate": 16.57,
+      "campaign_sends": 49788,
+      "campaign_conversions": 308,
+      "campaign_conv_rate": 0.658,
+      "campaign_cost": 2213.83,
+      "campaign_cpa": 7.19,
+      "digital_events": 488306,
+      "digital_error_rate": 2.32,
+      "unrec_by_channel": {
+        "Call Center": 359,
+        "Email": 127,
+        "Web": 93,
+        "App": 72,
+        "Branch": 29
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 107,
+        "Tarjeta Débito": 59,
+        "Cuenta Ahorro": 138,
+        "Cuenta Corriente": 123,
+        "No_Product_Linked": 219
+      }
+    },
+    {
+      "month": "2023-11",
+      "year": "2023",
+      "approved_tx": 112566,
+      "unrec_complaints": 637,
+      "dispute_rate_per_10k": 56.59,
+      "dispute_sla_breach_rate": 18.05,
+      "campaign_sends": 49178,
+      "campaign_conversions": 271,
+      "campaign_conv_rate": 0.585,
+      "campaign_cost": 1394.74,
+      "campaign_cpa": 5.15,
+      "digital_events": 419660,
+      "digital_error_rate": 2.28,
+      "unrec_by_channel": {
+        "Call Center": 313,
+        "Email": 123,
+        "Web": 91,
+        "App": 89,
+        "Branch": 17
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 111,
+        "Tarjeta Débito": 41,
+        "Cuenta Ahorro": 137,
+        "Cuenta Corriente": 98,
+        "No_Product_Linked": 213
+      }
+    },
+    {
+      "month": "2023-12",
+      "year": "2023",
+      "approved_tx": 115542,
+      "unrec_complaints": 712,
+      "dispute_rate_per_10k": 61.62,
+      "dispute_sla_breach_rate": 19.1,
+      "campaign_sends": 50252,
+      "campaign_conversions": 201,
+      "campaign_conv_rate": 0.426,
+      "campaign_cost": 1971.81,
+      "campaign_cpa": 9.81,
+      "digital_events": 425204,
+      "digital_error_rate": 2.31,
+      "unrec_by_channel": {
+        "Call Center": 364,
+        "Email": 142,
+        "Web": 110,
+        "App": 66,
+        "Branch": 26
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 114,
+        "Tarjeta Débito": 47,
+        "Cuenta Ahorro": 142,
+        "Cuenta Corriente": 117,
+        "No_Product_Linked": 238
+      }
+    },
+    {
+      "month": "2024-01",
+      "year": "2024",
+      "approved_tx": 112568,
+      "unrec_complaints": 700,
+      "dispute_rate_per_10k": 62.18,
+      "dispute_sla_breach_rate": 22.0,
+      "campaign_sends": 50926,
+      "campaign_conversions": 251,
+      "campaign_conv_rate": 0.524,
+      "campaign_cost": 2037.49,
+      "campaign_cpa": 8.12,
+      "digital_events": 497127,
+      "digital_error_rate": 2.31,
+      "unrec_by_channel": {
+        "Call Center": 356,
+        "Email": 132,
+        "Web": 84,
+        "App": 86,
+        "Branch": 30
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 119,
+        "Tarjeta Débito": 36,
+        "Cuenta Ahorro": 152,
+        "Cuenta Corriente": 116,
+        "No_Product_Linked": 232
+      }
+    },
+    {
+      "month": "2024-02",
+      "year": "2024",
+      "approved_tx": 107896,
+      "unrec_complaints": 646,
+      "dispute_rate_per_10k": 59.87,
+      "dispute_sla_breach_rate": 20.74,
+      "campaign_sends": 47711,
+      "campaign_conversions": 292,
+      "campaign_conv_rate": 0.653,
+      "campaign_cost": 782.75,
+      "campaign_cpa": 2.68,
+      "digital_events": 371912,
+      "digital_error_rate": 2.31,
+      "unrec_by_channel": {
+        "Call Center": 326,
+        "Email": 146,
+        "Web": 84,
+        "App": 66,
+        "Branch": 17
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 94,
+        "Tarjeta Débito": 38,
+        "Cuenta Ahorro": 121,
+        "Cuenta Corriente": 120,
+        "No_Product_Linked": 233
+      }
+    },
+    {
+      "month": "2024-03",
+      "year": "2024",
+      "approved_tx": 111211,
+      "unrec_complaints": 667,
+      "dispute_rate_per_10k": 59.98,
+      "dispute_sla_breach_rate": 21.14,
+      "campaign_sends": 47968,
+      "campaign_conversions": 324,
+      "campaign_conv_rate": 0.719,
+      "campaign_cost": 564.68,
+      "campaign_cpa": 1.74,
+      "digital_events": 424098,
+      "digital_error_rate": 2.29,
+      "unrec_by_channel": {
+        "Call Center": 357,
+        "Email": 128,
+        "Web": 85,
+        "App": 56,
+        "Branch": 33
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 118,
+        "Tarjeta Débito": 48,
+        "Cuenta Ahorro": 121,
+        "Cuenta Corriente": 114,
+        "No_Product_Linked": 214
+      }
+    },
+    {
+      "month": "2024-04",
+      "year": "2024",
+      "approved_tx": 112049,
+      "unrec_complaints": 717,
+      "dispute_rate_per_10k": 63.99,
+      "dispute_sla_breach_rate": 19.11,
+      "campaign_sends": 49543,
+      "campaign_conversions": 276,
+      "campaign_conv_rate": 0.592,
+      "campaign_cost": 754.95,
+      "campaign_cpa": 2.74,
+      "digital_events": 391299,
+      "digital_error_rate": 2.29,
+      "unrec_by_channel": {
+        "Call Center": 375,
+        "Email": 124,
+        "Web": 107,
+        "App": 80,
+        "Branch": 27
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 94,
+        "Tarjeta Débito": 43,
+        "Cuenta Ahorro": 137,
+        "Cuenta Corriente": 122,
+        "No_Product_Linked": 272
+      }
+    },
+    {
+      "month": "2024-05",
+      "year": "2024",
+      "approved_tx": 116302,
+      "unrec_complaints": 654,
+      "dispute_rate_per_10k": 56.23,
+      "dispute_sla_breach_rate": 17.89,
+      "campaign_sends": 51702,
+      "campaign_conversions": 334,
+      "campaign_conv_rate": 0.686,
+      "campaign_cost": 1062.54,
+      "campaign_cpa": 3.18,
+      "digital_events": 463679,
+      "digital_error_rate": 2.32,
+      "unrec_by_channel": {
+        "Call Center": 342,
+        "Email": 125,
+        "Web": 96,
+        "App": 57,
+        "Branch": 26
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 114,
+        "Tarjeta Débito": 42,
+        "Cuenta Ahorro": 145,
+        "Cuenta Corriente": 115,
+        "No_Product_Linked": 197
+      }
+    },
+    {
+      "month": "2024-06",
+      "year": "2024",
+      "approved_tx": 111923,
+      "unrec_complaints": 678,
+      "dispute_rate_per_10k": 60.58,
+      "dispute_sla_breach_rate": 19.91,
+      "campaign_sends": 46803,
+      "campaign_conversions": 267,
+      "campaign_conv_rate": 0.606,
+      "campaign_cost": 1462.44,
+      "campaign_cpa": 5.48,
+      "digital_events": 419700,
+      "digital_error_rate": 2.26,
+      "unrec_by_channel": {
+        "Call Center": 333,
+        "Email": 140,
+        "Web": 108,
+        "App": 67,
+        "Branch": 21
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 120,
+        "Tarjeta Débito": 46,
+        "Cuenta Ahorro": 127,
+        "Cuenta Corriente": 110,
+        "No_Product_Linked": 234
+      }
+    },
+    {
+      "month": "2024-07",
+      "year": "2024",
+      "approved_tx": 118924,
+      "unrec_complaints": 695,
+      "dispute_rate_per_10k": 58.44,
+      "dispute_sla_breach_rate": 22.3,
+      "campaign_sends": 52595,
+      "campaign_conversions": 320,
+      "campaign_conv_rate": 0.648,
+      "campaign_cost": 2202.1,
+      "campaign_cpa": 6.88,
+      "digital_events": 444861,
+      "digital_error_rate": 2.32,
+      "unrec_by_channel": {
+        "Call Center": 333,
+        "Email": 148,
+        "Web": 111,
+        "App": 69,
+        "Branch": 28
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 133,
+        "Tarjeta Débito": 48,
+        "Cuenta Ahorro": 121,
+        "Cuenta Corriente": 115,
+        "No_Product_Linked": 224
+      }
+    },
+    {
+      "month": "2024-08",
+      "year": "2024",
+      "approved_tx": 112364,
+      "unrec_complaints": 680,
+      "dispute_rate_per_10k": 60.52,
+      "dispute_sla_breach_rate": 19.26,
+      "campaign_sends": 48629,
+      "campaign_conversions": 273,
+      "campaign_conv_rate": 0.597,
+      "campaign_cost": 2682.28,
+      "campaign_cpa": 9.83,
+      "digital_events": 419801,
+      "digital_error_rate": 2.29,
+      "unrec_by_channel": {
+        "Call Center": 334,
+        "Email": 134,
+        "Web": 97,
+        "App": 81,
+        "Branch": 26
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 114,
+        "Tarjeta Débito": 39,
+        "Cuenta Ahorro": 130,
+        "Cuenta Corriente": 114,
+        "No_Product_Linked": 234
+      }
+    },
+    {
+      "month": "2024-09",
+      "year": "2024",
+      "approved_tx": 108462,
+      "unrec_complaints": 678,
+      "dispute_rate_per_10k": 62.51,
+      "dispute_sla_breach_rate": 21.98,
+      "campaign_sends": 47453,
+      "campaign_conversions": 233,
+      "campaign_conv_rate": 0.523,
+      "campaign_cost": 2994.79,
+      "campaign_cpa": 12.85,
+      "digital_events": 430118,
+      "digital_error_rate": 2.28,
+      "unrec_by_channel": {
+        "Call Center": 352,
+        "Email": 111,
+        "Web": 113,
+        "App": 62,
+        "Branch": 34
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 116,
+        "Tarjeta Débito": 41,
+        "Cuenta Ahorro": 136,
+        "Cuenta Corriente": 112,
+        "No_Product_Linked": 234
+      }
+    },
+    {
+      "month": "2024-10",
+      "year": "2024",
+      "approved_tx": 117565,
+      "unrec_complaints": 680,
+      "dispute_rate_per_10k": 57.84,
+      "dispute_sla_breach_rate": 19.85,
+      "campaign_sends": 50232,
+      "campaign_conversions": 287,
+      "campaign_conv_rate": 0.608,
+      "campaign_cost": 2663.37,
+      "campaign_cpa": 9.28,
+      "digital_events": 407032,
+      "digital_error_rate": 2.31,
+      "unrec_by_channel": {
+        "Call Center": 329,
+        "Email": 127,
+        "Web": 99,
+        "App": 85,
+        "Branch": 35
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 106,
+        "Tarjeta Débito": 45,
+        "Cuenta Ahorro": 142,
+        "Cuenta Corriente": 119,
+        "No_Product_Linked": 226
+      }
+    },
+    {
+      "month": "2024-11",
+      "year": "2024",
+      "approved_tx": 111153,
+      "unrec_complaints": 667,
+      "dispute_rate_per_10k": 60.01,
+      "dispute_sla_breach_rate": 18.59,
+      "campaign_sends": 47921,
+      "campaign_conversions": 194,
+      "campaign_conv_rate": 0.43,
+      "campaign_cost": 2561.47,
+      "campaign_cpa": 13.2,
+      "digital_events": 385266,
+      "digital_error_rate": 2.31,
+      "unrec_by_channel": {
+        "Call Center": 322,
+        "Email": 139,
+        "Web": 105,
+        "App": 65,
+        "Branch": 31
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 98,
+        "Tarjeta Débito": 43,
+        "Cuenta Ahorro": 121,
+        "Cuenta Corriente": 118,
+        "No_Product_Linked": 235
+      }
+    },
+    {
+      "month": "2024-12",
+      "year": "2024",
+      "approved_tx": 113365,
+      "unrec_complaints": 685,
+      "dispute_rate_per_10k": 60.42,
+      "dispute_sla_breach_rate": 20.29,
+      "campaign_sends": 49621,
+      "campaign_conversions": 260,
+      "campaign_conv_rate": 0.557,
+      "campaign_cost": 3118.65,
+      "campaign_cpa": 11.99,
+      "digital_events": 403075,
+      "digital_error_rate": 2.28,
+      "unrec_by_channel": {
+        "Call Center": 371,
+        "Email": 117,
+        "Web": 108,
+        "App": 67,
+        "Branch": 19
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 130,
+        "Tarjeta Débito": 46,
+        "Cuenta Ahorro": 141,
+        "Cuenta Corriente": 126,
+        "No_Product_Linked": 190
+      }
+    },
+    {
+      "month": "2025-01",
+      "year": "2025",
+      "approved_tx": 112080,
+      "unrec_complaints": 743,
+      "dispute_rate_per_10k": 66.29,
+      "dispute_sla_breach_rate": 21.27,
+      "campaign_sends": 50668,
+      "campaign_conversions": 232,
+      "campaign_conv_rate": 0.488,
+      "campaign_cost": 2927.92,
+      "campaign_cpa": 12.62,
+      "digital_events": 443948,
+      "digital_error_rate": 2.28,
+      "unrec_by_channel": {
+        "Call Center": 370,
+        "Email": 151,
+        "Web": 106,
+        "App": 81,
+        "Branch": 27
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 101,
+        "Tarjeta Débito": 47,
+        "Cuenta Ahorro": 154,
+        "Cuenta Corriente": 110,
+        "No_Product_Linked": 278
+      }
+    },
+    {
+      "month": "2025-02",
+      "year": "2025",
+      "approved_tx": 101738,
+      "unrec_complaints": 646,
+      "dispute_rate_per_10k": 63.5,
+      "dispute_sla_breach_rate": 20.74,
+      "campaign_sends": 44523,
+      "campaign_conversions": 188,
+      "campaign_conv_rate": 0.449,
+      "campaign_cost": 2658.03,
+      "campaign_cpa": 14.14,
+      "digital_events": 395621,
+      "digital_error_rate": 2.31,
+      "unrec_by_channel": {
+        "Call Center": 331,
+        "Email": 117,
+        "Web": 98,
+        "App": 62,
+        "Branch": 27
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 98,
+        "Tarjeta Débito": 33,
+        "Cuenta Ahorro": 138,
+        "Cuenta Corriente": 115,
+        "No_Product_Linked": 227
+      }
+    },
+    {
+      "month": "2025-03",
+      "year": "2025",
+      "approved_tx": 113458,
+      "unrec_complaints": 659,
+      "dispute_rate_per_10k": 58.08,
+      "dispute_sla_breach_rate": 19.88,
+      "campaign_sends": 49306,
+      "campaign_conversions": 263,
+      "campaign_conv_rate": 0.567,
+      "campaign_cost": 2293.11,
+      "campaign_cpa": 8.72,
+      "digital_events": 426983,
+      "digital_error_rate": 2.29,
+      "unrec_by_channel": {
+        "Call Center": 341,
+        "Email": 116,
+        "Web": 108,
+        "App": 68,
+        "Branch": 18
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 108,
+        "Tarjeta Débito": 52,
+        "Cuenta Ahorro": 135,
+        "Cuenta Corriente": 96,
+        "No_Product_Linked": 227
+      }
+    },
+    {
+      "month": "2025-04",
+      "year": "2025",
+      "approved_tx": 111255,
+      "unrec_complaints": 661,
+      "dispute_rate_per_10k": 59.41,
+      "dispute_sla_breach_rate": 19.67,
+      "campaign_sends": 48994,
+      "campaign_conversions": 294,
+      "campaign_conv_rate": 0.638,
+      "campaign_cost": 1147.57,
+      "campaign_cpa": 3.9,
+      "digital_events": 387151,
+      "digital_error_rate": 2.31,
+      "unrec_by_channel": {
+        "Call Center": 332,
+        "Email": 128,
+        "Web": 101,
+        "App": 70,
+        "Branch": 22
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 118,
+        "Tarjeta Débito": 42,
+        "Cuenta Ahorro": 127,
+        "Cuenta Corriente": 126,
+        "No_Product_Linked": 211
+      }
+    },
+    {
+      "month": "2025-05",
+      "year": "2025",
+      "approved_tx": 116513,
+      "unrec_complaints": 696,
+      "dispute_rate_per_10k": 59.74,
+      "dispute_sla_breach_rate": 20.98,
+      "campaign_sends": 48735,
+      "campaign_conversions": 206,
+      "campaign_conv_rate": 0.45,
+      "campaign_cost": 707.93,
+      "campaign_cpa": 3.44,
+      "digital_events": 477284,
+      "digital_error_rate": 2.29,
+      "unrec_by_channel": {
+        "Call Center": 345,
+        "Email": 140,
+        "Web": 107,
+        "App": 65,
+        "Branch": 33
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 107,
+        "Tarjeta Débito": 51,
+        "Cuenta Ahorro": 129,
+        "Cuenta Corriente": 114,
+        "No_Product_Linked": 256
+      }
+    },
+    {
+      "month": "2025-06",
+      "year": "2025",
+      "approved_tx": 109386,
+      "unrec_complaints": 643,
+      "dispute_rate_per_10k": 58.78,
+      "dispute_sla_breach_rate": 18.97,
+      "campaign_sends": 48217,
+      "campaign_conversions": 291,
+      "campaign_conv_rate": 0.642,
+      "campaign_cost": 1003.98,
+      "campaign_cpa": 3.45,
+      "digital_events": 417165,
+      "digital_error_rate": 2.28,
+      "unrec_by_channel": {
+        "Call Center": 322,
+        "Email": 133,
+        "Web": 95,
+        "App": 69,
+        "Branch": 20
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 116,
+        "Tarjeta Débito": 39,
+        "Cuenta Ahorro": 115,
+        "Cuenta Corriente": 121,
+        "No_Product_Linked": 211
+      }
+    },
+    {
+      "month": "2025-07",
+      "year": "2025",
+      "approved_tx": 116630,
+      "unrec_complaints": 676,
+      "dispute_rate_per_10k": 57.96,
+      "dispute_sla_breach_rate": 20.71,
+      "campaign_sends": 50196,
+      "campaign_conversions": 234,
+      "campaign_conv_rate": 0.495,
+      "campaign_cost": 947.13,
+      "campaign_cpa": 4.05,
+      "digital_events": 491453,
+      "digital_error_rate": 2.26,
+      "unrec_by_channel": {
+        "Call Center": 344,
+        "Email": 130,
+        "Web": 102,
+        "App": 70,
+        "Branch": 22
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 104,
+        "Tarjeta Débito": 36,
+        "Cuenta Ahorro": 125,
+        "Cuenta Corriente": 121,
+        "No_Product_Linked": 249
+      }
+    },
+    {
+      "month": "2025-08",
+      "year": "2025",
+      "approved_tx": 115796,
+      "unrec_complaints": 685,
+      "dispute_rate_per_10k": 59.16,
+      "dispute_sla_breach_rate": 18.54,
+      "campaign_sends": 49660,
+      "campaign_conversions": 245,
+      "campaign_conv_rate": 0.525,
+      "campaign_cost": 1161.57,
+      "campaign_cpa": 4.74,
+      "digital_events": 445122,
+      "digital_error_rate": 2.29,
+      "unrec_by_channel": {
+        "Call Center": 340,
+        "Email": 147,
+        "Web": 90,
+        "App": 76,
+        "Branch": 21
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 114,
+        "Tarjeta Débito": 41,
+        "Cuenta Ahorro": 139,
+        "Cuenta Corriente": 121,
+        "No_Product_Linked": 229
+      }
+    },
+    {
+      "month": "2025-09",
+      "year": "2025",
+      "approved_tx": 109194,
+      "unrec_complaints": 663,
+      "dispute_rate_per_10k": 60.72,
+      "dispute_sla_breach_rate": 20.51,
+      "campaign_sends": 48162,
+      "campaign_conversions": 278,
+      "campaign_conv_rate": 0.615,
+      "campaign_cost": 1188.2,
+      "campaign_cpa": 4.27,
+      "digital_events": 447590,
+      "digital_error_rate": 2.29,
+      "unrec_by_channel": {
+        "Call Center": 345,
+        "Email": 141,
+        "Web": 85,
+        "App": 58,
+        "Branch": 28
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 101,
+        "Tarjeta Débito": 42,
+        "Cuenta Ahorro": 131,
+        "Cuenta Corriente": 110,
+        "No_Product_Linked": 239
+      }
+    },
+    {
+      "month": "2025-10",
+      "year": "2025",
+      "approved_tx": 118937,
+      "unrec_complaints": 708,
+      "dispute_rate_per_10k": 59.53,
+      "dispute_sla_breach_rate": 18.79,
+      "campaign_sends": 50418,
+      "campaign_conversions": 277,
+      "campaign_conv_rate": 0.584,
+      "campaign_cost": 1641.56,
+      "campaign_cpa": 5.93,
+      "digital_events": 396849,
+      "digital_error_rate": 2.31,
+      "unrec_by_channel": {
+        "Call Center": 380,
+        "Email": 143,
+        "Web": 83,
+        "App": 58,
+        "Branch": 33
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 109,
+        "Tarjeta Débito": 53,
+        "Cuenta Ahorro": 154,
+        "Cuenta Corriente": 116,
+        "No_Product_Linked": 223
+      }
+    },
+    {
+      "month": "2025-11",
+      "year": "2025",
+      "approved_tx": 110578,
+      "unrec_complaints": 631,
+      "dispute_rate_per_10k": 57.06,
+      "dispute_sla_breach_rate": 16.32,
+      "campaign_sends": 48287,
+      "campaign_conversions": 187,
+      "campaign_conv_rate": 0.412,
+      "campaign_cost": 2225.41,
+      "campaign_cpa": 11.9,
+      "digital_events": 419222,
+      "digital_error_rate": 2.31,
+      "unrec_by_channel": {
+        "Call Center": 311,
+        "Email": 108,
+        "Web": 105,
+        "App": 69,
+        "Branch": 34
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 99,
+        "Tarjeta Débito": 59,
+        "Cuenta Ahorro": 124,
+        "Cuenta Corriente": 103,
+        "No_Product_Linked": 204
+      }
+    },
+    {
+      "month": "2025-12",
+      "year": "2025",
+      "approved_tx": 113189,
+      "unrec_complaints": 706,
+      "dispute_rate_per_10k": 62.37,
+      "dispute_sla_breach_rate": 20.4,
+      "campaign_sends": 50843,
+      "campaign_conversions": 361,
+      "campaign_conv_rate": 0.755,
+      "campaign_cost": 1918.42,
+      "campaign_cpa": 5.31,
+      "digital_events": 425444,
+      "digital_error_rate": 2.32,
+      "unrec_by_channel": {
+        "Call Center": 344,
+        "Email": 137,
+        "Web": 118,
+        "App": 70,
+        "Branch": 28
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 106,
+        "Tarjeta Débito": 45,
+        "Cuenta Ahorro": 141,
+        "Cuenta Corriente": 116,
+        "No_Product_Linked": 249
+      }
+    },
+    {
+      "month": "2026-01",
+      "year": "2026",
+      "approved_tx": 111852,
+      "unrec_complaints": 690,
+      "dispute_rate_per_10k": 61.69,
+      "dispute_sla_breach_rate": 20.0,
+      "campaign_sends": 50378,
+      "campaign_conversions": 325,
+      "campaign_conv_rate": 0.685,
+      "campaign_cost": 1049.91,
+      "campaign_cpa": 3.23,
+      "digital_events": 515394,
+      "digital_error_rate": 2.31,
+      "unrec_by_channel": {
+        "Call Center": 336,
+        "Email": 141,
+        "Web": 116,
+        "App": 56,
+        "Branch": 34
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 99,
+        "Tarjeta Débito": 43,
+        "Cuenta Ahorro": 146,
+        "Cuenta Corriente": 132,
+        "No_Product_Linked": 225
+      }
+    },
+    {
+      "month": "2026-02",
+      "year": "2026",
+      "approved_tx": 106022,
+      "unrec_complaints": 616,
+      "dispute_rate_per_10k": 58.1,
+      "dispute_sla_breach_rate": 22.24,
+      "campaign_sends": 44696,
+      "campaign_conversions": 250,
+      "campaign_conv_rate": 0.595,
+      "campaign_cost": 1214.01,
+      "campaign_cpa": 4.86,
+      "digital_events": 411611,
+      "digital_error_rate": 2.29,
+      "unrec_by_channel": {
+        "Call Center": 347,
+        "Email": 97,
+        "Web": 87,
+        "App": 63,
+        "Branch": 16
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 109,
+        "Tarjeta Débito": 44,
+        "Cuenta Ahorro": 114,
+        "Cuenta Corriente": 115,
+        "No_Product_Linked": 193
+      }
+    },
+    {
+      "month": "2026-03",
+      "year": "2026",
+      "approved_tx": 114551,
+      "unrec_complaints": 740,
+      "dispute_rate_per_10k": 64.6,
+      "dispute_sla_breach_rate": 19.73,
+      "campaign_sends": 49808,
+      "campaign_conversions": 265,
+      "campaign_conv_rate": 0.565,
+      "campaign_cost": 2095.2,
+      "campaign_cpa": 7.91,
+      "digital_events": 433646,
+      "digital_error_rate": 2.32,
+      "unrec_by_channel": {
+        "Call Center": 360,
+        "Email": 154,
+        "Web": 112,
+        "App": 79,
+        "Branch": 27
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 128,
+        "Tarjeta Débito": 59,
+        "Cuenta Ahorro": 148,
+        "Cuenta Corriente": 112,
+        "No_Product_Linked": 247
+      }
+    },
+    {
+      "month": "2026-04",
+      "year": "2026",
+      "approved_tx": 116444,
+      "unrec_complaints": 687,
+      "dispute_rate_per_10k": 59.0,
+      "dispute_sla_breach_rate": 22.13,
+      "campaign_sends": 50112,
+      "campaign_conversions": 292,
+      "campaign_conv_rate": 0.62,
+      "campaign_cost": 2084.71,
+      "campaign_cpa": 7.14,
+      "digital_events": 424902,
+      "digital_error_rate": 2.29,
+      "unrec_by_channel": {
+        "Call Center": 351,
+        "Email": 121,
+        "Web": 109,
+        "App": 75,
+        "Branch": 25
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 113,
+        "Tarjeta Débito": 35,
+        "Cuenta Ahorro": 144,
+        "Cuenta Corriente": 118,
+        "No_Product_Linked": 231
+      }
+    },
+    {
+      "month": "2026-05",
+      "year": "2026",
+      "approved_tx": 117063,
+      "unrec_complaints": 700,
+      "dispute_rate_per_10k": 59.8,
+      "dispute_sla_breach_rate": 22.43,
+      "campaign_sends": 49623,
+      "campaign_conversions": 289,
+      "campaign_conv_rate": 0.619,
+      "campaign_cost": 1350.7,
+      "campaign_cpa": 4.67,
+      "digital_events": 425249,
+      "digital_error_rate": 2.27,
+      "unrec_by_channel": {
+        "Call Center": 350,
+        "Email": 147,
+        "Web": 88,
+        "App": 74,
+        "Branch": 34
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 105,
+        "Tarjeta Débito": 58,
+        "Cuenta Ahorro": 158,
+        "Cuenta Corriente": 107,
+        "No_Product_Linked": 232
+      }
+    },
+    {
+      "month": "2026-06",
+      "year": "2026",
+      "approved_tx": 64984,
+      "unrec_complaints": 377,
+      "dispute_rate_per_10k": 58.01,
+      "dispute_sla_breach_rate": 20.42,
+      "campaign_sends": 27707,
+      "campaign_conversions": 162,
+      "campaign_conv_rate": 0.622,
+      "campaign_cost": 711.21,
+      "campaign_cpa": 4.39,
+      "digital_events": 251967,
+      "digital_error_rate": 2.28,
+      "unrec_by_channel": {
+        "Call Center": 175,
+        "Email": 102,
+        "Web": 48,
+        "App": 33,
+        "Branch": 15
+      },
+      "unrec_by_product": {
+        "Tarjeta Crédito": 55,
+        "Tarjeta Débito": 25,
+        "Cuenta Ahorro": 72,
+        "Cuenta Corriente": 65,
+        "No_Product_Linked": 134
+      }
+    }
+  ],
+  "yearly_metrics": {
+    "2023": {
+      "months_observed": 7,
+      "is_partial_year": true,
+      "monthly_run_rate_unrec": 631.0,
+      "dispute_rate_per_10k_tx": 59.91,
+      "sla_breach_rate": 19.83,
+      "campaign_conv_rate": 0.666,
+      "campaign_cpa": 6.83,
+      "digital_error_rate": 2.3,
+      "total_unrec": 4417,
+      "total_approved_tx": 737229
+    },
+    "2024": {
+      "months_observed": 12,
+      "is_partial_year": false,
+      "monthly_run_rate_unrec": 678.9,
+      "dispute_rate_per_10k_tx": 60.18,
+      "sla_breach_rate": 20.27,
+      "campaign_conv_rate": 0.596,
+      "campaign_cpa": 6.91,
+      "digital_error_rate": 2.3,
+      "total_unrec": 8147,
+      "total_approved_tx": 1353782
+    },
+    "2025": {
+      "months_observed": 12,
+      "is_partial_year": false,
+      "monthly_run_rate_unrec": 676.4,
+      "dispute_rate_per_10k_tx": 60.18,
+      "sla_breach_rate": 19.76,
+      "campaign_conv_rate": 0.553,
+      "campaign_cpa": 6.49,
+      "digital_error_rate": 2.29,
+      "total_unrec": 8117,
+      "total_approved_tx": 1348754
+    },
+    "2026": {
+      "months_observed": 6,
+      "is_partial_year": true,
+      "monthly_run_rate_unrec": 635.0,
+      "dispute_rate_per_10k_tx": 60.39,
+      "sla_breach_rate": 21.18,
+      "campaign_conv_rate": 0.618,
+      "campaign_cpa": 5.37,
+      "digital_error_rate": 2.3,
+      "total_unrec": 3810,
+      "total_approved_tx": 630916
+    }
+  },
+  "shift_assessment": {
+    "comparison_period": "2024 vs 2025 (Full Calendar Years)",
+    "dispute_rate_delta_per_10k": 0.0,
+    "sla_breach_rate_delta_pct": -0.51,
+    "campaign_conv_rate_delta_pct": -0.043,
+    "reception_channel_psi": 0.00019,
+    "product_type_psi": 0.00113,
+    "assessment": "STATIONARY / NO SIGNIFICANT DRIFT. Dispute rate per 10k approved transactions remained exactly 60.18 in both 2024 and 2025. Reception channel PSI (0.0002) and Product distribution PSI (0.0011) are both < 0.05, indicating extreme temporal stability in dispute generation and channel habits."
+  }
+}
