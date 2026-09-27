@@ -26,6 +26,12 @@ def get_connection(duckdb_path: Union[str, Path]) -> Iterator[duckdb.DuckDBPyCon
     os.makedirs(os.path.dirname(duckdb_path) or ".", exist_ok=True)
     con = duckdb.connect(duckdb_path)
     try:
+        temp_dir = Path(duckdb_path).parent / "duckdb_tmp"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        con.execute("SET memory_limit=?", [os.environ.get("DUCKDB_MEMORY_LIMIT", "3GB")])
+        con.execute("SET temp_directory=?", [str(temp_dir)])
+        con.execute("SET threads=?", [int(os.environ.get("DUCKDB_THREADS", "2"))])
+        con.execute("SET preserve_insertion_order=false")
         con.execute("CREATE SCHEMA IF NOT EXISTS silver;")
         logger.info("connected to %s", duckdb_path)
         yield con

@@ -182,6 +182,7 @@ transactions_spec = TableSpec(
     columns=[
         ColumnSpec("t.transaction_id"),
         ColumnSpec("t.transaction_date", transform="timestamp"),
+        ColumnSpec("t.process_date", transform="date"),
         ColumnSpec("t.product_id"),
         ColumnSpec("t.customer_id"),
         ColumnSpec("t.transaction_type"),

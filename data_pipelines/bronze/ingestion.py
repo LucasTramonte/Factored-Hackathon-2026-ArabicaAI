@@ -26,6 +26,8 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shutil
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import date
@@ -224,6 +226,9 @@ def ingest_fact(
                 table_name, len(dates_to_load), mode, min(dates_to_load), max(dates_to_load))
     loop_start = time.monotonic()
 
+    staging_dir = tempfile.mkdtemp(prefix=f"{table_name}.stage-", dir=os.path.dirname(local_dir)) if mode == "full refresh" else None
+    write_dir = staging_dir or local_dir
+
     def _copy_from(glob_pattern: str) -> None:
         con.execute(f"""
             COPY (
@@ -232,37 +237,56 @@ def ingest_fact(
                        current_timestamp AS _ingested_at,
                        '{table_name}' AS _source_table
                 FROM read_csv('{glob_pattern}', ALL_VARCHAR=true, hive_partitioning=true, filename=true)
-            ) TO '{local_dir}' (FORMAT PARQUET, PARTITION_BY (year, month, day), OVERWRITE_OR_IGNORE)
+            ) TO '{write_dir}' (FORMAT PARQUET, PARTITION_BY (year, month, day), OVERWRITE_OR_IGNORE)
         """)
 
-    if mode == "full refresh":
-        # Loading everything anyway -- no reason to enumerate individual dates and issue one S3
-        # read per day (that used to mean 1000+ sequential round trips on a multi-year table, most
-        # of the actual wall-clock cost of a full refresh). A single glob over the whole
-        # year=*/month=*/day=*/*.csv tree does it in one read_csv call, same as the original
-        # notebook did before this pipeline existed -- and that approach was already proven to work
-        # on all 7 fact tables at their real sizes (up to 15.6M rows for digital_events).
-        _copy_from(_full_history_glob(base_path, table_name))
-        logger.info("[%s] full refresh: %d partition(s) loaded in %.0fs",
-                    table_name, len(dates_to_load), time.monotonic() - loop_start)
-    else:
-        # Incremental -- group the (usually few) new dates by year/month so a normal day-to-day
-        # rerun costs 1-2 S3 round trips rather than one per new day.
-        batches = _group_by_year_month(dates_to_load)
-        logger.info("[%s] %d new partition(s) across %d month-batch(es)",
-                    table_name, len(dates_to_load), len(batches))
-        for i, ((year, month), month_dates) in enumerate(batches, start=1):
-            t0 = time.monotonic()
-            _copy_from(_month_glob(base_path, table_name, year, month))
-            logger.debug("[%s] batch %d/%d (%04d-%02d, %d new date(s)) loaded in %.1fs",
-                         table_name, i, len(batches), year, month, len(month_dates),
-                         time.monotonic() - t0)
+    try:
+        if mode == "full refresh":
+            # Loading everything anyway -- no reason to enumerate individual dates and issue one S3
+            # read per day (that used to mean 1000+ sequential round trips on a multi-year table, most
+            # of the actual wall-clock cost of a full refresh). A single glob over the whole
+            # year=*/month=*/day=*/*.csv tree does it in one read_csv call, same as the original
+            # notebook did before this pipeline existed -- and that approach was already proven to work
+            # on all 7 fact tables at their real sizes (up to 15.6M rows for digital_events).
+            _copy_from(_full_history_glob(base_path, table_name))
+            logger.info("[%s] full refresh: %d partition(s) loaded in %.0fs",
+                        table_name, len(dates_to_load), time.monotonic() - loop_start)
+        else:
+            # Incremental -- group the (usually few) new dates by year/month so a normal day-to-day
+            # rerun costs 1-2 S3 round trips rather than one per new day.
+            batches = _group_by_year_month(dates_to_load)
+            logger.info("[%s] %d new partition(s) across %d month-batch(es)",
+                        table_name, len(dates_to_load), len(batches))
+            for i, ((year, month), month_dates) in enumerate(batches, start=1):
+                t0 = time.monotonic()
+                _copy_from(_month_glob(base_path, table_name, year, month))
+                logger.debug("[%s] batch %d/%d (%04d-%02d, %d new date(s)) loaded in %.1fs",
+                             table_name, i, len(batches), year, month, len(month_dates),
+                             time.monotonic() - t0)
 
-    # Rebuilt from LOCAL parquet only -- no S3 traffic for partitions already on disk.
-    con.execute(f"""
-        CREATE OR REPLACE TABLE bronze.{table_name} AS
-        SELECT * FROM read_parquet('{local_dir}/**/*.parquet', hive_partitioning=true)
-    """)
+        # Rebuild the materialized Bronze table from the just-written local snapshot.
+        con.execute(f"""
+            CREATE OR REPLACE TABLE bronze.{table_name} AS
+            SELECT * FROM read_parquet('{write_dir}/**/*.parquet', hive_partitioning=true)
+        """)
+        if staging_dir:
+            backup_dir = f"{local_dir}.old"
+            if os.path.exists(backup_dir):
+                shutil.rmtree(backup_dir)
+            had_live = os.path.exists(local_dir)
+            if had_live:
+                os.replace(local_dir, backup_dir)
+            try:
+                os.replace(staging_dir, local_dir)
+            except OSError:
+                if had_live:
+                    os.replace(backup_dir, local_dir)
+                raise
+            if had_live:
+                shutil.rmtree(backup_dir)
+    finally:
+        if staging_dir and os.path.exists(staging_dir):
+            shutil.rmtree(staging_dir)
 
     update_watermark(con, table_name, max(dates_to_load))
 

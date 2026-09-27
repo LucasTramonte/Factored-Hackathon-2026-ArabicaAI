@@ -1,0 +1,114 @@
+"""Focused regression fixtures for the Bronze/Silver readiness gate."""
+import duckdb
+import pytest
+
+from data_pipelines.quality.checks import run_checks
+from data_pipelines.quality.contracts import CONTRACTS
+
+
+@pytest.fixture
+def con():
+    connection = duckdb.connect()
+    connection.execute("CREATE SCHEMA bronze; CREATE SCHEMA silver")
+    yield connection
+    connection.close()
+
+
+def tables(con, name, rows):
+    contract = CONTRACTS[name]
+    columns = list(contract.expected_columns)
+    fields = ", ".join(f'"{column}" VARCHAR' for column in columns)
+    prefix = 'fact_' if contract.partition_field else 'dim_'
+    con.execute(f'CREATE TABLE bronze."{name}" ({fields}, _source_file VARCHAR)')
+    con.execute(f'CREATE TABLE silver."{prefix}{name}" ({fields})')
+    for values in rows:
+        raw = [values.get(column) for column in columns]
+        placeholders = ', '.join('?' for _ in columns)
+        con.execute(f'INSERT INTO bronze."{name}" VALUES ({placeholders}, ?)', raw + [values.get('_source_file')])
+        con.execute(f'INSERT INTO silver."{prefix}{name}" VALUES ({placeholders})', raw)
+
+
+def find(results, check, table, field=None):
+    return next(item for item in results if item['check'] == check and item['table'] == table and item['field'] == field)
+
+
+def test_missing_table_blocks_readiness(con):
+    result = run_checks(con, ['customers'])
+    assert find(result, 'table_discovery', 'customers')['severity'] == 'error'
+
+
+def test_duplicate_and_required_fields_are_visible_before_silver_dedup(con):
+    tables(con, 'customers', [
+        {'customer_id': 'C1', 'country': 'México', 'customer_status': 'Active'},
+        {'customer_id': 'C1', 'country': '', 'customer_status': 'Wrong'},
+    ])
+    con.execute("DELETE FROM silver.dim_customers WHERE country='' ")
+    result = run_checks(con, ['customers'])
+    assert find(result, 'duplicate_primary_keys', 'customers', 'customer_id')['numerator'] == 1
+    assert find(result, 'silver_row_delta_unexplained', 'customers')['numerator'] == 0
+    assert find(result, 'required_field_nulls', 'customers', 'country')['numerator'] == 1
+    assert find(result, 'domain_violations', 'customers', 'customer_status')['numerator'] == 1
+
+
+def test_partition_business_date_and_foreign_key_are_separate(con):
+    tables(con, 'customers', [{'customer_id':'C1', 'country':'Colombia', 'customer_status':'Active'}])
+    tables(con, 'marketing_campaigns', [{'campaign_id':'M1', 'campaign_status':'Active'}])
+    tables(con, 'campaign_sends', [
+        {'send_id':'S1', 'send_date':'2024-01-01 23:00:00', 'process_date':'2024-01-02',
+         'campaign_id':'M1', 'customer_id':'C1', 'send_channel':'Email', 'send_status':'Sent',
+         'was_delivered':'True', 'had_conversion':'False',
+         '_source_file':'s3://bucket/data/campaign_sends/year=2024/month=01/day=02/part.csv'},
+        {'send_id':'S2', 'send_date':'2024-01-03 00:00:00', 'process_date':'2024-01-02',
+         'campaign_id':'Missing', 'customer_id':'C1', 'send_channel':'Email', 'send_status':'Sent',
+         'was_delivered':'True', 'had_conversion':'False',
+         '_source_file':'s3://bucket/data/campaign_sends/year=2024/month=01/day=03/part.csv'},
+    ])
+    result = run_checks(con, ['campaign_sends'])
+    assert find(result, 'late_arrival_signal', 'campaign_sends', 'send_date')['numerator'] == 1
+    assert find(result, 'partition_date_mismatch', 'campaign_sends', 'process_date')['numerator'] == 1
+    assert find(result, 'foreign_key_orphans', 'campaign_sends', 'campaign_id')['numerator'] == 1
+
+
+def test_missing_silver_and_cross_file_duplicates(con):
+    tables(con, 'campaign_sends', [
+        {'send_id':'S1', 'send_date':'2024-01-01', 'process_date':'2024-01-01',
+         'campaign_id':'M1', 'customer_id':'C1', 'send_channel':'Email', 'send_status':'Sent',
+         'was_delivered':'True', 'had_conversion':'False',
+         '_source_file':'s3://bucket/campaign_sends/year=2024/month=01/day=01/a.csv'},
+        {'send_id':'S1', 'send_date':'2024-01-02', 'process_date':'2024-01-02',
+         'campaign_id':'M1', 'customer_id':'C1', 'send_channel':'Email', 'send_status':'Sent',
+         'was_delivered':'True', 'had_conversion':'False',
+         '_source_file':'s3://bucket/campaign_sends/year=2024/month=01/day=02/b.csv'},
+    ])
+    con.execute("DELETE FROM silver.fact_campaign_sends WHERE process_date='2024-01-02'")
+    results = run_checks(con, ['campaign_sends'])
+    assert find(results, 'duplicate_primary_keys_across_partitions', 'campaign_sends', 'send_id')['numerator'] == 1
+    con.execute('DROP TABLE silver.fact_campaign_sends')
+    results = run_checks(con, ['campaign_sends'])
+    assert find(results, 'silver_table_discovery', 'campaign_sends')['severity'] == 'error'
+
+
+def test_cross_file_duplicates_count_each_row_in_later_file(con):
+    path_a = 's3://bucket/customers/a.csv'
+    path_b = 's3://bucket/customers/b.csv'
+    tables(con, 'customers', [
+        {'customer_id': 'C1', 'country': 'Mexico', 'customer_status': 'Active', '_source_file': path_a},
+        {'customer_id': 'C1', 'country': 'Mexico', 'customer_status': 'Active', '_source_file': path_b},
+        {'customer_id': 'C1', 'country': 'Mexico', 'customer_status': 'Active', '_source_file': path_b},
+    ])
+    result = run_checks(con, ['customers'])
+    assert find(result, 'duplicate_primary_keys', 'customers', 'customer_id')['numerator'] == 2
+    assert find(result, 'duplicate_primary_keys_within_file', 'customers', 'customer_id')['numerator'] == 1
+    assert find(result, 'duplicate_primary_keys_across_partitions', 'customers', 'customer_id')['numerator'] == 2
+
+
+def test_partial_silver_build_blocks_readiness(con):
+    tables(con, 'customers', [
+        {'customer_id': 'C1', 'country': 'Mexico', 'customer_status': 'Active'},
+        {'customer_id': 'C2', 'country': 'Mexico', 'customer_status': 'Active'},
+    ])
+    con.execute("DELETE FROM silver.dim_customers WHERE customer_id='C2'")
+    result = run_checks(con, ['customers'])
+    delta = find(result, 'silver_row_delta_unexplained', 'customers')
+    assert delta['numerator'] == 1
+    assert delta['severity'] == 'error'

@@ -108,7 +108,7 @@ def main(argv: List[str] | None = None) -> int:
     results = run(settings, tables_filter, args.full_refresh)
     print_summary(results)
 
-    failures = [r for r in results if r.status == "failed"]
+    failures = [r for r in results if r.status in {"failed", "no_data_found"}]
     if failures:
         logging.getLogger(__name__).error("%d of %d tables failed", len(failures), len(results))
         return 1

@@ -48,11 +48,9 @@ def test_ingest_dimension_reads_flat_csv(con, tmp_path):
 
     assert result.rows == 2
     assert result.status == "ok"
-    df = con.execute("SELECT * FROM bronze.customers ORDER BY customer_id").df()
-    assert list(df["customer_id"]) == ["C1", "C2"]
-    assert "_ingested_at" in df.columns
-    assert "_source_table" in df.columns
-    assert (df["_source_table"] == "customers").all()
+    result_rows = con.execute("SELECT customer_id, _source_table FROM bronze.customers ORDER BY customer_id").fetchall()
+    assert result_rows == [("C1", "customers"), ("C2", "customers")]
+    assert con.execute("SELECT COUNT(*) FROM bronze.customers WHERE _ingested_at IS NULL").fetchone()[0] == 0
 
 
 def test_ingest_dimension_full_overwrite_on_rerun(con, tmp_path):
@@ -213,3 +211,18 @@ def test_safe_identifier_rejects_unsafe_names(bad_name):
 def test_safe_identifier_accepts_normal_names():
     assert _safe_identifier("digital_events") == "digital_events"
     assert _safe_identifier("_load_watermarks") == "_load_watermarks"
+
+
+def test_full_refresh_replaces_changed_and_removed_source_partitions(con, tmp_path):
+    """A rebuild reflects the current source snapshot, including corrected old days."""
+    base = tmp_path / "source"
+    first = base / "transactions/year=2024/month=01/day=01/t.csv"
+    second = base / "transactions/year=2024/month=01/day=02/t.csv"
+    _write_csv(first, "transaction_id,amount\nT1,100\n")
+    _write_csv(second, "transaction_id,amount\nT2,200\n")
+    ingest_fact(con, str(base), "transactions", data_dir=str(tmp_path / "out"))
+    _write_csv(first, "transaction_id,amount\nT1,150\nT3,300\n")
+    second.unlink()
+    result = ingest_fact(con, str(base), "transactions", full_refresh=True, data_dir=str(tmp_path / "out"))
+    assert result.rows == 2
+    assert con.execute("SELECT transaction_id, amount FROM bronze.transactions ORDER BY transaction_id").fetchall() == [("T1", "150"), ("T3", "300")]
