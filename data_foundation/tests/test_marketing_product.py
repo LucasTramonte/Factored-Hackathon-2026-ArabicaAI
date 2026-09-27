@@ -59,7 +59,7 @@ class MarketingProductTests(unittest.TestCase):
         self.fixture()
         self.write("campaign_sends", [
             {"send_id": "A", "send_date": "2026-01-01 10:00:00", "campaign_id": "M1", "customer_id": "C1", "send_channel": "Email", "was_delivered": "True", "was_opened": "True", "was_clicked": "False", "had_conversion": "True", "conversion_date": "2026-01-02"},
-            {"send_id": "B", "send_date": "2026-01-02 10:00:00", "campaign_id": "M1", "customer_id": "C1", "send_channel": "SMS", "was_delivered": "False", "was_opened": "", "was_clicked": "", "had_conversion": "False"},
+            {"send_id": "B", "send_date": "2026-01-02 10:00:00", "campaign_id": "M1", "customer_id": "C1", "send_channel": "SMS", "was_delivered": "False", "was_opened": "", "was_clicked": "", "had_conversion": ""},
             {"send_id": "C", "send_date": "2026-01-03 10:00:00", "campaign_id": "M1", "customer_id": "C2", "send_channel": "Email", "was_delivered": "True", "was_opened": "False", "was_clicked": "False", "had_conversion": "False"},
             {"send_id": "A", "send_date": "2026-01-01 10:00:00", "campaign_id": "M1", "customer_id": "C1", "send_channel": "Email", "was_delivered": "True", "was_opened": "True", "was_clicked": "False", "had_conversion": "True"},
         ])
@@ -68,6 +68,9 @@ class MarketingProductTests(unittest.TestCase):
         self.assertEqual(result["marketing"]["overall"]["sends"], 3)
         self.assertEqual(result["marketing"]["overall"]["delivered"], 2)
         self.assertEqual(result["marketing"]["overall"]["conversions"], 1)
+        self.assertEqual(result["marketing"]["overall"]["conversion_rate"], 1 / 3)
+        self.assertEqual(result["marketing"]["overall"]["converted_known"], 2)
+        self.assertEqual(result["marketing"]["conversion_timing"]["under_24h"], 1)
         self.assertEqual(result["marketing"]["repeat_exposed_customers"], 1)
         self.assertEqual(result["marketing"]["current_opt_out_sends"], 1)
         self.assertEqual(result["marketing"]["overall"]["open_unknown"], 1)

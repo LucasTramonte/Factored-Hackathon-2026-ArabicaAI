@@ -92,6 +92,7 @@ def scan_marketing(paths: list[Path], campaigns: dict, customers: dict) -> tuple
     groups: dict[str, dict[str, Counter]] = defaultdict(lambda: defaultdict(Counter))
     exposure = Counter()
     extra = Counter()
+    timing = Counter()
     quality = Counter()
     with DiskKeySet() as keys:
         for _, row in projected_rows(paths, COLUMNS["campaign_sends"]):
@@ -149,8 +150,20 @@ def scan_marketing(paths: list[Path], campaigns: dict, customers: dict) -> tuple
             if converted is True:
                 if not conversion_time:
                     extra["conversions_without_valid_date"] += 1
-                elif send_time and conversion_time < send_time:
-                    extra["conversion_before_send"] += 1
+                elif not send_time:
+                    extra["conversions_without_valid_send_date"] += 1
+                else:
+                    hours = (datetime.fromisoformat(conversion_time) - datetime.fromisoformat(send_time)).total_seconds() / 3600
+                    if hours < 0:
+                        extra["conversion_before_send"] += 1
+                    elif hours < 24:
+                        timing["under_24h"] += 1
+                    elif hours < 24 * 7:
+                        timing["1_to_7_days"] += 1
+                    elif hours < 24 * 30:
+                        timing["7_to_30_days"] += 1
+                    else:
+                        timing["30_days_or_more"] += 1
                 if not row["conversion_value"]:
                     extra["conversions_without_value"] += 1
     def metrics(count: Counter) -> dict:
@@ -159,7 +172,7 @@ def scan_marketing(paths: list[Path], campaigns: dict, customers: dict) -> tuple
             "delivery_rate": count["delivered"] / count["delivered_known"] if count["delivered_known"] else None,
             "open_rate": count["opens"] / count["open_known"] if count["open_known"] else None,
             "click_rate": count["clicks"] / count["click_known"] if count["click_known"] else None,
-            "conversion_rate": count["conversions"] / count["converted_known"] if count["converted_known"] else None,
+            "conversion_rate": count["conversions"] / count["sends"] if count["sends"] else None,
         })
         return values
     result = {
@@ -169,6 +182,7 @@ def scan_marketing(paths: list[Path], campaigns: dict, customers: dict) -> tuple
         "repeat_exposed_customers": sum(count > 1 for count in exposure.values()),
         "exposed_customers": len(exposure),
         "current_opt_out_sends": extra["current_opt_out_sends"],
+        "conversion_timing": dict(timing),
         "quality_signals": dict(extra),
         "attribution": "Recorded send-level conversions are descriptive; no control assignment or direct digital-event campaign key is documented.",
     }
@@ -442,6 +456,7 @@ def render_report(results: dict) -> str:
     segment_adoption = sorted(((name, 100 * row["rate"]) for name, row in p["adoption_cohorts"]["segment"].items()), key=lambda item: -item[1])
     digital_product_use = sorted(p["digital_product_events_by_type"].items(), key=lambda item: -item[1])
     activity = sorted(p["approved_transaction_count_by_type"].items(), key=lambda item: -item[1])
+    conversion_timing = [(label, m["conversion_timing"].get(key, 0)) for key, label in (("under_24h", "Under 24 hours"), ("1_to_7_days", "1–7 days"), ("7_to_30_days", "7–30 days"), ("30_days_or_more", "30+ days"))]
     stages = [("Valid sessions", funnel.get("eligible_sessions", 0)), ("Login", funnel.get("login", 0)), ("Product after login", funnel.get("product_after_login", 0)), ("Linked product", funnel.get("linked_product_after_product", 0))]
     campaign_funnel = [("Delivered", 100 * (overall.get("delivery_rate") or 0)), ("Opened*", 100 * (overall.get("open_rate") or 0)), ("Clicked*", 100 * (overall.get("click_rate") or 0)), ("Converted", 100 * (overall.get("conversion_rate") or 0))]
     cards = [
@@ -465,7 +480,7 @@ def render_report(results: dict) -> str:
 <style>:root{{--ink:#173147;--muted:#5c7181;--blue:#16809a;--teal:#54c6ac;--cream:#f5f7f3;--line:#dce6e6}}*{{box-sizing:border-box}}body{{margin:0;background:var(--cream);color:var(--ink);font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}}header{{background:linear-gradient(135deg,#102b43,#11677f);color:white;padding:4rem max(5vw,2rem) 3rem}}header h1{{font-size:clamp(2rem,4vw,3.5rem);line-height:1.1;max-width:850px;margin:.4rem 0}}header p{{max-width:850px;color:#d3eced}}.eyebrow{{text-transform:uppercase;letter-spacing:.18em;font-weight:700;font-size:.76rem}}main{{max-width:1280px;margin:auto;padding:2rem max(2vw,1rem)}}.kpis{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-top:-3.6rem;position:relative}}.kpi,.panel,.chart{{background:white;border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 24px #1937470d}}.kpi{{padding:1.2rem}}.kpi span{{display:block;color:var(--muted);font-size:.85rem}}.kpi strong{{font-size:1.9rem}}nav{{display:flex;flex-wrap:wrap;gap:.5rem;margin:2rem 0 1rem}}nav button{{border:1px solid var(--line);background:white;color:var(--ink);padding:.7rem 1rem;border-radius:999px;font:inherit;cursor:pointer}}nav button[aria-selected=true]{{background:var(--ink);color:white}}.panel{{padding:1.6rem;margin:1rem 0}}.panel h2{{margin-top:0}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem}}.chart{{padding:1.3rem;box-shadow:none}}.chart h3{{font-size:1rem;margin:.1rem 0 1rem}}.bar-row{{display:grid;grid-template-columns:minmax(90px,150px) 1fr 85px;align-items:center;gap:.7rem;margin:.7rem 0;font-size:.84rem}}.bar-label{{overflow-wrap:anywhere}}.track{{height:16px;background:#e8f0ee;border-radius:20px;overflow:hidden}}.fill{{height:100%;background:linear-gradient(90deg,var(--blue),var(--teal));border-radius:20px}}.bar-row strong{{text-align:right}}.note{{background:#eef7f5;border-left:4px solid var(--blue);padding:1rem;margin:1rem 0}}table{{border-collapse:collapse;width:100%;font-size:.9rem}}th,td{{padding:.55rem;text-align:left;border-bottom:1px solid var(--line)}}th{{color:var(--muted)}}.scroll{{overflow:auto}}[hidden]{{display:none!important}}footer{{max-width:1280px;margin:auto;padding:1rem 2rem 3rem;color:var(--muted)}}@media(max-width:600px){{.bar-row{{grid-template-columns:90px 1fr 60px}}header{{padding-bottom:5rem}}}}</style></head>
 <body><header><div class='eyebrow'>ArabicaAI · synthetic data · private team report</div><h1>Marketing & product evidence</h1><p>Observed campaign response, product ownership, and digital engagement. Rates are descriptive; no causal attribution, product acquisition, or ROI is inferred.</p></header><main><div class='kpis'>{card_html}</div>
 <nav aria-label='Report sections'><button type='button' aria-selected='true' data-target='marketing'>Marketing</button><button type='button' aria-selected='false' data-target='products'>Products</button><button type='button' aria-selected='false' data-target='digital'>Digital</button><button type='button' aria-selected='false' data-target='methods'>Methods</button></nav>
-<section id='marketing' class='panel'><h2>Campaign effectiveness</h2><p>Recorded conversion rate uses known <code>had_conversion</code> values over valid sends. Delivery uses known <code>was_delivered</code>; open and click rates use known values among delivered sends.</p><div class='grid'>{_bars(campaign_funnel, 'Observed campaign rates · %', 'percent')}{_bars(channel_values, 'Recorded conversion by send channel', 'percent')}{_bars(objective_values, 'Recorded conversion by campaign objective', 'percent')}{_bars(segment_values, 'Recorded conversion by current segment · %', 'percent')}{_bars(country_values, 'Recorded conversion by current country · %', 'percent')}</div><p class='small'>* Open and click rates use known values among delivered sends. Delivery uses known delivery flags; conversion uses known flags across valid sends. Unknown counts remain in summary.json.</p><div class='scroll'><table><thead><tr><th>Channel</th><th>Sends</th><th>Delivered / known</th><th>Opened / known delivered</th><th>Clicked / known delivered</th><th>Converted / known</th></tr></thead><tbody>{channel_rows}</tbody></table></div><div class='note'><strong>Attribution boundary:</strong> {html.escape(m['attribution'])} {m['repeat_exposed_customers']:,} customers received multiple sends. {m['current_opt_out_sends']:,} sends map to customers whose current snapshot says <code>accepts_marketing=False</code>; historical consent is unknown.</div></section>
+<section id='marketing' class='panel'><h2>Campaign effectiveness</h2><p>Recorded conversion rate uses all valid sends, including sends with an unknown <code>had_conversion</code> flag. Delivery uses known <code>was_delivered</code>; open and click rates use known values among delivered sends.</p><div class='grid'>{_bars(campaign_funnel, 'Observed campaign rates · %', 'percent')}{_bars(channel_values, 'Recorded conversion by send channel', 'percent')}{_bars(objective_values, 'Recorded conversion by campaign objective', 'percent')}{_bars(segment_values, 'Recorded conversion by current segment · %', 'percent')}{_bars(country_values, 'Recorded conversion by current country · %', 'percent')}{_bars(conversion_timing, 'Time from send to recorded conversion')}</div><p class='small'>* Open and click rates use known values among delivered sends. Delivery uses known delivery flags; conversion uses all valid sends. Timing excludes invalid or earlier-than-send dates. Unknown counts remain in summary.json.</p><div class='scroll'><table><thead><tr><th>Channel</th><th>Sends</th><th>Delivered / known</th><th>Opened / known delivered</th><th>Clicked / known delivered</th><th>Converted / known</th></tr></thead><tbody>{channel_rows}</tbody></table></div><div class='note'><strong>Attribution boundary:</strong> {html.escape(m['attribution'])} {m['repeat_exposed_customers']:,} customers received multiple sends. {m['current_opt_out_sends']:,} sends map to customers whose current snapshot says <code>accepts_marketing=False</code>; historical consent is unknown.</div></section>
 <section id='products' class='panel' hidden><h2>Ownership and observed activity</h2><p>Active owners are unique customers with an active product of each type. Approved transaction counts are observed activity, not settled value or adoption. Opening cohorts are subject to product-snapshot survivorship.</p><div class='grid'>{_bars(ownership, 'Active owners by product type')}{_bars(activity, 'Approved transactions by product type')}{_bars(segment_adoption, 'Active ownership by segment · %', 'percent')}{_bars(digital_product_use, 'Linked digital events by product type')}</div><div class='scroll'><table><thead><tr><th>Product type</th><th>Active products</th><th>Active owners</th><th>Linked app / known</th><th>Active products with approved activity</th></tr></thead><tbody>{product_rows}</tbody></table></div><div class='note'>{html.escape(p['note'])}</div></section>
 <section id='digital' class='panel' hidden><h2>Digital engagement</h2><p>Session stages require a Login event followed in timestamp order by a Product-category event and then an identifiable product event. The last stage may occur on the first Product event. Ambiguous sessions are excluded.</p><div class='grid'>{_bars(stages, 'Ordered session funnel')}{_bars(sorted(d['event_types'].items(), key=lambda item:-item[1]), 'Digital event types')}</div><div class='note'>{funnel.get('ambiguous_sessions', 0):,} sessions contain multiple customer IDs; {d['coverage'].get('anonymous_events', 0):,} events lack a customer ID; {d['coverage'].get('unlinked_product_events', 0):,} lack a product ID. {d['login_action_mismatch']:,} Login/Logout events disagree with their action label.</div></section>
 <section id='methods' class='panel' hidden><h2>Methods and quality</h2><p>Marketing grain: <code>send_id</code>. Ownership: product and unique customer. Transaction activity is aggregated by <code>product_id</code> before enrichment. Digital grain: <code>session_id</code>, sorted by event timestamp on disk. All six tables were scanned from local CSVs; duplicate fact IDs after their first occurrence are excluded and counted below.</p><div class='scroll'><table><thead><tr><th>Table</th><th>Files</th><th>Raw rows</th><th>Included rows</th><th>Blank IDs</th><th>Repeated IDs</th></tr></thead><tbody>{quality_rows}</tbody></table></div><h3>Limits</h3><ul>{limitations}</ul></section></main>
