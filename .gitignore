@@ -6,3 +6,15 @@ data_foundation/runs/
 data_foundation/**/__pycache__/
 data/
 Docs/pdfs/
+
+# Secrets — never commit real credentials
+.env
+
+# DuckDB database files (large, local, regenerable from the pipeline)
+*.duckdb
+*.duckdb.wal
+
+# Local Bronze/Silver/Gold data — regenerable by re-running ingestion, and too large for git anyway
+data/
+*.parquet
+*.csv
