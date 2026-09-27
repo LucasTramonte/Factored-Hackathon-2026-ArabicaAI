@@ -1,0 +1,8 @@
+data/
+Docs/pdfs/
+Docs/
+data_foundation/runs/
+data_foundation/**/__pycache__/
+.git/
+.venv/
+*.py[cod]

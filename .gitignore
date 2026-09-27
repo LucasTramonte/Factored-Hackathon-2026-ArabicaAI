@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+data_foundation/runs/
+data_foundation/**/__pycache__/
+data/
+Docs/pdfs/
