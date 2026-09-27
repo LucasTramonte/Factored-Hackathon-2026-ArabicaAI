@@ -42,6 +42,7 @@ docker-test: docker-build
 	docker run --rm latam-bank-pipeline:test
 
 docker-pipeline: docker-build
+	mkdir -p "$(DATA_DIR)"
 	docker run --rm --user "$$(id -u):$$(id -g)" \
 		-v "$(DATA_DIR):/workspace/data" \
 		-v "$(HOME)/.aws:/run/aws:ro" \

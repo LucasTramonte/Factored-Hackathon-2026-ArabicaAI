@@ -38,7 +38,7 @@ A zero-error quality run means the tables are structurally ready to query. It do
 | `make docker-test` | Run offline tests in the code-only container. |
 | `make docker-pipeline` | Run the pipeline with local `data/` and `~/.aws` mounted at runtime. |
 
-For a smaller first S3 check, follow the targeted commands in [REPRODUCIBILITY.md](REPRODUCIBILITY.md). CI runs offline tests and a Docker build; it does not need S3 credentials.
+Both Docker commands build the image first and reuse cached layers on later runs. For a smaller first S3 check, follow the targeted commands in [REPRODUCIBILITY.md](REPRODUCIBILITY.md). CI runs offline tests and a Docker build; it does not need S3 credentials.
 
 ## Where to look next
 
