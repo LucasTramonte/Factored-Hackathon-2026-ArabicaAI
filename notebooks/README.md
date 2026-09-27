@@ -71,3 +71,7 @@ The notebook rebuilds `meeting.sqlite` tables and writes aggregate `results.json
 - The focused regression fixture tests cross-file keys, BOM, atomic failure, input inventory, unknown denominators, open cases, currencies and ambiguous dimension matches. Notebook validation also includes a clean-kernel synthetic fixture, one-partition smoke and seven-partition controlled runs before a full run.
 
 Review the saved HTML after execution for clipped labels, missing outputs and conclusions that need updating. The summary and meeting recommendation are dated interpretations of the reviewed run, not guaranteed to remain valid after changing the inputs. Keep only output-cleared notebook source in Git.
+
+## Suspicious-charge intake baselines
+
+`02_suspicious_charge_intake_baselines.ipynb` is the next evaluation stage. It runs two deterministic references on 42 authored ES/PT cases without reading raw bank records. See [the evaluation guide](../evals/intake/README.md) and [customer/KPI contract](../Docs/intake/customer-and-measurement-contract.md) for definitions, scenario provenance and limitations.

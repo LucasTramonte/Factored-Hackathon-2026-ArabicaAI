@@ -6,9 +6,10 @@ AWS_PROFILE ?= factored-datathon
 
 test:
 	$(PYTHON) -m unittest discover -s data_foundation/tests -v
+	$(PYTHON) -m unittest discover -s evals/intake -p 'test_*.py' -v
 
 compile:
-	$(PYTHON) -m compileall -q data_foundation
+	$(PYTHON) -m compileall -q data_foundation evals/intake
 
 smoke:
 	$(PYTHON) -m data_foundation.scripts.run_baseline --table customers --table products --table branches --table service_agents --table marketing_campaigns --output-root data_foundation/runs/data-quality-baseline
