@@ -1,0 +1,586 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Silver Schema Map</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #f6f4ef;
+    --ink: #1e2127;
+    --ink-mute: #5c6470;
+    --ink-faint: #8a8f99;
+    --surface: #ffffff;
+    --border-soft: #e3ddd0;
+
+    --dim-bg: #fbf3e2;
+    --dim-border: #cf9d4e;
+    --dim-tag: #9a6a1f;
+
+    --fact-bg: #eaf1fb;
+    --fact-border: #6f93c9;
+    --fact-tag: #2f5a94;
+
+    --bus: #0f7a72;
+    --fk: #838a97;
+    --fx: #a15b2e;
+    --bridge: #b3384a;
+
+    --pk-badge-bg: #1e2127;
+    --pk-badge-fg: #ffffff;
+    --fk-badge-fg: #6b7280;
+
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161b;
+      --ink: #eef0f3;
+      --ink-mute: #9aa2b1;
+      --ink-faint: #6b7280;
+      --surface: #1b1e25;
+      --border-soft: #2b2f38;
+
+      --dim-bg: #2a2113;
+      --dim-border: #a97c3a;
+      --dim-tag: #e2ad5c;
+
+      --fact-bg: #14202f;
+      --fact-border: #4a6fa0;
+      --fact-tag: #8fb2e6;
+
+      --bus: #4fd1c0;
+      --fk: #9aa2b1;
+      --fx: #d68a56;
+      --bridge: #e0687a;
+
+      --pk-badge-bg: #eef0f3;
+      --pk-badge-fg: #14161b;
+      --fk-badge-fg: #9aa2b1;
+      color-scheme: dark;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #14161b;
+    --ink: #eef0f3;
+    --ink-mute: #9aa2b1;
+    --ink-faint: #6b7280;
+    --surface: #1b1e25;
+    --border-soft: #2b2f38;
+
+    --dim-bg: #2a2113;
+    --dim-border: #a97c3a;
+    --dim-tag: #e2ad5c;
+
+    --fact-bg: #14202f;
+    --fact-border: #4a6fa0;
+    --fact-tag: #8fb2e6;
+
+    --bus: #4fd1c0;
+    --fk: #9aa2b1;
+    --fx: #d68a56;
+    --bridge: #e0687a;
+
+    --pk-badge-bg: #eef0f3;
+    --pk-badge-fg: #14161b;
+    --fk-badge-fg: #9aa2b1;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+    padding: 28px 16px 40px;
+  }
+
+  .wrap { max-width: 1560px; margin: 0 auto; }
+
+  header h1 {
+    font-size: 21px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  header p {
+    margin: 0 0 22px;
+    color: var(--ink-mute);
+    font-size: 14px;
+    max-width: 760px;
+    line-height: 1.5;
+  }
+
+  figure { margin: 0; }
+
+  .canvas-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    background: var(--surface);
+    padding: 26px 30px 34px;
+  }
+
+  .canvas {
+    position: relative;
+    min-width: 1500px;
+  }
+
+  .row-label {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 10px 2px;
+  }
+
+  .dim-row, .fact-row {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 22px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .dim-row { margin-bottom: 230px; }
+  .fact-row { margin-top: 0; }
+
+  .box {
+    border-radius: 10px;
+    border: 1.5px solid;
+    padding: 10px 12px 12px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    position: relative;
+  }
+  .box.dim  { width: 210px; background: var(--dim-bg);  border-color: var(--dim-border); }
+  .box.fact { width: 190px; background: var(--fact-bg); border-color: var(--fact-border); }
+
+  .box-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .box-title {
+    font-weight: 600;
+    font-size: 12.5px;
+    color: var(--ink);
+    word-break: break-word;
+  }
+  .box-tag {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 1px 5px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .box.dim .box-tag  { background: var(--dim-border); color: var(--surface); }
+  .box.fact .box-tag { background: var(--fact-border); color: var(--surface); }
+
+  .box .row { display: flex; align-items: baseline; gap: 6px; }
+  .badge {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0 4px;
+    border-radius: 3px;
+    line-height: 1.5;
+    flex: none;
+  }
+  .badge.pk { background: var(--pk-badge-bg); color: var(--pk-badge-fg); }
+  .badge.fk { border: 1px solid var(--fk-badge-fg); color: var(--fk-badge-fg); background: transparent; }
+  .box .note {
+    margin-top: 3px;
+    font-size: 10.5px;
+    color: var(--ink-mute);
+    font-style: italic;
+  }
+
+  .edges-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  figcaption {
+    margin-top: 14px;
+    font-size: 12.5px;
+    color: var(--ink-mute);
+    line-height: 1.5;
+  }
+
+  .legend {
+    margin-top: 22px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px 28px;
+    font-size: 12px;
+    color: var(--ink-mute);
+  }
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+  .legend-swatch { width: 26px; height: 0; border-top-width: 3px; border-top-style: solid; flex: none; }
+  .legend-swatch.dashed { border-top-style: dashed; }
+
+  .caveat {
+    margin-top: 20px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    font-size: 12.5px;
+    color: var(--ink-mute);
+    line-height: 1.55;
+  }
+  .caveat b { color: var(--ink); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Silver Schema Map</h1>
+    <p>All 13 tables in the Silver layer: six dimensions feeding seven fact tables. Lines show the join keys tying them together — thickest and teal where a key is shared almost everywhere.</p>
+  </header>
+
+  <figure>
+    <div class="canvas-scroll">
+      <div class="canvas" id="canvas">
+        <div class="row-label">Dimensions</div>
+        <div class="dim-row" id="dimRow">
+          <div class="box dim" id="box-customers">
+            <div class="box-head"><span class="box-title">dim_customers</span><span class="box-tag">DIM</span></div>
+            <div class="row pk"><span class="badge pk">PK</span><span>customer_id</span></div>
+          </div>
+          <div class="box dim" id="box-branches">
+            <div class="box-head"><span class="box-title">dim_branches</span><span class="box-tag">DIM</span></div>
+            <div class="row pk"><span class="badge pk">PK</span><span>branch_id</span></div>
+          </div>
+          <div class="box dim" id="box-products">
+            <div class="box-head"><span class="box-title">dim_products</span><span class="box-tag">DIM</span></div>
+            <div class="row pk"><span class="badge pk">PK</span><span>product_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>customer_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>opening_branch_id</span></div>
+          </div>
+          <div class="box dim" id="box-agents">
+            <div class="box-head"><span class="box-title">dim_service_agents</span><span class="box-tag">DIM</span></div>
+            <div class="row pk"><span class="badge pk">PK</span><span>agent_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>assigned_branch_id</span></div>
+          </div>
+          <div class="box dim" id="box-campaigns">
+            <div class="box-head"><span class="box-title">dim_marketing_campaigns</span><span class="box-tag">DIM</span></div>
+            <div class="row pk"><span class="badge pk">PK</span><span>campaign_id</span></div>
+          </div>
+          <div class="box dim" id="box-fx">
+            <div class="box-head"><span class="box-title">dim_fx_rates</span><span class="box-tag">DIM</span></div>
+            <div class="row pk"><span class="badge pk">PK</span><span>rate_date, source_currency,<br>target_currency</span></div>
+            <div class="note">reference table — joined by currency + date, not by id</div>
+          </div>
+        </div>
+
+        <div class="row-label">Facts</div>
+        <div class="fact-row" id="factRow">
+          <div class="box fact" id="box-transactions">
+            <div class="box-head"><span class="box-title">fact_transactions</span><span class="box-tag">FACT</span></div>
+            <div class="row pk"><span class="badge pk">PK</span><span>transaction_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>customer_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>product_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>branch_id</span></div>
+            <div class="note">+ FX join (currency, exact date)</div>
+          </div>
+          <div class="box fact" id="box-complaints">
+            <div class="box-head"><span class="box-title">fact_complaints</span><span class="box-tag">FACT</span></div>
+            <div class="row pk"><span class="badge pk">PK</span><span>complaint_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>customer_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>affected_product_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>related_branch_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>assigned_agent_id</span></div>
+          </div>
+          <div class="box fact" id="box-cci">
+            <div class="box-head"><span class="box-title">fact_call_center_interactions</span><span class="box-tag">FACT</span></div>
+            <div class="row pk"><span class="badge pk">PK</span><span>interaction_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>customer_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>agent_id</span></div>
+          </div>
+          <div class="box fact" id="box-transcripts">
+            <div class="box-head"><span class="box-title">fact_call_transcripts</span><span class="box-tag">FACT</span></div>
+            <div class="row pk"><span class="badge pk">PK</span><span>transcript_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>interaction_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>customer_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>agent_id</span></div>
+          </div>
+          <div class="box fact" id="box-surveys">
+            <div class="box-head"><span class="box-title">fact_satisfaction_surveys</span><span class="box-tag">FACT</span></div>
+            <div class="row pk"><span class="badge pk">PK</span><span>survey_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>interaction_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>customer_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>agent_id</span></div>
+          </div>
+          <div class="box fact" id="box-campaignsends">
+            <div class="box-head"><span class="box-title">fact_campaign_sends</span><span class="box-tag">FACT</span></div>
+            <div class="row pk"><span class="badge pk">PK</span><span>send_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>customer_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>campaign_id</span></div>
+          </div>
+          <div class="box fact" id="box-events">
+            <div class="box-head"><span class="box-title">fact_digital_events</span><span class="box-tag">FACT</span></div>
+            <div class="row pk"><span class="badge pk">PK</span><span>event_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>customer_id</span></div>
+            <div class="row fk"><span class="badge fk">FK</span><span>product_id</span></div>
+          </div>
+        </div>
+
+        <svg class="edges-overlay" id="edges" role="img" aria-label="Lines connecting each fact table to the dimension tables it references, with customer_id highlighted as the key nearly every table shares."></svg>
+      </div>
+    </div>
+    <figcaption>Every fact table (and <code>dim_products</code>) carries <code>customer_id</code> — the teal line is that one key threading through 8 of the 13 tables. Gray lines are other foreign keys; amber dashed lines are FX-rate lookups by currency and date rather than by id; the red dashed lines are the one fact-to-fact reference (<code>call_transcripts</code> and <code>satisfaction_surveys</code> both hang off <code>call_center_interactions.interaction_id</code>).</figcaption>
+  </figure>
+
+  <div class="legend" aria-hidden="true">
+    <div class="legend-item"><span class="legend-swatch" style="border-color:var(--bus); border-top-width:4px;"></span>customer_id (shared key)</div>
+    <div class="legend-item"><span class="legend-swatch" style="border-color:var(--fk);"></span>other foreign key</div>
+    <div class="legend-item"><span class="legend-swatch dashed" style="border-color:var(--fx);"></span>FX rate lookup (currency + date)</div>
+    <div class="legend-item"><span class="legend-swatch dashed" style="border-color:var(--bridge);"></span>fact → fact reference</div>
+  </div>
+
+  <div class="caveat">
+    <b>Worth knowing before you rely on this as a contract:</b> none of these relationships are enforced by DuckDB — there are no <code>REFERENCES</code> constraints anywhere in the Silver build. <code>PK</code> here only drives the <code>QUALIFY row_number() … = 1</code> dedup in <code>silver.py</code>; <code>FK</code> is a column that happens to match another table's key. A row with an orphaned FK (a <code>customer_id</code> with no matching <code>dim_customers</code> row, say) will build without error — worth a row-count / orphan check before trusting joins across these tables in analysis.
+  </div>
+</div>
+
+<script>
+(function () {
+  var edgeDefs = [
+    // customer_id (products -> customers, and every fact -> customers) is drawn separately as a
+    // shared bus/spine below, not as a generic edge here.
+    { from: "products",     to: "branches",      kind: "dimdim" },
+    { from: "agents",       to: "branches",      kind: "dimdim" },
+    { from: "products",     to: "fx",            kind: "dimdim-fx" },
+
+    { from: "transactions",   to: "products",   kind: "fk" },
+    { from: "transactions",   to: "branches",   kind: "fk" },
+    { from: "transactions",   to: "fx",         kind: "fx" },
+    { from: "complaints",     to: "products",   kind: "fk" },
+    { from: "complaints",     to: "branches",   kind: "fk" },
+    { from: "complaints",     to: "agents",     kind: "fk" },
+    { from: "events",        to: "products",    kind: "fk" },
+    { from: "cci",           to: "agents",      kind: "fk" },
+    { from: "transcripts",   to: "agents",      kind: "fk" },
+    { from: "surveys",       to: "agents",      kind: "fk" },
+    { from: "campaignsends", to: "campaigns",   kind: "fk" },
+
+    { from: "transcripts", to: "cci", kind: "bridge" },
+    { from: "surveys",     to: "cci", kind: "bridge" }
+  ];
+
+  var busTargets = ["products", "transactions", "campaignsends", "cci", "transcripts", "surveys", "complaints", "events"];
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function boxEl(id) { return document.getElementById("box-" + id); }
+
+  function rectRelTo(el, container) {
+    var r = el.getBoundingClientRect();
+    var c = container.getBoundingClientRect();
+    return { left: r.left - c.left, top: r.top - c.top, width: r.width, height: r.height,
+             right: r.right - c.left, bottom: r.bottom - c.top,
+             centerX: r.left - c.left + r.width / 2 };
+  }
+
+  function draw() {
+    var canvas = document.getElementById("canvas");
+    var svg = document.getElementById("edges");
+    var cRect = canvas.getBoundingClientRect();
+    svg.setAttribute("width", cRect.width);
+    svg.setAttribute("height", cRect.height);
+    svg.style.width = cRect.width + "px";
+    svg.style.height = cRect.height + "px";
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    var colors = {
+      bus: cssVar("--bus"),
+      fk: cssVar("--fk"),
+      fx: cssVar("--fx"),
+      bridge: cssVar("--bridge")
+    };
+
+    var defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    svg.appendChild(defs);
+
+    function addMarker(id, color) {
+      var m = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+      m.setAttribute("id", id);
+      m.setAttribute("viewBox", "0 0 10 10");
+      m.setAttribute("refX", "8.5");
+      m.setAttribute("refY", "5");
+      m.setAttribute("markerWidth", "6.5");
+      m.setAttribute("markerHeight", "6.5");
+      m.setAttribute("orient", "auto-start-reverse");
+      var p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      p.setAttribute("d", "M0,0 L10,5 L0,10 z");
+      p.setAttribute("fill", color);
+      m.appendChild(p);
+      defs.appendChild(m);
+    }
+    addMarker("arrow-fk", colors.fk);
+    addMarker("arrow-fx", colors.fx);
+    addMarker("arrow-bridge", colors.bridge);
+
+    // ---- slot allocation for generic edges (avoid all lines leaving/entering one exact point) ----
+    var touchList = [];
+    edgeDefs.forEach(function (e) {
+      var fromSide, toSide;
+      var fromRow = (boxEl(e.from).closest("#dimRow") ? "dim" : "fact");
+      var toRow = (boxEl(e.to).closest("#dimRow") ? "dim" : "fact");
+      if (fromRow === "dim" && toRow === "dim") { fromSide = "bottom"; toSide = "bottom"; }
+      else if (fromRow === "fact" && toRow === "fact") { fromSide = "top"; toSide = "top"; }
+      else { fromSide = "top"; toSide = "bottom"; } // fact -> dim
+      e._fromSide = fromSide; e._toSide = toSide;
+      touchList.push({ box: e.from, side: fromSide });
+      touchList.push({ box: e.to, side: toSide });
+    });
+    var slotCounts = {};
+    touchList.forEach(function (t) {
+      var k = t.box + "|" + t.side;
+      slotCounts[k] = (slotCounts[k] || 0) + 1;
+    });
+    var slotSeen = {};
+    function nextSlot(box, side) {
+      var k = box + "|" + side;
+      slotSeen[k] = (slotSeen[k] || 0) + 1;
+      return { i: slotSeen[k], n: slotCounts[k] };
+    }
+    function anchorX(rect, slot) {
+      return rect.left + rect.width * (slot.i / (slot.n + 1));
+    }
+
+    function pathFor(e) {
+      var fromRect = rectRelTo(boxEl(e.from), canvas);
+      var toRect = rectRelTo(boxEl(e.to), canvas);
+      var fromSlot = nextSlot(e.from, e._fromSide);
+      var toSlot = nextSlot(e.to, e._toSide);
+      var x1 = anchorX(fromRect, fromSlot), y1, x2 = anchorX(toRect, toSlot), y2;
+
+      if (e._fromSide === "bottom") y1 = fromRect.bottom; else y1 = fromRect.top;
+      if (e._toSide === "bottom") y2 = toRect.bottom; else y2 = toRect.top;
+
+      var d;
+      if (e._fromSide === "bottom" && e._toSide === "bottom") {
+        var dip = Math.max(y1, y2) + 46;
+        d = "M " + x1 + "," + y1 + " C " + x1 + "," + dip + " " + x2 + "," + dip + " " + x2 + "," + y2;
+      } else if (e._fromSide === "top" && e._toSide === "top") {
+        var rise = Math.min(y1, y2) - 46;
+        d = "M " + x1 + "," + y1 + " C " + x1 + "," + rise + " " + x2 + "," + rise + " " + x2 + "," + y2;
+      } else {
+        var ymid = (y1 + y2) / 2;
+        d = "M " + x1 + "," + y1 + " C " + x1 + "," + ymid + " " + x2 + "," + ymid + " " + x2 + "," + y2;
+      }
+      return d;
+    }
+
+    function drawPath(d, color, marker, dashed) {
+      var p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      p.setAttribute("d", d);
+      p.setAttribute("fill", "none");
+      p.setAttribute("stroke", color);
+      p.setAttribute("stroke-width", "1.6");
+      if (dashed) p.setAttribute("stroke-dasharray", "5 4");
+      p.setAttribute("marker-end", "url(#" + marker + ")");
+      p.setAttribute("opacity", "0.9");
+      svg.appendChild(p);
+    }
+
+    edgeDefs.forEach(function (e) {
+      var d = pathFor(e);
+      if (e.kind === "fk") drawPath(d, colors.fk, "arrow-fk", false);
+      else if (e.kind === "fx") drawPath(d, colors.fx, "arrow-fx", true);
+      else if (e.kind === "dimdim-fx") drawPath(d, colors.fx, "arrow-fx", true);
+      else if (e.kind === "dimdim") drawPath(d, colors.fk, "arrow-fk", false);
+      else if (e.kind === "bridge") drawPath(d, colors.bridge, "arrow-bridge", true);
+    });
+
+    // ---- the customer_id bus: one shared horizontal spine ----
+    var custRect = rectRelTo(boxEl("customers"), canvas);
+    var prodRect = rectRelTo(boxEl("products"), canvas);
+    var spineY = custRect.bottom + 70;
+
+    var xs = [custRect.centerX, prodRect.centerX];
+    var factXs = busTargets.filter(function (t) { return t !== "products"; }).map(function (t) {
+      return rectRelTo(boxEl(t), canvas).centerX;
+    });
+    xs = xs.concat(factXs);
+    var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+
+    var spine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    spine.setAttribute("x1", minX); spine.setAttribute("x2", maxX);
+    spine.setAttribute("y1", spineY); spine.setAttribute("y2", spineY);
+    spine.setAttribute("stroke", colors.bus);
+    spine.setAttribute("stroke-width", "3");
+    svg.appendChild(spine);
+
+    function stub(x, y1, y2) {
+      // Plain connector into the shared spine -- no per-stub arrowhead. With every fact and
+      // dim_products tapping the same horizontal line, a "points at the one side" arrow convention
+      // (used for the point-to-point FK lines below) doesn't map cleanly onto a bus; color +
+      // thickness + the single label is what carries the meaning here.
+      var l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      l.setAttribute("x1", x); l.setAttribute("x2", x);
+      l.setAttribute("y1", y1); l.setAttribute("y2", y2);
+      l.setAttribute("stroke", colors.bus);
+      l.setAttribute("stroke-width", "3");
+      svg.appendChild(l);
+    }
+
+    // customers -> spine
+    stub(custRect.centerX, custRect.bottom, spineY);
+    // products -> spine
+    stub(prodRect.centerX, prodRect.bottom, spineY);
+    // each fact -> spine
+    busTargets.filter(function (t) { return t !== "products"; }).forEach(function (t) {
+      var r = rectRelTo(boxEl(t), canvas);
+      stub(r.centerX, spineY, r.top);
+    });
+
+    var label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", minX);
+    label.setAttribute("y", spineY - 10);
+    label.setAttribute("fill", colors.bus);
+    label.setAttribute("font-family", "IBM Plex Mono, monospace");
+    label.setAttribute("font-weight", "600");
+    label.setAttribute("font-size", "12");
+    label.textContent = "customer_id";
+    svg.appendChild(label);
+  }
+
+  function ready() {
+    draw();
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(draw);
+    }
+    setTimeout(draw, 150);
+  }
+
+  window.addEventListener("load", ready);
+  window.addEventListener("resize", function () { requestAnimationFrame(draw); });
+
+  if (window.matchMedia) {
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
+      requestAnimationFrame(draw);
+    });
+  }
+  try {
+    new MutationObserver(function () { requestAnimationFrame(draw); })
+      .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  } catch (e) {}
+})();
+</script>
+</body></html>

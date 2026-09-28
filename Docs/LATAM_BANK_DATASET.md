@@ -6,14 +6,14 @@
 
 ## Dataset Overview
 
-  Attribute       Value
-  --------------- --------------------------------------------------------
-  Total records   \~19,000,000
-  Total tables    13
-  Countries       Mexico, Colombia, Argentina
-  Date range      2023-06-17 to 2026-06-17
-  Currencies      MXN, COP, ARS, USD
-  Languages       Spanish with Mexican, Colombian, and Argentine accents
+| Attribute | Value |
+|---|---|
+| Total records | ~19,000,000 |
+| Total tables | 13 |
+| Countries | Mexico, Colombia, Argentina |
+| Date range | 2023-06-17 to 2026-06-17 |
+| Currencies | MXN, COP, ARS, USD |
+| Languages | Spanish with Mexican, Colombian, and Argentine accents |
 
 The dataset simulates a comprehensive regional banking system operating
 across Mexico, Colombia, and Argentina.
@@ -43,65 +43,42 @@ It intentionally includes data-quality challenges such as:
 
 ## Data Quality Challenges
 
-  Challenge             Rate / Status Description
-  ------------------- --------------- -------------------------------------------
-  Duplicate records              \~2% Realistic duplicate entries across tables
-  Null values                    \~5% Missing data in non-mandatory fields
-  Late arrivals                   Yes Partitioned data may arrive late
-  Schema evolution                Yes Table schemas may evolve over time
+| Challenge | Rate / Status | Description |
+|---|---|---|
+| Duplicate records | ~2% | Realistic duplicate entries across tables |
+| Null values | ~5% | Missing data in non-mandatory fields |
+| Late arrivals | Yes | Partitioned data may arrive late |
+| Schema evolution | Yes | Table schemas may evolve over time |
 
 ## Tables
 
 ### Dimension Tables
 
-  Table                        Rows Description
-  ----------------------- --------- ----------------------------------------
-  `customers`               150,000 Bank customer dimension table
-  `products`                400,000 Active financial products of customers
-  `branches`                    350 Physical bank branches
-  `service_agents`            1,200 Customer service agents
-  `marketing_campaigns`         200 Bank marketing campaigns
+| Table | Rows | Description |
+|---|---:|---|
+| `customers` | 150,000 | Bank customer dimension table |
+| `products` | 400,000 | Active financial products of customers |
+| `branches` | 350 | Physical bank branches |
+| `service_agents` | 1,200 | Customer service agents |
+| `marketing_campaigns` | 200 | Bank marketing campaigns |
 
 ### Fact Tables
 
-  -------------------------------------------------------------------------------
-  Table                                                Rows Description
-  ---------------------------- ---------------------------- ---------------------
-  `transactions`                                  5,000,000 Daily financial
-                                                            transactions
-
-  `call_center_interactions`                        800,000 Call-center
-                                                            interactions with
-                                                            customers
-
-  `call_transcripts`                                200,000 Call-center call
-                                                            transcripts
-
-  `satisfaction_surveys`                            250,000 Post-interaction
-                                                            satisfaction surveys
-                                                            (CSAT, NPS)
-
-  `digital_events`                               10,000,000 Digital-channel
-                                                            interaction events
-                                                            (mobile app, web)
-
-  `complaints`                                       80,000 Complaints and claims
-                                                            system (PQR)
-
-  `campaign_sends`                                2,000,000 Individual marketing
-                                                            campaign sends
-  -------------------------------------------------------------------------------
+| Table | Rows | Description |
+|---|---:|---|
+| `transactions` | 5,000,000 | Daily financial transactions |
+| `call_center_interactions` | 800,000 | Call-center interactions with customers |
+| `call_transcripts` | 200,000 | Call-center call transcripts |
+| `satisfaction_surveys` | 250,000 | Post-interaction satisfaction surveys (CSAT, NPS) |
+| `digital_events` | 10,000,000 | Digital-channel interaction events (mobile app, web) |
+| `complaints` | 80,000 | Complaints and claims system (PQR) |
+| `campaign_sends` | 2,000,000 | Individual marketing campaign sends |
 
 ### Reference Tables
 
-  ---------------------------------------------------------------------------
-  Table                                            Rows Description
-  ------------------------ ---------------------------- ---------------------
-  `daily_exchange_rates`                          3,000 Daily exchange rates
-                                                        for currency
-                                                        conversion
-
-  ---------------------------------------------------------------------------
+| Table | Rows | Description |
+|---|---:|---|
+| `daily_exchange_rates` | 3,000 | Daily exchange rates for currency conversion |
 
 ## Potential Use Cases
 
@@ -211,7 +188,7 @@ For detailed schema information, including:
 -   Data types.
 -   Constraints.
 
-refer to the complete `DATA_DICTIONARY.md` file.
+refer to the complete [LATAM_BANK_DATA_DICTIONARY.md](LATAM_BANK_DATA_DICTIONARY.md) file.
 
 ## Dataset Metadata
 

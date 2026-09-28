@@ -6,3 +6,5 @@ data_foundation/**/__pycache__/
 .git/
 .venv/
 *.py[cod]
+.env
+.env.*
