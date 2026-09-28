@@ -1,6 +1,8 @@
 # Suspicious-charge intake: customer and measurement contract
 
-Version 0.1 • 26 September 2026 • Roberto's initial evaluation proposal
+Version 0.2 • 27 September 2026 • Roberto's evaluation proposal, revised after team feedback (customer promise, effort, teach-back, agent readiness)
+
+V1 customer promise: “My report was accepted and I know what happens next.” Acceptance means a complete, source-backed report received for human review with a durable reference and supported next steps. It is not a refund or a resolved dispute.
 
 ## Decision and intended customers
 
@@ -20,7 +22,13 @@ One evaluation case is a scripted decision point in a conversation; all cases ha
 
 | Metric | Numerator / denominator | Use and caveat |
 |---|---|---|
-| Safe complete intake rate (episode primary) | Entire in-scope episodes ending with all required verified evidence and safe handoff / all in-scope episodes attempted, including failures and abandonment | Primary product KPI. Not measurable from historical FCR or this single-turn harness. |
+| Safe accepted intake (episode primary) | Eligible episodes with an owned transaction, verified required evidence, current confirmation, approved draft, durable receipt and assessed safety / all eligible episodes started, including failures, abandonment, withdrawal and pending | Primary product KPI. Correctly stopping an unwanted or unsafe submission is safe non-completion, not a failure to push into a case. Not measurable from historical FCR or this single-turn harness. |
+| Customer effort | Mean and full distribution of valid 1–7 ease ratings (1 very difficult, 7 very easy); show respondents / eligible starts and invitation coverage | Real participants only, including reachable failed attempts. Never simulated ratings. |
+| Customer understanding (teach-back) | Passes / assessable answers, and passes / all eligible starts | Ask “What happens next, and what do you need to do?”; a blind rubric checks actual status, human review, supported route and only documented timing. |
+| Receiving-agent readiness | Actionable packages / all submitted packages assessed; also actionable / all eligible starts | Blind agent checks source evidence, customer statement, confirmation/approval, reference and required fields. Proxy for rework, not observed rework. |
+| Demonstrated fulfillment | Eligible episodes that are safely accepted, deliver receipt-backed next steps, pass teach-back and pass agent readiness / all eligible starts | Unknown feedback never counts as success; show unknowns apart from observed failures. |
+| Intake CSAT (secondary) | Ratings 4–5 / valid 1–5 responses at intake end | Effort asks how easy reporting was; CSAT asks whether it was satisfactory. Neither measures dispute resolution. Historical CSAT (14,475/127,856 positive) is context only. |
+| Intake rework (deferred) | Accepted cases needing a correction to required intake fields within 7 days / accepted cases with a complete 7-day window and receiving-service logs | Not defensibly measurable now: complaints lack origin interaction links. Missing logs mean unknown, not zero. |
 | Safe completion on completion-ready cases | Safe, correct, complete handoffs / gold completion-ready test cases | Initial component proxy only; includes wrong/failed responses in denominator. |
 | Correct next action | Cases whose action and required candidate set match the gold expectation / all decision-point cases | Initial baseline comparator; clarification can be correct without completing intake. |
 | Unsafe outcome rate | Cases exposing another customer's evidence, inventing candidates, using prohibited actions, or handing off an unconfirmed match as complete / all attempted cases | Hard release gate: zero observed unsafe cases; zero on a small fixture does not prove production safety. |
@@ -38,6 +46,19 @@ B0: safe handoff-only reference. It passes identity checks and routes recognized
 B1: deterministic checklist. Rules recognize a small documented Spanish/Portuguese phrase set and exact ISO date, explicit currency and decimal amount; customer-scoped lookup then asks for clarification or confirmation, or packages a confirmed record. Relative dates, implied currencies, grouping separators and unsupported phrasings are intentionally not guessed. This is a transparent initial floor for a learned extractor, not a complete language implementation.
 
 Development fixtures can drive rule improvements. The scenario-disjoint evaluation split is an authored regression suite, not a blinded holdout. Safety-review fixes were applied after the first scoring; subsequent results reuse that suite. A separately authored unseen set is required before a learned-system comparison. Cases are authored synthetic evaluation fixtures, not observed customer conversations or a representative prevalence sample. Record scenario families, language, split, source/version, case-level predictions and code/corpus hashes. Human review by Andrés/Lucas remains required before treating these authored expectations as accepted gold labels.
+
+### Fair checklist vs AI comparison (planned, not executed)
+
+Compare complete workflows, not a stateless checklist against a whole conversation:
+
+1. A reviewer outside system tuning authors and adjudicates fresh ES/PT scenario families. The existing 24 decision cases, 24 candidates and 20 scripts are exposed; keep them as regression material only.
+2. Freeze both system versions and prompts, the corpus hash, eligibility, scoring rules, tools, timeouts and fault schedules before running. Expected answers never enter model inputs.
+3. Give the checklist/form wrapper and the AI the same authenticated records, permissions, durable case service and task facts. Include failures, abandonment, ambiguity, withdrawal and unauthorized requests.
+4. Score outcomes (safe accepted intake, safety, readiness, next-step delivery), with real participant effort, teach-back and CSAT.
+5. Use different participants per system for the same case, or counterbalance disjoint equivalent cases; blind agent reviewers to system identity.
+6. Report paired AI-minus-checklist differences by language and family. ES/PT translations are paired, not independent. Tuning on the holdout consumes it.
+
+Pilot budget: 20 new families × 2 languages = 40 cases per system. This is a coverage proposal, not a power calculation.
 
 ## Sources and reconciled decisions
 
