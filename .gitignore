@@ -19,3 +19,6 @@ Docs/Factored Hackathon - Arabica AI/latam-bank-architecture-en.excalidraw.md
 # Local Bronze/Silver/Gold data — regenerable by re-running ingestion, and too large for git anyway
 *.parquet
 *.csv
+demo-ui/node_modules/
+demo-ui/dist/
+demo-ui/.angular/

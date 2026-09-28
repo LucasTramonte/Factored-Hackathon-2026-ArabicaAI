@@ -8,3 +8,13 @@ data_foundation/**/__pycache__/
 *.py[cod]
 .env
 .env.*
+demo-ui/node_modules/
+demo-ui/dist/
+demo-ui/src/app/*.bak
+demo-date-backup-*/
+*.bak
+atualizar_datas_demo.py
+criar_interface.py
+output.md
+demo-ui/.angular/
+demo_db/tests/
