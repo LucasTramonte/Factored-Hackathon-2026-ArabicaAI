@@ -73,6 +73,9 @@ def test_silver_aggregates_keep_denominators_and_owner_checks():
     rendered=marketing_product(data)
     assert 'Recorded conversion' in rendered
     assert 'CAC' in rendered and 'LTV' in rendered
+    assert 'Start with the chosen customer workflow' in rendered
+    assert 'Checklist versus AI evaluation' in rendered
+    assert 'safe accepted intake' in rendered
     assert 'id="time-year"' in rendered and 'id="time-month"' in rendered
     assert 'const sendMonths=' in rendered and 'Monthly send trend by business date</summary>' not in rendered
     assert 'C1' not in rendered and 'P1' not in rendered

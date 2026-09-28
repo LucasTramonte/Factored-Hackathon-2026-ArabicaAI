@@ -1,32 +1,32 @@
 # Marketing and Product: customer-backward decision brief
 
-**Status: Proposed test, not a launched product.** Evidence run: [private report hub](../data_foundation/reports/index.html); aggregate definitions and source counts are in its [JSON](../data_foundation/reports/aggregates.json) and [manifest](../data_foundation/reports/manifest.json).
+**Status: Team-selected V1 workflow; Marketing/Product analysis remains exploratory.** Evidence run: [private report hub](../data_foundation/reports/index.html); aggregate definitions and source counts are in its [JSON](../data_foundation/reports/aggregates.json) and [manifest](../data_foundation/reports/manifest.json).
 
 ## Customer problem
 
-A customer should receive relevant messages only when permitted and should be able to complete routine digital tasks without confusion. The supplied synthetic data show many sends and digital events, but they do not tell us whether a campaign improved a customer's outcome or whether a `Purchase` event represents a new bank product.
+A customer reporting an unrecognized charge needs to identify the right transaction, approve an accurate account of the issue, receive a confirmed case reference, and know what happens next. The team selected this narrow intake and human-handoff workflow for V1. The supplied marketing and digital records do not show whether campaigns or existing features improve that journey.
 
 ## Proposed customer benefit
 
-Test a clear, consent-respecting message and a supported digital path for one defined task. The experience should show the customer what happened, what remains to do, and how to reach a human when the task fails. Select the task and cohort with a product owner before implementation.
+The V1 path is authenticated retrieval → clarification → customer approval → accepted case → reference and next steps for human review. Verify transaction ownership, create a reference only after durable acceptance, prevent duplicates on retry, and record failures and abandonment. It does not decide fraud, issue refunds, block cards or claim automated dispute resolution.
 
 ## Evidence available today
 
 - Send-level delivery, open, click, and recorded conversion counts exist in Silver. Current consent and segment are snapshots; neither proves what was true at send time.
 - Product ownership and linked-app flags describe the current product snapshot. Transaction activity can be associated with a product only when its owner matches and the transaction is not dated before product opening.
 - Digital events can support a session engagement funnel. Product-linked event ownership is overwhelmingly inconsistent, so product-type feature usage and acquisition claims are withheld.
-- The separate complaint intake case has its own population and decision path. Marketing targeting scores do not measure its value.
+- The selected intake population is 12,297 `Cargo no reconocido` complaints, 6,192 through Call Center. Those descriptive counts justify testing a useful handoff, not an adoption rate, customer benefit or SLA improvement. Marketing targeting scores do not measure its value.
 
 ## Hard questions before committing to a feature
 
-1. What exact customer task and verified backend completion event will count as success?
-2. Can consent at send time, campaign assignment, control exposure, and a durable outcome link be recorded safely?
-3. Which event labels and session rules reflect a real digital task, especially with anonymous events and missing `action` values?
-4. What is the recovery path and what happens to customers outside the tested cohort?
+1. What confirms authenticated ownership, customer approval and durable case acceptance?
+2. How are ambiguous transactions, missing data, duplicate retries and tool failures handled?
+3. Which intake-specific events and customer-level denominators will capture every start, including abandonment?
+4. Can the receiving agent use the handoff, and can the customer see the reference and next steps?
 
 ## Test and acceptance measures
 
-Instrument eligible customers, assignment, message delivery, task start, backend-confirmed completion, failure, retry, and human handoff. Define an exclusion and missingness report before launch. Compare a randomized control and treatment on verified completion and customer harm metrics, with a stated time window and one customer-level denominator. Audit consent at send time. The present report is descriptive and cannot substitute for that test.
+Instrument every eligible intake start, retrieval, clarification, customer approval, durable acceptance, reference delivery, failure, retry and handoff. Primary V1 measure: safe accepted intake / all eligible starts, including failures and abandonment. Report unsafe outcomes, duplicates, handoff completeness, latency and missing assessments. Compare checklist and AI on the same independently reviewed, held-out Spanish/Portuguese scenario families; keep the reported 22/24 versus 4/24 correct-next-action component regressions separate from end-to-end intake results. A later live A/B test needs its own assignment, control and power plan. Handoff is not safe automated dispute resolution.
 
 ## Unit-economics measurement contract
 
@@ -36,10 +36,15 @@ For a future cohort, record an eligible lead ID and timestamp, campaign assignme
 
 The current report's monthly plots use `send_date` from July 2023 through June 18, 2026. June 2026 is incomplete and conversions may arrive after a send. Delivery, opens, clicks, page views and send-level recorded conversions remain operational diagnostics. They do not settle whether the next investment belongs in lead generation, acquisition conversion or retention.
 
-## Current workflow and modeling order
+## Relationship to the chosen V1 workflow
 
-The first customer task to instrument is a read-only account/payment inquiry: verify the answer from the backend, record failure and correction, and offer handoff. A product funnel diagnostic can identify where customers stop, but its current generic PageView → Click → FormSubmit baseline does not measure inquiry resolution. The dispute population supports a separate intake-to-human test; card service and credit eligibility require their own case and policy evidence.
+The 27 September team update describes the selected V1 as **unrecognized-charge intake with confirmed case acceptance and human handoff**. [The intake architecture decision](Factored%20Hackathon%20-%20Arabica%20AI/Architecture%20decision%20%E2%80%94%20suspicious%20charge%20intake.md) specifies the same scope. Earlier [ADR-0001](ADR-0001-workflow-prioritization.md) proposed a read-only inquiry as the primary automated-resolution path; that proposal is not the build priority stated in the team update. A read-only account/payment inquiry is a useful deterministic comparison or future workflow, not a parallel V1.
 
-Start with the outcome instrumentation, then a customer-randomized A/B test of the supported journey. Campaign effectiveness and product usage should be tied to verified outcomes. Defer channel attribution, targeting and personalization models until the outcome, historical consent, assignment and holdout data exist. Set a minimum useful effect and power before the test, report an intention-to-treat difference with uncertainty and harm guardrails, and do not claim gain from descriptive response rates. See the [Gold readiness request](Plans/marketing-product-gold-contract.md) for the audited keys and new source contracts.
+| Analysis | Direct relevance to V1 | Decision now |
+| --- | --- | --- |
+| Product adoption and usage | Current ownership and owner-safe transactions support authenticated evidence retrieval; snapshot adoption does not establish dispute intent. | Use validated retrieval fields and chronology; do not segment intake by invalid complaint-product links. |
+| Digital funnel and feature usage | Generic PageView → Click → FormSubmit events cannot be rebranded as intake starts or accepted cases; product-linked event ownership is inconsistent. | Instrument intake-specific start, confirmation, approval, acceptance, retry and handoff events. This is the first Product Analytics contribution. |
+| Campaign effectiveness and A/B tests | Historical send response has no verified link to a dispute case or safe accepted intake. | Do not use 0.56% send conversion as V1 success. First compare checklist and AI on held-out reviewed cases; consider a live customer experiment only after the service and outcome logging exist. |
+| Channel attribution, personalization and targeting | No historical consent or reliable campaign-to-intake outcome link; the current complaint-product links fail ownership checks. | Defer models. Marketing may later test consent-valid education or status messages with a separate outcome and control, without claiming a gain in the V1 intake. |
 
-The offline report now filters monthly send response and owner-safe approved transaction activity by year and month. It shows adjacent-month transaction activity continuation as an **activity proxy**, never historical customer retention. Current product ownership and the digital session funnel remain full-snapshot measures outside that filter.
+The next milestone is one end-to-end accepted case plus ambiguous and tool/data-failure demonstrations. Measure the full workflow on held-out cases afterward. The meeting's 22/24 checklist and 4/24 handoff-only figures are **component** results; the 24 newer candidate cases were unscored, so neither figure estimates V1 safe accepted intake or a statistical model gain. The offline report's year/month filters describe historical sends and transaction activity, not historical intake outcomes. CAC/LTV work and the [Gold readiness request](Plans/marketing-product-gold-contract.md) remain separate future data needs.
