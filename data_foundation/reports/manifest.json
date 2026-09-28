@@ -1,0 +1,110 @@
+{
+  "generated_at_utc": "2026-09-28T11:42:55.199589+00:00",
+  "database": "/tmp/latam-lucas-integration/data/latam_bank.duckdb",
+  "database_bytes": 3227791360,
+  "quality_run": "/tmp/latam-lucas-integration/data/quality_runs/marketing-product-20260927/quality_results.json",
+  "quality_generated_at_utc": "2026-09-28T01:30:18.207957+00:00",
+  "quality_checks": 336,
+  "quality_errors": 0,
+  "quality_warnings": 6,
+  "source": "Local Bronze DuckDB; _source_file identifies each ingested object",
+  "bronze_watermarks": [
+    {
+      "table": "call_center_interactions",
+      "last_loaded_date": "2026-06-17"
+    },
+    {
+      "table": "call_transcripts",
+      "last_loaded_date": "2026-06-17"
+    },
+    {
+      "table": "campaign_sends",
+      "last_loaded_date": "2026-06-17"
+    },
+    {
+      "table": "complaints",
+      "last_loaded_date": "2026-06-17"
+    },
+    {
+      "table": "digital_events",
+      "last_loaded_date": "2026-06-17"
+    },
+    {
+      "table": "satisfaction_surveys",
+      "last_loaded_date": "2026-06-17"
+    },
+    {
+      "table": "transactions",
+      "last_loaded_date": "2026-06-17"
+    }
+  ],
+  "source_files_by_table": {
+    "customers": 1,
+    "products": 1,
+    "branches": 1,
+    "service_agents": 1,
+    "marketing_campaigns": 1,
+    "daily_exchange_rates": 1,
+    "call_center_interactions": 1097,
+    "call_transcripts": 1097,
+    "satisfaction_surveys": 1097,
+    "complaints": 1097,
+    "campaign_sends": 1083,
+    "digital_events": 1097,
+    "transactions": 1097
+  },
+  "quality_warning_checks": [
+    {
+      "table": "customers",
+      "check": "domain_violations",
+      "numerator": 4407,
+      "denominator": 150000
+    },
+    {
+      "table": "customers",
+      "check": "foreign_key_orphans",
+      "numerator": 149995,
+      "denominator": 150000
+    },
+    {
+      "table": "service_agents",
+      "check": "foreign_key_orphans",
+      "numerator": 831,
+      "denominator": 1200
+    },
+    {
+      "table": "complaints",
+      "check": "product_owner_mismatch",
+      "numerator": 44570,
+      "denominator": 44570
+    },
+    {
+      "table": "digital_events",
+      "check": "product_owner_mismatch",
+      "numerator": 1094226,
+      "denominator": 1094242
+    },
+    {
+      "table": "transactions",
+      "check": "transaction_before_product_opening",
+      "numerator": 827610,
+      "denominator": 4425008
+    }
+  ],
+  "silver_counts": {
+    "dim_customers": 150000,
+    "dim_marketing_campaigns": 200,
+    "dim_products": 400000,
+    "fact_campaign_sends": 1746801,
+    "fact_complaints": 67095,
+    "fact_digital_events": 15620994,
+    "fact_transactions": 4425008
+  },
+  "metric_grain": {
+    "marketing": "send_id",
+    "product": "product_id",
+    "digital": "session_id",
+    "intake": "complaint_id"
+  },
+  "memory_model": "DuckDB projected scans and grouped SQL with disk spill; Python holds aggregate rows only"
+}
