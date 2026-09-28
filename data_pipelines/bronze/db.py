@@ -1,17 +1,8 @@
 """
 DuckDB connection management.
 
-Uses DuckDB's native secrets manager (`CREATE SECRET`, available since DuckDB 0.10) instead of the
-older `SET s3_access_key_id=...` pattern -- it's the currently-recommended way to supply S3 credentials
-and scopes them to a named, droppable object rather than loose session variables.
-
-Honest caveat: `CREATE SECRET` is a DDL statement, and DuckDB does not support bound (`?`) parameters
-in DDL -- confirmed by testing against this exact statement shape before shipping it, since assuming
-otherwise would have silently produced the same "looked fine, wasn't" failure this project has hit
-several times already. So credentials are still interpolated into SQL text here, same exposure as
-`SET` would have. What this module actually does to limit that: never logs the statement itself (only
-a bucket name and connection-success message), and isolates the interpolation to this one function so
-there is exactly one place in the codebase to audit.
+S3 runs use a temporary DuckDB secret backed by the AWS credential chain. Local CSV runs skip extensions and credentials. Profiles,
+environment credentials and roles are resolved by DuckDB without interpolating raw keys into SQL.
 
 Context-manager based so the connection is always closed, even on error -- avoids the "database file
 already in use" lock error that comes from a crashed or forgotten interactive kernel.
@@ -38,28 +29,31 @@ def _quote(value: str) -> str:
 
 
 @contextmanager
-def get_connection(settings: Settings) -> Iterator[duckdb.DuckDBPyConnection]:
+def get_connection(settings: Settings, use_s3: bool = True) -> Iterator[duckdb.DuckDBPyConnection]:
+    """Open Bronze DuckDB, configuring S3 only for remote ingestion."""
     # duckdb.connect() does not create missing parent directories, and now that duckdb_path is
     # derived from project_root/data_dir (which may not exist yet on a fresh checkout), that has
     # to happen here rather than being assumed away.
     os.makedirs(os.path.dirname(settings.duckdb_path) or ".", exist_ok=True)
     con = duckdb.connect(settings.duckdb_path)
     try:
-        con.execute("INSTALL httpfs; LOAD httpfs;")
-
-        # CREATE SECRET can't take bound parameters (tested -- DDL statements raise
-        # "This type of statement can't be prepared" in this DuckDB version), so credentials are
-        # quote-escaped and interpolated directly. This statement is never logged.
-        con.execute(
-            f"""
-            CREATE OR REPLACE SECRET {_SECRET_NAME} (
-                TYPE s3,
-                KEY_ID '{_quote(settings.aws_access_key_id)}',
-                SECRET '{_quote(settings.aws_secret_access_key)}',
-                REGION '{_quote(settings.region)}'
+        temp_dir = settings.data_dir / "duckdb_tmp"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        con.execute("SET memory_limit=?", [os.environ.get("DUCKDB_MEMORY_LIMIT", "2GB")])
+        con.execute("SET temp_directory=?", [str(temp_dir)])
+        con.execute("SET threads=?", [int(os.environ.get("DUCKDB_THREADS", "4"))])
+        if use_s3:
+            extension_dir = settings.data_dir / "duckdb_extensions"
+            extension_dir.mkdir(parents=True, exist_ok=True)
+            con.execute("SET extension_directory=?", [str(extension_dir)])
+            con.execute("INSTALL httpfs; LOAD httpfs; INSTALL aws; LOAD aws;")
+            # The AWS SDK resolves AWS_PROFILE or its normal credential chain. A temporary
+            # secret keeps credentials out of repository files and SQL logs.
+            con.execute(
+                f"CREATE OR REPLACE SECRET {_SECRET_NAME} ("
+                f"TYPE s3, PROVIDER credential_chain, REGION '{_quote(settings.region)}', "
+                f"SCOPE 's3://{_quote(settings.bucket)}/')"
             )
-            """
-        )
 
         con.execute("CREATE SCHEMA IF NOT EXISTS bronze;")
         logger.info("connected to %s (bucket=%s)", settings.duckdb_path, settings.bucket)

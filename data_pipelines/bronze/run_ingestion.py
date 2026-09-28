@@ -27,7 +27,8 @@ from ingestion import IngestResult, ingest_dimension, ingest_fact
 
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Ingest LATAM Bank tables from S3 into local Bronze.")
+    parser = argparse.ArgumentParser(description="Ingest LATAM Bank tables from S3 or local CSVs into Bronze.")
+    parser.add_argument("--local-source", type=str, help="Root containing the supplied local CSV tables; no S3 or AWS credentials needed.")
     parser.add_argument(
         "--full-refresh", action="store_true",
         help="Re-read all available history for fact tables instead of only new partitions.",
@@ -43,7 +44,8 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def run(settings: Settings, tables_filter: List[str] | None, full_refresh: bool) -> List[IngestResult]:
+def run(settings: Settings, tables_filter: List[str] | None, full_refresh: bool, local_source: str | None = None) -> List[IngestResult]:
+    """Ingest selected tables from S3 or local CSVs into the configured Bronze store."""
     tables = ALL_TABLES if not tables_filter else [t for t in ALL_TABLES if t.name in tables_filter]
 
     if tables_filter:
@@ -52,10 +54,10 @@ def run(settings: Settings, tables_filter: List[str] | None, full_refresh: bool)
             raise ValueError(f"Unknown table name(s) in --tables: {', '.join(sorted(missing))}")
 
     results: List[IngestResult] = []
-    base_path = settings.base_s3_path()
+    base_path = local_source or settings.base_s3_path()
     data_dir = str(settings.data_dir)
 
-    with get_connection(settings) as con:
+    with get_connection(settings, use_s3=local_source is None) as con:
         for table in tables:
             try:
                 if table.kind == "dimension":
@@ -92,7 +94,7 @@ def main(argv: List[str] | None = None) -> int:
     tables_filter = args.tables.split(",") if args.tables else None
 
     try:
-        settings = Settings.from_env()
+        settings = Settings.from_env(require_s3=args.local_source is None)
     except RuntimeError as e:
         logging.getLogger(__name__).error(str(e))
         return 1
@@ -105,10 +107,10 @@ def main(argv: List[str] | None = None) -> int:
         settings.project_root, settings.data_dir, settings.duckdb_path,
     )
 
-    results = run(settings, tables_filter, args.full_refresh)
+    results = run(settings, tables_filter, args.full_refresh, args.local_source)
     print_summary(results)
 
-    failures = [r for r in results if r.status == "failed"]
+    failures = [r for r in results if r.status in {"failed", "no_data_found"}]
     if failures:
         logging.getLogger(__name__).error("%d of %d tables failed", len(failures), len(results))
         return 1

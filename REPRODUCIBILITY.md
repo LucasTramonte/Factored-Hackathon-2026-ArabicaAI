@@ -1,96 +1,36 @@
-# Reproducibility Guide
+# Reproducing the data foundation
 
-This repository separates reproducible code from participant-controlled access to the synthetic dataset.
+## Prerequisites
 
-## What another developer needs
+Python 3.10+, GNU Make, enough local disk for the ignored DuckDB/Parquet store, and read-only access to the organizer's S3 bucket. The repository does not contain data or credentials. The default bucket and region are in `Makefile`; override `S3_BUCKET`, `AWS_REGION`, `AWS_PROFILE` or `DATA_DIR` as needed. A usable AWS profile can be checked without displaying keys with `aws s3 ls s3://<bucket>/data/ --profile <profile>`.
 
-- Git.
-- Python 3.10 or a compatible newer Python version.
-- Optional: Docker for an isolated test environment.
-- Optional: GNU Make for the shortcuts in `Makefile`.
-- AWS CLI only when downloading the organizer-provided S3 dataset.
-- Read-only dataset credentials supplied through the official Datathon channel.
+## Local pipeline
 
-The repository does not contain credentials, AWS profiles, raw data, generated reports, or local absolute paths.
-
-## Local setup
-
-From the repository root:
-
-```powershell
-python -m unittest discover -s data_foundation/tests -v
-python -m compileall -q data_foundation
-```
-
-The shared foundation uses relative defaults: `data/` for input and `data_foundation/runs/data-quality-baseline/` for generated audit runs. It does not depend on the developer's home directory, current AWS profile, or machine-specific path.
-
-## Downloading the dataset
-
-Dataset access is an external prerequisite. Confirm that the organizer has authorized the developer before configuring credentials.
-
-Prefer an AWS profile or environment-managed credentials. Never commit, paste into source files, place in Docker layers, or add to shell history any access key or secret key.
-
-Example using a named AWS profile:
-
-```powershell
-aws configure --profile factored-datathon
-aws s3 ls s3://factored-datathon-2026-s3-157725502942-us-east-2-an/data/ --profile factored-datathon
-aws s3 sync s3://factored-datathon-2026-s3-157725502942-us-east-2-an/data/ ./data/ --profile factored-datathon
-```
-
-The profile configuration is local to the developer and must not be committed. The repository's `Makefile` also supports:
-
-```powershell
-make aws-sync DATA_BUCKET=s3://factored-datathon-2026-s3-157725502942-us-east-2-an/data/
-```
-
-That target assumes the AWS CLI is already authenticated and uses the named profile
-`factored-datathon` by default. Override it explicitly when needed:
-
-```powershell
-make aws-sync AWS_PROFILE=default
-```
-
-It does not configure credentials.
-
-## Validation progression
-
-Use the cheapest meaningful validation first:
-
-```text
-unit tests -> compile check -> dimension smoke scan -> controlled scan -> full baseline
-```
-
-Commands:
-
-```powershell
+```bash
+make setup
 make test
 make compile
-make smoke
-make baseline
+make pipeline AWS_PROFILE=default
 ```
 
-The full baseline can be expensive. Do not use it as the first debugging mechanism.
+`make pipeline` runs Bronze, Silver, then the DuckDB quality gate in that order. Bronze reads S3 through DuckDB's AWS credential chain; it does not need keys in `.env`. Facts add new process-date partitions; dimensions refresh on each run. Use `make bronze-full` only when a source partition was corrected or removed, then rebuild Silver and rerun quality. The database and Parquet files stay under ignored `data/`; `data/quality_runs/<UTC run ID>/` contains aggregate results and a Markdown summary.
 
-## Docker
+Do not read an analysis from Silver until the quality command exits successfully. Warnings still require metric-specific treatment; a successful quality run does not validate campaign attribution or customer/product ownership as a usable analytical link.
 
-Docker is useful here for validating the code and test environment, not for distributing the dataset or credentials:
+For targeted debugging, call the existing entrypoints with `--tables`, for example:
 
-```powershell
-docker build --tag latam-bank-analysis:test .
-docker run --rm latam-bank-analysis:test
+```bash
+.venv/bin/python data_pipelines/bronze/run_ingestion.py --tables customers,marketing_campaigns
+.venv/bin/python data_pipelines/silver/run_silver.py --tables customers,marketing_campaigns
+.venv/bin/python -m data_pipelines.quality.run_quality --tables customers,marketing_campaigns
 ```
 
-The current image intentionally runs tests only as a non-root user. Raw data and generated reports are excluded by `.dockerignore`. A future data-processing image should receive an explicit mounted data directory or controlled object-store access; it should never bake credentials into the image.
+The Silver command always refreshes its small FX reference table. Bronze defaults to a 2 GB DuckDB limit and four threads; Silver defaults to 3 GB and two threads. Both honor `DUCKDB_MEMORY_LIMIT` and `DUCKDB_THREADS`; the quality gate defaults to 3 GB and two threads. Ignored `data/duckdb_tmp` holds spill files. Override the limits only after measuring memory and runtime.
 
-The repository also defines a CI workflow that runs the same tests and builds this
-code-only image. Docker is therefore an additional reproducibility check, not a
-requirement for local development.
+## Docker and CI
 
-## Reproducibility boundaries
+`make docker-test` builds a code-only image and runs the offline fixtures. `make docker-pipeline` builds the same image, mounts `data/` writable and `~/.aws` read-only at runtime, then executes Bronze, Silver and quality. No data or credentials enter an image layer. CI installs the declared requirements, runs the same fixture suite and builds the test image; it does not require S3 credentials or run the full dataset.
 
-- Python behavior is pinned by the supported major/minor version, but no third-party dependency installation is currently required.
-- Dataset contents depend on the organizer's S3 bucket and the participant's authorized read-only access.
-- Raw data is local input and is never modified by the scanner.
-- Audit runs are generated under `data_foundation/runs/data-quality-baseline/<run_id>/` and ignored by Git.
-- Results should record the data source, scan command, timestamp, table selection, and relevant contract version.
+## Rebuilding reports
+
+The old HTML and aggregates were withdrawn. `Docs/Plans/marketing-product-trust.md` records the customer-backwards analysis and report gate. New aggregate artifacts can be committed only after a single full Silver run, numerator/denominator reconciliation, privacy check and local HTML inspection.

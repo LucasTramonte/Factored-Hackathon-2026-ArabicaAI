@@ -1,59 +1,26 @@
-# Data Quality Architecture
+# Data pipeline architecture
 
-## Scope
-
-The current system is a read-only baseline scanner for the LATAM Bank CSV dataset. It inventories files, checks declared schemas and rows, tracks duplicate keys, validates partition dates, and reports selected foreign-key orphan signals.
-
-## Components
-
-- `data_foundation/src/contracts.py` contains executable `TableContract` and `ForeignKey` definitions plus file discovery. Contracts define the Python runtime schema authority.
-- `data_foundation/src/quality/checks.py` contains CSV row iteration, schema checks, required-field checks, domain checks, duplicate-key checks, date parsing, partition checks, and result normalization.
-- `data_foundation/scripts/run_baseline.py` orchestrates table scans, retains key sets only for tables used as foreign-key parents, performs relationship checks, and writes timestamped audit runs.
-- `data_foundation/config/data_quality_contracts.yaml` is a human-readable audit registry. It mirrors the executable contracts but is not loaded by Python yet.
-- `data_foundation/tests/` contains dependency-free fixture tests for shared quality behavior.
-
-This package is intentionally a shared foundation. Business-specific analyses and workflow
-decisions belong in later pull requests and should not be mixed into these modules.
-
-## Data Flow
+## Flow
 
 ```text
-data/ CSV files
-    -> contract-based file discovery
-    -> header validation and streaming row iteration
-    -> row-level quality checks
-    -> dimension key materialization for FK parents
-    -> streaming FK membership checks
-    -> timestamped audit run: manifest / results / inventory / report / log
+authorized S3 CSV objects (read only)
+  -> data_pipelines/bronze: incremental fact partitions, refreshed dimensions
+  -> ignored data/bronze Parquet + bronze.* in data/latam_bank.duckdb
+  -> data_pipelines/silver: typed, deduplicated silver.dim_* and silver.fact_*
+  -> data_pipelines/quality: raw/typed reconciliation and relationship warnings
+  -> future Marketing/Product analyses after the deferred evidence gate
 ```
 
-The scanner does not modify raw files and does not silently deduplicate records.
+Bronze is the sole production extraction path. It records `_source_file`, `_ingested_at` and `_source_table`; a watermark tracks the latest process partition. Full refresh writes a staged Parquet snapshot before replacing old local partitions, so corrected or removed partitions do not survive by accident. Missing source data is a failed ingestion. Silver rebuilds from local Bronze, parses text booleans and dates, canonicalizes known country spellings, keeps source vs FX-estimated USD amounts distinct and defensively deduplicates by primary key.
 
-## Memory Model
+## Analytical contract
 
-Rows are consumed through Python CSV iterators rather than loaded into a full-table DataFrame. Parent key sets are retained only for referenced dimension tables such as customers, products, branches, agents, and campaigns. Large fact-table key sets must never be retained.
+`process_date` is the processing partition, while `send_date`, `event_date`, `transaction_date`, and similar fields describe occurrence. Silver facts retain the typed processing date where supplied. Query plans should project columns and filter early, then aggregate a fact to the target grain before joining another fact. Product-linked customer events need both an existing product and owner agreement; an existing `product_id` alone is insufficient. Current product and customer dimensions are snapshots, not historical state.
 
-A previous implementation reached approximately 2.3 GB of memory by materializing keys from large fact tables. The current orchestration avoids that mistake by identifying FK parent tables first and retaining keys only for those small-side tables. New large-data code must document whether memory grows with chunk size, unique dimension keys, or total fact rows.
+## Readiness and memory
 
-## Foreign-Key Validation
+The quality gate queries Bronze and Silver in DuckDB. It reports table/schema presence, raw and deduplicated row counts, required values, domains, processing partitions, date parseability, foreign-key orphans, and known owner/temporal mismatches. Errors block readiness; warnings remain visible for the subsequent metric-specific decision. Its JSON and Markdown reports are ignored under `data/quality_runs/`.
 
-The runner builds small-side key sets for referenced parent tables and streams child rows for membership checks. This is intentionally safer than building a set of all child or fact keys. The current implementation performs a separate pass for each relationship after the table scan; this is a known simplicity/runtime trade-off, not a one-pass guarantee.
+Python keeps only contracts and aggregate counters. DuckDB limits memory and uses ignored `data/duckdb_tmp` for external joins and grouping. Bronze and Silver share the ignored local database; S3 input is never modified. AWS credentials come from the runtime profile via DuckDB's credential chain and are not embedded in code or Docker images.
 
-## Contracts And Joins
-
-Contracts are declarative in shape, even though the executable registry currently lives in Python. Composite keys are represented explicitly, including `(date, source_currency, target_currency)` for exchange rates. Analytical joins must state their grain and cardinality before execution. Shared `customer_id` values do not make two fact tables safe to join directly.
-
-## Reporting And Artifacts
-
-Each run under `data_foundation/runs/data-quality-baseline/<run_id>/` contains a manifest, machine-readable check results, a file inventory, a Markdown summary, and a UTC progress log. The run ID and command make a result traceable without relying on ambiguous names such as `full2` or `smoke2`. Runs are generated artifacts and are ignored by Git. The report is evidence of observed data quality, not an automatic repair process.
-
-## Testing Strategy
-
-Quality behavior is protected with small fixtures first. The intended progression is unit tests, fixtures, integration tests, smoke tests, controlled data, and only then a full scan. Regression tests should reproduce discovered bugs with the smallest possible input before preserving the fix.
-
-## Known Trade-offs
-
-- The scanner uses streaming row iteration, not pandas chunking or a disk-backed query engine.
-- Foreign-key validation currently uses repeated relationship passes for clarity.
-- The YAML registry is intentionally not wired into runtime loading until contract parity and failure behavior are tested.
-- Progress reporting is currently at command/result level; future long scans should add file-boundary progress without per-row logging.
+The previous CSV baseline was retired only after its check semantics were compared on the same controlled source snapshot; [the parity record](data_pipelines/quality/PARITY.md) also reconciles the full S3 Bronze run with the installed CSV inventory. The prior Marketing/Product HTML and intake dashboard were withdrawn because their source and links did not meet the new evidence gate. The rebuild plan is in `Docs/Plans/marketing-product-trust.md`.

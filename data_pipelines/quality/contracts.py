@@ -1,9 +1,8 @@
-"""Executable table contracts and CSV file discovery for the quality scanner."""
+"""Raw and typed table contracts for the DuckDB quality gate."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -78,12 +77,3 @@ CONTRACTS = {
     "digital_events": _contract("digital_events", "digital_events", "event_id", "event_id event_date process_date customer_id session_id event_type event_category channel product_id action utm_campaign", "event_id event_date process_date session_id event_type event_category channel", partition_field="process_date", date_field="event_date", foreign_keys=(ForeignKey("customer_id", "customers", "customer_id"), ForeignKey("product_id", "products", "product_id"))),
     "transactions": _contract("transactions", "transactions", "transaction_id", "transaction_id transaction_date process_date product_id customer_id transaction_type amount currency amount_usd channel transaction_status is_fraud", "transaction_id transaction_date process_date product_id customer_id transaction_type amount currency channel transaction_status is_fraud", partition_field="process_date", date_field="transaction_date", foreign_keys=(ForeignKey("customer_id", "customers", "customer_id"), ForeignKey("product_id", "products", "product_id"))),
 }
-
-
-def discover_files(data_root: Path, contract: TableContract) -> list[Path]:
-    """Return CSV files belonging to a contract in deterministic path order."""
-
-    base = data_root / contract.relative_path
-    if base.is_file():
-        return [base]
-    return sorted(base.rglob("*.csv")) if base.exists() else []
