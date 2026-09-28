@@ -24,3 +24,11 @@ The quality gate queries Bronze and Silver in DuckDB. It reports table/schema pr
 Python keeps only contracts and aggregate counters. DuckDB limits memory and uses ignored `data/duckdb_tmp` for external joins and grouping. Bronze and Silver share the ignored local database; S3 input is never modified. AWS credentials come from the runtime profile via DuckDB's credential chain and are not embedded in code or Docker images.
 
 The previous CSV baseline was retired only after its check semantics were compared on the same controlled source snapshot; [the parity record](data_pipelines/quality/PARITY.md) also reconciles the full S3 Bronze run with the installed CSV inventory. The prior Marketing/Product HTML and intake dashboard were withdrawn because their source and links did not meet the new evidence gate. The rebuild plan is in `Docs/Plans/marketing-product-trust.md`.
+
+## Optional transcript-intent enrichment
+
+`make pipeline-with-labels` adds an explicit offline step after quality. It reads two authorized, local SQLite caches of pinned Jev responses and transactionally publishes `enrichment.jev_predictions`, `enrichment.jev_members`, and the current-source view `enrichment.interaction_labels`. It does not invoke Jev or extract source data. The default pipeline remains unchanged.
+
+The view preserves original categories and all interactions. Identity and exact-text hashes bind predictions to current Silver records; absent/new/changed text remains unclassified. `provisional` and `review_required` are model-derived triage statuses, never verified labels; human adjudication remains pending. Confidence is uncalibrated. Rebuild enrichment after a Silver refresh and query the view rather than historical cache tables directly.
+
+DuckDB checks one-to-one interaction/transcript keys and cache membership coverage before publication; failure rolls back the import. Membership streams through a temporary CSV, while the historical 546 distinct-text responses fit in memory. This importer is intended for the bounded historical cache, not an unbounded live classification service. No historical exploratory module is required by the pipeline or Docker image.
