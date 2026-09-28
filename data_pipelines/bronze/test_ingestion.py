@@ -48,11 +48,9 @@ def test_ingest_dimension_reads_flat_csv(con, tmp_path):
 
     assert result.rows == 2
     assert result.status == "ok"
-    df = con.execute("SELECT * FROM bronze.customers ORDER BY customer_id").df()
-    assert list(df["customer_id"]) == ["C1", "C2"]
-    assert "_ingested_at" in df.columns
-    assert "_source_table" in df.columns
-    assert (df["_source_table"] == "customers").all()
+    result_rows = con.execute("SELECT customer_id, _source_table FROM bronze.customers ORDER BY customer_id").fetchall()
+    assert result_rows == [("C1", "customers"), ("C2", "customers")]
+    assert con.execute("SELECT COUNT(*) FROM bronze.customers WHERE _ingested_at IS NULL").fetchone()[0] == 0
 
 
 def test_ingest_dimension_full_overwrite_on_rerun(con, tmp_path):
@@ -213,3 +211,76 @@ def test_safe_identifier_rejects_unsafe_names(bad_name):
 def test_safe_identifier_accepts_normal_names():
     assert _safe_identifier("digital_events") == "digital_events"
     assert _safe_identifier("_load_watermarks") == "_load_watermarks"
+
+
+def test_full_refresh_replaces_changed_and_removed_source_partitions(con, tmp_path):
+    """A rebuild reflects the current source snapshot, including corrected old days."""
+    base = tmp_path / "source"
+    first = base / "transactions/year=2024/month=01/day=01/t.csv"
+    second = base / "transactions/year=2024/month=01/day=02/t.csv"
+    _write_csv(first, "transaction_id,amount\nT1,100\n")
+    _write_csv(second, "transaction_id,amount\nT2,200\n")
+    ingest_fact(con, str(base), "transactions", data_dir=str(tmp_path / "out"))
+    _write_csv(first, "transaction_id,amount\nT1,150\nT3,300\n")
+    second.unlink()
+    result = ingest_fact(con, str(base), "transactions", full_refresh=True, data_dir=str(tmp_path / "out"))
+    assert result.rows == 2
+    assert con.execute("SELECT transaction_id, amount FROM bronze.transactions ORDER BY transaction_id").fetchall() == [("T1", "150"), ("T3", "300")]
+
+
+def test_refresh_rename_failure_keeps_old_table_and_files(con, tmp_path, monkeypatch):
+    from ingestion import os as ingestion_os
+    base = tmp_path / "source"
+    out = tmp_path / "out"
+    file = base / "transactions/year=2024/month=01/day=01/t.csv"
+    _write_csv(file, "transaction_id,amount\nT1,100\n")
+    ingest_fact(con, str(base), "transactions", data_dir=str(out))
+    _write_csv(file, "transaction_id,amount\nT1,200\n")
+    real_replace = ingestion_os.replace
+    def fail_stage(src, dst):
+        if ".stage-" in str(src):
+            raise OSError("simulated rename failure")
+        return real_replace(src, dst)
+    monkeypatch.setattr(ingestion_os, "replace", fail_stage)
+    with pytest.raises(OSError, match="simulated rename failure"):
+        ingest_fact(con, str(base), "transactions", full_refresh=True, data_dir=str(out))
+    assert con.execute("SELECT amount FROM bronze.transactions").fetchone()[0] == "100"
+    assert con.execute(f"SELECT amount FROM read_parquet('{out}/bronze/transactions/**/*.parquet')").fetchone()[0] == "100"
+
+
+def test_restart_reconciles_swapped_snapshot_before_source_lookup(con, tmp_path):
+    from ingestion import _rebuild_fact_table
+    base = tmp_path / "source"
+    out = tmp_path / "out"
+    file = base / "transactions/year=2024/month=01/day=01/t.csv"
+    _write_csv(file, "transaction_id,amount\nT1,100\n")
+    ingest_fact(con, str(base), "transactions", data_dir=str(out))
+    live = out / "bronze" / "transactions"
+    backup = out / "bronze" / "transactions.old"
+    os.replace(live, backup)
+    _write_csv(file, "transaction_id,amount\nT1,200\n")
+    ingest_fact(con, str(base), "transactions", full_refresh=True, data_dir=str(tmp_path / "new"))
+    os.replace(tmp_path / "new" / "bronze" / "transactions", live)
+    # Simulate the persisted database from before the swap.
+    _rebuild_fact_table(con, "transactions", str(backup))
+    file.unlink()
+    result = ingest_fact(con, str(base), "transactions", data_dir=str(out))
+    assert result.status == "no_data_found"
+    assert con.execute("SELECT amount FROM bronze.transactions").fetchone()[0] == "200"
+    assert not backup.exists()
+
+
+def test_restart_restores_backup_when_live_directory_is_missing(con, tmp_path):
+    base = tmp_path / "source"
+    out = tmp_path / "out"
+    _write_csv(base / "transactions/year=2024/month=01/day=01/t.csv",
+               "transaction_id,amount\nT1,100\n")
+    ingest_fact(con, str(base), "transactions", data_dir=str(out))
+    live = out / "bronze" / "transactions"
+    backup = out / "bronze" / "transactions.old"
+    os.replace(live, backup)
+    result = ingest_fact(con, str(base), "transactions", data_dir=str(out))
+    assert result.rows == 1
+    assert live.exists()
+    assert not backup.exists()
+    assert con.execute("SELECT amount FROM bronze.transactions").fetchone()[0] == "100"

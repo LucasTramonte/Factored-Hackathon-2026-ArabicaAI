@@ -20,7 +20,7 @@ storage type without implying an undocumented SQL type.
 
 **Type:** Dimension table\
 **Rows:** 150,000\
-**Source:** `data_foundation/src/contracts.py`
+**Source:** `data_pipelines/quality/contracts.py`
 
 | Column | Type | Constraints |
 |---|---|---|
@@ -36,7 +36,7 @@ storage type without implying an undocumented SQL type.
 
 **Type:** Dimension table\
 **Rows:** 400,000\
-**Source:** `data_foundation/src/contracts.py`
+**Source:** `data_pipelines/quality/contracts.py`
 
 | Column | Type | Constraints |
 |---|---|---|
@@ -53,7 +53,7 @@ storage type without implying an undocumented SQL type.
 
 **Type:** Dimension table\
 **Rows:** 350\
-**Source:** `data_foundation/src/contracts.py`
+**Source:** `data_pipelines/quality/contracts.py`
 
 | Column | Type | Constraints |
 |---|---|---|
@@ -65,7 +65,7 @@ storage type without implying an undocumented SQL type.
 
 **Type:** Dimension table\
 **Rows:** 1,200\
-**Source:** `data_foundation/src/contracts.py`
+**Source:** `data_pipelines/quality/contracts.py`
 
 | Column | Type | Constraints |
 |---|---|---|
@@ -77,7 +77,7 @@ storage type without implying an undocumented SQL type.
 
 **Type:** Dimension table\
 **Rows:** 200\
-**Source:** `data_foundation/src/contracts.py`
+**Source:** `data_pipelines/quality/contracts.py`
 
 | Column | Type | Constraints |
 |---|---|---|

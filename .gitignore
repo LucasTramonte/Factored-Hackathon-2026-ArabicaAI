@@ -6,6 +6,8 @@ data_foundation/runs/
 data_foundation/**/__pycache__/
 data/
 Docs/pdfs/
+Docs/Factored Hackathon - Arabica AI/.obsidian/
+Docs/Factored Hackathon - Arabica AI/latam-bank-architecture-en.excalidraw.md
 
 # Secrets — never commit real credentials
 .env
@@ -15,7 +17,6 @@ Docs/pdfs/
 *.duckdb.wal
 
 # Local Bronze/Silver/Gold data — regenerable by re-running ingestion, and too large for git anyway
-data/
 *.parquet
 *.csv
 

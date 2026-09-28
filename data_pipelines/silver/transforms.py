@@ -15,7 +15,10 @@ cast is just insurance, not an assumption that the input is already VARCHAR.
 """
 from __future__ import annotations
 
-from config import COUNTRY_CANONICAL, NULL_LIKE_SENTINELS
+if __package__:
+    from .config import COUNTRY_CANONICAL, NULL_LIKE_SENTINELS
+else:  # direct run_silver.py execution
+    from config import COUNTRY_CANONICAL, NULL_LIKE_SENTINELS
 
 _SENTINEL_LIST_SQL = ", ".join(f"'{s}'" for s in sorted(NULL_LIKE_SENTINELS))
 

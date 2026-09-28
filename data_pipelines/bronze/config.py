@@ -1,8 +1,8 @@
 """
 Configuration for the Bronze ingestion pipeline.
 
-Everything environment-specific (bucket, region, credentials, local DB path) is read from the
-environment, not hardcoded -- the same code runs unchanged across dev/staging/prod, only the
+Environment-specific bucket, region and local paths come from the environment; AWS
+credentials resolve through the runtime AWS profile, not code or a credentials .env file -- the same code runs unchanged across dev/staging/prod, only the
 environment differs. The table registry (which tables exist, and whether each is a flat snapshot
 or a year/month/day-partitioned fact) lives here as the single source of truth.
 """
@@ -62,21 +62,20 @@ ALL_TABLES: List[TableConfig] = [TableConfig(name=n, kind="dimension") for n in 
 class Settings:
     bucket: str
     region: str
-    aws_access_key_id: str
-    aws_secret_access_key: str
     project_root: Path
     data_dir: Path        # where local Bronze Parquet files land: <data_dir>/bronze/<table>/...
     duckdb_path: str
     s3_data_prefix: str = "data"  # matches the bucket layout: s3://bucket/data/<table>
 
     @classmethod
-    def from_env(cls) -> "Settings":
-        required = ["S3_BUCKET", "AWS_REGION", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]
+    def from_env(cls, require_s3: bool = True) -> "Settings":
+        """Resolve output paths and require AWS settings only for S3 ingestion."""
+        required = ["S3_BUCKET", "AWS_REGION"] if require_s3 else []
         missing = [k for k in required if not os.environ.get(k)]
         if missing:
             raise RuntimeError(
                 f"Missing required environment variable(s): {', '.join(missing)}. "
-                "Check your .env file or the environment the pipeline is running in."
+                "Set the bucket and region in the environment or use Makefile defaults."
             )
 
         # Project root defaults to two levels above this file, matching the recommended layout:
@@ -96,10 +95,8 @@ class Settings:
         duckdb_path = os.environ.get("DUCKDB_PATH", str(data_dir / "latam_bank.duckdb"))
 
         return cls(
-            bucket=os.environ["S3_BUCKET"],
-            region=os.environ["AWS_REGION"],
-            aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
-            aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+            bucket=os.environ.get("S3_BUCKET", ""),
+            region=os.environ.get("AWS_REGION", ""),
             project_root=project_root,
             data_dir=data_dir,
             duckdb_path=duckdb_path,

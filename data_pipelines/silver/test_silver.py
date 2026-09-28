@@ -190,22 +190,22 @@ def test_transactions_amount_usd_fallback_and_exact_date_fx(bronze_fx):
     build_fx_rates_table(con)
 
     columns = (
-        "transaction_id, transaction_date, product_id, customer_id, transaction_type, "
+        "transaction_id, transaction_date, process_date, product_id, customer_id, transaction_type, "
         "transaction_category, amount, currency, amount_usd, channel, branch_id, merchant_name, "
         "merchant_category, transaction_country, transaction_city, transaction_status, "
         "response_code, is_fraud, fraud_score, latitude, longitude, _ingested_at"
     )
     rows = """
-        ('T1', '2024-01-01 10:00:00', 'P1', 'C1', 'Purchase', 'Food', '100', 'MXN', NULL, 'POS',
+        ('T1', '2024-01-01 10:00:00', '2024-01-02', 'P1', 'C1', 'Purchase', 'Food', '100', 'MXN', NULL, 'POS',
          'B1', 'Store', 'Food', 'mexico', 'CDMX', 'Approved', '00', 'False', '1.0', NULL, NULL,
          TIMESTAMP '2024-01-01'),
-        ('T2', '2024-01-01 11:00:00', 'P1', 'C1', 'Purchase', 'Food', '100', 'MXN', '9999.0', 'POS',
+        ('T2', '2024-01-01 11:00:00', '2024-01-02', 'P1', 'C1', 'Purchase', 'Food', '100', 'MXN', '9999.0', 'POS',
          'B1', 'Store', 'Food', 'México', 'CDMX', 'Approved', '00', 'False', '1.0', NULL, NULL,
          TIMESTAMP '2024-01-01'),
-        ('T3', '2024-01-01 12:00:00', 'P1', 'C1', 'Purchase', 'Food', '100', 'MXN', NULL, 'POS',
+        ('T3', '2024-01-01 12:00:00', '2024-01-02', 'P1', 'C1', 'Purchase', 'Food', '100', 'MXN', NULL, 'POS',
          'B1', 'Store', 'Food', 'mexico', 'CDMX', 'Approved', '00', 'False', '1.0', NULL, NULL,
          TIMESTAMP '2024-01-01'),
-        ('T3', '2024-01-01 12:00:00', 'P1', 'C1', 'Purchase', 'Food', '100', 'MXN', NULL, 'POS',
+        ('T3', '2024-01-01 12:00:00', '2024-01-02', 'P1', 'C1', 'Purchase', 'Food', '100', 'MXN', NULL, 'POS',
          'B1', 'Store', 'Food', 'mexico', 'CDMX', 'Approved', '00', 'False', '1.0', NULL, NULL,
          TIMESTAMP '2024-06-01')
     """
@@ -221,6 +221,7 @@ def test_transactions_amount_usd_fallback_and_exact_date_fx(bronze_fx):
     assert t1[0] == pytest.approx(100 * 0.05)
     assert t1[1] is True
     assert t1[2] == "México"  # 'mexico' canonicalized
+    assert con.execute("SELECT process_date FROM silver.fact_transactions WHERE transaction_id='T1'").fetchone()[0].isoformat() == "2024-01-02"
 
     # T2: amount_usd was already populated in Bronze -> kept as-is, not overwritten by the FX calc.
     t2 = con.execute(
