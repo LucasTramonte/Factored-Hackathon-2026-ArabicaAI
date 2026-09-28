@@ -4,7 +4,7 @@ This repository supports the Factored Hackathon 2026 with a synthetic LATAM bank
 
 ## Start here
 
-You need Python 3.10+, GNU Make, several GB of free disk space, and access to the organizer's S3 bucket through an AWS profile. The repository contains no raw data or credentials. Use an AWS profile or temporary role credentials; **do not add access keys to a repository `.env` file**.
+For local runs, you need Python 3.10+ and GNU Make. For container runs, you need Docker and GNU Make; Python is installed in the image. Both paths need several GB of free disk space and access to the organizer's S3 bucket through an AWS profile. The repository contains no raw data or credentials. Use an AWS profile or temporary role credentials; **do not add access keys to a repository `.env` file**.
 
 From the repository root:
 
@@ -13,6 +13,15 @@ make setup       # create .venv and install pipeline dependencies
 make test        # run offline fixtures; no S3 access needed
 make pipeline AWS_PROFILE=default
 ```
+
+To run entirely in Docker, use the same profile without creating a local virtual environment:
+
+```bash
+make docker-test
+make docker-pipeline AWS_PROFILE=default
+```
+
+Both Docker targets build the image before running it. `docker-pipeline` mounts `data/` writable and your `~/.aws` directory read-only at runtime; credentials are never copied into the image.
 
 `make pipeline` runs **Bronze → Silver → quality**. On a fresh checkout, Bronze loads all available source partitions; later runs ingest only newer fact partitions and refresh the small dimensions. The bucket and region defaults are in the [Makefile](Makefile). Use `AWS_PROFILE=your-profile` if your credentials are under another profile.
 
@@ -38,7 +47,7 @@ A zero-error quality run means the tables are structurally ready to query. It do
 | `make docker-test` | Run offline tests in the code-only container. |
 | `make docker-pipeline` | Run the pipeline with local `data/` and `~/.aws` mounted at runtime. |
 
-Both Docker commands build the image first and reuse cached layers on later runs. For a smaller first S3 check, follow the targeted commands in [REPRODUCIBILITY.md](REPRODUCIBILITY.md). CI runs offline tests and a Docker build; it does not need S3 credentials.
+Docker reuses cached build layers on later runs. For a smaller first S3 check, follow the targeted commands in [REPRODUCIBILITY.md](REPRODUCIBILITY.md). CI runs offline tests and a Docker build; it does not need S3 credentials.
 
 ## Where to look next
 
