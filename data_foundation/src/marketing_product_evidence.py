@@ -111,9 +111,7 @@ def marketing(con) -> dict:
            WHEN campaign_found AND send_date IS NOT NULL AND start_date IS NOT NULL AND end_date IS NOT NULL THEN 'outside'
            ELSE 'uncheckable' END AS campaign_window, {METRICS}
       FROM send_base GROUP BY 1 ORDER BY 1""")
-    result["monthly"] = rows(con, """SELECT date_trunc('month', send_date)::DATE AS month,
-      COUNT(*) AS sends, COUNT(*) FILTER (WHERE had_conversion) AS recorded_conversions
-      FROM silver.fact_campaign_sends GROUP BY 1 ORDER BY 1""")
+    result["monthly"] = rows(con, SEND_BASE + "SELECT date_trunc('month', send_date)::DATE AS month, " + METRICS + " FROM send_base GROUP BY 1 ORDER BY 1")
     result["limitations"] = ["Current consent is a snapshot, not consent at send time.",
       "Recorded conversion belongs to a send record; no randomized control or independently verified purchase link exists.",
       "Conversion value has no safe common currency for ROI."]
@@ -169,6 +167,34 @@ def economics(con) -> dict:
         "A send dated before the current registration_date is shown separately, not treated as a lead or removed silently.",
       ],
     }
+
+
+def monthly_activity(con) -> dict:
+    """Count approved, owner-safe activity and adjacent-month customer overlap."""
+    monthly = rows(con, """WITH active AS (
+      SELECT date_trunc('month',t.transaction_date)::DATE AS month,
+        t.customer_id, COUNT(*) AS approved_transactions
+      FROM silver.fact_transactions t
+      JOIN silver.dim_products p ON t.product_id=p.product_id AND t.customer_id=p.customer_id
+      WHERE t.transaction_status='Approved' AND t.transaction_date::DATE>=p.opening_date
+      GROUP BY 1,2
+    ), sequenced AS (
+      SELECT month,customer_id,approved_transactions,
+        LAG(month) OVER (PARTITION BY customer_id ORDER BY month) AS previous_month
+      FROM active
+    ), by_month AS (
+      SELECT month, COUNT(*) AS active_customers,
+        SUM(approved_transactions)::BIGINT AS approved_transactions,
+        COUNT(*) FILTER (WHERE previous_month=month-INTERVAL '1 month') AS continuing_customers
+      FROM sequenced GROUP BY 1
+    ) SELECT b.month,b.active_customers,b.approved_transactions,b.continuing_customers,
+      COALESCE(p.active_customers,0) AS prior_active_customers
+    FROM by_month b LEFT JOIN by_month p ON p.month=b.month-INTERVAL '1 month'
+    ORDER BY b.month""")
+    bounds = rows(con, "SELECT MIN(transaction_date) AS first_transaction, MAX(transaction_date) AS last_transaction FROM silver.fact_transactions")[0]
+    return {"monthly": monthly, **bounds,
+      "definition": "Customers with approved, owner-matched, post-opening transactions in both adjacent calendar months / customers active in the preceding month; customer-month transitions, not contractual retention.",
+      "partial_month_warning": "The first month lacks a preceding observed month; the final month ends before month-end, so its continuation is right-censored."}
 
 
 def products(con) -> dict:
@@ -307,5 +333,5 @@ def analyze(con) -> dict:
     """Build all report aggregates from a single verified Silver snapshot."""
     counts = assert_ready(con)
     return {"generated_at_utc": datetime.now(timezone.utc).isoformat(),
-            "silver_counts": counts, "marketing": marketing(con), "economics": economics(con), "products": products(con),
+            "silver_counts": counts, "marketing": marketing(con), "economics": economics(con), "activity": monthly_activity(con), "products": products(con),
             "digital": digital(con), "intake": intake(con)}

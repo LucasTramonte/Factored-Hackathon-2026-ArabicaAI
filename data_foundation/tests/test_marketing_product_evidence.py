@@ -26,8 +26,9 @@ def test_silver_aggregates_keep_denominators_and_owner_checks():
       ('P1','C1','Checking','Active',DATE '2024-01-02',TRUE),('P2','C2','Savings','Active',DATE '2024-01-01',NULL))
       t(product_id,customer_id,product_type,product_status,opening_date,has_linked_app)""")
     con.execute("""CREATE TABLE silver.fact_transactions AS SELECT * FROM (VALUES
-      ('T1','P1','C1',TIMESTAMP '2024-01-03'),('T2','P1','C2',TIMESTAMP '2024-01-03'),
-      ('T3','P1','C1',TIMESTAMP '2024-01-01')) t(transaction_id,product_id,customer_id,transaction_date)""")
+      ('T1','P1','C1',TIMESTAMP '2024-01-03','Approved'),('T2','P1','C2',TIMESTAMP '2024-01-03','Approved'),
+      ('T3','P1','C1',TIMESTAMP '2024-01-01','Approved'),('T4','P1','C1',TIMESTAMP '2024-02-03','Approved'),
+      ('T5','P2','C2',TIMESTAMP '2024-03-03','Approved')) t(transaction_id,product_id,customer_id,transaction_date,transaction_status)""")
     con.execute("""CREATE TABLE silver.fact_digital_events AS SELECT * FROM (VALUES
       ('E1','C1','A',TIMESTAMP '2024-01-01 10:00','PageView','Navigation','x',NULL,DATE '2024-01-01'),
       ('E2','C1','A',TIMESTAMP '2024-01-01 10:01','Click','Product',NULL,'P2',DATE '2024-01-01'),
@@ -51,8 +52,14 @@ def test_silver_aggregates_keep_denominators_and_owner_checks():
     assert (m['overall']['opens'],m['overall']['open_known'])==(1,1)
     assert (m['overall']['recorded_conversions'],m['overall']['conversion_known'])==(1,2)
     assert m['quality']['outside_campaign_dates']==1
+    assert m['monthly'][0]['delivered']==1
     assert m['quality']['current_opt_out_sends']==1
-    assert p['transaction_activity']['eligible_transactions']==1
+    assert p['transaction_activity']['eligible_transactions']==3
+    assert data['activity']['monthly'][0]['active_customers']==1
+    assert data['activity']['monthly'][1]['continuing_customers']==1
+    assert data['activity']['monthly'][1]['prior_active_customers']==1
+    assert data['activity']['monthly'][2]['continuing_customers']==0
+    assert data['activity']['monthly'][2]['prior_active_customers']==1
     assert p['transaction_activity']['owner_mismatch']==1
     assert p['transaction_activity']['before_opening']==1
     assert d['product_links']['owner_mismatch']==1
@@ -66,7 +73,8 @@ def test_silver_aggregates_keep_denominators_and_owner_checks():
     rendered=marketing_product(data)
     assert 'Recorded conversion' in rendered
     assert 'CAC' in rendered and 'LTV' in rendered
-    assert '<svg' in rendered and 'Monthly send trend by business date</summary>' not in rendered
+    assert 'id="time-year"' in rendered and 'id="time-month"' in rendered
+    assert 'const sendMonths=' in rendered and 'Monthly send trend by business date</summary>' not in rendered
     assert 'C1' not in rendered and 'P1' not in rendered
 
 

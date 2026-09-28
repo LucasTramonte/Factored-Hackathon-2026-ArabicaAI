@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import html
 import json
-import math
 from calendar import monthrange
 from datetime import date
 from pathlib import Path
@@ -16,7 +15,7 @@ section{background:#fff;border-radius:16px;padding:26px;margin:18px 0;box-shadow
 nav{display:flex;gap:18px;flex-wrap:wrap;margin-top:22px}a{color:#0e746f}header a{color:#b8fff3}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.card{background:#eef7f4;padding:18px;border-radius:12px}.card b{display:block;font-size:1.8rem;color:#0b5f58}
 .tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:.9rem}th,td{padding:10px;border-bottom:1px solid #d9e5e1;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{background:#eaf4f0;position:sticky;top:0}
 .bar{display:flex;align-items:center;gap:12px;margin:12px 0}.bar span:first-child{width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.track{height:22px;background:#e0ece8;border-radius:12px;flex:1;overflow:hidden}.fill{height:100%;background:#d68b53}.bar b{width:100px;text-align:right;font-size:.85rem}
-.note{border-left:4px solid #d68b53;padding:12px 16px;background:#fff6eb}.timeseries{width:100%;height:auto}.timeseries text{fill:#536970;font-size:11px}figure{margin:20px 0}figcaption{font-weight:650;margin-bottom:8px}select{padding:8px;border:1px solid #9db5ad;border-radius:6px}footer{color:#617675;margin-top:30px}
+.note{border-left:4px solid #d68b53;padding:12px 16px;background:#fff6eb}.timeseries{width:100%;height:auto}.timeseries text{fill:#536970;font-size:11px}figure{margin:20px 0}figcaption{font-weight:650;margin-bottom:8px}select{padding:8px;border:1px solid #9db5ad;border-radius:6px}.filters{display:flex;gap:16px;flex-wrap:wrap;align-items:end}.filters label{display:grid;gap:5px}.filters select{min-width:130px}.decision{border-left:5px solid #0e746f}.decision table td:first-child{white-space:normal}footer{color:#617675;margin-top:30px}
 </style>"""
 
 
@@ -53,47 +52,27 @@ def shell(title: str, subtitle: str, body: str) -> str:
 <header><h1>{esc(title)}</h1><p>{esc(subtitle)}</p><nav><a href="index.html">Report hub</a><a href="marketing-product.html">Marketing & Product</a><a href="intake-decision.html">Intake decision</a></nav></header><main>{body}<footer>Aggregate synthetic data · Private repository · Offline report</footer></main></body></html>'''
 
 
-def monthly_plot(monthly: list[dict], metric: str, title: str, last_send: str) -> str:
-    """Draw a zero-based monthly SVG series with exact values in hover titles."""
-    if not monthly:
-        return '<p>No dated sends available.</p>'
-    values = [r['sends'] if metric == 'sends' else 100 * r['recorded_conversions'] / r['sends'] if r['sends'] else 0 for r in monthly]
-    ceiling = (math.ceil(max(values) / 10000) * 10000) if metric == 'sends' else (math.ceil(max(values) * 5) / 5)
-    ceiling = max(ceiling, 1)
-    left, right, top, bottom = 65, 925, 25, 226
-    x = lambda i: left + i * (right-left) / max(1,len(monthly)-1)
-    y = lambda value: bottom - value * (bottom-top) / ceiling
-    last_month = date.fromisoformat(str(monthly[-1]['month'])[:10])
-    last_date = date.fromisoformat(str(last_send)[:10])
-    partial = last_date.year == last_month.year and last_date.month == last_month.month and last_date.day < monthrange(last_date.year,last_date.month)[1]
-    output = [f'<figure><figcaption>{esc(title)}</figcaption><svg class="timeseries" role="img" aria-label="{esc(title)} by send month" viewBox="0 0 980 280">']
-    if partial:
-        width = (right-left)/max(1,len(monthly)-1)
-        output.append(f'<rect x="{x(len(monthly)-1)-width/2:.1f}" y="{top}" width="{width/2+20:.1f}" height="{bottom-top}" fill="#fff2d8"/>')
-    for fraction in (0,0.25,0.5,0.75,1):
-        yy = y(ceiling*fraction)
-        label = f'{int(ceiling*fraction):,}' if metric=='sends' else f'{ceiling*fraction:.2f}%'
-        output.append(f'<line x1="{left}" y1="{yy:.1f}" x2="{right}" y2="{yy:.1f}" stroke="#d5e3de"/><text x="{left-8}" y="{yy+4:.1f}" text-anchor="end">{label}</text>')
-    color = '#0d756e' if metric=='sends' else '#bc653a'
-    points = ' '.join(f'{x(i):.1f},{y(value):.1f}' for i,value in enumerate(values))
-    output.append(f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="3"/>')
-    for i,(row,value) in enumerate(zip(monthly,values)):
-        month = str(row['month'])[:7]
-        tooltip = f"{month}: {row['sends']:,} sends; {row['recorded_conversions']:,} recorded conversions; {100*row['recorded_conversions']/row['sends']:.2f}% per send" if row['sends'] else f'{month}: 0 sends'
-        output.append(f'<circle cx="{x(i):.1f}" cy="{y(value):.1f}" r="4.5" fill="{color}"><title>{esc(tooltip)}</title></circle>')
-        if i % 3 == 0 or i == len(monthly)-1:
-            output.append(f'<text x="{x(i):.1f}" y="{bottom+22}" text-anchor="middle">{esc(month)}</text>')
-    if partial:
-        output.append(f'<text x="{right}" y="{top+15}" text-anchor="end" fill="#885315">Partial month</text>')
-    output.append('</svg></figure>')
-    return ''.join(output)
-
-
 def marketing_product(data: dict) -> str:
     """Render Marketing and Product counts, sensitivity, funnel and caveats."""
-    m, p, d, econ = data["marketing"], data["products"], data["digital"], data["economics"]
+    m, p, d, econ, activity = data["marketing"], data["products"], data["digital"], data["economics"], data["activity"]
     o, q, e, s = m["overall"], m["quality"], d["events"], d["sessions"]
-    body = '<section><h2>What the customer needs</h2><p>Relevant messages and digital tasks that can be completed with clear recovery paths. These data describe current records; they do not prove a campaign or feature improved customer outcomes.</p></section>'
+    v1 = next((r for r in data["intake"]["populations"] if r["population"].startswith("V1:")), {})
+    activity_last_day = date.fromisoformat(str(activity['last_transaction'])[:10])
+    activity_last_partial = activity_last_day.day < monthrange(activity_last_day.year, activity_last_day.month)[1]
+    complete_activity = activity['monthly'][1:-1 if activity_last_partial else None]
+    complete_range = (str(complete_activity[0]['month'])[:7]+'–'+str(complete_activity[-1]['month'])[:7]) if complete_activity else 'no complete follow-up months'
+    baseline_continuing = sum(r['continuing_customers'] for r in complete_activity)
+    baseline_prior = sum(r['prior_active_customers'] for r in complete_activity)
+    body = '<section class="decision"><h2>Start with the customer decision</h2><p>A customer checking an account or payment needs an accurate answer and a clear recovery path. The next test should be a <strong>read-only account/payment inquiry</strong> with backend-confirmed answer, completion and handoff events. Product analytics can identify where that path breaks; a customer-randomized test can then measure improvement. The current data do not establish a resolution baseline or any model gain.</p><p>Transaction-dispute intake remains a separate human-handoff test: '+num(v1.get('call_center',0))+' of '+num(v1.get('complaints',0))+' narrowly defined cases arrived through Call Center. Card-service support needs a verified service-case link; credit eligibility needs approved policy and outcome labels. Do not transfer marketing response rates or generic digital events to those workflows.</p></section>'
+    body += '<section><h2>What is measurable by month or year?</h2><p>Choose a year and, optionally, one month. Send measures use business send_date; product activity uses transaction_date. A year combines monthly customer-month transitions, not distinct retained customers for the year.</p><div class="filters"><label>Year <select id="time-year"><option value="all">All available</option></select></label><label>Month <select id="time-month"><option value="all">All months</option></select></label></div><p id="time-window" class="muted"></p><div id="time-cards" class="cards"></div><div id="time-send"></div><div id="time-rate"></div><div id="time-activity"></div><p class="note">The activity measure is <strong>adjacent-month transaction activity continuation</strong>: customers with an approved, owner-matched, post-opening transaction in both months / customers with one in the previous month. It is not contractual customer retention or proof of feature use. The first month has no observed predecessor. The last observed transaction month ends on '+esc(activity_last_day)+'; if incomplete, it is excluded from the continuation rate. The latest send month may also have incomplete conversions. Current product ownership and the digital funnel below remain full-snapshot measures and do not change with this filter.</p></section>'
+    body += '<section><h2>Baseline, evidence and modeling priority</h2><p><strong>Baseline today:</strong> '+num(o['recorded_conversions'])+' recorded conversion flags / '+num(o['sends'])+' sends ('+pct(o['recorded_conversions'],o['sends'])+') and '+num(s['submit_after_click'])+' ordered form submissions after '+num(s['navigation_view'])+' navigation-view sessions ('+pct(s['submit_after_click'],s['navigation_view'])+'). Neither is a verified inquiry completion or an acquisition outcome. Owner-safe approved transaction activity has '+num(baseline_continuing)+' / '+num(baseline_prior)+' ('+pct(baseline_continuing,baseline_prior)+') adjacent-month customer continuations across complete follow-up months, '+esc(complete_range)+'; this measures activity, not retention. <strong>Measured gain from modeling:</strong> none yet.</p>'
+    body += table([
+      {"work":"1 · Product funnel and feature instrumentation", "decision":"Start now", "reason":"Choose the read-only inquiry and record eligible start, backend-confirmed answer, failure, correction and handoff. The generic funnel is a diagnostic baseline only."},
+      {"work":"2 · Customer-randomized A/B test", "decision":"After instrumentation", "reason":"Compare verified task completion per assigned eligible customer against a control; monitor wrong answers, complaints and handoff. Pre-specify effect and observation window."},
+      {"work":"3 · Campaign effectiveness and product usage", "decision":"After outcome links", "reason":"Report verified completion and repeat activity by cohort; current send conversion and active-product snapshot remain descriptive."},
+      {"work":"4 · Personalization, targeting and channel attribution", "decision":"Defer models", "reason":"No historical consent, reliable campaign-to-outcome link or randomized control; repeated sends and bad digital product links can produce spurious lift."},
+    ],[("work","Work"),("decision","Decision"),("reason","Evidence threshold")])
+    body += '<p>A large row count does not fix an undefined target or missing counterfactual. The first experiment should randomize at customer level, keep an intention-to-treat denominator, check assignment balance and missing outcomes, and report effect sizes with uncertainty and harm guardrails. Pick a minimum useful effect and power before launch. No statistical claim of model lift is supported by this synthetic snapshot.</p></section>'
     body += '<section><h2>Can we decide where to invest?</h2><p><strong>Not yet.</strong> The available records describe campaigns sent to customer IDs, but do not connect eligible leads, verified new-customer acquisition, fully loaded cost, and bank contribution over time. Thus acquisition versus conversion versus retention cannot be ranked from this snapshot.</p><div class="cards">'
     for label, key in [('CAC','CAC'),('LTV','LTV'),('LTV / CAC','LTV/CAC'),('CAC versus average ticket','CAC/average ticket'),('Lead → customer','lead-to-customer'),('Retention','retention')]:
         item=econ['metrics'][key]
@@ -114,7 +93,7 @@ def marketing_product(data: dict) -> str:
     body += '<label>Compare by <select id="dimension"><option value="channel">Channel</option><option value="objective">Campaign objective</option><option value="segment">Customer segment</option><option value="country">Customer country</option></select></label><div id="chart"></div><p class="muted">Bar width uses a 0–10% conversion scale. Other rate denominators appear below.</p><div id="group-table" class="tablewrap"></div>'
     body += '<p>Business send-date range: '+esc(q['first_send'])+' through '+esc(q['last_send'])+'. The first and last calendar years are partial.</p>'
     body += '<h3>Campaign-window sensitivity</h3>'+table(m['date_sensitivity'], [('campaign_window','Window'),('sends','Sends'),('recorded_conversions','Recorded conversions'),('delivery_unknown','Unknown delivery')])
-    body += '<p>Rates by group always use the send grain. Out-of-window sends remain in the overall result; the sensitivity table shows their volume.</p><h3>Monthly campaign response by business send date</h3>'+monthly_plot(m['monthly'],'sends','Send volume',q['last_send'])+monthly_plot(m['monthly'],'rate','Recorded conversion per send',q['last_send'])+'<p>Both charts start at zero. Hover a point for exact numerator and denominator; the final month is incomplete and later conversions may still be unobserved. Counts describe synthetic records, not incremental customer acquisition.</p></section>'
+    body += '<p>Rates by group always use the send grain. Out-of-window sends remain in the overall result; the sensitivity table shows their volume. Use the time filter above for monthly and yearly totals.</p></section>'
     body += '<section><h2>Data readiness for targeting</h2><div class="cards">'
     for label,key,note in [('Repeat exposed customers','repeat_exposed_customers','of '+num(m['exposure']['exposed_customers'])+' exposed customers'),('Current opt-out sends','current_opt_out_sends','Snapshot consent, not historical'),('Outside campaign dates','outside_campaign_dates','Compared with business send_date'),('Target country mismatch','target_country_mismatch','Joined customer snapshot'),('Target segment mismatch','target_segment_mismatch','Joined customer snapshot')]:
         value = m['exposure'][key] if key in m['exposure'] else q[key]
@@ -135,6 +114,49 @@ def marketing_product(data: dict) -> str:
     body += '<section><h2>Decision and limits</h2><p>Use these descriptive counts to choose a controlled test of clearer, consent-respecting communication and supported digital tasks. Measure verified customer completion and errors before claiming value. No causal attribution, targeting model, cross-currency ROI, or acquisition model is validated here.</p><ul>'
     for item in m['limitations']+p['limitations']+d['limitations']: body += '<li>'+esc(item)+'</li>'
     body += '</ul><p>Source: one verified Silver snapshot; see aggregate JSON and quality-run manifest for exact counts and provenance.</p></section>'
+    send_series = json.dumps(m['monthly'], ensure_ascii=False, default=str).replace('<','\\u003c')
+    activity_series = json.dumps(activity['monthly'], ensure_ascii=False, default=str).replace('<','\\u003c')
+    filter_script = r'''<script>
+const sendMonths=__SEND_SERIES__, activityMonths=__ACTIVITY_SERIES__;
+const lastSendDate=__LAST_SEND__, lastActivityDate=__LAST_ACTIVITY__;
+const activityEnd=lastActivityDate.split('-').map(Number),lastActivityPartial=activityEnd[2]<new Date(activityEnd[0],activityEnd[1],0).getDate();
+const yearPick=document.getElementById('time-year'), monthPick=document.getElementById('time-month');
+const years=[...new Set([...sendMonths,...activityMonths].map(r=>r.month.slice(0,4)))].sort();
+for(const year of years){const option=document.createElement('option');option.value=year;option.textContent=year;yearPick.append(option)}
+for(let n=1;n<=12;n++){const option=document.createElement('option');option.value=String(n).padStart(2,'0');option.textContent=new Date(2024,n-1,1).toLocaleString('en',{month:'long'});monthPick.append(option)}
+const svgNS='http://www.w3.org/2000/svg';
+function node(parent,tag,attrs={},text){const el=document.createElementNS(svgNS,tag);for(const [key,value] of Object.entries(attrs))el.setAttribute(key,value);if(text!==undefined)el.textContent=text;parent.append(el);return el}
+function rateOrNA(n,d){return d?(100*n/d).toFixed(2)+'%':'n/a'}
+function sum(rows,key){return rows.reduce((total,row)=>total+(row[key]||0),0)}
+function filtered(rows){return rows.filter(row=>(yearPick.value==='all'||row.month.slice(0,4)===yearPick.value)&&(monthPick.value==='all'||row.month.slice(5,7)===monthPick.value))}
+function drawTimePlot(target,rows,metric,title){
+ target.replaceChildren();const figure=document.createElement('figure');const caption=document.createElement('figcaption');caption.textContent=title;figure.append(caption);target.append(figure);
+ if(!rows.length){const empty=document.createElement('p');empty.textContent='No observations for this period';figure.append(empty);return}
+ const svg=node(figure,'svg',{class:'timeseries',role:'img','aria-label':title,viewBox:'0 0 980 280'});
+ const values=rows.map(r=>metric==='sends'?r.sends:metric==='rate'?(r.sends?100*r.recorded_conversions/r.sends:0):r.active_customers);
+ const top=25,bottom=226,left=65,right=925,max=Math.max(...values);
+ const ceiling=metric==='rate'?Math.max(1,Math.ceil(max*5)/5):Math.max(1,Math.ceil(max/10000)*10000);
+ const x=i=>rows.length===1?(left+right)/2:left+i*(right-left)/(rows.length-1);
+ const y=v=>bottom-v*(bottom-top)/ceiling;
+ const last=rows[rows.length-1].month.slice(0,7),globalLast=(metric==='sends'||metric==='rate'?sendMonths:activityMonths).at(-1).month.slice(0,7);
+ const endDate=metric==='activity'?lastActivityDate:lastSendDate;const parts=endDate.slice(0,10).split('-').map(Number);const isPartial=parts[2]<new Date(parts[0],parts[1],0).getDate();
+ if(last===globalLast&&last===endDate.slice(0,7)&&isPartial){const width=rows.length===1?100:(right-left)/(rows.length-1);node(svg,'rect',{x:(x(rows.length-1)-width/2).toFixed(1),y:top,width:width.toFixed(1),height:bottom-top,fill:'#fff2d8'});node(svg,'text',{x:right,y:top+15,'text-anchor':'end'},'Partial month')}
+ for(const f of [0,.25,.5,.75,1]){const yy=y(ceiling*f);node(svg,'line',{x1:left,y1:yy,x2:right,y2:yy,stroke:'#d5e3de'});node(svg,'text',{x:left-8,y:yy+4,'text-anchor':'end'},metric==='rate'?(ceiling*f).toFixed(2)+'%':Math.round(ceiling*f).toLocaleString())}
+ const color=metric==='sends'?'#0d756e':metric==='rate'?'#bc653a':'#385f9a';
+ node(svg,'polyline',{points:values.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1)).join(' '),fill:'none',stroke:color,'stroke-width':3});
+ rows.forEach((r,i)=>{const dot=node(svg,'circle',{cx:x(i),cy:y(values[i]),r:5,fill:color});const detail=metric==='activity'?`${r.month.slice(0,7)}: ${r.active_customers.toLocaleString()} active customers; ${r.approved_transactions.toLocaleString()} approved transactions; ${r.continuing_customers.toLocaleString()}/${r.prior_active_customers.toLocaleString()} continued from prior month`: `${r.month.slice(0,7)}: ${r.sends.toLocaleString()} sends; ${r.recorded_conversions.toLocaleString()} recorded conversions; ${rateOrNA(r.recorded_conversions,r.sends)} per send`;node(dot,'title',{},detail);if(i%3===0||i===rows.length-1)node(svg,'text',{x:x(i),y:bottom+22,'text-anchor':'middle'},r.month.slice(0,7))});
+}
+function drawTime(){
+ monthPick.disabled=yearPick.value==='all';if(monthPick.disabled)monthPick.value='all';
+ const sends=filtered(sendMonths),activity=filtered(activityMonths),complete=activity.filter(r=>r.month!==activityMonths[0].month&&!(lastActivityPartial&&r.month===activityMonths.at(-1).month)),sc=sum(sends,'sends'),cv=sum(sends,'recorded_conversions'),tx=sum(activity,'approved_transactions'),ac=sum(activity,'active_customers'),co=sum(complete,'continuing_customers'),prior=sum(complete,'prior_active_customers');
+ const cards=document.getElementById('time-cards');cards.replaceChildren();
+ for(const [label,value,note] of [['Sends',sc.toLocaleString(),'deduplicated send records'],['Recorded conversion / send',rateOrNA(cv,sc),`${cv.toLocaleString()} / ${sc.toLocaleString()} sends`],['Approved transactions',tx.toLocaleString(),'owner matched; after product opening'],['Active customer-months',ac.toLocaleString(),'sum of monthly distinct customers'],['Adjacent-month continuation',rateOrNA(co,prior),`${co.toLocaleString()} / ${prior.toLocaleString()} complete previous-month customer-months; partial ends excluded`]]){const card=document.createElement('div');card.className='card';const small=document.createElement('small');small.textContent=label;const b=document.createElement('b');b.textContent=value;const detail=document.createElement('small');detail.textContent=note;card.append(small,b,detail);cards.append(card)}
+ document.getElementById('time-window').textContent=`Selected: ${yearPick.value==='all'?'all available years':yearPick.value}${monthPick.value==='all'?'': '-'+monthPick.value}. ${sends.length} send months and ${activity.length} activity months. Activity months: ${activityMonths[0].month.slice(0,7)} to ${activityMonths.at(-1).month.slice(0,7)}; boundaries may be partial.`;
+ drawTimePlot(document.getElementById('time-send'),sends,'sends','Campaign send volume by send month');drawTimePlot(document.getElementById('time-rate'),sends,'rate','Recorded conversion per send month');drawTimePlot(document.getElementById('time-activity'),activity,'activity','Approved transaction-active customers by transaction month');
+}
+yearPick.addEventListener('change',drawTime);monthPick.addEventListener('change',drawTime);drawTime();
+</script>'''.replace('__SEND_SERIES__',send_series).replace('__ACTIVITY_SERIES__',activity_series).replace('__LAST_SEND__',json.dumps(str(q['last_send'])[:10])).replace('__LAST_ACTIVITY__',json.dumps(str(activity['last_transaction'])[:10]))
+    body += filter_script
     groups = json.dumps(m['groups'], ensure_ascii=False).replace('<','\\u003c')
     body += f'''<script>const groups={groups};const chart=document.getElementById('chart');const groupTable=document.getElementById('group-table');
 function rate(n,d){{return d? (100*n/d).toFixed(2)+'% ('+n.toLocaleString()+'/'+d.toLocaleString()+')':'n/a (0 known)'}}
