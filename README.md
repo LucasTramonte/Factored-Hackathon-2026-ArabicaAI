@@ -2,6 +2,10 @@
 
 This repository supports the Factored Hackathon 2026 with a synthetic LATAM banking dataset. The current deliverables are a reproducible, read-only data pipeline, a quality audit, and rebuilt aggregate Marketing/Product reports from verified Silver tables.
 
+## Intake demo
+
+The separate [charge-intake demo](Docs/Plans/intake-demo.md) has an English Angular interface, FastAPI, PostgreSQL migrations, and a one-day S3 → Bronze → Silver → quality → PostgreSQL load. Start there for `make demo-*` commands. The demo takes a bounded sample; `make pipeline` below is the full analytical run. The shared-link deployment is prepared but has not been published.
+
 ## Start here
 
 For local runs, you need Python 3.10+ and GNU Make. For container runs, you need Docker and GNU Make; Python is installed in the image. Full S3 runs need several GB of free disk space and access to the organizer's bucket through an AWS profile. The offline route below uses supplied local CSVs. The repository contains no raw data or credentials. Use an AWS profile or temporary role credentials; **do not add access keys to a repository `.env` file**.
