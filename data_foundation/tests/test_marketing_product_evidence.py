@@ -4,7 +4,7 @@ import json
 
 from data_foundation.src.marketing_product_evidence import analyze
 from data_foundation.src.marketing_product_insights import paired_month_change, summarize_insights
-from data_foundation.src.marketing_product_report import marketing_product, complete_activity_rows, complete_intake_years, write_reports
+from data_foundation.src.marketing_product_report import marketing_product, hub, complete_activity_rows, complete_intake_years, write_reports
 from data_foundation.scripts.run_marketing_product import validate_quality_identity, published_manifest
 from data_foundation.scripts import run_marketing_product as report_runner
 from datetime import datetime, timezone, timedelta
@@ -112,35 +112,69 @@ def test_complete_intake_years_excludes_partial_boundaries_and_missing_months():
 
 
 def test_paired_month_bootstrap_requires_complete_matched_years():
-    """Month-pair resampling preserves weighted rates and refuses partial years."""
-    rows = [{'month': f'{year}-{month:02d}-01', 'n': 1 if year == 2024 else 2,
-             'd': 10}
-            for year in (2024, 2025) for month in range(1, 13)]
+    """Varied matched months distinguish pairing and denominator weighting."""
+    rows = []
+    for year in (2024, 2025):
+        for month in range(1, 13):
+            numerator, denominator = (
+                (month + 2, 60 + 5 * month) if year == 2024
+                else (3 * month + (10 if month % 3 == 0 else 1), 75 + 8 * month)
+            )
+            rows.append({'month': f'{year}-{month:02d}-01',
+                         'n': numerator, 'd': denominator})
     options = {'first_date': '2023-06-17', 'last_date': '2026-06-18',
                'seed': 7, 'draws': 100}
     change = paired_month_change(rows, 'n', 'd', **options)
-    assert (change['earlier_numerator'], change['later_numerator']) == (12, 24)
-    assert change['observed_change_pp'] == pytest.approx(10)
+    assert (change['earlier_numerator'], change['earlier_denominator']) == (102, 1110)
+    assert (change['later_numerator'], change['later_denominator']) == (282, 1524)
+    assert change['observed_change_pp'] == pytest.approx(9.314747818684825)
     ci = change['conditional_monthly_mean_ci_95_pp']
-    assert (ci['estimate'], ci['lower'], ci['upper']) == pytest.approx((10, 10, 10))
-    assert (ci['pairs'], ci['degrees_of_freedom']) == (12, 11)
-    unequal = [dict(row) for row in rows]
-    unequal[12]['d'] = 20
-    unequal_change = paired_month_change(unequal, 'n', 'd', **options)
-    assert unequal_change['conditional_monthly_mean_ci_95_pp']['estimate'] != pytest.approx(
-        unequal_change['observed_change_pp']
+    assert (ci['estimate'], ci['lower'], ci['upper']) == pytest.approx(
+        (8.565738408388363, 5.4411581469974895, 11.690318669779236)
     )
+    assert ci['estimate'] != pytest.approx(change['observed_change_pp'])
+    assert (ci['pairs'], ci['degrees_of_freedom']) == (12, 11)
     assert change['leave_one_month_out_change_pp'] == pytest.approx(
-        {'min': 10, 'max': 10}
+        {'min': 8.553830992855382, 'max': 9.818474012929617}
     )
     assert change['half_year_change_pp'] == pytest.approx(
-        {'jan_jun': 10, 'jul_dec': 10}
+        {'jan_jun': 6.980895709364234, 'jul_dec': 10.825504389342369}
     )
-    assert all(value == pytest.approx(10)
-               for value in change['resampled_change_pp'].values())
+    quantiles = change['resampled_change_pp']
+    assert quantiles == pytest.approx({
+        'p2_5': 6.207276663718334, 'p20': 7.715924212660793,
+        'p50': 9.105689057234917, 'p80': 10.295213326773037,
+        'p97_5': 11.479490927852783,
+    })
+    # The same seed gives different medians if years are sampled separately
+    # or monthly rates are averaged without their denominators.
+    assert quantiles['p50'] != pytest.approx(8.675717665336673)
+    assert quantiles['p50'] != pytest.approx(8.281624231683852)
     assert paired_month_change(rows[:-1], 'n', 'd', **options) is None
     assert paired_month_change(rows + [rows[-1]], 'n', 'd', **options) is None
     assert paired_month_change(rows, 'n', 'd', **{**options, 'first_date': '2024-02-01'}) is None
+
+
+def test_report_direction_and_interval_claims_follow_values():
+    """Headlines and zero-inclusion text must survive a refreshed aggregate."""
+    data = json.loads(
+        (Path(__file__).resolve().parents[1] / 'reports' / 'aggregates.json').read_text()
+    )
+    for difference, verb in ((1, 'rose'), (-1, 'fell'), (0, 'was unchanged')):
+        insights = summarize_insights(data)
+        activity = insights['product']['activity_continuation_change']
+        activity['observed_change_pp'] = difference
+        activity['later_rate_pct'] = activity['earlier_rate_pct'] + difference
+        headline = f'Product: repeat transaction activity {verb}'
+        assert headline in marketing_product(data, insights)
+        assert f'adjacent-month transaction activity {verb}' in hub(data, insights)
+
+    insights = summarize_insights(data)
+    ci = insights['marketing']['recorded_conversion_change']['conditional_monthly_mean_ci_95_pp']
+    ci['lower'], ci['upper'] = 0.01, 0.02
+    assert 'Zero is inside the interval.' not in marketing_product(data, insights)
+    ci['lower'] = -0.01
+    assert 'Zero is inside the interval.' in marketing_product(data, insights)
 
 
 def test_curated_report_and_simulation_match_published_aggregates(tmp_path):

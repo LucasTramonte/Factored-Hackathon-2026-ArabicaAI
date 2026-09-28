@@ -48,6 +48,11 @@ def card(label: str, value: str, note: str) -> str:
     return f'<div class="card"><small>{esc(label)}</small><b>{esc(value)}</b><small>{esc(note)}</small></div>'
 
 
+def _movement(change: float) -> str:
+    """Choose a direction from the observed rate difference."""
+    return "rose" if change > 0 else "fell" if change < 0 else "was unchanged"
+
+
 def shell(title: str, subtitle: str, body: str) -> str:
     """Wrap an offline report in a shared visual system."""
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(title)}</title>{STYLE}</head><body>
@@ -100,7 +105,8 @@ def marketing_product(data: dict, insights: dict | None = None) -> str:
     if activity_change:
         change = activity_change
         body += (
-            '<article><h3>Product: repeat transaction activity rose</h3><p>'
+            f'<article><h3>Product: repeat transaction activity '
+            f'{_movement(change["observed_change_pp"])}</h3><p>'
             f'{change["earlier_rate_pct"]:.2f}% in 2024 → {change["later_rate_pct"]:.2f}% in 2025 '
             f'({change["observed_change_pp"]:+.2f} percentage points); '
             f'{change["matched_months_higher"]}/12 matched months were higher. '
@@ -131,6 +137,8 @@ def marketing_product(data: dict, insights: dict | None = None) -> str:
     )
     if marketing_change:
         change = marketing_change
+        ci = change["conditional_monthly_mean_ci_95_pp"]
+        zero_note = "Zero is inside the interval. " if ci["lower"] <= 0 <= ci["upper"] else ""
         body += (
             '<article><h3>Marketing: the annual response change is uncertain</h3><p>'
             f'Recorded conversion per send moved from {change["earlier_rate_pct"]:.3f}% '
@@ -140,10 +148,10 @@ def marketing_product(data: dict, insights: dict | None = None) -> str:
             f'(conditional 95% CI '
             f'{change["conditional_monthly_mean_ci_95_pp"]["lower"]:+.3f} to '
             f'{change["conditional_monthly_mean_ci_95_pp"]["upper"]:+.3f}). '
-            'Zero is inside the interval. These flags do not count new customers.</p></article>'
+            f'{zero_note}These flags do not count new customers.</p></article>'
         )
     body += '</div></section>'
-    body += '<section><h2>Which customer questions are worth pursuing?</h2><p><strong>Product:</strong> Why did adjacent-month transaction activity strengthen, and can customers actually finish a specific digital task? The current snapshot gives a behavioral signal, but no task outcome or historical product state. Start with one defined journey, repaired product ownership, completion/failure events and direct customer or agent review.</p><p><strong>Marketing:</strong> Are customers receiving too many or irrelevant messages, and which channel can be measured fairly? The sample has '+f'{insight["marketing"]["sends"] / insight["marketing"]["exposed_customers"]:.2f}'+' sends per exposed customer on average. Recover consent and segment at send time, reconcile channel-specific response definitions, and test a verified outcome against a holdout before personalizing.</p><p>These are discovery questions for this synthetic dataset, not claims about real bank customers. The selected hackathon intake workflow remains a separate decision; <a href="intake-decision.html">its complaint evidence is here</a>.</p></section>'
+    body += '<section><h2>Which customer questions are worth pursuing?</h2><p><strong>Product:</strong> Why did adjacent-month transaction activity change, and can customers actually finish a specific digital task? The current snapshot gives a behavioral signal, but no task outcome or historical product state. Start with one defined journey, repaired product ownership, completion/failure events and direct customer or agent review.</p><p><strong>Marketing:</strong> Are customers receiving too many or irrelevant messages, and which channel can be measured fairly? The sample has '+f'{insight["marketing"]["sends"] / insight["marketing"]["exposed_customers"]:.2f}'+' sends per exposed customer on average. Recover consent and segment at send time, reconcile channel-specific response definitions, and test a verified outcome against a holdout before personalizing.</p><p>These are discovery questions for this synthetic dataset, not claims about real bank customers. The selected hackathon intake workflow remains a separate decision; <a href="intake-decision.html">its complaint evidence is here</a>.</p></section>'
     if marketing_change and activity_change:
         def change_row(label: str, change: dict, digits: int) -> dict:
             """Format month-resampling sensitivity without implying causal inference."""
@@ -321,10 +329,11 @@ def hub(data: dict, insights: dict | None = None) -> str:
     body = '<section class="decision"><h2>Marketing and Product: decisions from this dataset</h2>'
     if activity:
         body += (
-            f'<p><strong>Product:</strong> adjacent-month transaction activity rose '
+            f'<p><strong>Product:</strong> adjacent-month transaction activity '
+            f'{_movement(activity["observed_change_pp"])} '
             f'from {activity["earlier_rate_pct"]:.2f}% in 2024 to '
-            f'{activity["later_rate_pct"]:.2f}% in 2025. That warrants cohort and '
-            'task-completion discovery; it is not customer retention.</p>'
+            f'{activity["later_rate_pct"]:.2f}% in 2025. Check stable cohorts and '
+            'task completion before interpreting this as customer retention.</p>'
         )
     body += (
         f'<p><strong>Marketing:</strong> {num(zero_channels["sends"])} WhatsApp '
