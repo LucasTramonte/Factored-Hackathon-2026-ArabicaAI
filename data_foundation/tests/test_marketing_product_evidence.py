@@ -3,7 +3,7 @@ import duckdb
 import json
 
 from data_foundation.src.marketing_product_evidence import analyze
-from data_foundation.src.marketing_product_report import marketing_product, complete_activity_rows
+from data_foundation.src.marketing_product_report import marketing_product, complete_activity_rows, complete_intake_years
 from data_foundation.scripts.run_marketing_product import validate_quality_identity, published_manifest
 from data_foundation.scripts import run_marketing_product as report_runner
 from datetime import datetime, timezone, timedelta
@@ -85,13 +85,27 @@ def test_silver_aggregates_keep_denominators_and_owner_checks(con):
     rendered=marketing_product(data)
     assert 'Recorded conversion' in rendered
     assert 'CAC' in rendered and 'LTV' in rendered
-    assert 'Start with the chosen customer workflow' in rendered
-    assert 'Checklist versus AI evaluation' in rendered
+    assert 'Decision: test an accepted case and useful handoff' in rendered
+    assert 'Compare checklist and AI' in rendered
+    assert rendered.index('1. Test the handoff') < rendered.index('Work backward from the customer') < rendered.index('What is measurable by month or year?')
     assert 'safe accepted intake' in rendered
     assert '100.00% of 2 eligible sessions' in rendered
     assert 'id="time-year"' in rendered and 'id="time-month"' in rendered
     assert 'const sendMonths=' in rendered and 'Monthly send trend by business date</summary>' not in rendered
     assert 'C1' not in rendered and 'P1' not in rendered
+
+
+def test_complete_intake_years_excludes_partial_boundaries_and_missing_months():
+    """The opening compares only fully observed, unique calendar months."""
+    rows = [{'month': f'{year}-{month:02d}-01', 'v1': 1}
+            for year in (2023, 2024, 2025, 2026) for month in range(1, 13)]
+    intake = {'populations': [{'population': 'V1: Cargo no reconocido',
+                               'first_created': '2023-06-17', 'last_created': '2026-06-18'}],
+              'monthly': rows}
+    assert complete_intake_years(intake) == [{'year': 2024, 'v1': 12},
+                                              {'year': 2025, 'v1': 12}]
+    intake['monthly'] = [row for row in rows if row['month'] != '2025-05-01']
+    assert complete_intake_years(intake) == [{'year': 2024, 'v1': 12}]
 
 
 def test_quality_identity_rejects_stale_database(tmp_path):
