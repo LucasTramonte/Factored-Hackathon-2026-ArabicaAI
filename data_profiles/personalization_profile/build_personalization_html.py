@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Builds a single, self-contained, offline HTML report justifying the personalization signals for
 `gold.customer_personalization_profile`.
@@ -51,8 +50,7 @@ def resolve_duckdb_path() -> Path:
 
 
 def fig_to_base64(fig) -> str:
-    """Embeds a Matplotlib figure directly in the HTML -- no separate image files to keep in sync
-    with the report, and the report stays a single portable file."""
+    """Embed a Matplotlib figure directly in the HTML as a portable image."""
     buf = io.BytesIO()
     fig.savefig(buf, format="png", bbox_inches="tight")
     plt.close(fig)
@@ -185,7 +183,7 @@ def main(argv: List[str] | None = None) -> int:
     ).fetchone()[0]
     open_complaints = con.execute(
         "SELECT count(DISTINCT customer_id) FROM silver.fact_complaints "
-        "WHERE status IN ('Open','In Process','Escalated')"
+        "WHERE status IN ('Open', 'In Process', 'Escalated')"
     ).fetchone()[0]
 
     # ---- 6. Sentiment / consent ----------------------------------------------------
@@ -217,15 +215,13 @@ def main(argv: List[str] | None = None) -> int:
         ("csat_avg / nps_avg / ces_avg", "fact_satisfaction_surveys, split by survey_type",
          "Scales differ per type; blending would be wrong", "Include as 3 separate columns"),
         ("accepts_marketing", "dim_customers", "Clean 50/50 split, no nulls", "Include as a gate, not a style"),
-        ("credit_score, income, fraud_score, days_past_due", "dim_customers / products / transactions",
-         "Out of scope by team decision", "Excluded -- risk-based personalization deferred"),
     ], columns=["Variable", "Source", "Evidence", "Decision"])
 
     html = f"""<!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Personalizacion - justificacion de variables</title>
+<title>Personalization - variable justification</title>
 <style>
   body {{ font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 920px; margin: 40px auto;
          padding: 0 20px; color: #1a202c; line-height: 1.55; }}
@@ -244,57 +240,56 @@ def main(argv: List[str] | None = None) -> int:
 </head>
 <body>
 
-<h1>Personalizacion de respuestas: que variables usar</h1>
-<p>Analisis sobre datos reales de <code>silver.*</code> ({total_customers:,} clientes) para decidir
-que senales soportan <code>gold.customer_personalization_profile</code>, antes de construirlo.
-Las senales de riesgo (score de credito, ingreso, fraud_score) quedan fuera de alcance por decision del equipo.</p>
+<h1>Response personalization: recommended variables</h1>
+<p>Analysis of real <code>silver.*</code> data ({total_customers:,} customers) to determine which
+signals support <code>gold.customer_personalization_profile</code> before building it.</p>
 
-<h2>1. Cobertura de cada senal por cliente</h2>
-<p class="note">Ningun cliente esta completamente "frio": todos tienen al menos un evento digital o
-una interaccion. Pero la cobertura cae fuerte en quejas (36%) y transcripciones (68%) -- esas dos
-no pueden ser la unica senal de personalizacion de un cliente.</p>
-<img src="data:image/png;base64,{coverage_img}" alt="Cobertura de señales">
+<h2>1. Signal coverage by customer</h2>
+<p class="note">No customer is completely "cold": everyone has at least one digital event or
+interaction. However, coverage drops substantially for complaints (36%) and transcripts (68%), so
+neither can be the only personalization signal for a customer.</p>
+<img src="data:image/png;base64,{coverage_img}" alt="Signal coverage by customer">
 {df_to_html_table(coverage[['source', 'customers_with_signal', '% of customers']])}
 
-<h2>2. Acento: dominio y consistencia entre fuentes</h2>
-<div class="metric">Clientes comparables: <b>{agree[0]:,}</b></div>
-<div class="metric">Coinciden perfil vs. interacciones: <b>{100*agree[1]/agree[0]:.1f}%</b></div>
-<div class="metric">Clientes con acento en blanco: <b>{blank_accent:,} ({100*blank_accent/total_customers:.1f}%)</b></div>
-<img src="data:image/png;base64,{accent_img}" alt="Distribución de acentos">
-<p class="note">Donde ambas fuentes existen, coinciden el 100% de las veces -- confiable. Pero
-falta en ~30% de los perfiles, asi que se necesita una cadena de respaldo (perfil -> moda en
-interacciones -> moda en transcripciones -> null explicito).</p>
+<h2>2. Accent: domain and cross-source consistency</h2>
+<div class="metric">Comparable customers: <b>{agree[0]:,}</b></div>
+<div class="metric">Profile vs. interaction agreement: <b>{100*agree[1]/agree[0]:.1f}%</b></div>
+<div class="metric">Customers with a blank accent: <b>{blank_accent:,} ({100*blank_accent/total_customers:.1f}%)</b></div>
+<img src="data:image/png;base64,{accent_img}" alt="Accent distribution">
+<p class="note">Where both sources are available, they agree 100% of the time, which supports the
+signal's reliability. However, the profile is blank for roughly 30% of customers, so the profile
+needs a fallback chain: customer profile -> interaction mode -> transcript mode -> explicit null.</p>
 
-<h2>3. Idioma: verificacion del requisito Espanol/Portugues</h2>
+<h2>3. Language: Spanish/Portuguese requirement check</h2>
 {df_to_html_table(lang)}
-<div class="metric">Transcripciones en portugues: <b>{pt_count:,}</b></div>
-<p class="note"><b>Hallazgo critico:</b> el dataset no contiene ninguna muestra en portugues.
-La personalizacion en portugues no puede derivarse de estos datos -- debe construirse con casos
-manuales y reportarse como limitacion del dataset, no simularse como si estuviera validada.</p>
+<div class="metric">Portuguese transcripts: <b>{pt_count:,}</b></div>
+<p class="note"><b>Critical finding:</b> the dataset contains no Portuguese samples. Portuguese
+personalization cannot be derived from these data; it must be built with manually authored cases
+and reported as a dataset limitation rather than presented as validated behavior.</p>
 
-<h2>4. Segmento, pais y canal digital</h2>
-<img src="data:image/png;base64,{segment_channel_img}" alt="Segmento y canal">
-<p class="note">Segmento esta desbalanceado (Basic 60%, Premium 10%) -- cualquier evaluacion por
-segmento tendra menos evidencia para Premium/Student. Pais y canal estan bien distribuidos.</p>
+<h2>4. Segment, country, and digital channel</h2>
+<img src="data:image/png;base64,{segment_channel_img}" alt="Segment and digital channel distributions">
+<p class="note">Segments are unbalanced (Basic 60%, Premium 10%), so segment-based evaluation will
+have less evidence for Premium and Student customers. Country and channel are well distributed.</p>
 
-<h2>5. Contacto repetido y quejas abiertas</h2>
-<img src="data:image/png;base64,{reason_img}" alt="Motivos de contacto">
-<div class="metric">Clientes con >=2 contactos por el mismo motivo: <b>{repeat:,} ({100*repeat/total_customers:.1f}%)</b></div>
-<div class="metric">Clientes con queja abierta ahora: <b>{open_complaints:,} ({100*open_complaints/total_customers:.1f}%)</b></div>
+<h2>5. Repeat contact and open complaints</h2>
+<img src="data:image/png;base64,{reason_img}" alt="Contact reasons">
+<div class="metric">Customers with >=2 contacts for the same reason: <b>{repeat:,} ({100*repeat/total_customers:.1f}%)</b></div>
+<div class="metric">Customers with an open complaint now: <b>{open_complaints:,} ({100*open_complaints/total_customers:.1f}%)</b></div>
 
-<h2>6. Sentimiento, satisfaccion y consentimiento</h2>
-<div class="metric">Nulos en sentiment_score: <b>{sent_null[1]:,}/{sent_null[0]:,} (0%)</b></div>
+<h2>6. Sentiment, satisfaction, and consent</h2>
+<div class="metric">Missing sentiment_score values: <b>{sent_null[1]:,}/{sent_null[0]:,} (0%)</b></div>
 {df_to_html_table(consent)}
-<p class="note"><code>accepts_marketing</code> esta perfectamente balanceado y sin nulos -- sirve
-como filtro (gate) para personalizacion proactiva, no como estilo de personalizacion en si.</p>
+<p class="note"><code>accepts_marketing</code> is almost perfectly balanced and has no nulls, making
+it a reliable gate for proactive personalization rather than a personalization style itself.</p>
 
-<h2>7. Variables recomendadas para gold.customer_personalization_profile</h2>
+<h2>7. Recommended variables for gold.customer_personalization_profile</h2>
 {df_to_html_table(recommended)}
 
 <footer>
-Generado desde <code>silver.*</code> (solo lectura). Base de datos con {total_customers:,} clientes.
-Consultas ejecutadas en {elapsed:.1f}s. Dataset sintetico -- estos conteos describen la muestra generada
-para el hackathon, no comportamiento real de clientes.
+Generated from <code>silver.*</code> (read-only). Database contains {total_customers:,} customers.
+Queries completed in {elapsed:.1f}s. The dataset is synthetic; these counts describe the hackathon
+sample and not real customer behavior.
 </footer>
 
 </body>
