@@ -143,12 +143,18 @@ products_spec = TableSpec(
         ColumnSpec("p.current_balance", transform="double"),
         ColumnSpec(
             source="p.current_balance", target="current_balance_usd",
-            expr="TRY_CAST(p.current_balance AS DOUBLE) * fx.rate_to_usd",
+            expr=(
+                "TRY_CAST(p.current_balance AS DOUBLE) * "
+                "CASE WHEN UPPER(TRIM(p.currency)) = 'USD' THEN 1 ELSE fx.rate_to_usd END"
+            ),
         ),
         ColumnSpec("p.credit_limit", transform="double"),
         ColumnSpec(
             source="p.credit_limit", target="credit_limit_usd",
-            expr="TRY_CAST(p.credit_limit AS DOUBLE) * fx.rate_to_usd",
+            expr=(
+                "TRY_CAST(p.credit_limit AS DOUBLE) * "
+                "CASE WHEN UPPER(TRIM(p.currency)) = 'USD' THEN 1 ELSE fx.rate_to_usd END"
+            ),
         ),
         ColumnSpec("p.interest_rate", transform="double"),
         ColumnSpec("p.opening_date", transform="date"),
@@ -197,13 +203,16 @@ transactions_spec = TableSpec(
             source="t.amount_usd", target="amount_usd",
             expr=(
                 "COALESCE(TRY_CAST(t.amount_usd AS DOUBLE), "
-                "TRY_CAST(t.amount AS DOUBLE) * fx.exchange_rate)"
+                "CASE WHEN UPPER(TRIM(t.currency)) = 'USD' "
+                "THEN TRY_CAST(t.amount AS DOUBLE) "
+                "ELSE TRY_CAST(t.amount AS DOUBLE) * fx.exchange_rate END)"
             ),
         ),
         ColumnSpec(
             source="t.amount_usd", target="amount_usd_is_estimated",
             expr=(
                 "(TRY_CAST(t.amount_usd AS DOUBLE) IS NULL "
+                "AND UPPER(TRIM(t.currency)) <> 'USD' "
                 "AND TRY_CAST(t.amount AS DOUBLE) * fx.exchange_rate IS NOT NULL)"
             ),
         ),

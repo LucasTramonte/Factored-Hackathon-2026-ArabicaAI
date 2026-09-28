@@ -180,6 +180,15 @@ def test_products_uses_latest_fx_rate(bronze_fx):
     # LATEST rate, not an exact-date one (it has no transaction-like date to join on).
     assert balance_usd == pytest.approx(1000 * 0.06)
 
+    con.execute("""INSERT INTO bronze.products SELECT
+        'P2', 'C1', 'Cuenta Ahorro', 'N2', 'USD', '100', '200', '5.0',
+        '2020-01-01', NULL, 'B1', 'Active', 'Branch', 'True', NULL, NULL,
+        '2024-01-01', TIMESTAMP '2024-01-01'""")
+    build_silver_table(con, products_spec)
+    assert con.execute(
+        "SELECT current_balance_usd, credit_limit_usd FROM silver.dim_products WHERE product_id='P2'"
+    ).fetchone() == (100.0, 200.0)
+
 
 # --------------------------------------------------------------------------------------
 # transactions -- exact-date currency conversion, amount_usd fallback + estimated flag, dedup
@@ -207,7 +216,10 @@ def test_transactions_amount_usd_fallback_and_exact_date_fx(bronze_fx):
          TIMESTAMP '2024-01-01'),
         ('T3', '2024-01-01 12:00:00', '2024-01-02', 'P1', 'C1', 'Purchase', 'Food', '100', 'MXN', NULL, 'POS',
          'B1', 'Store', 'Food', 'mexico', 'CDMX', 'Approved', '00', 'False', '1.0', NULL, NULL,
-         TIMESTAMP '2024-06-01')
+         TIMESTAMP '2024-06-01'),
+        ('T4', '2024-01-01 13:00:00', '2024-01-02', 'P1', 'C1', 'Purchase', 'Food', '100', 'USD', NULL, 'POS',
+         'B1', 'Store', 'Food', 'mexico', 'CDMX', 'Approved', '00', 'False', '1.0', NULL, NULL,
+         TIMESTAMP '2024-01-01')
     """
     _create_bronze(con, "transactions", columns, rows)
 
@@ -230,12 +242,18 @@ def test_transactions_amount_usd_fallback_and_exact_date_fx(bronze_fx):
     assert t2[0] == 9999.0
     assert t2[1] is False
 
+    # Native USD needs no FX row; the source amount is already USD, not estimated.
+    t4 = con.execute(
+        "SELECT amount_usd, amount_usd_is_estimated FROM silver.fact_transactions WHERE transaction_id = 'T4'"
+    ).fetchone()
+    assert t4 == (100.0, False)
+
     # T3 appears twice with different _ingested_at -- dedup must keep exactly one.
     t3_count = con.execute("SELECT count(*) FROM silver.fact_transactions WHERE transaction_id = 'T3'").fetchone()[0]
     assert t3_count == 1
 
     total_rows = con.execute("SELECT count(*) FROM silver.fact_transactions").fetchone()[0]
-    assert total_rows == 3  # T1, T2, T3 (deduped) -- not 4
+    assert total_rows == 4  # T1, T2, T3 (deduped), T4
 
 
 # --------------------------------------------------------------------------------------

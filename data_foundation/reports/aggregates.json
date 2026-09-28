@@ -1,0 +1,1832 @@
+{
+  "generated_at_utc": "2026-09-28T12:52:07.495949+00:00",
+  "silver_counts": {
+    "dim_customers": 150000,
+    "dim_marketing_campaigns": 200,
+    "dim_products": 400000,
+    "fact_campaign_sends": 1746801,
+    "fact_complaints": 67095,
+    "fact_digital_events": 15620994,
+    "fact_transactions": 4425008
+  },
+  "marketing": {
+    "grain": "one deduplicated Silver send",
+    "overall": {
+      "sends": 1746801,
+      "delivery_known": 1746801,
+      "delivered": 1642044,
+      "delivery_unknown": 0,
+      "open_known": 1262572,
+      "opens": 487309,
+      "open_unknown": 379472,
+      "click_known": 1642044,
+      "clicks": 97793,
+      "click_unknown": 0,
+      "conversion_known": 1746801,
+      "recorded_conversions": 9799,
+      "conversion_unknown": 0
+    },
+    "groups": {
+      "channel": [
+        {
+          "label": "Email",
+          "sends": 620195,
+          "delivery_known": 620195,
+          "delivered": 582810,
+          "delivery_unknown": 0,
+          "open_known": 582810,
+          "opens": 174893,
+          "open_unknown": 0,
+          "click_known": 582810,
+          "clicks": 35183,
+          "click_unknown": 0,
+          "conversion_known": 620195,
+          "recorded_conversions": 3497,
+          "conversion_unknown": 0
+        },
+        {
+          "label": "SMS",
+          "sends": 432283,
+          "delivery_known": 432283,
+          "delivered": 406464,
+          "delivery_unknown": 0,
+          "open_known": 406464,
+          "opens": 202910,
+          "open_unknown": 0,
+          "click_known": 406464,
+          "clicks": 40609,
+          "click_unknown": 0,
+          "conversion_known": 432283,
+          "recorded_conversions": 4050,
+          "conversion_unknown": 0
+        },
+        {
+          "label": "WhatsApp",
+          "sends": 349144,
+          "delivery_known": 349144,
+          "delivered": 328329,
+          "delivery_unknown": 0,
+          "open_known": 0,
+          "opens": 0,
+          "open_unknown": 328329,
+          "click_known": 328329,
+          "clicks": 0,
+          "click_unknown": 0,
+          "conversion_known": 349144,
+          "recorded_conversions": 0,
+          "conversion_unknown": 0
+        },
+        {
+          "label": "Push",
+          "sends": 290650,
+          "delivery_known": 290650,
+          "delivered": 273298,
+          "delivery_unknown": 0,
+          "open_known": 273298,
+          "opens": 109506,
+          "open_unknown": 0,
+          "click_known": 273298,
+          "clicks": 22001,
+          "click_unknown": 0,
+          "conversion_known": 290650,
+          "recorded_conversions": 2252,
+          "conversion_unknown": 0
+        },
+        {
+          "label": "Voice",
+          "sends": 54529,
+          "delivery_known": 54529,
+          "delivered": 51143,
+          "delivery_unknown": 0,
+          "open_known": 0,
+          "opens": 0,
+          "open_unknown": 51143,
+          "click_known": 51143,
+          "clicks": 0,
+          "click_unknown": 0,
+          "conversion_known": 54529,
+          "recorded_conversions": 0,
+          "conversion_unknown": 0
+        }
+      ],
+      "objective": [
+        {
+          "label": "Retention",
+          "sends": 592712,
+          "delivery_known": 592712,
+          "delivered": 557249,
+          "delivery_unknown": 0,
+          "open_known": 432879,
+          "opens": 166016,
+          "open_unknown": 124370,
+          "click_known": 557249,
+          "clicks": 33184,
+          "click_unknown": 0,
+          "conversion_known": 592712,
+          "recorded_conversions": 3351,
+          "conversion_unknown": 0
+        },
+        {
+          "label": "Cross-sell",
+          "sends": 445766,
+          "delivery_known": 445766,
+          "delivered": 419240,
+          "delivery_unknown": 0,
+          "open_known": 313797,
+          "opens": 116969,
+          "open_unknown": 105443,
+          "click_known": 419240,
+          "clicks": 23382,
+          "click_unknown": 0,
+          "conversion_known": 445766,
+          "recorded_conversions": 2340,
+          "conversion_unknown": 0
+        },
+        {
+          "label": "Acquisition",
+          "sends": 277065,
+          "delivery_known": 277065,
+          "delivered": 260376,
+          "delivery_unknown": 0,
+          "open_known": 198492,
+          "opens": 78904,
+          "open_unknown": 61884,
+          "click_known": 260376,
+          "clicks": 16015,
+          "click_unknown": 0,
+          "conversion_known": 277065,
+          "recorded_conversions": 1564,
+          "conversion_unknown": 0
+        },
+        {
+          "label": "Reactivation",
+          "sends": 225229,
+          "delivery_known": 225229,
+          "delivered": 211618,
+          "delivery_unknown": 0,
+          "open_known": 137221,
+          "opens": 57977,
+          "open_unknown": 74397,
+          "click_known": 211618,
+          "clicks": 11705,
+          "click_unknown": 0,
+          "conversion_known": 225229,
+          "recorded_conversions": 1204,
+          "conversion_unknown": 0
+        },
+        {
+          "label": "Up-sell",
+          "sends": 206029,
+          "delivery_known": 206029,
+          "delivered": 193561,
+          "delivery_unknown": 0,
+          "open_known": 180183,
+          "opens": 67443,
+          "open_unknown": 13378,
+          "click_known": 193561,
+          "clicks": 13507,
+          "click_unknown": 0,
+          "conversion_known": 206029,
+          "recorded_conversions": 1340,
+          "conversion_unknown": 0
+        }
+      ],
+      "segment": [
+        {
+          "label": "Basic",
+          "sends": 1045281,
+          "delivery_known": 1045281,
+          "delivered": 982518,
+          "delivery_unknown": 0,
+          "open_known": 755109,
+          "opens": 291131,
+          "open_unknown": 227409,
+          "click_known": 982518,
+          "clicks": 58230,
+          "click_unknown": 0,
+          "conversion_known": 1045281,
+          "recorded_conversions": 5847,
+          "conversion_unknown": 0
+        },
+        {
+          "label": "Plus",
+          "sends": 436413,
+          "delivery_known": 436413,
+          "delivered": 410389,
+          "delivery_unknown": 0,
+          "open_known": 315960,
+          "opens": 122431,
+          "open_unknown": 94429,
+          "click_known": 410389,
+          "clicks": 24666,
+          "click_unknown": 0,
+          "conversion_known": 436413,
+          "recorded_conversions": 2437,
+          "conversion_unknown": 0
+        },
+        {
+          "label": "Premium",
+          "sends": 177495,
+          "delivery_known": 177495,
+          "delivered": 166805,
+          "delivery_unknown": 0,
+          "open_known": 128280,
+          "opens": 49558,
+          "open_unknown": 38525,
+          "click_known": 166805,
+          "clicks": 9956,
+          "click_unknown": 0,
+          "conversion_known": 177495,
+          "recorded_conversions": 999,
+          "conversion_unknown": 0
+        },
+        {
+          "label": "Student",
+          "sends": 87612,
+          "delivery_known": 87612,
+          "delivered": 82332,
+          "delivery_unknown": 0,
+          "open_known": 63223,
+          "opens": 24189,
+          "open_unknown": 19109,
+          "click_known": 82332,
+          "clicks": 4941,
+          "click_unknown": 0,
+          "conversion_known": 87612,
+          "recorded_conversions": 516,
+          "conversion_unknown": 0
+        }
+      ],
+      "country": [
+        {
+          "label": "México",
+          "sends": 872723,
+          "delivery_known": 872723,
+          "delivered": 820499,
+          "delivery_unknown": 0,
+          "open_known": 630590,
+          "opens": 243438,
+          "open_unknown": 189909,
+          "click_known": 820499,
+          "clicks": 48868,
+          "click_unknown": 0,
+          "conversion_known": 872723,
+          "recorded_conversions": 4910,
+          "conversion_unknown": 0
+        },
+        {
+          "label": "Colombia",
+          "sends": 527056,
+          "delivery_known": 527056,
+          "delivered": 495469,
+          "delivery_unknown": 0,
+          "open_known": 381389,
+          "opens": 147251,
+          "open_unknown": 114080,
+          "click_known": 495469,
+          "clicks": 29425,
+          "click_unknown": 0,
+          "conversion_known": 527056,
+          "recorded_conversions": 2910,
+          "conversion_unknown": 0
+        },
+        {
+          "label": "Argentina",
+          "sends": 347022,
+          "delivery_known": 347022,
+          "delivered": 326076,
+          "delivery_unknown": 0,
+          "open_known": 250593,
+          "opens": 96620,
+          "open_unknown": 75483,
+          "click_known": 326076,
+          "clicks": 19500,
+          "click_unknown": 0,
+          "conversion_known": 347022,
+          "recorded_conversions": 1979,
+          "conversion_unknown": 0
+        }
+      ]
+    },
+    "quality": {
+      "missing_campaign": 0,
+      "missing_customer": 0,
+      "current_opt_out_sends": 874417,
+      "unknown_current_consent_sends": 0,
+      "outside_campaign_dates": 8277,
+      "campaign_date_uncheckable": 0,
+      "target_segment_mismatch": 763550,
+      "target_country_mismatch": 547396,
+      "target_country_uncheckable": 0,
+      "conversion_date_missing": 0,
+      "conversion_before_send": 0,
+      "conversion_value_missing": 0,
+      "engagement_without_delivery": 0,
+      "send_partition_day_mismatch": 436429,
+      "first_send": "2023-07-01 06:00:42",
+      "last_send": "2026-06-18 05:59:53"
+    },
+    "exposure": {
+      "exposed_customers": 150000,
+      "repeat_exposed_customers": 149988,
+      "max_sends_per_customer": 30
+    },
+    "timing": [
+      {
+        "window": "1 to 7 days",
+        "sends": 7451
+      },
+      {
+        "window": "7 to 30 days",
+        "sends": 2099
+      },
+      {
+        "window": "under 24 hours",
+        "sends": 249
+      }
+    ],
+    "date_sensitivity": [
+      {
+        "campaign_window": "inside",
+        "sends": 1738524,
+        "delivery_known": 1738524,
+        "delivered": 1634265,
+        "delivery_unknown": 0,
+        "open_known": 1256719,
+        "opens": 485114,
+        "open_unknown": 377546,
+        "click_known": 1634265,
+        "clicks": 97349,
+        "click_unknown": 0,
+        "conversion_known": 1738524,
+        "recorded_conversions": 9756,
+        "conversion_unknown": 0
+      },
+      {
+        "campaign_window": "outside",
+        "sends": 8277,
+        "delivery_known": 8277,
+        "delivered": 7779,
+        "delivery_unknown": 0,
+        "open_known": 5853,
+        "opens": 2195,
+        "open_unknown": 1926,
+        "click_known": 7779,
+        "clicks": 444,
+        "click_unknown": 0,
+        "conversion_known": 8277,
+        "recorded_conversions": 43,
+        "conversion_unknown": 0
+      }
+    ],
+    "monthly": [
+      {
+        "month": "2023-07-01",
+        "sends": 47370,
+        "delivery_known": 47370,
+        "delivered": 44526,
+        "delivery_unknown": 0,
+        "open_known": 42945,
+        "opens": 17843,
+        "open_unknown": 1581,
+        "click_known": 44526,
+        "clicks": 3591,
+        "click_unknown": 0,
+        "conversion_known": 47370,
+        "recorded_conversions": 349,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2023-08-01",
+        "sends": 52044,
+        "delivery_known": 52044,
+        "delivered": 48970,
+        "delivery_unknown": 0,
+        "open_known": 47998,
+        "opens": 20747,
+        "open_unknown": 972,
+        "click_known": 48970,
+        "clicks": 4176,
+        "click_unknown": 0,
+        "conversion_known": 52044,
+        "recorded_conversions": 408,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2023-09-01",
+        "sends": 46499,
+        "delivery_known": 46499,
+        "delivered": 43615,
+        "delivery_unknown": 0,
+        "open_known": 34967,
+        "opens": 14874,
+        "open_unknown": 8648,
+        "click_known": 43615,
+        "clicks": 3008,
+        "click_unknown": 0,
+        "conversion_known": 46499,
+        "recorded_conversions": 311,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2023-10-01",
+        "sends": 49658,
+        "delivery_known": 49658,
+        "delivered": 46680,
+        "delivery_unknown": 0,
+        "open_known": 37072,
+        "opens": 15188,
+        "open_unknown": 9608,
+        "click_known": 46680,
+        "clicks": 2965,
+        "click_unknown": 0,
+        "conversion_known": 49658,
+        "recorded_conversions": 307,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2023-11-01",
+        "sends": 49016,
+        "delivery_known": 49016,
+        "delivered": 46141,
+        "delivery_unknown": 0,
+        "open_known": 39482,
+        "opens": 14197,
+        "open_unknown": 6659,
+        "click_known": 46141,
+        "clicks": 2859,
+        "click_unknown": 0,
+        "conversion_known": 49016,
+        "recorded_conversions": 272,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2023-12-01",
+        "sends": 50450,
+        "delivery_known": 50450,
+        "delivered": 47348,
+        "delivery_unknown": 0,
+        "open_known": 28167,
+        "opens": 10444,
+        "open_unknown": 19181,
+        "click_known": 47348,
+        "clicks": 2030,
+        "click_unknown": 0,
+        "conversion_known": 50450,
+        "recorded_conversions": 200,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2024-01-01",
+        "sends": 50813,
+        "delivery_known": 50813,
+        "delivered": 47757,
+        "delivery_unknown": 0,
+        "open_known": 30875,
+        "opens": 12574,
+        "open_unknown": 16882,
+        "click_known": 47757,
+        "clicks": 2599,
+        "click_unknown": 0,
+        "conversion_known": 50813,
+        "recorded_conversions": 249,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2024-02-01",
+        "sends": 47663,
+        "delivery_known": 47663,
+        "delivered": 44708,
+        "delivery_unknown": 0,
+        "open_known": 39774,
+        "opens": 14112,
+        "open_unknown": 4934,
+        "click_known": 44708,
+        "clicks": 2823,
+        "click_unknown": 0,
+        "conversion_known": 47663,
+        "recorded_conversions": 290,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2024-03-01",
+        "sends": 48236,
+        "delivery_known": 48236,
+        "delivered": 45302,
+        "delivery_unknown": 0,
+        "open_known": 41245,
+        "opens": 14549,
+        "open_unknown": 4057,
+        "click_known": 45302,
+        "clicks": 2990,
+        "click_unknown": 0,
+        "conversion_known": 48236,
+        "recorded_conversions": 330,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2024-04-01",
+        "sends": 49359,
+        "delivery_known": 49359,
+        "delivered": 46481,
+        "delivery_unknown": 0,
+        "open_known": 38968,
+        "opens": 13754,
+        "open_unknown": 7513,
+        "click_known": 46481,
+        "clicks": 2842,
+        "click_unknown": 0,
+        "conversion_known": 49359,
+        "recorded_conversions": 274,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2024-05-01",
+        "sends": 51631,
+        "delivery_known": 51631,
+        "delivered": 48623,
+        "delivery_unknown": 0,
+        "open_known": 41752,
+        "opens": 15169,
+        "open_unknown": 6871,
+        "click_known": 48623,
+        "clicks": 3061,
+        "click_unknown": 0,
+        "conversion_known": 51631,
+        "recorded_conversions": 331,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2024-06-01",
+        "sends": 46979,
+        "delivery_known": 46979,
+        "delivered": 44205,
+        "delivery_unknown": 0,
+        "open_known": 35988,
+        "opens": 14116,
+        "open_unknown": 8217,
+        "click_known": 44205,
+        "clicks": 2812,
+        "click_unknown": 0,
+        "conversion_known": 46979,
+        "recorded_conversions": 272,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2024-07-01",
+        "sends": 52472,
+        "delivery_known": 52472,
+        "delivered": 49268,
+        "delivery_unknown": 0,
+        "open_known": 39313,
+        "opens": 15789,
+        "open_unknown": 9955,
+        "click_known": 49268,
+        "clicks": 3124,
+        "click_unknown": 0,
+        "conversion_known": 52472,
+        "recorded_conversions": 318,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2024-08-01",
+        "sends": 48796,
+        "delivery_known": 48796,
+        "delivered": 45913,
+        "delivery_unknown": 0,
+        "open_known": 31339,
+        "opens": 12564,
+        "open_unknown": 14574,
+        "click_known": 45913,
+        "clicks": 2511,
+        "click_unknown": 0,
+        "conversion_known": 48796,
+        "recorded_conversions": 271,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2024-09-01",
+        "sends": 47353,
+        "delivery_known": 47353,
+        "delivered": 44464,
+        "delivery_unknown": 0,
+        "open_known": 30999,
+        "opens": 11779,
+        "open_unknown": 13465,
+        "click_known": 44464,
+        "clicks": 2376,
+        "click_unknown": 0,
+        "conversion_known": 47353,
+        "recorded_conversions": 235,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2024-10-01",
+        "sends": 50229,
+        "delivery_known": 50229,
+        "delivered": 47167,
+        "delivery_unknown": 0,
+        "open_known": 32839,
+        "opens": 13073,
+        "open_unknown": 14328,
+        "click_known": 47167,
+        "clicks": 2602,
+        "click_unknown": 0,
+        "conversion_known": 50229,
+        "recorded_conversions": 285,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2024-11-01",
+        "sends": 47973,
+        "delivery_known": 47973,
+        "delivered": 45161,
+        "delivery_unknown": 0,
+        "open_known": 24460,
+        "opens": 10349,
+        "open_unknown": 20701,
+        "click_known": 45161,
+        "clicks": 2046,
+        "click_unknown": 0,
+        "conversion_known": 47973,
+        "recorded_conversions": 195,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2024-12-01",
+        "sends": 49529,
+        "delivery_known": 49529,
+        "delivered": 46576,
+        "delivery_unknown": 0,
+        "open_known": 30444,
+        "opens": 12741,
+        "open_unknown": 16132,
+        "click_known": 46576,
+        "clicks": 2552,
+        "click_unknown": 0,
+        "conversion_known": 49529,
+        "recorded_conversions": 259,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2025-01-01",
+        "sends": 50625,
+        "delivery_known": 50625,
+        "delivered": 47470,
+        "delivery_unknown": 0,
+        "open_known": 31531,
+        "opens": 12187,
+        "open_unknown": 15939,
+        "click_known": 47470,
+        "clicks": 2462,
+        "click_unknown": 0,
+        "conversion_known": 50625,
+        "recorded_conversions": 234,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2025-02-01",
+        "sends": 44560,
+        "delivery_known": 44560,
+        "delivered": 41864,
+        "delivery_unknown": 0,
+        "open_known": 20309,
+        "opens": 8561,
+        "open_unknown": 21555,
+        "click_known": 41864,
+        "clicks": 1701,
+        "click_unknown": 0,
+        "conversion_known": 44560,
+        "recorded_conversions": 188,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2025-03-01",
+        "sends": 49271,
+        "delivery_known": 49271,
+        "delivered": 46353,
+        "delivery_unknown": 0,
+        "open_known": 34791,
+        "opens": 14729,
+        "open_unknown": 11562,
+        "click_known": 46353,
+        "clicks": 2925,
+        "click_unknown": 0,
+        "conversion_known": 49271,
+        "recorded_conversions": 264,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2025-04-01",
+        "sends": 49042,
+        "delivery_known": 49042,
+        "delivered": 46137,
+        "delivery_unknown": 0,
+        "open_known": 38076,
+        "opens": 14074,
+        "open_unknown": 8061,
+        "click_known": 46137,
+        "clicks": 2827,
+        "click_unknown": 0,
+        "conversion_known": 49042,
+        "recorded_conversions": 293,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2025-05-01",
+        "sends": 48918,
+        "delivery_known": 48918,
+        "delivered": 45985,
+        "delivery_unknown": 0,
+        "open_known": 34040,
+        "opens": 11598,
+        "open_unknown": 11945,
+        "click_known": 45985,
+        "clicks": 2361,
+        "click_unknown": 0,
+        "conversion_known": 48918,
+        "recorded_conversions": 207,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2025-06-01",
+        "sends": 47924,
+        "delivery_known": 47924,
+        "delivered": 45018,
+        "delivery_unknown": 0,
+        "open_known": 35374,
+        "opens": 13888,
+        "open_unknown": 9644,
+        "click_known": 45018,
+        "clicks": 2763,
+        "click_unknown": 0,
+        "conversion_known": 47924,
+        "recorded_conversions": 287,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2025-07-01",
+        "sends": 50184,
+        "delivery_known": 50184,
+        "delivered": 47225,
+        "delivery_unknown": 0,
+        "open_known": 33800,
+        "opens": 11681,
+        "open_unknown": 13425,
+        "click_known": 47225,
+        "clicks": 2304,
+        "click_unknown": 0,
+        "conversion_known": 50184,
+        "recorded_conversions": 238,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2025-08-01",
+        "sends": 49906,
+        "delivery_known": 49906,
+        "delivered": 46906,
+        "delivery_unknown": 0,
+        "open_known": 36116,
+        "opens": 13047,
+        "open_unknown": 10790,
+        "click_known": 46906,
+        "clicks": 2669,
+        "click_unknown": 0,
+        "conversion_known": 49906,
+        "recorded_conversions": 244,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2025-09-01",
+        "sends": 48075,
+        "delivery_known": 48075,
+        "delivered": 45102,
+        "delivery_unknown": 0,
+        "open_known": 37432,
+        "opens": 13977,
+        "open_unknown": 7670,
+        "click_known": 45102,
+        "clicks": 2794,
+        "click_unknown": 0,
+        "conversion_known": 48075,
+        "recorded_conversions": 274,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2025-10-01",
+        "sends": 50361,
+        "delivery_known": 50361,
+        "delivered": 47396,
+        "delivery_unknown": 0,
+        "open_known": 34828,
+        "opens": 13777,
+        "open_unknown": 12568,
+        "click_known": 47396,
+        "clicks": 2730,
+        "click_unknown": 0,
+        "conversion_known": 50361,
+        "recorded_conversions": 282,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2025-11-01",
+        "sends": 48391,
+        "delivery_known": 48391,
+        "delivered": 45437,
+        "delivery_unknown": 0,
+        "open_known": 24031,
+        "opens": 9792,
+        "open_unknown": 21406,
+        "click_known": 45437,
+        "clicks": 1920,
+        "click_unknown": 0,
+        "conversion_known": 48391,
+        "recorded_conversions": 187,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2025-12-01",
+        "sends": 50670,
+        "delivery_known": 50670,
+        "delivered": 47691,
+        "delivery_unknown": 0,
+        "open_known": 42865,
+        "opens": 17328,
+        "open_unknown": 4826,
+        "click_known": 47691,
+        "clicks": 3415,
+        "click_unknown": 0,
+        "conversion_known": 50670,
+        "recorded_conversions": 359,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2026-01-01",
+        "sends": 50622,
+        "delivery_known": 50622,
+        "delivered": 47671,
+        "delivery_unknown": 0,
+        "open_known": 43254,
+        "opens": 15503,
+        "open_unknown": 4417,
+        "click_known": 47671,
+        "clicks": 3170,
+        "click_unknown": 0,
+        "conversion_known": 50622,
+        "recorded_conversions": 326,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2026-02-01",
+        "sends": 44624,
+        "delivery_known": 44624,
+        "delivered": 41907,
+        "delivery_unknown": 0,
+        "open_known": 37616,
+        "opens": 13328,
+        "open_unknown": 4291,
+        "click_known": 41907,
+        "clicks": 2646,
+        "click_unknown": 0,
+        "conversion_known": 44624,
+        "recorded_conversions": 251,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2026-03-01",
+        "sends": 49732,
+        "delivery_known": 49732,
+        "delivered": 46821,
+        "delivery_unknown": 0,
+        "open_known": 36752,
+        "opens": 13738,
+        "open_unknown": 10069,
+        "click_known": 46821,
+        "clicks": 2732,
+        "click_unknown": 0,
+        "conversion_known": 49732,
+        "recorded_conversions": 264,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2026-04-01",
+        "sends": 50036,
+        "delivery_known": 50036,
+        "delivered": 46991,
+        "delivery_unknown": 0,
+        "open_known": 33937,
+        "opens": 13491,
+        "open_unknown": 13054,
+        "click_known": 46991,
+        "clicks": 2733,
+        "click_unknown": 0,
+        "conversion_known": 50036,
+        "recorded_conversions": 293,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2026-05-01",
+        "sends": 49814,
+        "delivery_known": 49814,
+        "delivered": 46883,
+        "delivery_unknown": 0,
+        "open_known": 37933,
+        "opens": 14239,
+        "open_unknown": 8950,
+        "click_known": 46883,
+        "clicks": 2943,
+        "click_unknown": 0,
+        "conversion_known": 49814,
+        "recorded_conversions": 287,
+        "conversion_unknown": 0
+      },
+      {
+        "month": "2026-06-01",
+        "sends": 27976,
+        "delivery_known": 27976,
+        "delivered": 26282,
+        "delivery_unknown": 0,
+        "open_known": 21260,
+        "opens": 8509,
+        "open_unknown": 5022,
+        "click_known": 26282,
+        "clicks": 1731,
+        "click_unknown": 0,
+        "conversion_known": 27976,
+        "recorded_conversions": 165,
+        "conversion_unknown": 0
+      }
+    ],
+    "limitations": [
+      "Current consent is a snapshot, not consent at send time.",
+      "Recorded conversion belongs to a send record; no randomized control or independently verified purchase link exists.",
+      "Conversion value has no safe common currency for ROI."
+    ]
+  },
+  "economics": {
+    "campaigns": 200,
+    "campaign_budget_known": 169,
+    "sends": 1746801,
+    "send_cost_known": 1484718,
+    "conversion_value_known": 9799,
+    "acquisition_objective_sends": 277065,
+    "acquisition_objective_recorded_conversions": 1564,
+    "acquisition_objective_pre_registration_sends": 47482,
+    "customer_snapshot_rows": 150000,
+    "known_registration_dates": 150000,
+    "earliest_registration": "2018-06-18 01:21:11",
+    "latest_registration": "2026-06-17 23:53:29",
+    "registration_sensitivity": [
+      {
+        "registration_timing": "before registration",
+        "sends": 323060,
+        "delivery_known": 323060,
+        "delivered": 303731,
+        "delivery_unknown": 0,
+        "open_known": 236333,
+        "opens": 91998,
+        "open_unknown": 67398,
+        "click_known": 303731,
+        "clicks": 18367,
+        "click_unknown": 0,
+        "conversion_known": 323060,
+        "recorded_conversions": 1834,
+        "conversion_unknown": 0
+      },
+      {
+        "registration_timing": "on or after registration",
+        "sends": 1423741,
+        "delivery_known": 1423741,
+        "delivered": 1338313,
+        "delivery_unknown": 0,
+        "open_known": 1026239,
+        "opens": 395311,
+        "open_unknown": 312074,
+        "click_known": 1338313,
+        "clicks": 79426,
+        "click_unknown": 0,
+        "conversion_known": 1423741,
+        "recorded_conversions": 7965,
+        "conversion_unknown": 0
+      }
+    ],
+    "pre_registration_sends": 323060,
+    "metrics": {
+      "CAC": {
+        "status": "not identifiable",
+        "formula": "fully loaded sales and marketing acquisition cost / verified new customers acquired",
+        "missing": "acquisition attribution, complete cost and currency"
+      },
+      "LTV": {
+        "status": "not identifiable",
+        "formula": "discounted customer contribution over a defined lifetime",
+        "missing": "bank revenue or margin, servicing cost, credit loss and observed lifetime"
+      },
+      "LTV/CAC": {
+        "status": "not identifiable",
+        "formula": "cohort LTV / same-cohort CAC",
+        "missing": "both valid components, common currency and horizon"
+      },
+      "CAC/average ticket": {
+        "status": "not comparable",
+        "formula": "compare CAC with the first verified transaction ticket for the same acquired cohort",
+        "missing": "valid CAC and new-customer cohort; gross customer transaction amounts are not bank revenue"
+      },
+      "lead-to-customer": {
+        "status": "not identifiable",
+        "formula": "verified new customers / eligible leads from the same cohort",
+        "missing": "prospect or lead stage, stable lead-to-customer key and acquisition event"
+      },
+      "retention": {
+        "status": "not identifiable",
+        "formula": "retained customers / eligible starting customer cohort",
+        "missing": "longitudinal customer status and exit events"
+      }
+    },
+    "limits": [
+      "send_cost and campaign budget have no documented currency and may overlap; they cannot be summed into fully loaded CAC.",
+      "Acquisition is a campaign objective label, not proof that a new customer was acquired.",
+      "conversion_value is recorded only on marked conversions and has no documented currency or verified bank revenue meaning.",
+      "A send dated before the current registration_date is shown separately, not treated as a lead or removed silently."
+    ]
+  },
+  "activity": {
+    "monthly": [
+      {
+        "month": "2023-06-01",
+        "active_customers": 27358,
+        "approved_transactions": 32461,
+        "continuing_customers": 0,
+        "prior_active_customers": 0
+      },
+      {
+        "month": "2023-07-01",
+        "active_customers": 49706,
+        "approved_transactions": 70894,
+        "continuing_customers": 13666,
+        "prior_active_customers": 27358
+      },
+      {
+        "month": "2023-08-01",
+        "active_customers": 52255,
+        "approved_transactions": 75848,
+        "continuing_customers": 25366,
+        "prior_active_customers": 49706
+      },
+      {
+        "month": "2023-09-01",
+        "active_customers": 50464,
+        "approved_transactions": 72020,
+        "continuing_customers": 25607,
+        "prior_active_customers": 52255
+      },
+      {
+        "month": "2023-10-01",
+        "active_customers": 53524,
+        "approved_transactions": 78294,
+        "continuing_customers": 26137,
+        "prior_active_customers": 50464
+      },
+      {
+        "month": "2023-11-01",
+        "active_customers": 52724,
+        "approved_transactions": 75982,
+        "continuing_customers": 27026,
+        "prior_active_customers": 53524
+      },
+      {
+        "month": "2023-12-01",
+        "active_customers": 54328,
+        "approved_transactions": 79386,
+        "continuing_customers": 27495,
+        "prior_active_customers": 52724
+      },
+      {
+        "month": "2024-01-01",
+        "active_customers": 54009,
+        "approved_transactions": 78348,
+        "continuing_customers": 27964,
+        "prior_active_customers": 54328
+      },
+      {
+        "month": "2024-02-01",
+        "active_customers": 53104,
+        "approved_transactions": 76321,
+        "continuing_customers": 27173,
+        "prior_active_customers": 54009
+      },
+      {
+        "month": "2024-03-01",
+        "active_customers": 54878,
+        "approved_transactions": 80216,
+        "continuing_customers": 27367,
+        "prior_active_customers": 53104
+      },
+      {
+        "month": "2024-04-01",
+        "active_customers": 55723,
+        "approved_transactions": 81649,
+        "continuing_customers": 28703,
+        "prior_active_customers": 54878
+      },
+      {
+        "month": "2024-05-01",
+        "active_customers": 57670,
+        "approved_transactions": 86032,
+        "continuing_customers": 29684,
+        "prior_active_customers": 55723
+      },
+      {
+        "month": "2024-06-01",
+        "active_customers": 56944,
+        "approved_transactions": 84283,
+        "continuing_customers": 30144,
+        "prior_active_customers": 57670
+      },
+      {
+        "month": "2024-07-01",
+        "active_customers": 59582,
+        "approved_transactions": 90034,
+        "continuing_customers": 31146,
+        "prior_active_customers": 56944
+      },
+      {
+        "month": "2024-08-01",
+        "active_customers": 58483,
+        "approved_transactions": 87121,
+        "continuing_customers": 31686,
+        "prior_active_customers": 59582
+      },
+      {
+        "month": "2024-09-01",
+        "active_customers": 57296,
+        "approved_transactions": 84386,
+        "continuing_customers": 30421,
+        "prior_active_customers": 58483
+      },
+      {
+        "month": "2024-10-01",
+        "active_customers": 61210,
+        "approved_transactions": 93211,
+        "continuing_customers": 31805,
+        "prior_active_customers": 57296
+      },
+      {
+        "month": "2024-11-01",
+        "active_customers": 59968,
+        "approved_transactions": 89701,
+        "continuing_customers": 32894,
+        "prior_active_customers": 61210
+      },
+      {
+        "month": "2024-12-01",
+        "active_customers": 60953,
+        "approved_transactions": 91953,
+        "continuing_customers": 32673,
+        "prior_active_customers": 59968
+      },
+      {
+        "month": "2025-01-01",
+        "active_customers": 61457,
+        "approved_transactions": 92356,
+        "continuing_customers": 33316,
+        "prior_active_customers": 60953
+      },
+      {
+        "month": "2025-02-01",
+        "active_customers": 57846,
+        "approved_transactions": 84694,
+        "continuing_customers": 31684,
+        "prior_active_customers": 61457
+      },
+      {
+        "month": "2025-03-01",
+        "active_customers": 63101,
+        "approved_transactions": 95910,
+        "continuing_customers": 32330,
+        "prior_active_customers": 57846
+      },
+      {
+        "month": "2025-04-01",
+        "active_customers": 62574,
+        "approved_transactions": 94981,
+        "continuing_customers": 34739,
+        "prior_active_customers": 63101
+      },
+      {
+        "month": "2025-05-01",
+        "active_customers": 65094,
+        "approved_transactions": 100837,
+        "continuing_customers": 35510,
+        "prior_active_customers": 62574
+      },
+      {
+        "month": "2025-06-01",
+        "active_customers": 62884,
+        "approved_transactions": 95426,
+        "continuing_customers": 35498,
+        "prior_active_customers": 65094
+      },
+      {
+        "month": "2025-07-01",
+        "active_customers": 66499,
+        "approved_transactions": 103339,
+        "continuing_customers": 36239,
+        "prior_active_customers": 62884
+      },
+      {
+        "month": "2025-08-01",
+        "active_customers": 66467,
+        "approved_transactions": 104055,
+        "continuing_customers": 37895,
+        "prior_active_customers": 66499
+      },
+      {
+        "month": "2025-09-01",
+        "active_customers": 64610,
+        "approved_transactions": 98798,
+        "continuing_customers": 36873,
+        "prior_active_customers": 66467
+      },
+      {
+        "month": "2025-10-01",
+        "active_customers": 68794,
+        "approved_transactions": 108880,
+        "continuing_customers": 38067,
+        "prior_active_customers": 64610
+      },
+      {
+        "month": "2025-11-01",
+        "active_customers": 66404,
+        "approved_transactions": 102688,
+        "continuing_customers": 38754,
+        "prior_active_customers": 68794
+      },
+      {
+        "month": "2025-12-01",
+        "active_customers": 67891,
+        "approved_transactions": 105777,
+        "continuing_customers": 38433,
+        "prior_active_customers": 66404
+      },
+      {
+        "month": "2026-01-01",
+        "active_customers": 67787,
+        "approved_transactions": 106313,
+        "continuing_customers": 38839,
+        "prior_active_customers": 67891
+      },
+      {
+        "month": "2026-02-01",
+        "active_customers": 66140,
+        "approved_transactions": 101300,
+        "continuing_customers": 37896,
+        "prior_active_customers": 67787
+      },
+      {
+        "month": "2026-03-01",
+        "active_customers": 69634,
+        "approved_transactions": 110494,
+        "continuing_customers": 38794,
+        "prior_active_customers": 66140
+      },
+      {
+        "month": "2026-04-01",
+        "active_customers": 71153,
+        "approved_transactions": 113846,
+        "continuing_customers": 41475,
+        "prior_active_customers": 69634
+      },
+      {
+        "month": "2026-05-01",
+        "active_customers": 71978,
+        "approved_transactions": 116115,
+        "continuing_customers": 42774,
+        "prior_active_customers": 71153
+      },
+      {
+        "month": "2026-06-01",
+        "active_customers": 49147,
+        "approved_transactions": 65506,
+        "continuing_customers": 29819,
+        "prior_active_customers": 71978
+      }
+    ],
+    "first_transaction": "2023-06-17 06:01:30",
+    "last_transaction": "2026-06-18 05:59:41",
+    "definition": "Customers with approved, owner-matched, post-opening transactions in both adjacent calendar months / customers active in the preceding month; customer-month transitions, not contractual retention.",
+    "partial_month_warning": "The first month lacks a preceding observed month; the final month ends before month-end, so its continuation is right-censored."
+  },
+  "products": {
+    "grain": "one active Silver product snapshot",
+    "ownership": [
+      {
+        "product_type": "Cuenta Ahorro",
+        "active_products": 102148,
+        "owning_customers": 74120,
+        "linked_known": 102148,
+        "linked_products": 50804,
+        "linked_unknown": 0
+      },
+      {
+        "product_type": "Tarjeta Crédito",
+        "active_products": 85090,
+        "owning_customers": 64977,
+        "linked_known": 85090,
+        "linked_products": 42530,
+        "linked_unknown": 0
+      },
+      {
+        "product_type": "Cuenta Corriente",
+        "active_products": 85079,
+        "owning_customers": 64810,
+        "linked_known": 85079,
+        "linked_products": 42489,
+        "linked_unknown": 0
+      },
+      {
+        "product_type": "Tarjeta Débito",
+        "active_products": 33749,
+        "owning_customers": 30186,
+        "linked_known": 33749,
+        "linked_products": 16705,
+        "linked_unknown": 0
+      },
+      {
+        "product_type": "Préstamo Personal",
+        "active_products": 16977,
+        "owning_customers": 15987,
+        "linked_known": 16977,
+        "linked_products": 8464,
+        "linked_unknown": 0
+      },
+      {
+        "product_type": "Préstamo Hipotecario",
+        "active_products": 10157,
+        "owning_customers": 9798,
+        "linked_known": 10157,
+        "linked_products": 5144,
+        "linked_unknown": 0
+      },
+      {
+        "product_type": "Inversión",
+        "active_products": 5022,
+        "owning_customers": 4943,
+        "linked_known": 5022,
+        "linked_products": 2565,
+        "linked_unknown": 0
+      },
+      {
+        "product_type": "Seguro",
+        "active_products": 1743,
+        "owning_customers": 1736,
+        "linked_known": 1743,
+        "linked_products": 869,
+        "linked_unknown": 0
+      }
+    ],
+    "cohorts": [
+      {
+        "segment": "Basic",
+        "customers": 89756,
+        "active_owners": 80493
+      },
+      {
+        "segment": "Plus",
+        "customers": 37547,
+        "active_owners": 33714
+      },
+      {
+        "segment": "Premium",
+        "customers": 15207,
+        "active_owners": 13603
+      },
+      {
+        "segment": "Student",
+        "customers": 7490,
+        "active_owners": 6706
+      }
+    ],
+    "opening_year": [
+      {
+        "opening_year": 2018,
+        "active_products_in_snapshot": 22797
+      },
+      {
+        "opening_year": 2019,
+        "active_products_in_snapshot": 42518
+      },
+      {
+        "opening_year": 2020,
+        "active_products_in_snapshot": 42367
+      },
+      {
+        "opening_year": 2021,
+        "active_products_in_snapshot": 42711
+      },
+      {
+        "opening_year": 2022,
+        "active_products_in_snapshot": 42529
+      },
+      {
+        "opening_year": 2023,
+        "active_products_in_snapshot": 42584
+      },
+      {
+        "opening_year": 2024,
+        "active_products_in_snapshot": 42716
+      },
+      {
+        "opening_year": 2025,
+        "active_products_in_snapshot": 42075
+      },
+      {
+        "opening_year": 2026,
+        "active_products_in_snapshot": 19668
+      }
+    ],
+    "transaction_activity": {
+      "total_transactions": 4425008,
+      "missing_product": 0,
+      "owner_mismatch": 0,
+      "before_opening": 827610,
+      "date_uncheckable": 0,
+      "eligible_transactions": 3597398,
+      "active_products_with_eligible_activity": 330467
+    },
+    "transaction_by_type": [
+      {
+        "product_type": "Cuenta Ahorro",
+        "active_products": 102148,
+        "with_eligible_activity": 99324,
+        "eligible_transactions": 1080564
+      },
+      {
+        "product_type": "Tarjeta Crédito",
+        "active_products": 85090,
+        "with_eligible_activity": 82678,
+        "eligible_transactions": 901439
+      },
+      {
+        "product_type": "Cuenta Corriente",
+        "active_products": 85079,
+        "with_eligible_activity": 82742,
+        "eligible_transactions": 901427
+      },
+      {
+        "product_type": "Tarjeta Débito",
+        "active_products": 33749,
+        "with_eligible_activity": 32805,
+        "eligible_transactions": 357376
+      },
+      {
+        "product_type": "Préstamo Personal",
+        "active_products": 16977,
+        "with_eligible_activity": 16508,
+        "eligible_transactions": 179276
+      },
+      {
+        "product_type": "Préstamo Hipotecario",
+        "active_products": 10157,
+        "with_eligible_activity": 9845,
+        "eligible_transactions": 106485
+      },
+      {
+        "product_type": "Inversión",
+        "active_products": 5022,
+        "with_eligible_activity": 4884,
+        "eligible_transactions": 52743
+      },
+      {
+        "product_type": "Seguro",
+        "active_products": 1743,
+        "with_eligible_activity": 1681,
+        "eligible_transactions": 18088
+      }
+    ],
+    "limitations": [
+      "Product status and app linkage are current snapshots, not historical usage.",
+      "Transactions before a product's opening date are excluded from eligible activity and reported separately.",
+      "No digital product-type chart: customer/product links are overwhelmingly inconsistent."
+    ]
+  },
+  "digital": {
+    "grain": "one session_id with an unambiguous customer or anonymous identity",
+    "events": {
+      "events": 15620994,
+      "anonymous_events": 3745446,
+      "product_linked_events": 1440338,
+      "missing_action": 1561432,
+      "event_partition_day_mismatch": 3930816,
+      "first_event": "2023-06-17 06:02:03",
+      "last_event": "2026-06-18 06:04:05"
+    },
+    "labels": [
+      {
+        "event_type": "Login",
+        "event_category": "Authentication",
+        "events": 2434770,
+        "missing_action": 243645
+      },
+      {
+        "event_type": "Logout",
+        "event_category": "Authentication",
+        "events": 2433612,
+        "missing_action": 243168
+      },
+      {
+        "event_type": "PageView",
+        "event_category": "Product",
+        "events": 1991955,
+        "missing_action": 199505
+      },
+      {
+        "event_type": "PageView",
+        "event_category": "Navigation",
+        "events": 1991314,
+        "missing_action": 199392
+      },
+      {
+        "event_type": "PageView",
+        "event_category": "Transaction",
+        "events": 1989295,
+        "missing_action": 198811
+      },
+      {
+        "event_type": "Click",
+        "event_category": "Product",
+        "events": 1794359,
+        "missing_action": 179166
+      },
+      {
+        "event_type": "Click",
+        "event_category": "Navigation",
+        "events": 1790675,
+        "missing_action": 178798
+      },
+      {
+        "event_type": "FormSubmit",
+        "event_category": "Transaction",
+        "events": 596908,
+        "missing_action": 59569
+      },
+      {
+        "event_type": "Purchase",
+        "event_category": "Transaction",
+        "events": 239383,
+        "missing_action": 23731
+      },
+      {
+        "event_type": "Error",
+        "event_category": "Transaction",
+        "events": 179388,
+        "missing_action": 17775
+      },
+      {
+        "event_type": "Error",
+        "event_category": "Navigation",
+        "events": 179335,
+        "missing_action": 17872
+      }
+    ],
+    "product_links": {
+      "identified_links": 1094242,
+      "missing_product": 0,
+      "owner_mismatch": 1094226
+    },
+    "sessions": {
+      "sessions": 1837415,
+      "ambiguous_customer_sessions": 0,
+      "mixed_identity_sessions": 498785,
+      "sessions_with_anonymous_events": 865829,
+      "navigation_view": 755552,
+      "click_after_view": 337895,
+      "submit_after_click": 49996,
+      "eligible_sessions": 1338630
+    },
+    "limitations": [
+      "The funnel is engagement within session, not an acquisition or completed transaction funnel.",
+      "Session ordering uses earliest timestamps; tied timestamps cannot prove order.",
+      "Sessions mixing anonymous and identified events, or multiple identified customers, are excluded from ordered stages."
+    ]
+  },
+  "intake": {
+    "grain": "one Silver complaint, grouped by creation_date",
+    "bronze_link_audit": {
+      "bronze_complaints": 67095,
+      "populated_origin_links": 0
+    },
+    "populations": [
+      {
+        "population": "Broader: Cobro indebido",
+        "complaints": 12194,
+        "call_center": 6171,
+        "sla_breached": 2431,
+        "claimed_amount_known": 4035,
+        "first_created": "2023-06-17 13:19:54",
+        "last_created": "2026-06-18 06:07:57"
+      },
+      {
+        "population": "V1: Cargo no reconocido",
+        "complaints": 12297,
+        "call_center": 6192,
+        "sla_breached": 2507,
+        "claimed_amount_known": 4090,
+        "first_created": "2023-06-17 15:37:40",
+        "last_created": "2026-06-18 05:23:19"
+      }
+    ],
+    "monthly": [
+      {
+        "month": "2023-06-01",
+        "v1": 153,
+        "broader_combined": 287
+      },
+      {
+        "month": "2023-07-01",
+        "v1": 351,
+        "broader_combined": 723
+      },
+      {
+        "month": "2023-08-01",
+        "v1": 378,
+        "broader_combined": 702
+      },
+      {
+        "month": "2023-09-01",
+        "v1": 328,
+        "broader_combined": 665
+      },
+      {
+        "month": "2023-10-01",
+        "v1": 333,
+        "broader_combined": 683
+      },
+      {
+        "month": "2023-11-01",
+        "v1": 315,
+        "broader_combined": 638
+      },
+      {
+        "month": "2023-12-01",
+        "v1": 341,
+        "broader_combined": 717
+      },
+      {
+        "month": "2024-01-01",
+        "v1": 346,
+        "broader_combined": 694
+      },
+      {
+        "month": "2024-02-01",
+        "v1": 315,
+        "broader_combined": 642
+      },
+      {
+        "month": "2024-03-01",
+        "v1": 335,
+        "broader_combined": 673
+      },
+      {
+        "month": "2024-04-01",
+        "v1": 388,
+        "broader_combined": 719
+      },
+      {
+        "month": "2024-05-01",
+        "v1": 312,
+        "broader_combined": 651
+      },
+      {
+        "month": "2024-06-01",
+        "v1": 312,
+        "broader_combined": 677
+      },
+      {
+        "month": "2024-07-01",
+        "v1": 353,
+        "broader_combined": 691
+      },
+      {
+        "month": "2024-08-01",
+        "v1": 339,
+        "broader_combined": 687
+      },
+      {
+        "month": "2024-09-01",
+        "v1": 339,
+        "broader_combined": 671
+      },
+      {
+        "month": "2024-10-01",
+        "v1": 356,
+        "broader_combined": 686
+      },
+      {
+        "month": "2024-11-01",
+        "v1": 337,
+        "broader_combined": 670
+      },
+      {
+        "month": "2024-12-01",
+        "v1": 321,
+        "broader_combined": 683
+      },
+      {
+        "month": "2025-01-01",
+        "v1": 368,
+        "broader_combined": 742
+      },
+      {
+        "month": "2025-02-01",
+        "v1": 318,
+        "broader_combined": 645
+      },
+      {
+        "month": "2025-03-01",
+        "v1": 333,
+        "broader_combined": 661
+      },
+      {
+        "month": "2025-04-01",
+        "v1": 333,
+        "broader_combined": 657
+      },
+      {
+        "month": "2025-05-01",
+        "v1": 341,
+        "broader_combined": 699
+      },
+      {
+        "month": "2025-06-01",
+        "v1": 324,
+        "broader_combined": 638
+      },
+      {
+        "month": "2025-07-01",
+        "v1": 348,
+        "broader_combined": 679
+      },
+      {
+        "month": "2025-08-01",
+        "v1": 375,
+        "broader_combined": 689
+      },
+      {
+        "month": "2025-09-01",
+        "v1": 329,
+        "broader_combined": 655
+      },
+      {
+        "month": "2025-10-01",
+        "v1": 362,
+        "broader_combined": 706
+      },
+      {
+        "month": "2025-11-01",
+        "v1": 322,
+        "broader_combined": 642
+      },
+      {
+        "month": "2025-12-01",
+        "v1": 365,
+        "broader_combined": 702
+      },
+      {
+        "month": "2026-01-01",
+        "v1": 342,
+        "broader_combined": 693
+      },
+      {
+        "month": "2026-02-01",
+        "v1": 324,
+        "broader_combined": 614
+      },
+      {
+        "month": "2026-03-01",
+        "v1": 376,
+        "broader_combined": 734
+      },
+      {
+        "month": "2026-04-01",
+        "v1": 361,
+        "broader_combined": 691
+      },
+      {
+        "month": "2026-05-01",
+        "v1": 343,
+        "broader_combined": 699
+      },
+      {
+        "month": "2026-06-01",
+        "v1": 181,
+        "broader_combined": 386
+      }
+    ],
+    "limitations": [
+      "Complaint records cannot be linked to interactions when origin_interaction_id is absent.",
+      "SLA breach is observed demand context; no intake effect or saved hold time was measured.",
+      "Product segmentation is suppressed because complaint/product ownership links fail validation."
+    ]
+  }
+}
