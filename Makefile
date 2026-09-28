@@ -3,10 +3,11 @@ S3_BUCKET ?= factored-datathon-2026-s3-157725502942-us-east-2-an
 AWS_REGION ?= us-east-2
 AWS_PROFILE ?= default
 DATA_DIR ?= $(CURDIR)/data
+SOURCE_DIR ?= $(CURDIR)/data
 
 export S3_BUCKET AWS_REGION AWS_PROFILE DATA_DIR
 
-.PHONY: setup test compile bronze bronze-full silver quality pipeline docker-build docker-test docker-pipeline
+.PHONY: setup test compile bronze bronze-full bronze-local-full silver quality pipeline pipeline-local docker-build docker-test docker-pipeline
 
 setup:
 	python3 -m venv .venv
@@ -24,6 +25,9 @@ bronze:
 bronze-full:
 	$(PYTHON) data_pipelines/bronze/run_ingestion.py --full-refresh
 
+bronze-local-full:
+	$(PYTHON) data_pipelines/bronze/run_ingestion.py --local-source "$(SOURCE_DIR)" --full-refresh
+
 silver:
 	$(PYTHON) data_pipelines/silver/run_silver.py
 
@@ -32,6 +36,11 @@ quality:
 
 pipeline:
 	$(MAKE) bronze
+	$(MAKE) silver
+	$(MAKE) quality
+
+pipeline-local:
+	$(MAKE) bronze-local-full
 	$(MAKE) silver
 	$(MAKE) quality
 

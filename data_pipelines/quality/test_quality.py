@@ -2,7 +2,7 @@
 import duckdb
 import pytest
 
-from data_pipelines.quality.checks import run_checks
+from data_pipelines.quality.checks import run_checks, _SILVER_COLUMNS
 from data_pipelines.quality.contracts import CONTRACTS
 
 
@@ -20,12 +20,16 @@ def tables(con, name, rows):
     fields = ", ".join(f'"{column}" VARCHAR' for column in columns)
     prefix = 'fact_' if contract.partition_field else 'dim_'
     con.execute(f'CREATE TABLE bronze."{name}" ({fields}, _source_file VARCHAR)')
-    con.execute(f'CREATE TABLE silver."{prefix}{name}" ({fields})')
+    silver_columns = sorted(_SILVER_COLUMNS[name])
+    silver_fields = ", ".join(f'"{column}" VARCHAR' for column in silver_columns)
+    con.execute(f'CREATE TABLE silver."{prefix}{name}" ({silver_fields})')
     for values in rows:
         raw = [values.get(column) for column in columns]
         placeholders = ', '.join('?' for _ in columns)
         con.execute(f'INSERT INTO bronze."{name}" VALUES ({placeholders}, ?)', raw + [values.get('_source_file')])
-        con.execute(f'INSERT INTO silver."{prefix}{name}" VALUES ({placeholders})', raw)
+        silver_values = [values.get("date" if column == "rate_date" else column) for column in silver_columns]
+        silver_placeholders = ", ".join("?" for _ in silver_columns)
+        con.execute(f'INSERT INTO silver."{prefix}{name}" VALUES ({silver_placeholders})', silver_values)
 
 
 def find(results, check, table, field=None):
@@ -63,7 +67,7 @@ def test_partition_business_date_and_foreign_key_are_separate(con):
          'was_delivered':'True', 'had_conversion':'False',
          '_source_file':'s3://bucket/data/campaign_sends/year=2024/month=01/day=03/part.csv'},
     ])
-    result = run_checks(con, ['campaign_sends'])
+    result = run_checks(con, ['campaign_sends', 'marketing_campaigns', 'customers'])
     assert find(result, 'late_arrival_signal', 'campaign_sends', 'send_date')['numerator'] == 1
     assert find(result, 'partition_date_mismatch', 'campaign_sends', 'process_date')['numerator'] == 1
     assert find(result, 'foreign_key_orphans', 'campaign_sends', 'campaign_id')['numerator'] == 1
@@ -112,3 +116,61 @@ def test_partial_silver_build_blocks_readiness(con):
     delta = find(result, 'silver_row_delta_unexplained', 'customers')
     assert delta['numerator'] == 1
     assert delta['severity'] == 'error'
+
+
+def test_focused_foreign_key_parent_is_skipped(con):
+    tables(con, "campaign_sends", [{"send_id": "S1", "send_date": "2024-01-01",
+        "process_date": "2024-01-01", "campaign_id": "M1", "customer_id": "C1",
+        "send_channel": "Email", "send_status": "Sent", "was_delivered": "True",
+        "had_conversion": "False"}])
+    focused = run_checks(con, ["campaign_sends"])
+    assert find(focused, "foreign_key_skipped", "campaign_sends", "campaign_id")["severity"] == "info"
+    full = run_checks(con)
+    assert find(full, "foreign_key_parent_missing", "campaign_sends", "campaign_id")["severity"] == "error"
+
+
+def test_silver_derived_column_is_required(con):
+    tables(con, "transactions", [{"transaction_id": "T1", "transaction_date": "2024-01-01",
+        "process_date": "2024-01-01", "product_id": "P1", "customer_id": "C1",
+        "transaction_type": "Purchase", "amount": "1", "currency": "USD",
+        "channel": "App", "transaction_status": "Approved", "is_fraud": "False"}])
+    con.execute('ALTER TABLE silver.fact_transactions DROP COLUMN amount_usd_is_estimated')
+    results = run_checks(con, ["transactions"])
+    assert find(results, "silver_schema_missing_columns", "transactions")["numerator"] == 1
+
+
+def test_relationship_checks_skip_missing_columns(con):
+    tables(con, "products", [{"product_id": "P1", "customer_id": "C1",
+        "product_type": "Checking", "currency": "USD", "product_status": "Active"}])
+    tables(con, "transactions", [{"transaction_id": "T1", "transaction_date": "2024-01-01",
+        "process_date": "2024-01-01", "product_id": "P1", "customer_id": "C1",
+        "transaction_type": "Purchase", "amount": "1", "currency": "USD",
+        "channel": "App", "transaction_status": "Approved", "is_fraud": "False"}])
+    con.execute('ALTER TABLE bronze.transactions DROP COLUMN customer_id')
+    results = run_checks(con)
+    assert find(results, "schema_missing_columns", "transactions")["severity"] == "error"
+    assert not any(item["check"] == "product_owner_mismatch" and item["table"] == "transactions" for item in results)
+    con.execute('ALTER TABLE bronze.products DROP COLUMN product_id')
+    results = run_checks(con)
+    assert find(results, "schema_missing_columns", "products")["severity"] == "error"
+
+
+def test_full_quality_report_survives_missing_relationship_columns(tmp_path):
+    from data_pipelines.quality.run_quality import main
+    db = tmp_path / "quality.duckdb"
+    connection = duckdb.connect(str(db))
+    connection.execute("CREATE SCHEMA bronze; CREATE SCHEMA silver")
+    tables(connection, "products", [{"product_id": "P1", "customer_id": "C1",
+        "product_type": "Checking", "currency": "USD", "product_status": "Active"}])
+    tables(connection, "transactions", [{"transaction_id": "T1", "transaction_date": "2024-01-01",
+        "process_date": "2024-01-01", "product_id": "P1", "customer_id": "C1",
+        "transaction_type": "Purchase", "amount": "1", "currency": "USD",
+        "channel": "App", "transaction_status": "Approved", "is_fraud": "False"}])
+    connection.execute('ALTER TABLE bronze.transactions DROP COLUMN customer_id')
+    connection.close()
+    status = main(["--db", str(db), "--output-root", str(tmp_path / "reports"), "--run-id", "fixture"])
+    assert status == 1
+    import json
+    report = json.loads((tmp_path / "reports" / "fixture" / "quality_results.json").read_text())
+    assert any(row["check"] == "schema_missing_columns" and row["table"] == "transactions"
+               for row in report["checks"])

@@ -28,6 +28,8 @@ def get_connection(duckdb_path: Union[str, Path]) -> Iterator[duckdb.DuckDBPyCon
     try:
         temp_dir = Path(duckdb_path).parent / "duckdb_tmp"
         temp_dir.mkdir(parents=True, exist_ok=True)
+        # Bound DuckDB's working memory during fact deduplication; external sort can spill
+        # to duckdb_tmp. The 2GB setting exhausted memory on the full transactions build.
         con.execute("SET memory_limit=?", [os.environ.get("DUCKDB_MEMORY_LIMIT", "3GB")])
         con.execute("SET temp_directory=?", [str(temp_dir)])
         con.execute("SET threads=?", [int(os.environ.get("DUCKDB_THREADS", "2"))])

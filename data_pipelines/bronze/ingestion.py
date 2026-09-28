@@ -179,6 +179,34 @@ def _group_by_year_month(dates: List[date]) -> List[tuple]:
     return sorted(buckets.items())
 
 
+def _rebuild_fact_table(con: duckdb.DuckDBPyConnection, table_name: str, local_dir: str) -> None:
+    """Publish the Bronze table from the active local Parquet snapshot."""
+    con.execute(f"""
+        CREATE OR REPLACE TABLE bronze.{table_name} AS
+        SELECT * FROM read_parquet('{local_dir}/**/*.parquet', hive_partitioning=true)
+    """)
+
+
+def _recover_fact_snapshot(con: duckdb.DuckDBPyConnection, table_name: str, local_dir: str) -> None:
+    """Reconcile an interrupted refresh before reading a watermark or source files."""
+    backup_dir = f"{local_dir}.old"
+    if not os.path.exists(backup_dir):
+        return
+    if not os.path.exists(local_dir):
+        os.replace(backup_dir, local_dir)
+    _rebuild_fact_table(con, table_name, local_dir)
+    dates = []
+    for root, _, files in os.walk(local_dir):
+        if any(file.endswith(".parquet") for file in files):
+            match = re.search(r"year=(\d{4})/month=(\d{1,2})/day=(\d{1,2})", root)
+            if match:
+                dates.append(date(*(int(part) for part in match.groups())))
+    if dates:
+        update_watermark(con, table_name, max(dates))
+    if os.path.exists(backup_dir):
+        shutil.rmtree(backup_dir)
+
+
 def ingest_fact(
     con: duckdb.DuckDBPyConnection,
     base_path: str,
@@ -190,13 +218,14 @@ def ingest_fact(
     CWD-relative "data" (tests rely on that default; production runs pass settings.data_dir)."""
     table_name = _safe_identifier(table_name)
     local_dir = os.path.join(str(data_dir), "bronze", table_name)
-    os.makedirs(local_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(local_dir), exist_ok=True)
 
     # Ensured unconditionally, not just as a side effect of get_last_loaded_date() below --
     # that call is skipped entirely when full_refresh=True, which used to mean a --full-refresh
     # run against a brand-new database (the README's own suggested first-run command) crashed at
     # the very end trying to INSERT into a bronze._load_watermarks table that was never created.
     ensure_watermark_table(con)
+    _recover_fact_snapshot(con, table_name, local_dir)
 
     table_exists = con.execute(
         "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'bronze' AND table_name = ?",
@@ -210,7 +239,7 @@ def ingest_fact(
         return IngestResult(table_name=table_name, kind="fact", rows=0, partitions_added=0,
                              status="no_data_found")
 
-    if full_refresh or not table_exists or last_loaded is None:
+    if full_refresh or not table_exists or last_loaded is None or not os.path.isdir(local_dir):
         dates_to_load = available
         mode = "full refresh"
     else:
@@ -228,6 +257,7 @@ def ingest_fact(
 
     staging_dir = tempfile.mkdtemp(prefix=f"{table_name}.stage-", dir=os.path.dirname(local_dir)) if mode == "full refresh" else None
     write_dir = staging_dir or local_dir
+    os.makedirs(write_dir, exist_ok=True)
 
     def _copy_from(glob_pattern: str) -> None:
         con.execute(f"""
@@ -264,15 +294,8 @@ def ingest_fact(
                              table_name, i, len(batches), year, month, len(month_dates),
                              time.monotonic() - t0)
 
-        # Rebuild the materialized Bronze table from the just-written local snapshot.
-        con.execute(f"""
-            CREATE OR REPLACE TABLE bronze.{table_name} AS
-            SELECT * FROM read_parquet('{write_dir}/**/*.parquet', hive_partitioning=true)
-        """)
         if staging_dir:
             backup_dir = f"{local_dir}.old"
-            if os.path.exists(backup_dir):
-                shutil.rmtree(backup_dir)
             had_live = os.path.exists(local_dir)
             if had_live:
                 os.replace(local_dir, backup_dir)
@@ -282,13 +305,13 @@ def ingest_fact(
                 if had_live:
                     os.replace(backup_dir, local_dir)
                 raise
-            if had_live:
-                shutil.rmtree(backup_dir)
+        _rebuild_fact_table(con, table_name, local_dir)
+        update_watermark(con, table_name, max(dates_to_load))
+        if staging_dir and had_live:
+            shutil.rmtree(backup_dir)
     finally:
         if staging_dir and os.path.exists(staging_dir):
             shutil.rmtree(staging_dir)
-
-    update_watermark(con, table_name, max(dates_to_load))
 
     count = con.execute(f"SELECT count(*) FROM bronze.{table_name}").fetchone()[0]
     logger.info(

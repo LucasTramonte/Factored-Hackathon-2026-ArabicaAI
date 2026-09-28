@@ -9,6 +9,10 @@ import re
 from typing import Iterable
 
 from .contracts import CONTRACTS, TableContract
+from data_pipelines.silver.table_specs import ALL_SPECS
+
+_SILVER_COLUMNS = {spec.name: {column.target_name() for column in spec.columns} for spec in ALL_SPECS}
+_SILVER_COLUMNS["daily_exchange_rates"] = {"rate_date", "source_currency", "target_currency", "exchange_rate", "buy_rate", "sell_rate", "rate_source"}
 
 _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z_0-9]*$")
 
@@ -49,7 +53,7 @@ def _nonblank(alias: str, field: str) -> str:
     return f"NULLIF(TRIM(CAST({value} AS VARCHAR)), '')"
 
 
-def check_table(con, contract: TableContract) -> list[dict]:
+def check_table(con, contract: TableContract, selected: set[str] | None = None) -> list[dict]:
     """Check one Bronze/Silver pair without copying fact rows into Python."""
     name = contract.name
     silver = silver_name(contract)
@@ -65,7 +69,7 @@ def check_table(con, contract: TableContract) -> list[dict]:
     results.append(metric("schema_duplicate_columns", name, len(duplicate_columns), len(bronze_cols), "error" if duplicate_columns else "info"))
     results.append(metric("schema_missing_columns", name, len(missing), len(contract.expected_columns),
                           "error" if missing else "info"))
-    silver_required = {"rate_date" if name == "daily_exchange_rates" and field == "date" else field for field in contract.required}
+    silver_required = _SILVER_COLUMNS[name]
     silver_missing = silver_required - silver_cols
     results.append(metric("silver_schema_missing_columns", name, len(silver_missing), len(silver_required),
                           "error" if silver_missing else "info"))
@@ -118,8 +122,15 @@ def check_table(con, contract: TableContract) -> list[dict]:
             late = _scalar(con, f"SELECT COUNT(*) FROM {b} b WHERE TRY_CAST({value} AS TIMESTAMP)::DATE < TRY_CAST(b.{ident(contract.partition_field)} AS DATE)")
             results.append(metric("late_arrival_signal", name, late, raw, "warning" if late else "info", contract.date_field))
     for fk in contract.foreign_keys:
-        if not _columns(con, "bronze", fk.parent_table):
+        if selected is not None and fk.parent_table not in selected:
+            results.append(metric("foreign_key_skipped", name, 0, raw, "info", fk.field))
+            continue
+        parent_cols = _columns(con, "bronze", fk.parent_table)
+        if not parent_cols:
             results.append(metric("foreign_key_parent_missing", name, 1, raw, "error", fk.field))
+            continue
+        if fk.field not in bronze_cols or fk.parent_key not in parent_cols:
+            results.append(metric("foreign_key_schema_missing", name, 1, raw, "error", fk.field))
             continue
         child = _nonblank('c', fk.field)
         parent = _nonblank('p', fk.parent_key)
@@ -131,16 +142,20 @@ def check_table(con, contract: TableContract) -> list[dict]:
 def relationship_checks(con) -> list[dict]:
     """Measure cross-table relationships that foreign keys alone cannot validate."""
     results = []
-    names = {name for name in ("transactions", "digital_events", "complaints") if _columns(con, "bronze", name)}
-    if not _columns(con, "bronze", "products"):
+    product_cols = _columns(con, "bronze", "products")
+    if not {"product_id", "customer_id"} <= product_cols:
         return results
-    for name in sorted(names):
+    for name in ("complaints", "digital_events", "transactions"):
         product_field = "affected_product_id" if name == "complaints" else "product_id"
+        child_cols = _columns(con, "bronze", name)
+        if not {"customer_id", product_field} <= child_cols:
+            continue
         child = f"bronze.{ident(name)}"
         linked = _scalar(con, f"SELECT COUNT(*) FROM {child} c JOIN bronze.products p ON c.{ident(product_field)}=p.product_id WHERE c.customer_id IS NOT NULL")
         mismatched = _scalar(con, f"SELECT COUNT(*) FROM {child} c JOIN bronze.products p ON c.{ident(product_field)}=p.product_id WHERE c.customer_id IS NOT NULL AND c.customer_id<>p.customer_id")
         results.append(metric("product_owner_mismatch", name, mismatched, linked, "warning" if mismatched else "info", product_field))
-    if "transactions" in names:
+    transaction_cols = _columns(con, "bronze", "transactions")
+    if {"customer_id", "product_id", "transaction_date"} <= transaction_cols and "opening_date" in product_cols:
         preopen = _scalar(con, "SELECT COUNT(*) FROM bronze.transactions t JOIN bronze.products p ON t.product_id=p.product_id WHERE TRY_CAST(t.transaction_date AS TIMESTAMP)::DATE < TRY_CAST(p.opening_date AS DATE)")
         total = _scalar(con, "SELECT COUNT(*) FROM bronze.transactions")
         results.append(metric("transaction_before_product_opening", "transactions", preopen, total, "warning" if preopen else "info"))
@@ -154,8 +169,9 @@ def run_checks(con, tables: Iterable[str] | None = None, progress=None) -> list[
     if unknown:
         raise ValueError(f"Unknown tables: {sorted(unknown)}")
     results = []
+    selection = set(selected) if tables is not None else None
     for name in selected:
-        results.extend(check_table(con, CONTRACTS[name]))
+        results.extend(check_table(con, CONTRACTS[name], selection))
         if progress is not None:
             progress(name)
     if tables is None:

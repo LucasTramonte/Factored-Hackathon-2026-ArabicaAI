@@ -34,8 +34,12 @@ from __future__ import annotations
 
 from typing import List
 
-from silver import ColumnSpec, TableSpec
-from transforms import strip_templated_nan
+if __package__:
+    from .silver import ColumnSpec, TableSpec
+    from .transforms import strip_templated_nan
+else:  # direct run_silver.py execution
+    from silver import ColumnSpec, TableSpec
+    from transforms import strip_templated_nan
 
 # --------------------------------------------------------------------------------------
 # customers

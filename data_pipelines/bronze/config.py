@@ -68,8 +68,9 @@ class Settings:
     s3_data_prefix: str = "data"  # matches the bucket layout: s3://bucket/data/<table>
 
     @classmethod
-    def from_env(cls) -> "Settings":
-        required = ["S3_BUCKET", "AWS_REGION"]
+    def from_env(cls, require_s3: bool = True) -> "Settings":
+        """Resolve output paths and require AWS settings only for S3 ingestion."""
+        required = ["S3_BUCKET", "AWS_REGION"] if require_s3 else []
         missing = [k for k in required if not os.environ.get(k)]
         if missing:
             raise RuntimeError(
@@ -94,8 +95,8 @@ class Settings:
         duckdb_path = os.environ.get("DUCKDB_PATH", str(data_dir / "latam_bank.duckdb"))
 
         return cls(
-            bucket=os.environ["S3_BUCKET"],
-            region=os.environ["AWS_REGION"],
+            bucket=os.environ.get("S3_BUCKET", ""),
+            region=os.environ.get("AWS_REGION", ""),
             project_root=project_root,
             data_dir=data_dir,
             duckdb_path=duckdb_path,

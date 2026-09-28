@@ -53,12 +53,12 @@ The other three candidate workflows (general complaint intake, transaction/accou
 
 ```json
 {
-  "customer_id": "C123",
   "message": "I don't recognize a charge of 850 on Tuesday",
-  "channel": "App",
-  "authenticated": true
+  "channel": "App"
 }
 ```
+
+The server derives `customer_id` and authentication status from the validated session; neither is accepted as a caller-controlled authorization field.
 
 **Tool output** (internal — never shown raw to the customer)
 

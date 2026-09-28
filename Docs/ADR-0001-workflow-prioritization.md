@@ -6,7 +6,7 @@
 
 ## Context and evidence
 
-The hackathon asks for one focused banking service workflow with a normal resolution path, an ambiguous case, human handoff, and measured safe automated resolution. The synthetic data supports several candidates but does not prove business improvement. Roberto's [exploration](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/blob/feat/roberto-data-exploration/reports/2026-09-26/team-meeting-brief.md) and a separate read-only scan of the installed CSVs found:
+The hackathon asks for one focused banking service workflow with a normal resolution path, an ambiguous case, human handoff, and measured safe automated resolution. The synthetic data supports several candidates but does not prove business improvement. Roberto's [exploration at commit f719428](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/blob/f7194286cfd084116cfce10bf9a2614c12c501fa/reports/2026-09-26/team-meeting-brief.md) and a separate read-only scan of the installed CSVs found:
 
 | Observation | Reproduced denominator and interpretation |
 |---|---|

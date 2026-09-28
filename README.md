@@ -4,7 +4,7 @@ This repository supports the Factored Hackathon 2026 with a synthetic LATAM bank
 
 ## Start here
 
-For local runs, you need Python 3.10+ and GNU Make. For container runs, you need Docker and GNU Make; Python is installed in the image. Both paths need several GB of free disk space and access to the organizer's S3 bucket through an AWS profile. The repository contains no raw data or credentials. Use an AWS profile or temporary role credentials; **do not add access keys to a repository `.env` file**.
+For local runs, you need Python 3.10+ and GNU Make. For container runs, you need Docker and GNU Make; Python is installed in the image. Full S3 runs need several GB of free disk space and access to the organizer's bucket through an AWS profile. The offline route below uses supplied local CSVs. The repository contains no raw data or credentials. Use an AWS profile or temporary role credentials; **do not add access keys to a repository `.env` file**.
 
 From the repository root:
 
@@ -28,19 +28,24 @@ Both Docker targets build the image before running it. `docker-pipeline` mounts 
 Before a full run, you can check read access without printing credentials:
 
 ```bash
-aws s3 ls s3://factored-datathon-2026-s3-157725502942-us-east-2-an/data/ --profile default
+aws s3 ls s3://factored-datathon-2026-s3-157725502942-us-east-2-an/data/
 ```
 
 The source CSVs are never modified. DuckDB, Parquet, temporary files, and audit runs stay under ignored `data/`. A successful pipeline run creates `data/latam_bank.duckdb` with `bronze.*` source tables and typed `silver.dim_*` / `silver.fact_*` tables. Read the latest `data/quality_runs/<run-id>/quality_report.md` for the readiness result and `quality_results.json` for every numerator and denominator.
 
 A zero-error quality run means the tables are structurally ready to query. It does **not** validate campaign attribution or every customer-to-product link. Review the warnings and the [full parity record](data_pipelines/quality/PARITY.md) before using a relationship in a metric.
 
+## Offline baseline from supplied CSVs
+
+If the CSVs are installed locally, run `make setup` and `make pipeline-local`. Once Python dependencies are installed, this reads the CSV tree in `data/` and builds the same Bronze → Silver → quality audit without S3, AWS credentials, or DuckDB extension downloads. Set `SOURCE_DIR=/path/to/csv-root` when the CSVs are elsewhere. The first run scans the local dataset; subsequent local runs intentionally refresh all source partitions so corrections and deletions are visible. Use a separate `DATA_DIR` for an offline run if you also maintain an S3-backed database.
+
 ## Common commands
 
 | Command | Purpose |
 |---|---|
 | `make test` | Run Bronze, Silver, and quality fixtures without S3. |
-| `make bronze` | Refresh dimensions and ingest newer fact partitions. |
+| `make bronze` | Refresh dimensions and ingest newer fact partitions from S3. |
+| `make pipeline-local` | Build and audit the supplied local CSVs entirely offline. |
 | `make bronze-full` | Rebuild Bronze when an older source partition was corrected or removed; follow with `make silver` and `make quality`. |
 | `make silver` | Rebuild typed analytical tables from local Bronze. |
 | `make quality` | Check all 13 Bronze/Silver table pairs and their relationships. |

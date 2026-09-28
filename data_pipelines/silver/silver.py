@@ -24,7 +24,10 @@ from typing import List, Optional
 
 import duckdb
 
-from transforms import as_boolean, as_country, as_date, as_double, as_integer, as_string, as_time, as_timestamp
+if __package__:
+    from .transforms import as_boolean, as_country, as_date, as_double, as_integer, as_string, as_time, as_timestamp
+else:  # direct run_silver.py execution
+    from transforms import as_boolean, as_country, as_date, as_double, as_integer, as_string, as_time, as_timestamp
 
 logger = logging.getLogger(__name__)
 
