@@ -1,16 +1,27 @@
 """Focused denominator, join and session-order regressions for the Silver report."""
 import duckdb
+import json
 
 from data_foundation.src.marketing_product_evidence import analyze
-from data_foundation.src.marketing_product_report import marketing_product
-from data_foundation.scripts.run_marketing_product import validate_quality_identity
+from data_foundation.src.marketing_product_report import marketing_product, complete_activity_rows
+from data_foundation.scripts.run_marketing_product import validate_quality_identity, published_manifest
+from data_foundation.scripts import run_marketing_product as report_runner
 from datetime import datetime, timezone, timedelta
 import pytest
 
 
-def test_silver_aggregates_keep_denominators_and_owner_checks():
+@pytest.fixture
+def con():
+    """Close the in-memory DuckDB even when a regression assertion fails."""
+    connection = duckdb.connect(':memory:')
+    try:
+        yield connection
+    finally:
+        connection.close()
+
+
+def test_silver_aggregates_keep_denominators_and_owner_checks(con):
     """Unknown flags, invalid links and unordered sessions cannot inflate outcomes."""
-    con = duckdb.connect(':memory:')
     con.execute('CREATE SCHEMA silver')
     con.execute("""CREATE TABLE silver.dim_customers AS SELECT * FROM (VALUES
       ('C1','Retail','México',FALSE,TIMESTAMP '2024-01-01'),('C2','Retail','Colombia',TRUE,TIMESTAMP '2024-02-03'))
@@ -64,6 +75,7 @@ def test_silver_aggregates_keep_denominators_and_owner_checks():
     assert p['transaction_activity']['before_opening']==1
     assert d['product_links']['owner_mismatch']==1
     assert d['sessions']['mixed_identity_sessions']==1
+    assert d['sessions']['eligible_sessions']==2
     assert (d['sessions']['navigation_view'],d['sessions']['click_after_view'],d['sessions']['submit_after_click'])==(2,2,2)
     assert data['intake']['populations'][1]['complaints']==1
     assert data['economics']['send_cost_known']==1
@@ -76,6 +88,7 @@ def test_silver_aggregates_keep_denominators_and_owner_checks():
     assert 'Start with the chosen customer workflow' in rendered
     assert 'Checklist versus AI evaluation' in rendered
     assert 'safe accepted intake' in rendered
+    assert '100.00% of 2 eligible sessions' in rendered
     assert 'id="time-year"' in rendered and 'id="time-month"' in rendered
     assert 'const sendMonths=' in rendered and 'Monthly send trend by business date</summary>' not in rendered
     assert 'C1' not in rendered and 'P1' not in rendered
@@ -91,3 +104,92 @@ def test_quality_identity_rejects_stale_database(tmp_path):
     db.write_bytes(b'abcd')
     with pytest.raises(ValueError,match='size changed'):
         validate_quality_identity(db,metadata)
+
+
+@pytest.mark.parametrize(('field','replacement','expected'), [
+    ('ready', False, 'complete, ready'),
+    ('errors', 1, 'complete, ready'),
+    ('tables', list(range(12)), 'complete, ready'),
+    ('database', '/other/database.duckdb', 'different database'),
+    ('generated_at_utc', '2000-01-01T00:00:00+00:00', 'modified after'),
+])
+def test_quality_identity_rejects_bad_provenance(tmp_path, field, replacement, expected):
+    """Ready, scope, identity and timestamp must all match before a report scan."""
+    db = tmp_path / 'fixture.duckdb'
+    db.write_bytes(b'abc')
+    metadata = {'ready': True, 'errors': 0, 'tables': list(range(13)),
+                'database': str(db), 'database_bytes': 3,
+                'generated_at_utc': (datetime.now(timezone.utc) + timedelta(seconds=5)).isoformat()}
+    metadata[field] = replacement
+    with pytest.raises(ValueError, match=expected):
+        validate_quality_identity(db, metadata)
+
+
+def test_quality_identity_rejects_missing_database(tmp_path):
+    """A missing database cannot be accepted even with a ready quality record."""
+    db = tmp_path / 'missing.duckdb'
+    with pytest.raises(ValueError, match='Database missing'):
+        validate_quality_identity(db, {'ready': True})
+
+
+def test_published_manifest_omits_machine_paths(tmp_path):
+    """The shared manifest keeps run identity without exposing local directories."""
+    db = tmp_path / 'private' / 'latam_bank.duckdb'
+    quality = tmp_path / 'quality_runs' / 'run-17' / 'quality_results.json'
+    result = published_manifest({'database': str(db), 'quality_run': str(quality),
+                                 'database_bytes': 123}, db, quality)
+    assert result['database'] == 'latam_bank.duckdb'
+    assert result['quality_run'] == 'run-17/quality_results.json'
+    assert str(tmp_path) not in str(result)
+
+
+def test_complete_activity_excludes_partial_origin_and_final_month():
+    """A complete continuation needs two complete adjacent observation months."""
+    months = [{'month': f'2023-{m:02d}-01'} for m in (6, 7, 8, 9)]
+    activity = {'monthly': months, 'first_transaction': '2023-06-17 06:00:00',
+                'last_transaction': '2023-09-18 05:00:00'}
+    assert complete_activity_rows(activity) == [months[2]]
+    activity['first_transaction'] = '2023-06-01 00:00:00'
+    assert complete_activity_rows(activity) == months[1:3]
+    activity['last_transaction'] = '2023-09-30 23:59:59'
+    assert complete_activity_rows(activity) == months[1:]
+
+
+def test_report_run_rejects_existing_output_before_scan_and_cleans_spill(tmp_path, monkeypatch):
+    """An immutable run fails early; a successful run leaves no shared spill files."""
+    db = tmp_path / 'bank.duckdb'
+    with duckdb.connect(str(db)) as connection:
+        connection.execute('CREATE TABLE marker (id INTEGER)')
+    quality = tmp_path / 'quality_runs' / 'run-17' / 'quality_results.json'
+    quality.parent.mkdir(parents=True)
+    metadata = {'ready': True, 'errors': 0, 'warnings': 0,
+                'tables': list(range(13)), 'database': str(db),
+                'database_bytes': db.stat().st_size,
+                'generated_at_utc': (datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat(),
+                'source': 'fixture', 'watermarks': []}
+    quality.write_text(json.dumps({'metadata': metadata, 'checks': []}))
+    calls = []
+
+    def aggregate(_connection):
+        calls.append('scanned')
+        return {'silver_counts': {}, 'marketing': {'overall': {'sends': 1}},
+                'digital': {'events': {'events': 1}}}
+
+    monkeypatch.setattr(report_runner, 'analyze', aggregate)
+    monkeypatch.setattr(report_runner, 'write_reports',
+                        lambda _data, path: path.mkdir(parents=True, exist_ok=True))
+    output = tmp_path / 'run'
+    output.mkdir()
+    options = ['--db', str(db), '--quality', str(quality), '--output', str(output)]
+    with pytest.raises(FileExistsError):
+        report_runner.main(options)
+    assert calls == []
+    output.rmdir()
+    published = tmp_path / 'published'
+    assert report_runner.main(options + ['--publish', str(published)]) == 0
+    assert calls == ['scanned']
+    assert not (output / 'duckdb_tmp').exists()
+    shared = json.loads((published / 'manifest.json').read_text())
+    assert shared['database'] == 'bank.duckdb'
+    assert shared['quality_run'] == 'run-17/quality_results.json'
+    assert str(tmp_path) not in str(shared)

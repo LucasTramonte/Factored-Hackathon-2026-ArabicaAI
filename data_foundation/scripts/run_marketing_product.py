@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,6 +29,12 @@ def validate_quality_identity(db: Path, metadata: dict) -> None:
         raise ValueError('Database was modified after the quality run')
 
 
+def published_manifest(manifest: dict, db: Path, quality: Path) -> dict:
+    """Hide machine paths while retaining source names and quality-run identity."""
+    return {**manifest, "database": db.name,
+            "quality_run": f"{quality.parent.name}/{quality.name}"}
+
+
 def main(argv: list[str] | None = None) -> int:
     """Check quality provenance, aggregate in DuckDB and write an ignored run."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -43,13 +50,17 @@ def main(argv: list[str] | None = None) -> int:
         validate_quality_identity(args.db, metadata)
     except ValueError as exc:
         parser.error(str(exc))
-    tmp = args.db.parent / 'duckdb_tmp'
-    tmp.mkdir(exist_ok=True)
-    with duckdb.connect(str(args.db), read_only=True) as con:
-        con.execute('SET memory_limit=?', [args.memory_limit])
-        con.execute('SET threads=?', [int(os.environ.get('DUCKDB_THREADS','2'))])
-        con.execute('SET temp_directory=?', [str(tmp)])
-        data = analyze(con)
+    args.output.mkdir(parents=True, exist_ok=False)
+    tmp = args.output / 'duckdb_tmp'
+    tmp.mkdir()
+    try:
+        with duckdb.connect(str(args.db), read_only=True) as con:
+            con.execute('SET memory_limit=?', [args.memory_limit])
+            con.execute('SET threads=?', [int(os.environ.get('DUCKDB_THREADS','2'))])
+            con.execute('SET temp_directory=?', [str(tmp)])
+            data = analyze(con)
+    finally:
+        shutil.rmtree(tmp)
     manifest = {
         'generated_at_utc': datetime.now(timezone.utc).isoformat(),
         'database': str(args.db.resolve()),
@@ -67,12 +78,11 @@ def main(argv: list[str] | None = None) -> int:
         'metric_grain': {'marketing':'send_id','product':'product_id','digital':'session_id','intake':'complaint_id'},
         'memory_model': 'DuckDB projected scans and grouped SQL with disk spill; Python holds aggregate rows only',
     }
-    args.output.mkdir(parents=True, exist_ok=False)
     write_reports(data,args.output)
     (args.output/'manifest.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
     if args.publish:
         write_reports(data,args.publish)
-        (args.publish/'manifest.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+        (args.publish/'manifest.json').write_text(json.dumps(published_manifest(manifest,args.db,args.quality),indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
     print(f'report_run={args.output} sends={data["marketing"]["overall"]["sends"]} events={data["digital"]["events"]["events"]}')
     return 0
 

@@ -1601,7 +1601,8 @@
       "sessions_with_anonymous_events": 865829,
       "navigation_view": 755552,
       "click_after_view": 337895,
-      "submit_after_click": 49996
+      "submit_after_click": 49996,
+      "eligible_sessions": 1338630
     },
     "limitations": [
       "The funnel is engagement within session, not an acquisition or completed transaction funnel.",

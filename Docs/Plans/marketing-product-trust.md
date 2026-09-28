@@ -1,6 +1,6 @@
 # Marketing and Product evidence rebuild
 
-**Status: Concluído nesta branch.** A análise usa uma Silver verificada por 336 checks (zero erros), e os HTMLs foram reconciliados com o JSON, uma partição real e o navegador offline.
+**Status: Completed on this branch.** The analysis uses Silver verified by 336 checks (zero errors). The HTML was reconciled with the JSON, one source partition, and an offline browser.
 
 ## Working Backwards decision
 

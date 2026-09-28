@@ -295,6 +295,8 @@ def digital(con) -> dict:
       COUNT(*) FILTER (WHERE sc.distinct_customers>1) AS ambiguous_customer_sessions,
       COUNT(*) FILTER (WHERE sc.anonymous_events>0 AND sc.distinct_customers>0) AS mixed_identity_sessions,
       COUNT(*) FILTER (WHERE sc.anonymous_events>0) AS sessions_with_anonymous_events,
+      COUNT(*) FILTER (WHERE sc.distinct_customers<=1 AND NOT
+        (sc.anonymous_events>0 AND sc.distinct_customers>0)) AS eligible_sessions,
       COUNT(*) FILTER (WHERE v.view_at IS NOT NULL AND sc.distinct_customers<=1 AND NOT (sc.anonymous_events>0 AND sc.distinct_customers>0)) AS navigation_view,
       COUNT(*) FILTER (WHERE c.click_at IS NOT NULL AND sc.distinct_customers<=1 AND NOT (sc.anonymous_events>0 AND sc.distinct_customers>0)) AS click_after_view,
       COUNT(*) FILTER (WHERE f.submit_at IS NOT NULL AND sc.distinct_customers<=1 AND NOT (sc.anonymous_events>0 AND sc.distinct_customers>0)) AS submit_after_click
