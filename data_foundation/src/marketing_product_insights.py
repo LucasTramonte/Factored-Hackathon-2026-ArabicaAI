@@ -37,6 +37,11 @@ def paired_month_change(
 
     earlier = rate([a for a, _ in pairs])
     later = rate([b for _, b in pairs])
+
+    def change(selected: list[tuple[dict, dict]]) -> float:
+        return rate([b for _, b in selected]) - rate([a for a, _ in selected])
+
+    leave_one_out = [change(pairs[:month] + pairs[month + 1:]) for month in range(12)]
     rng = random.Random(seed)
     changes = []
     for _ in range(draws):
@@ -61,6 +66,12 @@ def paired_month_change(
             b[numerator] / b[denominator] > a[numerator] / a[denominator]
             for a, b in pairs
         ),
+        "leave_one_month_out_change_pp": {
+            "min": min(leave_one_out), "max": max(leave_one_out),
+        },
+        "half_year_change_pp": {
+            "jan_jun": change(pairs[:6]), "jul_dec": change(pairs[6:]),
+        },
         "resampled_change_pp": {
             "p2_5": quantile(0.025), "p20": quantile(0.20),
             "p50": quantile(0.50), "p80": quantile(0.80),
@@ -80,13 +91,18 @@ def summarize_insights(data: dict) -> dict:
     return {
         "source_generated_at_utc": data.get("generated_at_utc"),
         "method": {
-            "years": list(YEARS), "draws": DRAWS, "seed": SEED,
+            "years": list(YEARS), "draws": DRAWS,
+            "marketing_seed": SEED, "product_seed": SEED + 1,
             "description": "Paired calendar-month bootstrap with replacement; "
                            "each draw resamples 12 month pairs and recomputes "
                            "denominator-weighted annual rates.",
+            "assumption": "The 12 observed month pairs are treated as exchangeable "
+                          "units for a descriptive month-composition sensitivity check.",
             "interpretation": "Percentiles describe sensitivity to which months are "
                               "represented. They are not causal effects, a production "
-                              "forecast, or a customer-level confidence interval.",
+                              "forecast, a customer-level confidence interval, or a "
+                              "95% confidence interval. Month pairs may be serially "
+                              "dependent and customer cohorts overlap.",
         },
         "marketing": {
             "sends": overall["sends"],

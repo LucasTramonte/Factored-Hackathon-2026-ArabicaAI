@@ -6,9 +6,11 @@
       2025
     ],
     "draws": 20000,
-    "seed": 20260928,
+    "marketing_seed": 20260928,
+    "product_seed": 20260929,
     "description": "Paired calendar-month bootstrap with replacement; each draw resamples 12 month pairs and recomputes denominator-weighted annual rates.",
-    "interpretation": "Percentiles describe sensitivity to which months are represented. They are not causal effects, a production forecast, or a customer-level confidence interval."
+    "assumption": "The 12 observed month pairs are treated as exchangeable units for a descriptive month-composition sensitivity check.",
+    "interpretation": "Percentiles describe sensitivity to which months are represented. They are not causal effects, a production forecast, a customer-level confidence interval, or a 95% confidence interval. Month pairs may be serially dependent and customer cohorts overlap."
   },
   "marketing": {
     "sends": 1746801,
@@ -40,6 +42,14 @@
       "later_rate_pct": 0.5199625123527241,
       "observed_change_pp": -0.039904703183464285,
       "matched_months_higher": 4,
+      "leave_one_month_out_change_pp": {
+        "min": -0.06106554952255927,
+        "max": -0.023344744708947318
+      },
+      "half_year_change_pp": {
+        "jan_jun": -0.08516888920830845,
+        "jul_dec": 0.004867969761215174
+      },
       "resampled_change_pp": {
         "p2_5": -0.10262873909894599,
         "p20": -0.06766752293725176,
@@ -70,6 +80,14 @@
       "later_rate_pct": 55.999415664622795,
       "observed_change_pp": 3.0628455784834046,
       "matched_months_higher": 12,
+      "leave_one_month_out_change_pp": {
+        "min": 2.953645501407884,
+        "max": 3.2248838378694913
+      },
+      "half_year_change_pp": {
+        "jan_jun": 2.85998778540862,
+        "jul_dec": 3.2583753056569336
+      },
       "resampled_change_pp": {
         "p2_5": 2.612338586596465,
         "p20": 2.8821908568348675,

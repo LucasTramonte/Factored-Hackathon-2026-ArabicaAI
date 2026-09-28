@@ -121,6 +121,12 @@ def test_paired_month_bootstrap_requires_complete_matched_years():
     change = paired_month_change(rows, 'n', 'd', **options)
     assert (change['earlier_numerator'], change['later_numerator']) == (12, 24)
     assert change['observed_change_pp'] == pytest.approx(10)
+    assert change['leave_one_month_out_change_pp'] == pytest.approx(
+        {'min': 10, 'max': 10}
+    )
+    assert change['half_year_change_pp'] == pytest.approx(
+        {'jan_jun': 10, 'jul_dec': 10}
+    )
     assert all(value == pytest.approx(10)
                for value in change['resampled_change_pp'].values())
     assert paired_month_change(rows[:-1], 'n', 'd', **options) is None

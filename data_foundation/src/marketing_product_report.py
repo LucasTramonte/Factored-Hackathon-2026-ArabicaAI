@@ -153,7 +153,28 @@ def marketing_product(data: dict, insights: dict | None = None) -> str:
         ], [('metric','Measure'),('annual','2024 → 2025'),('observed','Change, pp'),
             ('p20','P20, pp'),('p50','P50, pp'),('p80','P80, pp'),
             ('range','P2.5–P97.5, pp')])
-        body += '<p>Monte Carlo: 20,000 draws, fixed seed 20260928. Each draw resamples 12 paired calendar months with replacement and recomputes annual rates from their numerators and denominators. Only complete 2024 and 2025 enter. Percentiles show sensitivity to month composition; they are not customer-level confidence intervals, causal effects or production forecasts. Customer-months overlap, and the dataset is synthetic. <a href="marketing-product-insights.json">Download exact counts and simulation settings</a>.</p></section>'
+        body += (
+            '<p><strong>Method and assumption.</strong> The annual rates and changes above '
+            'are exact for this synthetic snapshot. For sensitivity only, 20,000 seeded '
+            'draws (20260928; product uses 20260929) sample 12 matched calendar-month '
+            'pairs with replacement and recompute each denominator-weighted rate. '
+            'This treats months as exchangeable; season pairing does not remove trend, '
+            'serial dependence or repeated customers. P2.5–P97.5 is a simulation range, '
+            'not a 95% confidence interval. It is not a production forecast or a '
+            'causal effect. Only complete 2024 and 2025 enter.</p>'
+            f'<p><strong>Without simulation:</strong> leaving out any one month gives '
+            f'{activity_change["leave_one_month_out_change_pp"]["min"]:+.2f} to '
+            f'{activity_change["leave_one_month_out_change_pp"]["max"]:+.2f} points '
+            f'for activity continuation, and '
+            f'{marketing_change["leave_one_month_out_change_pp"]["min"]:+.3f} to '
+            f'{marketing_change["leave_one_month_out_change_pp"]["max"]:+.3f} for '
+            f'recorded conversion per send. The Marketing change is '
+            f'{marketing_change["half_year_change_pp"]["jan_jun"]:+.3f} points '
+            f'in Jan–Jun and {marketing_change["half_year_change_pp"]["jul_dec"]:+.3f} '
+            'in Jul–Dec. These are descriptive checks, not significance tests. '
+            '<a href="marketing-product-insights.json">Download exact counts, diagnostics '
+            'and simulation settings</a>.</p></section>'
+        )
     body += '<section><h2>What is measurable by month or year?</h2><p>Choose a year and, optionally, one month. Send measures use business send_date; product activity uses transaction_date. A year combines monthly customer-month transitions, not distinct retained customers for the year.</p><div class="filters"><label>Year <select id="time-year"><option value="all">All available</option></select></label><label>Month <select id="time-month"><option value="all">All months</option></select></label></div><p id="time-window" class="muted"></p><div id="time-cards" class="cards"></div><div id="time-send"></div><div id="time-rate"></div><div id="time-activity"></div><p class="note">The activity measure is <strong>adjacent-month transaction activity continuation</strong>: customers with an approved, owner-matched, post-opening transaction in both months / customers with one in the previous month. It is not contractual customer retention or proof of feature use. The first month has no observed predecessor; if it began mid-month, its follow-up is also excluded from the continuation rate. The last observed transaction month ends on '+esc(activity_last_day)+'; if incomplete, it is excluded from the continuation rate. The latest send month may also have incomplete conversions. Current product ownership and the digital funnel below remain full-snapshot measures and do not change with this filter.</p></section>'
     body += '<section><h2>Decision from this evidence</h2>'
     body += table([
