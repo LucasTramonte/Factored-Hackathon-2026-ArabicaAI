@@ -59,3 +59,15 @@ docker-pipeline: docker-build
 		-e AWS_SHARED_CREDENTIALS_FILE=/run/aws/credentials \
 		-e AWS_PROFILE=$(AWS_PROFILE) -e AWS_REGION=$(AWS_REGION) -e S3_BUCKET=$(S3_BUCKET) \
 		latam-bank-pipeline:test sh -c 'python data_pipelines/bronze/run_ingestion.py && python data_pipelines/silver/run_silver.py && python -m data_pipelines.quality.run_quality'
+
+# Explicit opt-in: imports authorized local caches, never calls Jev.
+JEV_FIRST_CACHE ?= data_foundation/runs/jev-label-audit/audit.sqlite
+JEV_SECOND_CACHE ?= data_foundation/runs/jev-second-pass/second-pass.sqlite
+.PHONY: transcript-labels pipeline-with-labels
+transcript-labels:
+	$(PYTHON) -m data_pipelines.quality.run_quality --db "$(DATA_DIR)/latam_bank.duckdb" --tables call_center_interactions,call_transcripts
+	$(PYTHON) -m data_pipelines.transcript_labels --db "$(DATA_DIR)/latam_bank.duckdb" --first "$(JEV_FIRST_CACHE)" --second "$(JEV_SECOND_CACHE)"
+
+pipeline-with-labels:
+	$(MAKE) pipeline
+	$(MAKE) transcript-labels
