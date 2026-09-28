@@ -3,10 +3,12 @@ import duckdb
 import json
 
 from data_foundation.src.marketing_product_evidence import analyze
-from data_foundation.src.marketing_product_report import marketing_product, complete_activity_rows, complete_intake_years
+from data_foundation.src.marketing_product_insights import paired_month_change, summarize_insights
+from data_foundation.src.marketing_product_report import marketing_product, complete_activity_rows, complete_intake_years, write_reports
 from data_foundation.scripts.run_marketing_product import validate_quality_identity, published_manifest
 from data_foundation.scripts import run_marketing_product as report_runner
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 import pytest
 
 
@@ -85,10 +87,10 @@ def test_silver_aggregates_keep_denominators_and_owner_checks(con):
     rendered=marketing_product(data)
     assert 'Recorded conversion' in rendered
     assert 'CAC' in rendered and 'LTV' in rendered
-    assert 'Decision: test an accepted case and useful handoff' in rendered
-    assert 'Compare checklist and AI' in rendered
-    assert rendered.index('1. Test the handoff') < rendered.index('Work backward from the customer') < rendered.index('What is measurable by month or year?')
-    assert 'safe accepted intake' in rendered
+    assert 'Marketing and Product: what changes a decision?' in rendered
+    assert 'Product: feature-use analysis is blocked' in rendered
+    assert 'Marketing: audit channel measurement first' in rendered
+    assert rendered.index('Marketing and Product: what changes a decision?') < rendered.index('What is measurable by month or year?')
     assert '100.00% of 2 eligible sessions' in rendered
     assert 'id="time-year"' in rendered and 'id="time-month"' in rendered
     assert 'const sendMonths=' in rendered and 'Monthly send trend by business date</summary>' not in rendered
@@ -106,6 +108,39 @@ def test_complete_intake_years_excludes_partial_boundaries_and_missing_months():
                                               {'year': 2025, 'v1': 12}]
     intake['monthly'] = [row for row in rows if row['month'] != '2025-05-01']
     assert complete_intake_years(intake) == [{'year': 2024, 'v1': 12}]
+
+
+
+def test_paired_month_bootstrap_requires_complete_matched_years():
+    """Month-pair resampling preserves weighted rates and refuses partial years."""
+    rows = [{'month': f'{year}-{month:02d}-01', 'n': 1 if year == 2024 else 2,
+             'd': 10}
+            for year in (2024, 2025) for month in range(1, 13)]
+    options = {'first_date': '2023-06-17', 'last_date': '2026-06-18',
+               'seed': 7, 'draws': 100}
+    change = paired_month_change(rows, 'n', 'd', **options)
+    assert (change['earlier_numerator'], change['later_numerator']) == (12, 24)
+    assert change['observed_change_pp'] == pytest.approx(10)
+    assert all(value == pytest.approx(10)
+               for value in change['resampled_change_pp'].values())
+    assert paired_month_change(rows[:-1], 'n', 'd', **options) is None
+    assert paired_month_change(rows + [rows[-1]], 'n', 'd', **options) is None
+    assert paired_month_change(rows, 'n', 'd', **{**options, 'first_date': '2024-02-01'}) is None
+
+
+def test_curated_report_and_simulation_match_published_aggregates(tmp_path):
+    """A reviewed HTML release must remain reproducible from its source JSON."""
+    published = Path(__file__).resolve().parents[1] / 'reports'
+    data = json.loads((published / 'aggregates.json').read_text())
+    expected = summarize_insights(data)
+    assert json.loads((published / 'marketing-product-insights.json').read_text()) == expected
+    write_reports(data, tmp_path)
+    for name in ('aggregates.json', 'marketing-product-insights.json',
+                 'index.html', 'marketing-product.html', 'intake-decision.html'):
+        assert (tmp_path / name).read_bytes() == (published / name).read_bytes()
+    html = (published / 'marketing-product.html').read_text()
+    assert html.index('Marketing and Product: what changes a decision?') < html.index('What is measurable by month or year?')
+    assert 'P20 +2.88, P50 +3.08, P80 +3.25' in html
 
 
 def test_quality_identity_rejects_stale_database(tmp_path):

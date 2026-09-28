@@ -1,0 +1,82 @@
+{
+  "source_generated_at_utc": "2026-09-28T12:52:07.495949+00:00",
+  "method": {
+    "years": [
+      2024,
+      2025
+    ],
+    "draws": 20000,
+    "seed": 20260928,
+    "description": "Paired calendar-month bootstrap with replacement; each draw resamples 12 month pairs and recomputes denominator-weighted annual rates.",
+    "interpretation": "Percentiles describe sensitivity to which months are represented. They are not causal effects, a production forecast, or a customer-level confidence interval."
+  },
+  "marketing": {
+    "sends": 1746801,
+    "exposed_customers": 150000,
+    "repeat_exposed_customers": 149988,
+    "current_opt_out_sends": 874417,
+    "silent_channels": {
+      "names": [
+        "WhatsApp",
+        "Voice"
+      ],
+      "sends": 403673,
+      "delivered": 379472,
+      "open_known": 0,
+      "clicks": 0,
+      "recorded_conversions": 0
+    },
+    "recorded_conversion_change": {
+      "years": [
+        2024,
+        2025
+      ],
+      "months_per_year": 12,
+      "earlier_numerator": 3309,
+      "earlier_denominator": 591033,
+      "later_numerator": 3057,
+      "later_denominator": 587927,
+      "earlier_rate_pct": 0.5598672155361883,
+      "later_rate_pct": 0.5199625123527241,
+      "observed_change_pp": -0.039904703183464285,
+      "matched_months_higher": 4,
+      "resampled_change_pp": {
+        "p2_5": -0.10262873909894599,
+        "p20": -0.06766752293725176,
+        "p50": -0.040493270798804715,
+        "p80": -0.012586986886015894,
+        "p97_5": 0.024609505187716207
+      }
+    }
+  },
+  "product": {
+    "active_products": 339965,
+    "linked_products": 169570,
+    "pre_opening_transactions": 827610,
+    "all_transactions": 4425008,
+    "identified_digital_product_links": 1094242,
+    "digital_product_owner_mismatch": 1094226,
+    "activity_continuation_change": {
+      "years": [
+        2024,
+        2025
+      ],
+      "months_per_year": 12,
+      "earlier_numerator": 361660,
+      "earlier_denominator": 683195,
+      "later_numerator": 429338,
+      "later_denominator": 766683,
+      "earlier_rate_pct": 52.93657008613939,
+      "later_rate_pct": 55.999415664622795,
+      "observed_change_pp": 3.0628455784834046,
+      "matched_months_higher": 12,
+      "resampled_change_pp": {
+        "p2_5": 2.612338586596465,
+        "p20": 2.8821908568348675,
+        "p50": 3.0756201192930703,
+        "p80": 3.251645763166117,
+        "p97_5": 3.4672280678965777
+      }
+    }
+  }
+}

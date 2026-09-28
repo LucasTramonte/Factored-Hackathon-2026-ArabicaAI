@@ -7,6 +7,8 @@ from calendar import monthrange
 from datetime import date
 from pathlib import Path
 
+from data_foundation.src.marketing_product_insights import summarize_insights
+
 STYLE = """<style>
 :root{font-family:Inter,system-ui,sans-serif;color:#162b35;background:#edf2f0}*{box-sizing:border-box}body{margin:0}
 header{background:#10343a;color:#fff;padding:46px max(24px,calc((100vw - 1100px)/2))}header p{max-width:780px;line-height:1.6;color:#d0e5e1}
@@ -78,36 +80,96 @@ def complete_intake_years(intake: dict) -> list[dict]:
             and len(rows) == 12 and {str(row['month'])[5:7] for row in rows} == full_months]
 
 
-def marketing_product(data: dict) -> str:
-    """Render Marketing and Product counts, sensitivity, funnel and caveats."""
+def marketing_product(data: dict, insights: dict | None = None) -> str:
+    """Render independent Marketing and Product decisions from aggregate evidence."""
     m, p, d, econ, activity = data["marketing"], data["products"], data["digital"], data["economics"], data["activity"]
     o, q, e, s = m["overall"], m["quality"], d["events"], d["sessions"]
-    v1 = next((r for r in data["intake"]["populations"] if r["population"].startswith("V1:")), {})
+    insight = insights if insights is not None else summarize_insights(data)
+    marketing_change = insight["marketing"]["recorded_conversion_change"]
+    activity_change = insight["product"]["activity_continuation_change"]
     activity_last_day = date.fromisoformat(str(activity['last_transaction'])[:10])
-    years = complete_intake_years(data['intake'])
-    year_text = ' and '.join(f"{num(row['v1'])} in {row['year']}" for row in years) or 'no complete calendar year observed'
-    body = '<section class="decision"><h2>Decision: test an accepted case and useful handoff</h2><div class="takeaways">'
-    body += '<article><h3>1. Test the handoff</h3><p>'+num(v1.get('call_center',0))+' / '+num(v1.get('complaints',0))+' unrecognized-charge complaints came through the Call Center ('+pct(v1.get('call_center',0),v1.get('complaints',0))+'). V1 demand was '+esc(year_text)+' by complaint creation date. These supplied-data counts do not forecast production traffic or time saved.</p></article>'
-    body += '<article><h3>2. Measure the customer outcome</h3><p>Recorded campaign conversion flags occur on '+pct(o['recorded_conversions'],o['sends'])+' of sends; ordered form submission is '+pct(s['submit_after_click'],s['navigation_view'])+' of navigation-view sessions. Neither records accepted intake. Count every eligible start, including abandonment and failure, before claiming a V1 baseline or modeling gain.</p></article>'
-    body += '<article><h3>3. Defer acquisition and targeting claims</h3><p>The data lack a verified lead-to-customer link, historical consent, bank contribution and reliable digital product ownership. CAC, LTV, retention and attribution remain unmeasured. A 3:1 LTV/CAC comparison has no valid inputs here.</p></article></div></section>'
-    body += '<section><h2>Work backward from the customer</h2><p>A customer sees a charge they do not recognize. They need to confirm the transaction, approve an accurate report and receive a case reference with clear human-review next steps. V1 joins authenticated evidence retrieval, clarification, customer approval, backend acceptance and handoff. The complaint counts support testing that journey; they cannot show whether it works.</p><p><strong>Next test:</strong> instrument every eligible start through retrieval, approval, backend acceptance, reference delivery, failure, retry, abandonment and handoff. Compare checklist and AI on the same held-out, human-reviewed Spanish and Portuguese case families. Report safe accepted intake / all eligible starts, unsafe outcomes, duplicate cases and handoff usefulness. Related and translated cases stay in one split.</p></section>'
-    body += '<section><h2>What the current data can answer</h2><p>The complete-year V1 counts above are close, but this synthetic history is no production forecast. Campaign delivery and response are measured at the send grain. Product-linked transaction activity is counted only when owner and opening date agree. The digital funnel describes generic session engagement.</p><p><strong>Still unanswered:</strong> intake completion needs backend episode and acceptance events; lead conversion needs a stable prospect-to-customer link; CAC and LTV need cost currency and customer contribution; historical targeting needs consent at send time. <a href="../../Docs/Plans/marketing-product-gold-contract.md">Data request</a> · <a href="aggregates.json">Aggregate counts</a> · <a href="manifest.json">Run provenance</a>.</p></section>'
+    body = '<section class="decision"><h2>Marketing and Product: what changes a decision?</h2><div class="takeaways">'
+    if activity_change:
+        change = activity_change
+        spread = change["resampled_change_pp"]
+        body += (
+            '<article><h3>Product: repeat transaction activity rose</h3><p>'
+            f'{change["earlier_rate_pct"]:.2f}% in 2024 → {change["later_rate_pct"]:.2f}% in 2025 '
+            f'({change["observed_change_pp"]:+.2f} percentage points); '
+            f'{change["matched_months_higher"]}/12 matched months were higher. '
+            f'Month-pair Monte Carlo change: P20 {spread["p20"]:+.2f}, '
+            f'P50 {spread["p50"]:+.2f}, P80 {spread["p80"]:+.2f} points. '
+            'This is adjacent-month transaction activity; cohort mix and causes remain unknown.</p></article>'
+        )
+    body += (
+        '<article><h3>Product: feature-use analysis is blocked</h3><p>'
+        f'{num(insight["product"]["digital_product_owner_mismatch"])} / '
+        f'{num(insight["product"]["identified_digital_product_links"])} identified '
+        'digital product links disagree with the product owner. The generic session '
+        'funnel has no verified task-completion event. Fix identity and outcome events '
+        'before ranking features.</p></article>'
+    )
+    silent = insight["marketing"]["silent_channels"]
+    body += (
+        '<article><h3>Marketing: audit channel measurement first</h3><p>'
+        f'{num(silent["sends"])} sends ({pct(silent["sends"],o["sends"])}) went through '
+        'WhatsApp or Voice; they have no known opens and zero recorded clicks or '
+        'conversions. Another '+num(insight["marketing"]["current_opt_out_sends"])+
+        ' send records belong to customers opted out in the current snapshot. '
+        'Neither finding proves poor channel performance or a historical consent violation.</p></article>'
+    )
+    if marketing_change:
+        change = marketing_change
+        spread = change["resampled_change_pp"]
+        body += (
+            '<article><h3>Marketing: the annual response change is uncertain</h3><p>'
+            f'Recorded conversion per send moved from {change["earlier_rate_pct"]:.3f}% '
+            f'to {change["later_rate_pct"]:.3f}% ({change["observed_change_pp"]:+.3f} points). '
+            f'Month-pair Monte Carlo change: P20 {spread["p20"]:+.3f}, '
+            f'P50 {spread["p50"]:+.3f}, P80 {spread["p80"]:+.3f} points. '
+            'The wider exploratory range includes zero. Do not call this a measured '
+            'decline in customer acquisition.</p></article>'
+        )
+    body += '</div></section>'
+    body += '<section><h2>Which customer questions are worth pursuing?</h2><p><strong>Product:</strong> Why did adjacent-month transaction activity strengthen, and can customers actually finish a specific digital task? The current snapshot gives a behavioral signal, but no task outcome or historical product state. Start with one defined journey, repaired product ownership, completion/failure events and direct customer or agent review.</p><p><strong>Marketing:</strong> Are customers receiving too many or irrelevant messages, and which channel can be measured fairly? The sample has '+f'{insight["marketing"]["sends"] / insight["marketing"]["exposed_customers"]:.2f}'+' sends per exposed customer on average. Recover consent and segment at send time, reconcile channel-specific response definitions, and test a verified outcome against a holdout before personalizing.</p><p>These are discovery questions for this synthetic dataset, not claims about real bank customers. The selected hackathon intake workflow remains a separate decision; <a href="intake-decision.html">its complaint evidence is here</a>.</p></section>'
+    if marketing_change and activity_change:
+        def change_row(label: str, change: dict, digits: int) -> dict:
+            """Format month-resampling sensitivity without implying causal inference."""
+            spread = change["resampled_change_pp"]
+            fmt = f".{digits}f"
+            return {
+                "metric": label,
+                "annual": f'{change["earlier_rate_pct"]:{fmt}}% → {change["later_rate_pct"]:{fmt}}%',
+                "observed": f'{change["observed_change_pp"]:+{fmt}}',
+                "p20": f'{spread["p20"]:+{fmt}}',
+                "p50": f'{spread["p50"]:+{fmt}}',
+                "p80": f'{spread["p80"]:+{fmt}}',
+                "range": f'{spread["p2_5"]:+{fmt}} to {spread["p97_5"]:+{fmt}}',
+            }
+        body += '<section><h2>2024–2025 month-level sensitivity</h2>'
+        body += table([
+            change_row('Activity continuation', activity_change, 2),
+            change_row('Recorded conversion / send', marketing_change, 3),
+        ], [('metric','Measure'),('annual','2024 → 2025'),('observed','Change, pp'),
+            ('p20','P20, pp'),('p50','P50, pp'),('p80','P80, pp'),
+            ('range','P2.5–P97.5, pp')])
+        body += '<p>Monte Carlo: 20,000 draws, fixed seed 20260928. Each draw resamples 12 paired calendar months with replacement and recomputes annual rates from their numerators and denominators. Only complete 2024 and 2025 enter. Percentiles show sensitivity to month composition; they are not customer-level confidence intervals, causal effects or production forecasts. Customer-months overlap, and the dataset is synthetic. <a href="marketing-product-insights.json">Download exact counts and simulation settings</a>.</p></section>'
     body += '<section><h2>What is measurable by month or year?</h2><p>Choose a year and, optionally, one month. Send measures use business send_date; product activity uses transaction_date. A year combines monthly customer-month transitions, not distinct retained customers for the year.</p><div class="filters"><label>Year <select id="time-year"><option value="all">All available</option></select></label><label>Month <select id="time-month"><option value="all">All months</option></select></label></div><p id="time-window" class="muted"></p><div id="time-cards" class="cards"></div><div id="time-send"></div><div id="time-rate"></div><div id="time-activity"></div><p class="note">The activity measure is <strong>adjacent-month transaction activity continuation</strong>: customers with an approved, owner-matched, post-opening transaction in both months / customers with one in the previous month. It is not contractual customer retention or proof of feature use. The first month has no observed predecessor; if it began mid-month, its follow-up is also excluded from the continuation rate. The last observed transaction month ends on '+esc(activity_last_day)+'; if incomplete, it is excluded from the continuation rate. The latest send month may also have incomplete conversions. Current product ownership and the digital funnel below remain full-snapshot measures and do not change with this filter.</p></section>'
-    body += '<section><h2>What should the team do next?</h2>'
+    body += '<section><h2>Decision from this evidence</h2>'
     body += table([
-      {"work":"Instrument V1 and verify a complete handoff", "decision":"Now", "reason":"Capture all eligible starts and backend-confirmed outcomes; the current data have no V1 success baseline."},
-      {"work":"Compare checklist and AI", "decision":"Next", "reason":"Use the same held-out, human-reviewed ES/PT case families; measure accepted intake, safety and handoff quality."},
-      {"work":"Campaign, targeting and attribution models", "decision":"Wait", "reason":"Add consent-at-send-time, verified customer outcomes and a controlled comparison before estimating incremental value."},
-    ],[("work","Work"),("decision","When"),("reason","Evidence needed")])
-    body += '<p>No integrated model gain has been measured. A live A/B test needs its own assignment and power plan.</p></section>'
-    body += '<section><h2>Questions the current records cannot settle</h2>'
+      {"work":"Product journey discovery", "decision":"Investigate", "reason":"Validate the repeat-activity signal with stable customer cohorts and one verified digital task outcome."},
+      {"work":"Marketing measurement and consent history", "decision":"Repair first", "reason":"Reconcile channel response definitions and consent at send time before comparing or targeting customers."},
+      {"work":"Attribution, CAC/LTV and personalization models", "decision":"Wait", "reason":"No verified acquisition, bank contribution, historical consent or randomized holdout supports a value claim."},
+    ],[("work","Use case"),("decision","Decision"),("reason","Evidence threshold")])
+    body += '<p>None of these records establishes what a real customer needs. Use interviews or reviewed service cases to validate the problem before funding a model.</p></section>'
+    body += '<section><h2>Open questions and missing sources</h2>'
     body += table([
-      {"question":"Did V1 produce a safe accepted case?", "missing":"Episode starts, backend acceptance, failure, abandonment and handoff events"},
-      {"question":"Do campaigns acquire customers?", "missing":"Prospect IDs, verified customer creation, assignment and a durable lead-to-customer link"},
-      {"question":"Is acquisition or retention the better investment?", "missing":"Complete acquisition cost and currency, bank contribution and effective-dated customer lifecycle"},
-      {"question":"Does targeting help?", "missing":"Consent at exposure time, verified outcome, holdout and valid product ownership"},
+      {"question":"Did a customer complete a digital task?", "missing":"Task ID, start, backend-confirmed completion, error and subsequent support contact"},
+      {"question":"Did a message help rather than add unwanted contact?", "missing":"Consent and segment at exposure time, outcome, customer-level assignment and holdout"},
+      {"question":"Did a lead become a customer?", "missing":"Prospect ID, verified creation event and durable lead-to-customer link"},
+      {"question":"Did activity become retention or bank value?", "missing":"Effective-dated lifecycle, cohort eligibility, bank contribution and complete cost currency"},
     ],[("question","Decision question"),("missing","Missing source")])
-    body += '<p>Costs are incomplete: send_cost is known on '+num(econ['send_cost_known'])+' / '+num(econ['sends'])+' sends and campaign budget on '+num(econ['campaign_budget_known'])+' / '+num(econ['campaigns'])+' campaigns, with undocumented currency and overlap. '+num(econ['pre_registration_sends'])+' sends precede recipients’ current registration dates; this does not make them leads. Transaction amounts are customer cash flows, not bank revenue. See the <a href="../../Docs/Plans/marketing-product-gold-contract.md">Gold data request</a> for the required grains and checks.</p></section>'
+    body += '<p>Send cost is known on '+num(econ['send_cost_known'])+' / '+num(econ['sends'])+' sends and campaign budget on '+num(econ['campaign_budget_known'])+' / '+num(econ['campaigns'])+' campaigns, with undocumented currency and overlap. '+num(econ['pre_registration_sends'])+' sends precede recipients’ current registration dates; this does not make them leads. Transaction amounts are customer cash flows, not bank revenue. See the <a href="../../Docs/Plans/marketing-product-gold-contract.md">Gold data request</a>.</p></section>'
     body += '<details><summary>Detailed Marketing and Product diagnostics</summary>'
     body += '<section><h2>Marketing execution diagnostics</h2><div class="cards">'
     body += card('Valid sends', num(o['sends']), 'One deduplicated send_id')
@@ -187,7 +249,7 @@ function rate(n,d){{return d? (100*n/d).toFixed(2)+'% ('+n.toLocaleString()+'/'+
 function draw(){{const dim=document.getElementById('dimension').value;chart.replaceChildren();const t=document.createElement('table');const head=document.createElement('tr');for(const name of ['Group','Sends','Delivery','Known opens','Known clicks','Recorded conversion']){{const th=document.createElement('th');th.textContent=name;head.append(th)}}t.append(head);
 for(const row of groups[dim]){{const r=row.sends?100*row.recorded_conversions/row.sends:0;const div=document.createElement('div');div.className='bar';const label=document.createElement('span');label.textContent=row.label;const track=document.createElement('div');track.className='track';const fill=document.createElement('div');fill.className='fill';fill.style.width=Math.min(r*10,100)+'%';track.append(fill);const value=document.createElement('b');value.textContent=r.toFixed(2)+'% · '+row.recorded_conversions.toLocaleString()+'/'+row.sends.toLocaleString();div.append(label,track,value);chart.append(div);
 const tr=document.createElement('tr');for(const val of [row.label,row.sends.toLocaleString(),rate(row.delivered,row.delivery_known),rate(row.opens,row.open_known),rate(row.clicks,row.click_known),rate(row.recorded_conversions,row.sends)]){{const td=document.createElement('td');td.textContent=val;tr.append(td)}}t.append(tr)}}groupTable.replaceChildren(t)}}document.getElementById('dimension').addEventListener('change',draw);draw()</script>'''
-    return shell('Marketing & Product evidence', 'A customer decision brief for the selected unrecognized-charge intake workflow.', body)
+    return shell('Marketing & Product evidence', 'Customer questions, measured patterns and decisions from one verified synthetic-data snapshot.', body)
 
 
 def intake(data: dict) -> str:
@@ -207,17 +269,49 @@ def intake(data: dict) -> str:
     return shell('Suspicious-charge intake decision', 'Corrected complaint population and evidence for a human-handoff test.', body)
 
 
-def hub(data: dict) -> str:
-    """Render a concise private report index from the same aggregate run."""
-    v=next((r for r in data['intake']['populations'] if r['population'].startswith('V1:')),None)
-    body='<section class="decision"><h2>Decision: test a complete unrecognized-charge handoff</h2><p>'+num(v['call_center'] if v else 0)+' / '+num(v['complaints'] if v else 0)+' V1 complaints came through the Call Center. Build and measure an accepted case with a useful agent handoff. The current records do not measure intake success or a gain from AI.</p><p><a href="marketing-product.html">Read the customer decision brief →</a></p></section>'
-    body += '<section><h2>Explore the evidence</h2><p><a href="intake-decision.html">Complaint population and monthly counts →</a> · <a href="aggregates.json">Aggregate JSON →</a> · <a href="manifest.json">Source and quality manifest →</a> · <a href="../../Docs/Plans/marketing-product-gold-contract.md">Missing data request →</a></p><p>Campaign sends, complaint records and transactions are separate populations. CAC, LTV and accepted-intake rates are unavailable.</p></section>'
-    return shell('Arabica evidence hub','Private, offline review of the verified synthetic-data snapshot.',body)
+def hub(data: dict, insights: dict | None = None) -> str:
+    """Lead the private report index with the independent Marketing/Product findings."""
+    result = insights if insights is not None else summarize_insights(data)
+    activity = result["product"]["activity_continuation_change"]
+    zero_channels = result["marketing"]["silent_channels"]
+    body = '<section class="decision"><h2>Marketing and Product: decisions from this dataset</h2>'
+    if activity:
+        body += (
+            f'<p><strong>Product:</strong> adjacent-month transaction activity rose '
+            f'from {activity["earlier_rate_pct"]:.2f}% in 2024 to '
+            f'{activity["later_rate_pct"]:.2f}% in 2025. That warrants cohort and '
+            'task-completion discovery; it is not customer retention.</p>'
+        )
+    body += (
+        f'<p><strong>Marketing:</strong> {num(zero_channels["sends"])} WhatsApp '
+        'and Voice sends have no known opens and zero recorded clicks or '
+        'conversions. Audit channel measurement and historical consent '
+        'before reallocating spend or targeting customers.</p>'
+        '<p><a href="marketing-product.html">Read the analysis and month-level '
+        'Monte Carlo sensitivity →</a></p></section>'
+    )
+    body += (
+        '<section><h2>Other evidence</h2><p><a href="intake-decision.html">'
+        'Selected intake workflow →</a> · <a href="aggregates.json">'
+        'Verified aggregate counts →</a> · <a href="marketing-product-insights.json">'
+        'Derived findings and simulation settings →</a> · <a href="manifest.json">'
+        'Source and quality manifest →</a></p><p>This is a synthetic snapshot. '
+        'It does not establish campaign lift, product-feature effects, CAC, '
+        'LTV or customer retention.</p></section>'
+    )
+    return shell('Arabica evidence hub',
+                 'Private, offline review of verified synthetic data.', body)
 
 
 def write_reports(data: dict, destination: Path) -> None:
-    """Write the three self-contained HTML views and their aggregate JSON."""
+    """Write offline HTML, source aggregates and deterministic derived insights."""
     destination.mkdir(parents=True,exist_ok=True)
-    (destination/'aggregates.json').write_text(json.dumps(data,indent=2,ensure_ascii=False,default=str)+'\n',encoding='utf-8')
-    for name,content in [('index.html',hub(data)),('marketing-product.html',marketing_product(data)),('intake-decision.html',intake(data))]:
+    insights = summarize_insights(data)
+    (destination/'aggregates.json').write_text(
+        json.dumps(data,indent=2,ensure_ascii=False,default=str)+'\n',encoding='utf-8')
+    (destination/'marketing-product-insights.json').write_text(
+        json.dumps(insights,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
+    for name,content in [('index.html',hub(data,insights)),
+                         ('marketing-product.html',marketing_product(data,insights)),
+                         ('intake-decision.html',intake(data))]:
         (destination/name).write_text(content,encoding='utf-8')
