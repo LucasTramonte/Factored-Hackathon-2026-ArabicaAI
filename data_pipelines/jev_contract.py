@@ -83,4 +83,3 @@ def status(result):
     if choice=='balance_plus_ambiguous_followup' and b>0.7 and o<0.3 and v>0.7:return 'balance_with_ambiguous_followup'
     if choice=='balance_only' and b>0.7 and o<0.3 and v<0.3:return 'balance_only_supported'
     return 'inconclusive_review'
-
