@@ -33,7 +33,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"Unknown tables: {sorted(set(selected)-set(CONTRACTS))}")
     run_dir = args.output_root / args.run_id
     run_dir.mkdir(parents=True, exist_ok=False)
-    temp_dir = root / "duckdb_tmp"
+    # Keep spill files beside the selected database, including fixture databases
+    # passed with --db. The repository data directory may be read-only or absent.
+    temp_dir = args.db.parent / "duckdb_tmp"
     temp_dir.mkdir(parents=True, exist_ok=True)
     with duckdb.connect(str(args.db), read_only=True) as con:
         con.execute("SET memory_limit=?", [args.memory_limit])
