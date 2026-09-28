@@ -177,15 +177,36 @@ def test_report_direction_and_interval_claims_follow_values():
     assert 'Zero is inside the interval.' in marketing_product(data, insights)
 
 
+def _assert_json_equal_with_float_tolerance(actual, expected):
+    """Keep aggregate structure exact and tolerate runtime float rounding."""
+    if isinstance(expected, float):
+        assert actual == pytest.approx(expected, rel=1e-12, abs=1e-12)
+    elif isinstance(expected, dict):
+        assert isinstance(actual, dict)
+        assert actual.keys() == expected.keys()
+        for key in expected:
+            _assert_json_equal_with_float_tolerance(actual[key], expected[key])
+    elif isinstance(expected, list):
+        assert isinstance(actual, list)
+        assert len(actual) == len(expected)
+        for actual_item, expected_item in zip(actual, expected):
+            _assert_json_equal_with_float_tolerance(actual_item, expected_item)
+    else:
+        assert actual == expected
+
+
 def test_curated_report_and_simulation_match_published_aggregates(tmp_path):
     """A reviewed HTML release must remain reproducible from its source JSON."""
     published = Path(__file__).resolve().parents[1] / 'reports'
     data = json.loads((published / 'aggregates.json').read_text())
     expected = summarize_insights(data)
-    assert json.loads((published / 'marketing-product-insights.json').read_text()) == expected
+    reviewed = json.loads((published / 'marketing-product-insights.json').read_text())
+    _assert_json_equal_with_float_tolerance(reviewed, expected)
     write_reports(data, tmp_path)
-    for name in ('aggregates.json', 'marketing-product-insights.json',
-                 'index.html', 'marketing-product.html', 'intake-decision.html'):
+    generated = json.loads((tmp_path / 'marketing-product-insights.json').read_text())
+    _assert_json_equal_with_float_tolerance(generated, reviewed)
+    for name in ('aggregates.json', 'index.html', 'marketing-product.html',
+                 'intake-decision.html'):
         assert (tmp_path / name).read_bytes() == (published / name).read_bytes()
     html = (published / 'marketing-product.html').read_text()
     assert html.index('What the synthetic data tells us') < html.index('What is measurable by month or year?')

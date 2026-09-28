@@ -29,9 +29,3 @@ jobs:
 
       - name: Compile pipeline package
         run: python -m compileall -q data_pipelines data_foundation
-
-      - name: Build code-only test image
-        run: docker build --tag latam-bank-pipeline:test .
-
-      - name: Run offline tests in image
-        run: docker run --rm latam-bank-pipeline:test

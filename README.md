@@ -53,7 +53,7 @@ If the CSVs are installed locally, run `make setup` and `make pipeline-local`. O
 | `make docker-test` | Run offline tests in the code-only container. |
 | `make docker-pipeline` | Run the pipeline with local `data/` and `~/.aws` mounted at runtime. |
 
-Docker reuses cached build layers on later runs. For a smaller first S3 check, follow the targeted commands in [REPRODUCIBILITY.md](REPRODUCIBILITY.md). CI runs offline tests and a Docker build; it does not need S3 credentials.
+Docker reuses cached build layers on later runs. For a smaller first S3 check, follow the targeted commands in [REPRODUCIBILITY.md](REPRODUCIBILITY.md). CI runs offline tests and compilation without S3 credentials. Docker checks remain available with `make docker-test`.
 
 ## Where to look next
 
