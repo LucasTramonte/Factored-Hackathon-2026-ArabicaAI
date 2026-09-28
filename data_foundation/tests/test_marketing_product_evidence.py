@@ -13,15 +13,15 @@ def test_silver_aggregates_keep_denominators_and_owner_checks():
     con = duckdb.connect(':memory:')
     con.execute('CREATE SCHEMA silver')
     con.execute("""CREATE TABLE silver.dim_customers AS SELECT * FROM (VALUES
-      ('C1','Retail','México',FALSE),('C2','Retail','Colombia',TRUE))
-      t(customer_id,segment,country,accepts_marketing)""")
+      ('C1','Retail','México',FALSE,TIMESTAMP '2024-01-01'),('C2','Retail','Colombia',TRUE,TIMESTAMP '2024-02-03'))
+      t(customer_id,segment,country,accepts_marketing,registration_date)""")
     con.execute("""CREATE TABLE silver.dim_marketing_campaigns AS SELECT * FROM (VALUES
-      ('M1','Adoption','Retail','México',DATE '2024-01-01',DATE '2024-01-31'))
-      t(campaign_id,campaign_objective,target_segment,target_country,start_date,end_date)""")
+      ('M1','Adoption','Retail','México',DATE '2024-01-01',DATE '2024-01-31',100.0))
+      t(campaign_id,campaign_objective,target_segment,target_country,start_date,end_date,budget)""")
     con.execute("""CREATE TABLE silver.fact_campaign_sends AS SELECT * FROM (VALUES
-      ('S1','C1','M1',TIMESTAMP '2024-01-02',DATE '2024-01-03','Email',TRUE,TRUE,NULL,TRUE,TIMESTAMP '2024-01-04',NULL),
-      ('S2','C2','M1',TIMESTAMP '2024-02-02',DATE '2024-02-02','SMS',NULL,NULL,NULL,FALSE,NULL,NULL))
-      t(send_id,customer_id,campaign_id,send_date,process_date,send_channel,was_delivered,was_opened,was_clicked,had_conversion,conversion_date,conversion_value)""")
+      ('S1','C1','M1',TIMESTAMP '2024-01-02',DATE '2024-01-03','Email',TRUE,TRUE,NULL,TRUE,TIMESTAMP '2024-01-04',NULL,0.2),
+      ('S2','C2','M1',TIMESTAMP '2024-02-02',DATE '2024-02-02','SMS',NULL,NULL,NULL,FALSE,NULL,NULL,NULL))
+      t(send_id,customer_id,campaign_id,send_date,process_date,send_channel,was_delivered,was_opened,was_clicked,had_conversion,conversion_date,conversion_value,send_cost)""")
     con.execute("""CREATE TABLE silver.dim_products AS SELECT * FROM (VALUES
       ('P1','C1','Checking','Active',DATE '2024-01-02',TRUE),('P2','C2','Savings','Active',DATE '2024-01-01',NULL))
       t(product_id,customer_id,product_type,product_status,opening_date,has_linked_app)""")
@@ -59,8 +59,14 @@ def test_silver_aggregates_keep_denominators_and_owner_checks():
     assert d['sessions']['mixed_identity_sessions']==1
     assert (d['sessions']['navigation_view'],d['sessions']['click_after_view'],d['sessions']['submit_after_click'])==(2,2,2)
     assert data['intake']['populations'][1]['complaints']==1
+    assert data['economics']['send_cost_known']==1
+    assert data['economics']['campaign_budget_known']==1
+    assert data['economics']['pre_registration_sends']==1
+    assert {row['registration_timing']:row['sends'] for row in data['economics']['registration_sensitivity']}=={'before registration':1,'on or after registration':1}
     rendered=marketing_product(data)
     assert 'Recorded conversion' in rendered
+    assert 'CAC' in rendered and 'LTV' in rendered
+    assert '<svg' in rendered and 'Monthly send trend by business date</summary>' not in rendered
     assert 'C1' not in rendered and 'P1' not in rendered
 
 

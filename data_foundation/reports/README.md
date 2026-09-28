@@ -2,6 +2,16 @@
 
 Open [the offline report hub](index.html) to review the [Marketing and Product analysis](marketing-product.html), the [corrected intake decision](intake-decision.html), and their [aggregate JSON](aggregates.json). The [manifest](manifest.json) records the verified Silver database, full quality run, source scope, table counts, and generation time. These files contain aggregate counts only and make no external requests.
 
+## Business decisions and temporal scope
+
+CAC, LTV, LTV/CAC, CAC versus average ticket, lead-to-customer conversion and retention are **not identifiable** from this dataset. There are no eligible lead records or verified campaign-to-new-customer outcomes; bank revenue, margin, full acquisition cost, cost currency and longitudinal exits are also missing. The familiar 3:1 LTV/CAC ratio cannot be tested here. Gross transaction value is not bank revenue.
+
+The 200 campaigns include budget on 169 records. `send_cost` appears on 1,484,718/1,746,801 sends, but its currency and overlap with budget are undocumented. `Acquisition` is an objective label on 277,065 sends with 1,564 recorded conversions, not a measured customer-acquisition outcome. Across all campaigns, 323,060 sends predate the recipient's current `registration_date`; 47,482 of these belong to the Acquisition objective. The report shows this time-order sensitivity instead of assuming those sends are leads.
+
+The time-series charts replace the long monthly table. They plot **send volume** and **recorded conversion per send** separately by business `send_date`, from 2023-07-01 through 2026-06-18. June 2026 is partial: 27,976 sends and 165 recorded conversions. Recent conversion windows may also be right-censored. Hover chart points for exact counts and denominators; the aggregate JSON retains every month.
+
+The evidence cannot rank lead generation against conversion or retention. A future decision needs lead events, acquisition linkage, costs in a known currency, customer contribution and exit history for the same cohort. [The customer-backward brief](../../Docs/Marketing-Product-PRFAQ.md) gives the measurement contract.
+
 ## Findings to carry into a decision
 
 - Marketing: 1,746,801 valid Silver sends; delivery is 1,642,044/1,746,801 (94.00%). Known opens are 487,309/1,262,572 delivered sends with a known open flag (38.60%). Recorded conversions are 9,799/1,746,801 sends (0.56%). These are recorded send outcomes, not independently linked purchases or incremental lift. The 379,472 unknown open flags are visible rather than counted as closed.

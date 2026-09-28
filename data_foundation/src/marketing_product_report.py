@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import html
 import json
+import math
+from calendar import monthrange
+from datetime import date
 from pathlib import Path
 
 STYLE = """<style>
@@ -13,7 +16,7 @@ section{background:#fff;border-radius:16px;padding:26px;margin:18px 0;box-shadow
 nav{display:flex;gap:18px;flex-wrap:wrap;margin-top:22px}a{color:#0e746f}header a{color:#b8fff3}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.card{background:#eef7f4;padding:18px;border-radius:12px}.card b{display:block;font-size:1.8rem;color:#0b5f58}
 .tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:.9rem}th,td{padding:10px;border-bottom:1px solid #d9e5e1;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{background:#eaf4f0;position:sticky;top:0}
 .bar{display:flex;align-items:center;gap:12px;margin:12px 0}.bar span:first-child{width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.track{height:22px;background:#e0ece8;border-radius:12px;flex:1;overflow:hidden}.fill{height:100%;background:#d68b53}.bar b{width:100px;text-align:right;font-size:.85rem}
-.note{border-left:4px solid #d68b53;padding:12px 16px;background:#fff6eb}select{padding:8px;border:1px solid #9db5ad;border-radius:6px}footer{color:#617675;margin-top:30px}
+.note{border-left:4px solid #d68b53;padding:12px 16px;background:#fff6eb}.timeseries{width:100%;height:auto}.timeseries text{fill:#536970;font-size:11px}figure{margin:20px 0}figcaption{font-weight:650;margin-bottom:8px}select{padding:8px;border:1px solid #9db5ad;border-radius:6px}footer{color:#617675;margin-top:30px}
 </style>"""
 
 
@@ -50,12 +53,58 @@ def shell(title: str, subtitle: str, body: str) -> str:
 <header><h1>{esc(title)}</h1><p>{esc(subtitle)}</p><nav><a href="index.html">Report hub</a><a href="marketing-product.html">Marketing & Product</a><a href="intake-decision.html">Intake decision</a></nav></header><main>{body}<footer>Aggregate synthetic data · Private repository · Offline report</footer></main></body></html>'''
 
 
+def monthly_plot(monthly: list[dict], metric: str, title: str, last_send: str) -> str:
+    """Draw a zero-based monthly SVG series with exact values in hover titles."""
+    if not monthly:
+        return '<p>No dated sends available.</p>'
+    values = [r['sends'] if metric == 'sends' else 100 * r['recorded_conversions'] / r['sends'] if r['sends'] else 0 for r in monthly]
+    ceiling = (math.ceil(max(values) / 10000) * 10000) if metric == 'sends' else (math.ceil(max(values) * 5) / 5)
+    ceiling = max(ceiling, 1)
+    left, right, top, bottom = 65, 925, 25, 226
+    x = lambda i: left + i * (right-left) / max(1,len(monthly)-1)
+    y = lambda value: bottom - value * (bottom-top) / ceiling
+    last_month = date.fromisoformat(str(monthly[-1]['month'])[:10])
+    last_date = date.fromisoformat(str(last_send)[:10])
+    partial = last_date.year == last_month.year and last_date.month == last_month.month and last_date.day < monthrange(last_date.year,last_date.month)[1]
+    output = [f'<figure><figcaption>{esc(title)}</figcaption><svg class="timeseries" role="img" aria-label="{esc(title)} by send month" viewBox="0 0 980 280">']
+    if partial:
+        width = (right-left)/max(1,len(monthly)-1)
+        output.append(f'<rect x="{x(len(monthly)-1)-width/2:.1f}" y="{top}" width="{width/2+20:.1f}" height="{bottom-top}" fill="#fff2d8"/>')
+    for fraction in (0,0.25,0.5,0.75,1):
+        yy = y(ceiling*fraction)
+        label = f'{int(ceiling*fraction):,}' if metric=='sends' else f'{ceiling*fraction:.2f}%'
+        output.append(f'<line x1="{left}" y1="{yy:.1f}" x2="{right}" y2="{yy:.1f}" stroke="#d5e3de"/><text x="{left-8}" y="{yy+4:.1f}" text-anchor="end">{label}</text>')
+    color = '#0d756e' if metric=='sends' else '#bc653a'
+    points = ' '.join(f'{x(i):.1f},{y(value):.1f}' for i,value in enumerate(values))
+    output.append(f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="3"/>')
+    for i,(row,value) in enumerate(zip(monthly,values)):
+        month = str(row['month'])[:7]
+        tooltip = f"{month}: {row['sends']:,} sends; {row['recorded_conversions']:,} recorded conversions; {100*row['recorded_conversions']/row['sends']:.2f}% per send" if row['sends'] else f'{month}: 0 sends'
+        output.append(f'<circle cx="{x(i):.1f}" cy="{y(value):.1f}" r="4.5" fill="{color}"><title>{esc(tooltip)}</title></circle>')
+        if i % 3 == 0 or i == len(monthly)-1:
+            output.append(f'<text x="{x(i):.1f}" y="{bottom+22}" text-anchor="middle">{esc(month)}</text>')
+    if partial:
+        output.append(f'<text x="{right}" y="{top+15}" text-anchor="end" fill="#885315">Partial month</text>')
+    output.append('</svg></figure>')
+    return ''.join(output)
+
+
 def marketing_product(data: dict) -> str:
     """Render Marketing and Product counts, sensitivity, funnel and caveats."""
-    m, p, d = data["marketing"], data["products"], data["digital"]
+    m, p, d, econ = data["marketing"], data["products"], data["digital"], data["economics"]
     o, q, e, s = m["overall"], m["quality"], d["events"], d["sessions"]
     body = '<section><h2>What the customer needs</h2><p>Relevant messages and digital tasks that can be completed with clear recovery paths. These data describe current records; they do not prove a campaign or feature improved customer outcomes.</p></section>'
-    body += '<section><h2>Marketing snapshot</h2><div class="cards">'
+    body += '<section><h2>Can we decide where to invest?</h2><p><strong>Not yet.</strong> The available records describe campaigns sent to customer IDs, but do not connect eligible leads, verified new-customer acquisition, fully loaded cost, and bank contribution over time. Thus acquisition versus conversion versus retention cannot be ranked from this snapshot.</p><div class="cards">'
+    for label, key in [('CAC','CAC'),('LTV','LTV'),('LTV / CAC','LTV/CAC'),('CAC versus average ticket','CAC/average ticket'),('Lead → customer','lead-to-customer'),('Retention','retention')]:
+        item=econ['metrics'][key]
+        body += card(label,item['status'].title(),item['missing'])
+    body += '</div><p class="note">The 3:1 LTV/CAC rule is a contextual heuristic, not a bank acceptance criterion. A ratio above or below 3 cannot be interpreted here because neither component is identified. Compare margin-adjusted LTV and fully loaded CAC for the same acquired cohort and currency, then inspect payback and risk.</p>'
+    body += '<p>Observed field coverage: '+num(econ['customer_snapshot_rows'])+' customer snapshots with '+num(econ['known_registration_dates'])+' known registration dates; send_cost on '+num(econ['send_cost_known'])+' / '+num(econ['sends'])+' sends; campaign budget on '+num(econ['campaign_budget_known'])+' / '+num(econ['campaigns'])+' campaigns; conversion_value on '+num(econ['conversion_value_known'])+' / '+num(econ['sends'])+' sends. Cost and conversion-value currency are not documented. Gross customer transaction value is not bank revenue.</p>'
+    body += '<p>Acquisition-labelled campaigns have '+num(econ['acquisition_objective_sends'])+' sends and '+num(econ['acquisition_objective_recorded_conversions'])+' recorded conversions; '+num(econ['acquisition_objective_pre_registration_sends'])+' sends precede the recipient’s current registration date. Across all campaigns, '+num(econ['pre_registration_sends'])+' sends precede registration. These records cannot be recast as leads or proven acquisitions.</p>'
+    timing_rows=[{**r,'conversion_per_send':pct(r['recorded_conversions'],r['sends'])} for r in econ['registration_sensitivity']]
+    body += '<h3>Send-date versus customer registration-date sensitivity</h3>'+table(timing_rows, [('registration_timing','Timing'),('sends','Sends'),('recorded_conversions','Recorded conversions'),('conversion_per_send','Recorded conversion / send'),('delivered','Delivered')])
+    body += '<p>Minimum next dataset: prospect/lead ID and creation date, qualification event, campaign assignment, verified customer creation with lead-to-customer key, spend with currency and cost scope, plus customer contribution and exit history. Until then, test message execution separately from acquisition and retention economics.</p></section>'
+    body += '<section><h2>Marketing execution diagnostics</h2><div class="cards">'
     body += card('Valid sends', num(o['sends']), 'One deduplicated send_id')
     body += card('Delivery', pct(o['delivered'], o['delivery_known']), f"{num(o['delivered'])} / {num(o['delivery_known'])} known flags")
     body += card('Known opens', pct(o['opens'], o['open_known']), f"{num(o['opens'])} / {num(o['open_known'])} delivered, known flags")
@@ -65,7 +114,7 @@ def marketing_product(data: dict) -> str:
     body += '<label>Compare by <select id="dimension"><option value="channel">Channel</option><option value="objective">Campaign objective</option><option value="segment">Customer segment</option><option value="country">Customer country</option></select></label><div id="chart"></div><p class="muted">Bar width uses a 0–10% conversion scale. Other rate denominators appear below.</p><div id="group-table" class="tablewrap"></div>'
     body += '<p>Business send-date range: '+esc(q['first_send'])+' through '+esc(q['last_send'])+'. The first and last calendar years are partial.</p>'
     body += '<h3>Campaign-window sensitivity</h3>'+table(m['date_sensitivity'], [('campaign_window','Window'),('sends','Sends'),('recorded_conversions','Recorded conversions'),('delivery_unknown','Unknown delivery')])
-    body += '<p>Rates by group always use the send grain. Out-of-window sends remain in the overall result; the sensitivity table shows their volume.</p><details><summary>Monthly send trend by business date</summary>'+table(m['monthly'], [('month','Month'),('sends','Sends'),('recorded_conversions','Recorded conversions')])+'</details></section>'
+    body += '<p>Rates by group always use the send grain. Out-of-window sends remain in the overall result; the sensitivity table shows their volume.</p><h3>Monthly campaign response by business send date</h3>'+monthly_plot(m['monthly'],'sends','Send volume',q['last_send'])+monthly_plot(m['monthly'],'rate','Recorded conversion per send',q['last_send'])+'<p>Both charts start at zero. Hover a point for exact numerator and denominator; the final month is incomplete and later conversions may still be unobserved. Counts describe synthetic records, not incremental customer acquisition.</p></section>'
     body += '<section><h2>Data readiness for targeting</h2><div class="cards">'
     for label,key,note in [('Repeat exposed customers','repeat_exposed_customers','of '+num(m['exposure']['exposed_customers'])+' exposed customers'),('Current opt-out sends','current_opt_out_sends','Snapshot consent, not historical'),('Outside campaign dates','outside_campaign_dates','Compared with business send_date'),('Target country mismatch','target_country_mismatch','Joined customer snapshot'),('Target segment mismatch','target_segment_mismatch','Joined customer snapshot')]:
         value = m['exposure'][key] if key in m['exposure'] else q[key]
@@ -114,7 +163,7 @@ def intake(data: dict) -> str:
 def hub(data: dict) -> str:
     """Render a concise private report index from the same aggregate run."""
     m=data['marketing']['overall']; v=next((r for r in data['intake']['populations'] if r['population'].startswith('V1:')),None)
-    body='<section><h2>Customer questions</h2><div class="cards">'+card('Recorded conversions',num(m['recorded_conversions']),f"of {num(m['sends'])} send records")+card('V1 complaint cases',num(v['complaints'] if v else 0),'Cargo no reconocido')+'</div><p>Marketing and Product describe possible test cohorts and journeys. The intake page sizes one narrow handoff workflow. These are separate populations and cannot be joined into a customer outcome.</p></section>'
+    body='<section><h2>Customer questions</h2><div class="cards">'+card('CAC and LTV','Unavailable','Lead, acquisition, cost and contribution links missing')+card('Recorded send conversion',pct(m['recorded_conversions'],m['sends']),f"{num(m['recorded_conversions'])} / {num(m['sends'])} sends; not new customers")+card('V1 complaint cases',num(v['complaints'] if v else 0),'Cargo no reconocido')+'</div><p>Marketing and Product describe possible test cohorts and journeys. The intake page sizes one narrow handoff workflow. These are separate populations and cannot be joined into a customer outcome.</p></section>'
     body += '<section><h2>Read the evidence</h2><p><a href="marketing-product.html">Marketing & Product analysis →</a></p><p><a href="intake-decision.html">Corrected intake decision →</a></p><p><a href="aggregates.json">Download aggregate JSON →</a></p><p><a href="manifest.json">Source and quality manifest →</a></p></section>'
     return shell('Arabica evidence hub','Private, offline review of the verified synthetic-data snapshot.',body)
 

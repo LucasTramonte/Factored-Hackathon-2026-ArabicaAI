@@ -27,3 +27,11 @@ Test a clear, consent-respecting message and a supported digital path for one de
 ## Test and acceptance measures
 
 Instrument eligible customers, assignment, message delivery, task start, backend-confirmed completion, failure, retry, and human handoff. Define an exclusion and missingness report before launch. Compare a randomized control and treatment on verified completion and customer harm metrics, with a stated time window and one customer-level denominator. Audit consent at send time. The present report is descriptive and cannot substitute for that test.
+
+## Unit-economics measurement contract
+
+The current Silver snapshot cannot calculate CAC, LTV, LTV/CAC, CAC versus average ticket, lead-to-customer conversion or retention. `send_cost` and campaign `budget` are incomplete, lack a documented common currency and may overlap. A campaign objective named `Acquisition` is not a verified new-customer event. `conversion_value` is neither attributed bank revenue nor a margin series; transaction amounts are customer cash flows, not bank earnings.
+
+For a future cohort, record an eligible lead ID and timestamp, campaign assignment, verified customer-creation event and stable lead-to-customer key. Capture fully loaded sales and marketing costs by date, channel and currency. Capture customer contribution after servicing cost, credit loss and other material costs, together with exit status and a fixed observation horizon. Then report lead-to-customer conversion, CAC, margin-adjusted LTV, LTV/CAC and payback on the **same acquisition cohort**. Treat 3:1 as a heuristic to examine alongside payback and risk, not a pass/fail target for this bank.
+
+The current report's monthly plots use `send_date` from July 2023 through June 18, 2026. June 2026 is incomplete and conversions may arrive after a send. Delivery, opens, clicks, page views and send-level recorded conversions remain operational diagnostics. They do not settle whether the next investment belongs in lead generation, acquisition conversion or retention.

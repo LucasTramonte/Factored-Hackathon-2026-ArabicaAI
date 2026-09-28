@@ -120,6 +120,57 @@ def marketing(con) -> dict:
     return result
 
 
+def economics(con) -> dict:
+    """Audit whether acquisition and lifetime unit economics are identifiable."""
+    costs = rows(con, """SELECT COUNT(*) AS campaigns,
+      COUNT(*) FILTER (WHERE budget IS NOT NULL) AS campaign_budget_known
+      FROM silver.dim_marketing_campaigns""")[0]
+    sends = rows(con, """SELECT COUNT(*) AS sends,
+      COUNT(*) FILTER (WHERE send_cost IS NOT NULL) AS send_cost_known,
+      COUNT(*) FILTER (WHERE conversion_value IS NOT NULL) AS conversion_value_known
+      FROM silver.fact_campaign_sends""")[0]
+    timing = rows(con, """WITH dated AS (
+      SELECT s.was_delivered,s.was_opened,s.was_clicked,s.had_conversion,
+        CASE WHEN u.customer_id IS NULL OR u.registration_date IS NULL OR s.send_date IS NULL
+             THEN 'uncheckable'
+             WHEN s.send_date<u.registration_date THEN 'before registration'
+             ELSE 'on or after registration' END AS registration_timing
+      FROM silver.fact_campaign_sends s
+      LEFT JOIN silver.dim_customers u ON s.customer_id=u.customer_id
+    ) SELECT registration_timing,""" + METRICS + """ FROM dated GROUP BY 1 ORDER BY 1""")
+    acquisition = rows(con, """SELECT COUNT(*) AS acquisition_objective_sends,
+      COUNT(*) FILTER (WHERE s.had_conversion) AS acquisition_objective_recorded_conversions,
+      COUNT(*) FILTER (WHERE s.send_date<u.registration_date) AS acquisition_objective_pre_registration_sends
+      FROM silver.fact_campaign_sends s
+      JOIN silver.dim_marketing_campaigns m ON s.campaign_id=m.campaign_id
+      LEFT JOIN silver.dim_customers u ON s.customer_id=u.customer_id
+      WHERE m.campaign_objective='Acquisition'""")[0]
+    customers = rows(con, """SELECT COUNT(*) AS customer_snapshot_rows,
+      COUNT(*) FILTER (WHERE registration_date IS NOT NULL) AS known_registration_dates,
+      MIN(registration_date) AS earliest_registration,
+      MAX(registration_date) AS latest_registration
+      FROM silver.dim_customers""")[0]
+    return {
+      **costs, **sends, **acquisition, **customers,
+      "registration_sensitivity": timing,
+      "pre_registration_sends": next((r["sends"] for r in timing if r["registration_timing"]=="before registration"),0),
+      "metrics": {
+        "CAC": {"status":"not identifiable", "formula":"fully loaded sales and marketing acquisition cost / verified new customers acquired", "missing":"acquisition attribution, complete cost and currency"},
+        "LTV": {"status":"not identifiable", "formula":"discounted customer contribution over a defined lifetime", "missing":"bank revenue or margin, servicing cost, credit loss and observed lifetime"},
+        "LTV/CAC": {"status":"not identifiable", "formula":"cohort LTV / same-cohort CAC", "missing":"both valid components, common currency and horizon"},
+        "CAC/average ticket": {"status":"not comparable", "formula":"compare CAC with the first verified transaction ticket for the same acquired cohort", "missing":"valid CAC and new-customer cohort; gross customer transaction amounts are not bank revenue"},
+        "lead-to-customer": {"status":"not identifiable", "formula":"verified new customers / eligible leads from the same cohort", "missing":"prospect or lead stage, stable lead-to-customer key and acquisition event"},
+        "retention": {"status":"not identifiable", "formula":"retained customers / eligible starting customer cohort", "missing":"longitudinal customer status and exit events"},
+      },
+      "limits": [
+        "send_cost and campaign budget have no documented currency and may overlap; they cannot be summed into fully loaded CAC.",
+        "Acquisition is a campaign objective label, not proof that a new customer was acquired.",
+        "conversion_value is recorded only on marked conversions and has no documented currency or verified bank revenue meaning.",
+        "A send dated before the current registration_date is shown separately, not treated as a lead or removed silently.",
+      ],
+    }
+
+
 def products(con) -> dict:
     """Measure snapshot ownership and owner-safe transaction activity at product grain."""
     result = {"grain": "one active Silver product snapshot", "ownership": rows(con, """SELECT
@@ -256,5 +307,5 @@ def analyze(con) -> dict:
     """Build all report aggregates from a single verified Silver snapshot."""
     counts = assert_ready(con)
     return {"generated_at_utc": datetime.now(timezone.utc).isoformat(),
-            "silver_counts": counts, "marketing": marketing(con), "products": products(con),
+            "silver_counts": counts, "marketing": marketing(con), "economics": economics(con), "products": products(con),
             "digital": digital(con), "intake": intake(con)}
