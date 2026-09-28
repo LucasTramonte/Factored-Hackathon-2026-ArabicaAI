@@ -27,7 +27,7 @@ One evaluation case is a scripted decision point in a conversation; all cases ha
 | Customer understanding (teach-back) | Passes / assessable answers, and passes / all eligible starts | Ask “What happens next, and what do you need to do?”; a blind rubric checks actual status, human review, supported route and only documented timing. |
 | Receiving-agent readiness | Actionable packages / all submitted packages assessed; also actionable / all eligible starts | Blind agent checks source evidence, customer statement, confirmation/approval, reference and required fields. Proxy for rework, not observed rework. |
 | Demonstrated fulfillment | Eligible episodes that are safely accepted, deliver receipt-backed next steps, pass teach-back and pass agent readiness / all eligible starts | Unknown feedback never counts as success; show unknowns apart from observed failures. |
-| Intake CSAT (secondary) | Ratings 4–5 / valid 1–5 responses at intake end | Effort asks how easy reporting was; CSAT asks whether it was satisfactory. Neither measures dispute resolution. Historical CSAT (14,475/127,856 positive) is context only. |
+| Intake CSAT (secondary) | Ratings 4–5 / valid 1–5 responses at intake end | Effort asks how easy reporting was; CSAT asks whether it was satisfactory. Neither measures dispute resolution. Historical survey scores are context only, not targets. |
 | Intake rework (deferred) | Accepted cases needing a correction to required intake fields within 7 days / accepted cases with a complete 7-day window and receiving-service logs | Not defensibly measurable now: complaints lack origin interaction links. Missing logs mean unknown, not zero. |
 | Safe completion on completion-ready cases | Safe, correct, complete handoffs / gold completion-ready test cases | Initial component proxy only; includes wrong/failed responses in denominator. |
 | Correct next action | Cases whose action and required candidate set match the gold expectation / all decision-point cases | Initial baseline comparator; clarification can be correct without completing intake. |
@@ -51,7 +51,7 @@ Development fixtures can drive rule improvements. The scenario-disjoint evaluati
 
 Compare complete workflows, not a stateless checklist against a whole conversation:
 
-1. A reviewer outside system tuning authors and adjudicates fresh ES/PT scenario families. The existing 24 decision cases, 24 candidates and 20 scripts are exposed; keep them as regression material only.
+1. A reviewer outside system tuning authors and adjudicates fresh ES/PT scenario families. The existing 24 scored decision cases and 24 review candidates are exposed; keep them as regression material only.
 2. Freeze both system versions and prompts, the corpus hash, eligibility, scoring rules, tools, timeouts and fault schedules before running. Expected answers never enter model inputs.
 3. Give the checklist/form wrapper and the AI the same authenticated records, permissions, durable case service and task facts. Include failures, abandonment, ambiguity, withdrawal and unauthorized requests.
 4. Score outcomes (safe accepted intake, safety, readiness, next-step delivery), with real participant effort, teach-back and CSAT.

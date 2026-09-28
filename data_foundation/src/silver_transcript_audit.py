@@ -82,7 +82,7 @@ def audit(db, quality, previous, sample, output):
             sha256(t.full_text) text_hash,i.contact_reason FROM silver.fact_call_transcripts t
             LEFT JOIN silver.fact_call_center_interactions i USING(interaction_id)''')
         result = {'generated_at_utc': datetime.now(timezone.utc).isoformat(),
-                  'main_commit': subprocess.check_output(['git','rev-parse','origin/main'], text=True).strip(),
+                  'code_commit': subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip(),
                   'database': str(db.resolve()), 'quality_report': str(quality.resolve()),
                   'quality_warnings': gate['warnings'], 'scope': list(TABLES),
                   'audit_script_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),

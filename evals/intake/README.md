@@ -23,7 +23,7 @@ The stdlib CLI writes case-level predictions and summaries to ignored scratch; t
 
 `baseline.py` implements handoff-only and checklist references plus strict scoring. `run.py` reports counts/denominators and case-level failures. `source_smoke.py` demonstrates parameter-bound customer ownership checks against the existing exploration schema; it is not a production banking service. Production authentication, durable conversation state, actual customer confirmation UI, case persistence, tracing, retry policy and service integration belong to the team's implementation.
 
-The decision-point completion-ready proxy is not the episode-level primary KPI. Operating cost and episode completion are null until measured. Local one-call timings exclude service/model/network work. Zero observed unsafe cases does not establish production safety.
+The decision-point completion-ready proxy is not the episode-level primary KPI. Operating cost and episode completion are null until measured. Local one-call timings exclude service/model/network work. Zero observed unsafe cases does not establish production safety, and does not mean zero wrongly refused cases: routing an in-scope request out (the two checklist misses) is scored as incorrect, not unsafe.
 
 ## Iteration record
 
