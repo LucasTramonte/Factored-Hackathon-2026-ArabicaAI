@@ -8,6 +8,7 @@ RUN useradd --create-home --uid 10001 appuser
 COPY data_pipelines/bronze/requirements.txt /tmp/pipeline-requirements.txt
 RUN python -m pip install --no-cache-dir -r /tmp/pipeline-requirements.txt
 COPY --chown=appuser:appuser data_pipelines ./data_pipelines
+COPY --chown=appuser:appuser data_foundation ./data_foundation
 
 USER appuser
-CMD ["python", "-m", "pytest", "-p", "no:cacheprovider", "data_pipelines", "-q"]
+CMD ["python", "-m", "pytest", "-p", "no:cacheprovider", "data_pipelines", "data_foundation/tests", "-q"]

@@ -4,20 +4,23 @@ AWS_REGION ?= us-east-2
 AWS_PROFILE ?= default
 DATA_DIR ?= $(CURDIR)/data
 SOURCE_DIR ?= $(CURDIR)/data
+DUCKDB_PATH ?= $(DATA_DIR)/latam_bank.duckdb
+QUALITY_REPORT ?=
+REPORT_RUN ?= $(CURDIR)/data_foundation/runs/$(shell date -u +%Y%m%dT%H%M%SZ)
 
 export S3_BUCKET AWS_REGION AWS_PROFILE DATA_DIR
 
-.PHONY: setup test compile bronze bronze-full bronze-local-full silver quality pipeline pipeline-local docker-build docker-test docker-pipeline
+.PHONY: setup test compile bronze bronze-full bronze-local-full silver quality pipeline pipeline-local docker-build docker-test docker-pipeline report
 
 setup:
 	python3 -m venv .venv
 	.venv/bin/python -m pip install -r data_pipelines/bronze/requirements.txt
 
 test:
-	$(PYTHON) -m pytest data_pipelines -q
+	$(PYTHON) -m pytest data_pipelines data_foundation/tests -q
 
 compile:
-	$(PYTHON) -m compileall -q data_pipelines
+	$(PYTHON) -m compileall -q data_pipelines data_foundation
 
 bronze:
 	$(PYTHON) data_pipelines/bronze/run_ingestion.py
@@ -43,6 +46,10 @@ pipeline-local:
 	$(MAKE) bronze-local-full
 	$(MAKE) silver
 	$(MAKE) quality
+
+report:
+	@test -n "$(QUALITY_REPORT)" || (echo "Set QUALITY_REPORT to a full quality_results.json" && exit 1)
+	$(PYTHON) -m data_foundation.scripts.run_marketing_product --db "$(DUCKDB_PATH)" --quality "$(QUALITY_REPORT)" --output "$(REPORT_RUN)"
 
 docker-build:
 	docker build --tag latam-bank-pipeline:test .

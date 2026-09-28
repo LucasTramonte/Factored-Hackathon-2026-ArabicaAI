@@ -29,7 +29,7 @@ The Silver command always refreshes its small FX reference table. Bronze default
 
 ## Docker and CI
 
-`make docker-test` builds a code-only image and runs the offline fixtures. `make docker-pipeline` builds the same image, mounts `data/` writable and `~/.aws` read-only at runtime, then executes Bronze, Silver and quality. No data or credentials enter an image layer. CI installs the declared requirements, runs the same fixture suite and builds the test image; it does not require S3 credentials or run the full dataset.
+`make docker-test` builds a code-only image and runs the offline fixtures. `make docker-pipeline` builds the same image, mounts `data/` writable and `~/.aws` read-only at runtime, then executes Bronze, Silver and quality. No data or credentials enter an image layer. CI installs the declared requirements, runs offline fixtures and compiles the packages. Docker can be checked separately with `make docker-test`; CI needs no S3 credentials or full dataset.
 
 ## Rebuilding reports
 
