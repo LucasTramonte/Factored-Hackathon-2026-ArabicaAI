@@ -64,7 +64,7 @@ Source: `data/latam_bank.duckdb` (Silver + Bronze), synthetic data.
 | is_fraud | rows | scored | min | p05 | p50 | p95 | max |
 |---|---|---|---|---|---|---|---|
 | 0 | 4,420,692 | 3,536,426 | 0.0 | 1.5 | 15.0 | 28.5 | 30.0 |
-| 1 | 4,316 | 3,425 | 0.01 | 4.718000000000001 | 48.93 | 95.22599999999998 | 99.99 |
+| 1 | 4,316 | 3,425 | 0.01 | 4.72 | 48.93 | 95.23 | 99.99 |
 
 ## Rows scoring above the highest non-fraud score
 

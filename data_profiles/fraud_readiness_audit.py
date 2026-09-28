@@ -42,15 +42,15 @@ QUERIES = {
                count(*) FILTER (WHERE abs(t.amount_usd / (t.amount * fx.exchange_rate) - 1) > 0.01) AS off_by_over_1pct,
                round(median(t.amount_usd / (t.amount * fx.exchange_rate)), 4) AS median_ratio
         FROM silver.fact_transactions t
-        JOIN silver.dim_fx_rates fx ON fx.source_currency = t.currency AND fx.target_currency = 'USD'
+        JOIN silver.dim_fx_rates fx ON fx.source_currency = trim(t.currency) AND fx.target_currency = 'USD'
              AND fx.rate_date = CAST(t.transaction_date AS DATE)
         WHERE NOT t.amount_usd_is_estimated AND upper(t.currency) <> 'USD' AND t.amount <> 0
         GROUP BY 1 ORDER BY 2 DESC""",
     # If fraud_score separates the label almost perfectly, it was likely computed with hindsight.
     "fraud_score distribution by label": """
         SELECT is_fraud, count(*) AS rows, count(fraud_score) AS scored,
-               min(fraud_score) AS min, quantile_cont(fraud_score, 0.05) AS p05,
-               median(fraud_score) AS p50, quantile_cont(fraud_score, 0.95) AS p95, max(fraud_score) AS max
+               min(fraud_score) AS min, round(quantile_cont(fraud_score, 0.05), 2) AS p05,
+               median(fraud_score) AS p50, round(quantile_cont(fraud_score, 0.95), 2) AS p95, max(fraud_score) AS max
         FROM silver.fact_transactions GROUP BY 1 ORDER BY 1""",
     "Rows scoring above the highest non-fraud score": """
         SELECT is_fraud, count(fraud_score) AS scored,
