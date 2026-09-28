@@ -11,14 +11,29 @@ import csv
 import hashlib
 import json
 import math
+import re
 import sqlite3
 from collections import Counter
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from .contracts import CONTRACTS, discover_files
-from ..scripts.run_baseline import partition_date_from_path
+from data_pipelines.quality.contracts import CONTRACTS
+
+
+# Historical snapshot reproduction only. New analyses use the Silver pipeline.
+def discover_files(data_root, contract):
+    """Locate archived CSV inputs for reproducing pre-Silver reports only."""
+    base = data_root / contract.relative_path
+    return [base] if base.is_file() else sorted(base.rglob('*.csv'))
+
+
+def partition_date_from_path(path):
+    """Read historical year/month/day partitions without reviving the CSV scanner."""
+    parts = dict(re.findall(r'(year|month|day)=(\d+)', str(path)))
+    return ('{year}-{month:02d}-{day:02d}'.format(year=parts['year'], month=int(parts['month']),
+            day=int(parts['day'])) if {'year', 'month', 'day'} <= parts.keys() else None)
+
 
 
 FIELDS = {

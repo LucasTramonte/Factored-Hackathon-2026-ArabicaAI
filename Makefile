@@ -7,7 +7,7 @@ SOURCE_DIR ?= $(CURDIR)/data
 
 export S3_BUCKET AWS_REGION AWS_PROFILE DATA_DIR
 
-.PHONY: setup test compile bronze bronze-full bronze-local-full silver quality pipeline pipeline-local docker-build docker-test docker-pipeline
+.PHONY: setup test test-evaluation compile bronze bronze-full bronze-local-full silver quality pipeline pipeline-local docker-build docker-test docker-pipeline
 
 setup:
 	python3 -m venv .venv
@@ -15,6 +15,9 @@ setup:
 
 test:
 	$(PYTHON) -m pytest data_pipelines -q
+
+test-evaluation:
+	$(PYTHON) -m pytest data_foundation/tests evals/intake/test_baseline.py -q
 
 compile:
 	$(PYTHON) -m compileall -q data_pipelines
