@@ -88,18 +88,29 @@ def marketing_product(data: dict, insights: dict | None = None) -> str:
     marketing_change = insight["marketing"]["recorded_conversion_change"]
     activity_change = insight["product"]["activity_continuation_change"]
     activity_last_day = date.fromisoformat(str(activity['last_transaction'])[:10])
-    body = '<section class="decision"><h2>Marketing and Product: what changes a decision?</h2><div class="takeaways">'
+    body = (
+        '<section class="decision"><h2>What the synthetic data tells us</h2>'
+        '<p>The intervals below describe variation across the 12 matched months '
+        'of 2024 and 2025. They estimate a mean monthly difference within this '
+        'synthetic setting, assuming the month pairs are comparable and independent. '
+        'That assumption has not been verified. The intervals do not measure the '
+        'effect of a campaign or product change.</p>'
+        '<div class="takeaways">'
+    )
     if activity_change:
         change = activity_change
-        spread = change["resampled_change_pp"]
         body += (
             '<article><h3>Product: repeat transaction activity rose</h3><p>'
             f'{change["earlier_rate_pct"]:.2f}% in 2024 → {change["later_rate_pct"]:.2f}% in 2025 '
             f'({change["observed_change_pp"]:+.2f} percentage points); '
             f'{change["matched_months_higher"]}/12 matched months were higher. '
-            f'Month-pair Monte Carlo change: P20 {spread["p20"]:+.2f}, '
-            f'P50 {spread["p50"]:+.2f}, P80 {spread["p80"]:+.2f} points. '
-            'This is adjacent-month transaction activity; cohort mix and causes remain unknown.</p></article>'
+            f'The mean matched-month change is '
+            f'{change["conditional_monthly_mean_ci_95_pp"]["estimate"]:+.2f} points '
+            f'(conditional 95% CI '
+            f'{change["conditional_monthly_mean_ci_95_pp"]["lower"]:+.2f} to '
+            f'{change["conditional_monthly_mean_ci_95_pp"]["upper"]:+.2f}). '
+            'That is repeat transaction activity, not customer retention. '
+            'We still need to check who was active in each year.</p></article>'
         )
     body += (
         '<article><h3>Product: feature-use analysis is blocked</h3><p>'
@@ -120,15 +131,16 @@ def marketing_product(data: dict, insights: dict | None = None) -> str:
     )
     if marketing_change:
         change = marketing_change
-        spread = change["resampled_change_pp"]
         body += (
             '<article><h3>Marketing: the annual response change is uncertain</h3><p>'
             f'Recorded conversion per send moved from {change["earlier_rate_pct"]:.3f}% '
             f'to {change["later_rate_pct"]:.3f}% ({change["observed_change_pp"]:+.3f} points). '
-            f'Month-pair Monte Carlo change: P20 {spread["p20"]:+.3f}, '
-            f'P50 {spread["p50"]:+.3f}, P80 {spread["p80"]:+.3f} points. '
-            'The wider exploratory range includes zero. Do not call this a measured '
-            'decline in customer acquisition.</p></article>'
+            f'The mean matched-month change is '
+            f'{change["conditional_monthly_mean_ci_95_pp"]["estimate"]:+.3f} points '
+            f'(conditional 95% CI '
+            f'{change["conditional_monthly_mean_ci_95_pp"]["lower"]:+.3f} to '
+            f'{change["conditional_monthly_mean_ci_95_pp"]["upper"]:+.3f}). '
+            'Zero is inside the interval. These flags do not count new customers.</p></article>'
         )
     body += '</div></section>'
     body += '<section><h2>Which customer questions are worth pursuing?</h2><p><strong>Product:</strong> Why did adjacent-month transaction activity strengthen, and can customers actually finish a specific digital task? The current snapshot gives a behavioral signal, but no task outcome or historical product state. Start with one defined journey, repaired product ownership, completion/failure events and direct customer or agent review.</p><p><strong>Marketing:</strong> Are customers receiving too many or irrelevant messages, and which channel can be measured fairly? The sample has '+f'{insight["marketing"]["sends"] / insight["marketing"]["exposed_customers"]:.2f}'+' sends per exposed customer on average. Recover consent and segment at send time, reconcile channel-specific response definitions, and test a verified outcome against a holdout before personalizing.</p><p>These are discovery questions for this synthetic dataset, not claims about real bank customers. The selected hackathon intake workflow remains a separate decision; <a href="intake-decision.html">its complaint evidence is here</a>.</p></section>'
@@ -136,6 +148,7 @@ def marketing_product(data: dict, insights: dict | None = None) -> str:
         def change_row(label: str, change: dict, digits: int) -> dict:
             """Format month-resampling sensitivity without implying causal inference."""
             spread = change["resampled_change_pp"]
+            ci = change["conditional_monthly_mean_ci_95_pp"]
             fmt = f".{digits}f"
             return {
                 "metric": label,
@@ -145,17 +158,26 @@ def marketing_product(data: dict, insights: dict | None = None) -> str:
                 "p50": f'{spread["p50"]:+{fmt}}',
                 "p80": f'{spread["p80"]:+{fmt}}',
                 "range": f'{spread["p2_5"]:+{fmt}} to {spread["p97_5"]:+{fmt}}',
+                "ci": f'{ci["lower"]:+{fmt}} to {ci["upper"]:+{fmt}}',
             }
         body += '<section><h2>2024–2025 month-level sensitivity</h2>'
         body += table([
             change_row('Activity continuation', activity_change, 2),
             change_row('Recorded conversion / send', marketing_change, 3),
         ], [('metric','Measure'),('annual','2024 → 2025'),('observed','Change, pp'),
-            ('p20','P20, pp'),('p50','P50, pp'),('p80','P80, pp'),
-            ('range','P2.5–P97.5, pp')])
+            ('ci','Mean monthly 95% CI, pp'), ('p20','P20, pp'),
+            ('p50','P50, pp'),('p80','P80, pp'),
+            ('range','Monte Carlo P2.5–P97.5, pp')])
         body += (
-            '<p><strong>Method and assumption.</strong> The annual rates and changes above '
-            'are exact for this synthetic snapshot. For sensitivity only, 20,000 seeded '
+            '<p><strong>Two different comparisons.</strong> The annual rates and changes '
+            'are exact for this synthetic snapshot and weight months by their '
+            'denominators. Each conditional 95% CI instead covers the unweighted '
+            'mean of 12 monthly 2025 minus 2024 percentage-point differences. '
+            'It uses a paired t calculation with 11 degrees of freedom and assumes '
+            'comparable, independent month pairs and an approximately normal '
+            'sampling distribution for their mean. Those assumptions are hard to '
+            'check with 12 pairs; the interval says nothing about production '
+            'customers. For a separate sensitivity check, 20,000 seeded '
             'draws (20260928; product uses 20260929) sample 12 matched calendar-month '
             'pairs with replacement and recompute each denominator-weighted rate. '
             'This treats months as exchangeable; season pairing does not remove trend, '
@@ -190,7 +212,8 @@ def marketing_product(data: dict, insights: dict | None = None) -> str:
       {"question":"Did a lead become a customer?", "missing":"Prospect ID, verified creation event and durable lead-to-customer link"},
       {"question":"Did activity become retention or bank value?", "missing":"Effective-dated lifecycle, cohort eligibility, bank contribution and complete cost currency"},
     ],[("question","Decision question"),("missing","Missing source")])
-    body += '<p>Send cost is known on '+num(econ['send_cost_known'])+' / '+num(econ['sends'])+' sends and campaign budget on '+num(econ['campaign_budget_known'])+' / '+num(econ['campaigns'])+' campaigns, with undocumented currency and overlap. '+num(econ['pre_registration_sends'])+' sends precede recipients’ current registration dates; this does not make them leads. Transaction amounts are customer cash flows, not bank revenue. See the <a href="../../Docs/Plans/marketing-product-gold-contract.md">Gold data request</a>.</p></section>'
+    body += '<p>Send cost is known on '+num(econ['send_cost_known'])+' / '+num(econ['sends'])+' sends and campaign budget on '+num(econ['campaign_budget_known'])+' / '+num(econ['campaigns'])+' campaigns, with undocumented currency and overlap. '+num(econ['pre_registration_sends'])+' sends precede recipients’ current registration dates; this does not make them leads. Transaction amounts are customer cash flows, not bank revenue. See the <a href="../../Docs/Plans/marketing-product-gold-contract.md">Gold data request</a>.</p>'
+    body += '<p><strong>Before production:</strong> confirm event meanings and identity links against live records, capture consent and eligibility at the time of each event, and measure a named customer outcome. Use real traffic and customer-level data to size capacity and calculate uncertainty with repeated customers accounted for. An assigned holdout is needed to estimate campaign or feature impact.</p></section>'
     body += '<details><summary>Detailed Marketing and Product diagnostics</summary>'
     body += '<section><h2>Marketing execution diagnostics</h2><div class="cards">'
     body += card('Valid sends', num(o['sends']), 'One deduplicated send_id')

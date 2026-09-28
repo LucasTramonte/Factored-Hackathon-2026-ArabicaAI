@@ -87,10 +87,10 @@ def test_silver_aggregates_keep_denominators_and_owner_checks(con):
     rendered=marketing_product(data)
     assert 'Recorded conversion' in rendered
     assert 'CAC' in rendered and 'LTV' in rendered
-    assert 'Marketing and Product: what changes a decision?' in rendered
+    assert 'What the synthetic data tells us' in rendered
     assert 'Product: feature-use analysis is blocked' in rendered
     assert 'Marketing: audit channel measurement first' in rendered
-    assert rendered.index('Marketing and Product: what changes a decision?') < rendered.index('What is measurable by month or year?')
+    assert rendered.index('What the synthetic data tells us') < rendered.index('What is measurable by month or year?')
     assert '100.00% of 2 eligible sessions' in rendered
     assert 'id="time-year"' in rendered and 'id="time-month"' in rendered
     assert 'const sendMonths=' in rendered and 'Monthly send trend by business date</summary>' not in rendered
@@ -121,6 +121,15 @@ def test_paired_month_bootstrap_requires_complete_matched_years():
     change = paired_month_change(rows, 'n', 'd', **options)
     assert (change['earlier_numerator'], change['later_numerator']) == (12, 24)
     assert change['observed_change_pp'] == pytest.approx(10)
+    ci = change['conditional_monthly_mean_ci_95_pp']
+    assert (ci['estimate'], ci['lower'], ci['upper']) == pytest.approx((10, 10, 10))
+    assert (ci['pairs'], ci['degrees_of_freedom']) == (12, 11)
+    unequal = [dict(row) for row in rows]
+    unequal[12]['d'] = 20
+    unequal_change = paired_month_change(unequal, 'n', 'd', **options)
+    assert unequal_change['conditional_monthly_mean_ci_95_pp']['estimate'] != pytest.approx(
+        unequal_change['observed_change_pp']
+    )
     assert change['leave_one_month_out_change_pp'] == pytest.approx(
         {'min': 10, 'max': 10}
     )
@@ -145,8 +154,17 @@ def test_curated_report_and_simulation_match_published_aggregates(tmp_path):
                  'index.html', 'marketing-product.html', 'intake-decision.html'):
         assert (tmp_path / name).read_bytes() == (published / name).read_bytes()
     html = (published / 'marketing-product.html').read_text()
-    assert html.index('Marketing and Product: what changes a decision?') < html.index('What is measurable by month or year?')
-    assert 'P20 +2.88, P50 +3.08, P80 +3.25' in html
+    assert html.index('What the synthetic data tells us') < html.index('What is measurable by month or year?')
+    assert 'conditional 95% CI +2.56 to +3.58' in html
+    assert 'conditional 95% CI -0.115 to +0.034' in html
+    product_ci = expected['product']['activity_continuation_change']['conditional_monthly_mean_ci_95_pp']
+    marketing_ci = expected['marketing']['recorded_conversion_change']['conditional_monthly_mean_ci_95_pp']
+    assert (product_ci['lower'], product_ci['upper']) == pytest.approx(
+        (2.5625624845687387, 3.58200105430518)
+    )
+    assert (marketing_ci['lower'], marketing_ci['upper']) == pytest.approx(
+        (-0.11454243400205807, 0.03373228566326661)
+    )
 
 
 def test_quality_identity_rejects_stale_database(tmp_path):

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import math
 import random
+import statistics
 from collections import defaultdict
 
 DRAWS = 20_000
@@ -42,6 +44,13 @@ def paired_month_change(
         return rate([b for _, b in selected]) - rate([a for a, _ in selected])
 
     leave_one_out = [change(pairs[:month] + pairs[month + 1:]) for month in range(12)]
+    monthly_differences = [
+        100 * (b[numerator] / b[denominator] - a[numerator] / a[denominator])
+        for a, b in pairs
+    ]
+    monthly_mean = statistics.mean(monthly_differences)
+    monthly_se = statistics.stdev(monthly_differences) / math.sqrt(12)
+    t_critical_11df = 2.200985160082949
     rng = random.Random(seed)
     changes = []
     for _ in range(draws):
@@ -66,6 +75,15 @@ def paired_month_change(
             b[numerator] / b[denominator] > a[numerator] / a[denominator]
             for a, b in pairs
         ),
+        "conditional_monthly_mean_ci_95_pp": {
+            "estimate": monthly_mean,
+            "lower": monthly_mean - t_critical_11df * monthly_se,
+            "upper": monthly_mean + t_critical_11df * monthly_se,
+            "standard_error": monthly_se,
+            "pairs": 12,
+            "degrees_of_freedom": 11,
+            "t_critical": t_critical_11df,
+        },
         "leave_one_month_out_change_pp": {
             "min": min(leave_one_out), "max": max(leave_one_out),
         },
@@ -98,6 +116,13 @@ def summarize_insights(data: dict) -> dict:
                            "denominator-weighted annual rates.",
             "assumption": "The 12 observed month pairs are treated as exchangeable "
                           "units for a descriptive month-composition sensitivity check.",
+            "conditional_ci": "Two-sided paired t interval for the unweighted mean "
+                              "of 12 month-specific 2025 minus 2024 rate differences, "
+                              "in percentage points (11 df). Assumes independent, "
+                              "comparable month pairs and approximately normal "
+                              "sampling of their mean within the synthetic setting. "
+                              "This is a different estimand from the denominator-"
+                              "weighted annual rate difference.",
             "interpretation": "Percentiles describe sensitivity to which months are "
                               "represented. They are not causal effects, a production "
                               "forecast, a customer-level confidence interval, or a "
