@@ -70,6 +70,44 @@ class SpanishReplyTests(unittest.TestCase):
         cr.roberto_answers('1a, 2b')
         rows = [json.loads(l) for l in (self.root / 'reviews' / 'roberto.jsonl').read_text().splitlines()]
         self.assertEqual([(r['case_id'], r['chosen_code']) for r in rows], [('c1', 'F'), ('c2', 'C')])
+        with self.assertRaises(SystemExit):  # a second paste must not duplicate the review
+            cr.roberto_answers('1a 2b')
+        self.assertEqual(len((self.root / 'reviews' / 'roberto.jsonl').read_text().splitlines()), 2)
+
+
+class AnswerRecordingTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        (root / 'reviews').mkdir()
+        options = [dict(number=1, action='F', candidate_ids=['X1']), dict(number=2, action='C', candidate_ids=[])]
+        (root / 'queues.json').write_text(json.dumps({'pt': [dict(case_id='c1', queue='audit', options=options),
+                                                             dict(case_id='c2', queue='audit', options=options)]}))
+        self.state = root / 'state.json'
+        self.state.write_text(json.dumps(dict(language='pt', reviewer='r', current_index=0)))
+        self.old = cr.HERE, cr.STATE_FILE
+        cr.HERE, cr.STATE_FILE = root, self.state
+        self.log = root / 'reviews' / 'r.jsonl'
+
+    def tearDown(self):
+        cr.HERE, cr.STATE_FILE = self.old
+        self.tmp.cleanup()
+
+    def test_a_finished_queue_refuses_new_answers_without_writing(self):
+        cr.answer(cr.load_state(), '1', '')
+        cr.answer(cr.load_state(), '2', '')
+        with self.assertRaises(SystemExit):
+            cr.answer(cr.load_state(), '1', '')
+        self.assertEqual(len(self.log.read_text().splitlines()), 2)
+
+    def test_a_crash_between_append_and_state_update_is_not_recorded_twice(self):
+        cr.answer(cr.load_state(), '1', '')
+        self.state.write_text(json.dumps(dict(language='pt', reviewer='r', current_index=0)))  # state lost the advance
+        cr.answer(cr.load_state(), '2', '')
+        rows = [json.loads(l) for l in self.log.read_text().splitlines()]
+        self.assertEqual([r['case_id'] for r in rows], ['c1'])
+        self.assertEqual(cr.load_state()['current_index'], 1)
+        self.assertFalse(any(p.name.endswith('.tmp') for p in self.state.parent.iterdir()))
 
 
 if __name__ == '__main__':

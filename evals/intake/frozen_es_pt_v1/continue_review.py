@@ -100,9 +100,31 @@ def render(state: dict) -> str:
     return "\n".join(lines)
 
 
+def _save_state(state: dict) -> None:
+    """Write the state atomically, so an interruption can't leave a half-written file."""
+    tmp = STATE_FILE.with_name(STATE_FILE.name + ".tmp")
+    tmp.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, STATE_FILE)
+
+
+def _last_case_id(path: Path) -> str | None:
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    return json.loads(lines[-1])["case_id"] if lines else None
+
+
 def answer(state: dict, raw: str, comment: str) -> str:
+    """Record one answer and advance. Refuses after the queue ends; never appends a case twice."""
     queue = json.loads((HERE / "queues.json").read_text(encoding="utf-8"))[state["language"]]
+    if state["current_index"] >= len(queue):
+        raise SystemExit("A fila já foi concluída; nada foi gravado.")
     entry = queue[state["current_index"]]
+    log = HERE / "reviews" / f"{state['reviewer']}.jsonl"
+    if _last_case_id(log) == entry["case_id"]:
+        # The answer was written but the state never advanced (e.g. an interruption): only advance.
+        state["current_index"] += 1
+        state["pending_case_id"] = queue[state["current_index"]]["case_id"] if state["current_index"] < len(queue) else None
+        _save_state(state)
+        return f"O caso {state['current_index']} já estava gravado; a posição foi corrigida sem gravar de novo."
     chosen = next((o for o in entry["options"] if str(o["number"]) == raw), None)
     if chosen is None:
         raise SystemExit(f"Resposta {raw!r} não corresponde a nenhuma opção de 1 a {len(entry['options'])}.")
@@ -111,11 +133,11 @@ def answer(state: dict, raw: str, comment: str) -> str:
               "candidate_ids": chosen["candidate_ids"], "comment": comment,
               "recorded_by": "continue_review.py (Claude Code), after the Codex session ran out of credits",
               **state.get("record_extra", {})}
-    with (HERE / "reviews" / f"{state['reviewer']}.jsonl").open("a", encoding="utf-8") as f:
+    with log.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
     state["current_index"] += 1
     state["pending_case_id"] = queue[state["current_index"]]["case_id"] if state["current_index"] < len(queue) else None
-    STATE_FILE.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    _save_state(state)
     return f"Registrado: caso {state['current_index']} → opção {raw}."
 
 
@@ -174,6 +196,8 @@ def roberto_answers(text: str) -> str:
     if missing or invalid or duplicated:
         raise SystemExit(f"Nada foi gravado. Faltando: {missing}; inválidos: {invalid}; repetidos: {duplicated}.")
     path = HERE / "reviews" / "roberto.jsonl"
+    if path.exists() and path.read_text(encoding="utf-8").strip():
+        raise SystemExit(f"{path.name} já tem respostas; nada foi gravado. Apague o arquivo só se quiser registrar de novo.")
     with path.open("a", encoding="utf-8") as f:
         for n, entry in enumerate(queue, 1):
             chosen = entry["options"][LETTERS.index(picks[n])]
