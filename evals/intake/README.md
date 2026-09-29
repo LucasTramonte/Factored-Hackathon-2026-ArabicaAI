@@ -18,7 +18,7 @@ make test-evaluation compile PYTHON=.venv/bin/python
   notebooks/02_suspicious_charge_intake_baselines.ipynb
 ```
 
-The stdlib CLI writes case-level predictions and summaries to ignored scratch; the notebook uses the existing notebook dependencies. No model credentials, AWS access or extra dependencies are needed for the 42 authored cases. The optional smoke probe uses the local full-data cache and emits only pass/fail evidence, never source IDs.
+The stdlib CLI writes case-level predictions and summaries to ignored scratch; the notebook uses the existing notebook dependencies. No model credentials, AWS access or extra dependencies are needed for the 89 authored cases. The notebook's narrative and its development-versus-evaluation leakage check predate corpus v0.2 and were not re-executed. The optional smoke probe uses the local full-data cache and emits only pass/fail evidence, never source IDs.
 
 `cases.json` (v0.2) contains fake transaction/customer IDs, source provenance and four splits: 18 development cases, 24 evaluation cases, 25 held-out cases and 22 safety cases. Spanish/Portuguese pairs stay in the same scenario-family split, and a family lives in exactly one split. Gold expectations need independent human review. Development and evaluation rules were authored with corpus knowledge; later safety fixes reuse the suite. This is a reproducible initial benchmark, not a blinded held-out performance estimate. Do not tune against it and relabel it unseen.
 

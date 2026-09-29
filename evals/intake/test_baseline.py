@@ -21,11 +21,11 @@ class IntakeTests(unittest.TestCase):
                   tool_failure=False, gold=dict(action='confirm', candidate_ids=['T1'], completion_ready=False))
         corpus=dict(transactions=RECORDS, cases=[dict(base, case_id='a', family='f', split='heldout'),
                                                  dict(base, case_id='b', family='f', split='safety')])
-        with self.assertRaises(ValueError): evaluate(corpus)
+        with self.assertRaisesRegex(ValueError, 'leakage'): evaluate(corpus)
         corpus['cases'][1]['family']='g'
         self.assertEqual({s['split'] for s in evaluate(corpus)['summary']}, set(SPLITS))
         corpus['cases'][1]['split']='holdout'
-        with self.assertRaises(ValueError): evaluate(corpus)
+        with self.assertRaisesRegex(ValueError, 'Unsupported split'): evaluate(corpus)
 
     def test_identity_stops_before_query(self):
         class Forbidden:
