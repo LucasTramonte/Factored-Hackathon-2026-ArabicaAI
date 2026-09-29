@@ -17,7 +17,7 @@ setup:
 	.venv/bin/python -m pip install -r data_pipelines/bronze/requirements.txt
 
 test:
-	$(PYTHON) -m pytest data_pipelines data_foundation/tests -q
+	$(PYTHON) -m pytest data_pipelines data_foundation/tests intake_agent -q
 
 compile:
 	$(PYTHON) -m compileall -q data_pipelines data_foundation
