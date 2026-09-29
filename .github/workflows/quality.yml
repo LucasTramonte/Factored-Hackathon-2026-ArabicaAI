@@ -25,7 +25,7 @@ jobs:
         run: python -m pip install -r data_pipelines/bronze/requirements.txt
 
       - name: Run pipeline tests
-        run: python -m pytest data_pipelines data_foundation/tests -q
+        run: python -m pytest data_pipelines data_foundation/tests evals/intake -q
 
       - name: Compile pipeline package
-        run: python -m compileall -q data_pipelines data_foundation
+        run: python -m compileall -q data_pipelines data_foundation evals
