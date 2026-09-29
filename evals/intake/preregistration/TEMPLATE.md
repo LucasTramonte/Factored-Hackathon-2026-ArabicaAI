@@ -21,6 +21,8 @@
 | Retries and timeouts | e.g. 1 retry, 10 s timeout, technical handoff on failure |
 | Data handling | where the messages are sent, retention, whether that provider is approved for this data |
 
+The machine-readable block at the end of this file is written by `python -m evals.intake.preregistration.prereg fill` and checked by the runner. Don't edit it by hand.
+
 ## Analysis plan (fixed before running)
 
 - **Primary metric:** correct next action (action and candidate set match gold) over all cases of `frozen_es_pt_v1`, with a Wilson 95% interval. For a stochastic system, a case counts as correct when at least 2 of the 3 repetitions get it right (per-case majority). Each repetition's rate is reported too.

@@ -1,0 +1,59 @@
+"""The registration check must catch a changed prompt, a missing tag and a moved tag."""
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+from evals.intake.preregistration.prereg import check, fill, read
+
+
+def git(repo, *args):
+    subprocess.run(['git', '-C', str(repo), *args], check=True, capture_output=True)
+
+
+class PreregTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self.tmp.name)
+        git(self.repo, 'init', '-q')
+        git(self.repo, 'config', 'user.email', 't@example.com')
+        git(self.repo, 'config', 'user.name', 'Test')
+        (self.repo / 'prompt.md').write_text('Extract the stated facts.\n')
+        (self.repo / 'reg.md').write_text('# Pre-registration: x-v1\n')
+        git(self.repo, 'add', '.')
+        git(self.repo, 'commit', '-qm', 'prompt')
+        fill(self.repo / 'reg.md', 'x-v1', Path('prompt.md'), '@cf/openai/gpt-oss-20b', {'temperature': '0'}, repo=self.repo)
+        git(self.repo, 'tag', 'x-v1')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_faithful_registration_passes_and_is_machine_readable(self):
+        data = check(self.repo / 'reg.md', repo=self.repo)
+        self.assertEqual(data['model'], '@cf/openai/gpt-oss-20b')
+        self.assertEqual(read(self.repo / 'reg.md')['params'], {'temperature': '0'})
+
+    def test_a_changed_prompt_is_refused(self):
+        (self.repo / 'prompt.md').write_text('Extract the stated facts. Also handle "uns 40 mil".\n')
+        with self.assertRaisesRegex(ValueError, 'prompt file changed'):
+            check(self.repo / 'reg.md', repo=self.repo)
+
+    def test_a_missing_or_moved_tag_is_refused(self):
+        git(self.repo, 'tag', '-d', 'x-v1')
+        with self.assertRaisesRegex(ValueError, 'does not exist'):
+            check(self.repo / 'reg.md', repo=self.repo)
+        (self.repo / 'other.txt').write_text('later work\n')
+        git(self.repo, 'add', '.')
+        git(self.repo, 'commit', '-qm', 'later')
+        git(self.repo, 'tag', 'x-v1')
+        with self.assertRaisesRegex(ValueError, 'points to'):
+            check(self.repo / 'reg.md', repo=self.repo)
+
+    def test_fill_replaces_the_block_instead_of_appending_a_second_one(self):
+        fill(self.repo / 'reg.md', 'x-v1', Path('prompt.md'), 'm2', {}, repo=self.repo)
+        self.assertEqual((self.repo / 'reg.md').read_text().count('```json prereg'), 1)
+        self.assertEqual(read(self.repo / 'reg.md')['model'], 'm2')
+
+
+if __name__ == '__main__':
+    unittest.main()
