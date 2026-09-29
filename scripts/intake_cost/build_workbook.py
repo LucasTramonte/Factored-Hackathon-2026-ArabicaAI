@@ -10,8 +10,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook.properties import CalcProperties
 
-ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "INTAKE_COST_ESTIMATE.xlsx"
+ROOT = Path(__file__).resolve().parents[2]
+OUTPUT = ROOT / "Docs/Costs/Intake/INTAKE_COST_ESTIMATE.xlsx"
 NAVY = "17343B"
 TEAL = "147D76"
 PALE = "EAF4F2"
@@ -85,7 +85,7 @@ readme["B3"] = "Budget a small synthetic-data demo; validate V1 outcomes before 
 readme["A5"] = "Observed demand"
 readme["B5"] = "4,118 V1 complaints in 2025 (complete calendar year); not logged application starts or production traffic."
 readme["A6"] = "Today"
-readme["B6"] = "The demo has no model calls and no deployed cloud service. Model and cloud costs are proposed scenarios."
+readme["B6"] = "The Worker + D1 pilot is deployed; no model calls run today. Actual cloud spend and capacity remain unverified."
 readme["A7"] = "Scenarios"
 readme["B7"] = "11.3/day V1 complaint proxy, then 100, 900, and 9,000/day stress assumptions."
 readme["A8"] = "Interpretation"
@@ -96,8 +96,8 @@ readme["A10"] = "Important limit"
 readme["B10"] = "Lightsail VM self-hosts PostgreSQL in the $24 scenario; managed DB is a separate $30 add-on."
 readme["A11"] = "Editing"
 readme["B11"] = "Change pale-yellow values on Inputs. Blue-green cells on Scenarios recalculate in Excel/LibreOffice."
-readme["A12"] = "Cloudflare candidate"
-readme["B12"] = "Worker + D1 may have $0 fixed cloud cost inside Free limits; a code migration and CPU/D1 checks are required. See its separate sheet."
+readme["A12"] = "Cloudflare pilot"
+readme["B12"] = "Worker + D1 is deployed. Free hosting is conditional on usage limits; CPU and D1 usage remain unmeasured. See its separate sheet."
 readme["A13"] = "Not in estimate"
 readme["B13"] = "Taxes, exchange rates, domain, paid logs, egress overages, S3 transfer, model tools/audio, labor, support, HA, security operations."
 readme["A15"] = "Reviewed"
@@ -176,7 +176,7 @@ for r, name, daily in ((5, "2025 V1 complaint proxy", "=Inputs!B5/Inputs!B6*Inpu
     for col in (2, 3, 4, 5, 6, 7, 8):
         sc.cell(r, col).number_format = '#,##0.00'
 sc["A10"] = "Current demo cloud spend"
-sc["B10"] = "Not deployed: $0 actual cloud bill. Render fixed cost is hypothetical if deployed."
+sc["B10"] = "Worker + D1 pilot deployed; actual bill not checked. Render fixed cost is hypothetical."
 sc.merge_cells("B10:S10")
 sc["A11"] = "Capacity warning"
 sc["B11"] = "Peak req/s and in-flight values are arithmetic from assumptions, not a benchmark or a latency guarantee."
@@ -207,7 +207,7 @@ title(src, "Sources, scope and pricing basis", 4)
 header(src, 3, ("Item", "Evidence", "Source URL or repo path", "Interpretation"))
 sources = [
     ("V1 demand", "4,118 complaints in 2025; 12,297 all dates; 6,192 via Call Center all dates", "data_foundation/reports/aggregates.json", "Synthetic complaints, not app starts or forecast"),
-    ("Actual application", "FastAPI intake; 3 customer HTTP calls in normal path; no AI SDK or model call", "demo_api.py; demo-ui/src/app/app.ts", "No measured tokens, p95 or production throughput"),
+    ("Actual application", "FastAPI intake; 3 customer HTTP calls in normal path; no AI SDK or model call", "demo_pg/api.py; cloudflare/src/worker.js; demo-ui/src/app/app.ts", "No measured tokens, p95 or production throughput"),
     ("Hackathon metric", "Cost per attempt and successful automated resolution, with denominator", "Docs/FACTORED_HACKATHON_2026.md", "Handoff is not automated resolution"),
     ("OpenAI model", "GPT-5.6 Luna standard: $0.20 input, $1.20 output per million text tokens", "https://developers.openai.com/api/docs/models/gpt-5.6-luna", "Illustrative provider/model; no cache, tool, audio or batch discount"),
     ("AWS Lightsail", "$24/mo IPv4 Linux VM 4GB; $0.05/GB-month snapshots; $1/mo 5GB object bundle; $30/mo 2GB encrypted managed DB", "https://aws.amazon.com/lightsail/pricing/", "VM alone means self-managed PostgreSQL; capacity untested"),
@@ -229,9 +229,9 @@ for col, width in {"A": 24, "B": 78, "C": 74, "D": 63}.items():
     src.column_dimensions[col].width = width
 src.freeze_panes = "A4"
 
-cf = wb.create_sheet("Cloudflare candidate")
+cf = wb.create_sheet("Cloudflare pilot")
 title(cf, "Cloudflare Worker + D1 | conditional Free plan", 7)
-cf["A2"] = "A connected GitHub repo does not migrate the current PostgreSQL demo. The Worker variant must pass live CPU and D1 checks."
+cf["A2"] = "The Worker + D1 pilot is deployed; live CPU and D1 checks are still required before scaling claims."
 cf.merge_cells("A2:G2")
 header(cf, 4, ("Scenario", "Episodes/day", "Planned Worker req/day", "Free req/day cap", "Request headroom", "Request-cap check", "Illustrative AI USD/month"))
 for r, source_row in enumerate(range(5, 9), start=5):

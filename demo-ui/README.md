@@ -8,7 +8,7 @@ From the repository root:
 make demo-setup
 make demo-migrate
 make demo-seed
-.venv/bin/python -m uvicorn demo_api:app --host 127.0.0.1 --port 8001
+.venv/bin/python -m uvicorn demo_pg.api:app --host 127.0.0.1 --port 8001
 npm --prefix demo-ui start -- --host 127.0.0.1 --port 4200 --proxy-config proxy.conf.json
 ```
 

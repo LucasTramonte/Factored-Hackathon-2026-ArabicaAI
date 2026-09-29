@@ -86,23 +86,23 @@ DEMO_CUSTOMER_ID ?= CLI-U53R5AZVLET0
 DEMO_QUALITY_RUN ?= demo-$(subst -,,$(DEMO_DATE))
 
 demo-setup:
-	$(PYTHON) -m pip install -r demo-requirements.txt
+	$(PYTHON) -m pip install -r demo_pg/web-requirements.txt
 	npm --prefix demo-ui ci
 
 demo-migrate:
-	$(PYTHON) -m demo_db.migrate
+	$(PYTHON) -m demo_pg.db.migrate
 
 demo-seed:
-	$(PYTHON) -m demo_db.seed_fictitious
+	$(PYTHON) -m demo_pg.db.seed_fictitious
 
 demo-test:
-	$(PYTHON) -m pytest data_pipelines/bronze/test_ingestion.py demo_db/tests -q
+	$(PYTHON) -m pytest data_pipelines/bronze/test_ingestion.py demo_pg/db/tests -q
 
 demo-ui-build:
 	npm --prefix demo-ui run build
 
 demo-docker-build:
-	docker build -f demo.Dockerfile -t arabica-intake-demo:local .
+	docker build -f demo_pg/web.Dockerfile -t arabica-intake-demo:local .
 
 demo-sample-bronze:
 	DATA_DIR="$(DEMO_DATA_DIR)" DUCKDB_PATH="$(DEMO_DATA_DIR)/latam_bank.duckdb" \
@@ -117,10 +117,10 @@ demo-sample-quality:
 	$(PYTHON) -m data_pipelines.quality.run_quality --tables customers,products,transactions,daily_exchange_rates --run-id $(DEMO_QUALITY_RUN)
 
 demo-sample-load:
-	$(PYTHON) -m demo_db.load_sample --db "$(DEMO_DATA_DIR)/latam_bank.duckdb" \
+	$(PYTHON) -m demo_pg.db.load_sample --db "$(DEMO_DATA_DIR)/latam_bank.duckdb" \
 	--quality-report "$(DEMO_DATA_DIR)/quality_runs/$(DEMO_QUALITY_RUN)/quality_results.json" \
 	--business-date $(DEMO_DATE) --customer-id $(DEMO_CUSTOMER_ID) \
 	--manifest "$(DEMO_DATA_DIR)/load_manifest.json"
 
 demo-load-docker-build:
-	docker build -f demo-load.Dockerfile -t arabica-intake-load:local .
+	docker build -f demo_pg/loader.Dockerfile -t arabica-intake-load:local .

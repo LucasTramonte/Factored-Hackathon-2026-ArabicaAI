@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel
 
 app = FastAPI(title="ArabicaAI local demo", description="Fictitious data; simulated login. No real bank integration.")
-from demo_db.migrate import DEFAULT_DSN
+from demo_pg.db.migrate import DEFAULT_DSN
 DSN = os.environ.get("DEMO_DATABASE_DSN", DEFAULT_DSN)
 PUBLIC = os.environ.get("DEMO_PUBLIC") == "1"
 GATE_USER = os.environ.get("DEMO_ACCESS_USERNAME", "")
@@ -225,7 +225,7 @@ def agent_cases(request: Request, response: Response):
 
 
 # The UI is an optional build artifact. Keep all API routes above this catch-all.
-UI_BUILD = Path(__file__).resolve().parent / "demo-ui" / "dist" / "arabica-demo-ui" / "browser"
+UI_BUILD = Path(__file__).resolve().parents[1] / "demo-ui" / "dist" / "arabica-demo-ui" / "browser"
 RESERVED = ("demo", "transactions", "cases", "agent", "healthz", "docs", "redoc", "openapi.json")
 
 

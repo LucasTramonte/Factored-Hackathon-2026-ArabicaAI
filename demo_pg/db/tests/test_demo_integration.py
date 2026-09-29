@@ -8,9 +8,9 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
-import demo_api
-from demo_db.migrate import migrate
-from demo_db.seed_fictitious import seed
+from demo_pg import api as demo_api
+from demo_pg.db.migrate import migrate
+from demo_pg.db.seed_fictitious import seed
 
 ADMIN_DSN = "host=127.0.0.1 port=55432 dbname=postgres user=arabica connect_timeout=2"
 
@@ -112,7 +112,7 @@ def test_silver_sample_load_is_bounded_repeatable_and_rejects_drift(demo_db, tmp
     from datetime import date
     from pathlib import Path
     import duckdb
-    from demo_db.load_sample import load
+    from demo_pg.db.load_sample import load
 
     path = tmp_path / "sample.duckdb"
     with duckdb.connect(str(path)) as con:

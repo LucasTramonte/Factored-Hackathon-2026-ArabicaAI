@@ -4,7 +4,7 @@ This repository supports the Factored Hackathon 2026 with a synthetic LATAM bank
 
 ## Intake demo
 
-The separate [charge-intake demo](Docs/Plans/intake-demo.md) has an English Angular interface, FastAPI, PostgreSQL migrations, and a one-day S3 → Bronze → Silver → quality → PostgreSQL load. Start there for `make demo-*` commands. The demo takes a bounded sample; `make pipeline` below is the full analytical run. The shared-link deployment is prepared but has not been published. An isolated [Cloudflare Worker + D1 variant](cloudflare/README.md) is also available for a potentially free, always-reachable team preview after account setup and limit testing.
+The separate [charge-intake demo](Docs/Plans/intake-demo.md) has an English Angular interface, FastAPI, PostgreSQL migrations, and a one-day S3 → Bronze → Silver → quality → PostgreSQL load. Start there for `make demo-*` commands. The demo takes a bounded sample; `make pipeline` below is the full analytical run. The FastAPI/PostgreSQL implementation lives in [demo_pg/](demo_pg/README.md) for local runs and a separate deployment option. A [Cloudflare Worker + D1 pilot](cloudflare/README.md) is deployed for team preview; verify runtime access and limits before sharing it. Both use the same Angular UI.
 
 ## Start here
 
@@ -65,6 +65,7 @@ Docker reuses cached build layers on later runs. For a smaller first S3 check, f
 - [Dataset overview](Docs/LATAM_BANK_DATASET.md) and [hackathon brief](Docs/FACTORED_HACKATHON_2026.md): source scope and challenge context.
 - [Architecture](ARCHITECTURE.md) and [reproduction guide](REPRODUCIBILITY.md): pipeline behavior, memory limits, Docker, and troubleshooting commands.
 - [Quality parity record](data_pipelines/quality/PARITY.md): the 13-table audit, observed warnings, and comparison with the former CSV scanner.
+- [Intake cost review and workbook](Docs/Costs/Intake/INTAKE_COST_REVIEW.md): scenario assumptions, hosting options, and unmeasured capacity.
 - [Marketing/Product evidence](data_foundation/reports/README.md) and [offline report hub](data_foundation/reports/index.html): reviewed aggregates, limits and reproducible source. The [customer-backward brief](Docs/Marketing-Product-PRFAQ.md) frames the proposed test.
 
 The dataset is synthetic. Descriptive counts from it should not be presented as measured bank outcomes or causal effects.
