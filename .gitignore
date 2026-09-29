@@ -23,3 +23,14 @@ Docs/Factored Hackathon - Arabica AI/latam-bank-architecture-en.excalidraw.md
 /reports/2026-09-27/intake-review/
 /tmp/
 /output/
+# Demo UI and Cloudflare Worker build outputs and local secrets
+front-end/node_modules/
+front-end/dist/
+front-end/.angular/
+back-end/node_modules/
+back-end/public/
+back-end/.wrangler/
+back-end/.dev.vars*
+
+# Exported Cloudflare logs contain client IPs and request IDs; keep them under ignored data/observability/
+/logs-*.json
