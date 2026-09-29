@@ -36,7 +36,7 @@ Every number here comes from a query in [`data_profiles/findings/queries/`](data
 | [DF-010](#df-010-unrecognized-charge-demand-is-stable) | Unrecognized-charge demand is stable | design | Low | Supports ADR-002 | Lucas |
 | [DF-011](#df-011-30-of-customers-have-no-detected-accent) | 30% of customers have no detected accent | full | Low | Handled at metric level | Lucas |
 | [DF-012](#df-012-ambiguous-reports-are-rare-and-double-charges-absent) | Ambiguous reports are rare and double charges absent | design | Medium | Accepted limitation | Lucas |
-| [DF-013](#df-013-a-third-of-buyers-hold-more-than-one-credit-card) | A third of buyers hold more than one credit card | design | Medium | Accepted limitation | Lucas |
+| [DF-013](#df-013-a-third-of-credit-card-holding-buyers-hold-multiple-credit-cards) | A third of credit-card-holding buyers hold multiple credit cards | design | Medium | Accepted limitation | Lucas |
 | [DF-014](#df-014-purchases-fall-outside-the-cards-validity-dates) | Purchases fall outside the card's validity dates | design | Medium | Open | Manoella |
 | [DF-015](#df-015-bronze-profile-findings-re-checked-in-silver) | Bronze-profile findings re-checked in Silver | full | Low | Mixed | Manoella |
 
@@ -119,10 +119,10 @@ Every number here comes from a query in [`data_profiles/findings/queries/`](data
 - **Impact:** real data would almost never produce an ambiguous match or a double charge, so an evaluation drawn from it couldn't test either.
 - **Handling:** the evaluation is a coverage set with deliberately denser, more ambiguous fixtures, and it reports results by scenario family. "Charged twice" reports are authored, and routed as recognized billing disputes.
 
-### DF-013 A third of buyers hold more than one credit card
+### DF-013 A third of credit-card-holding buyers hold multiple credit cards
 
-- **Evidence:** of customers with design-window purchases, 32.0% hold more than one credit card (maximum 6) and 13.8% more than one debit card, in the current product snapshot.
-- **Impact:** "my credit card" doesn't identify a card for a third of customers.
+- **Evidence:** among customers with approved design-window purchases who hold at least one credit card in the current product snapshot, 32.0% hold more than one credit card (maximum 6). Among those purchasers who hold at least one debit card, 13.8% hold more than one debit card. Each percentage uses holders of that card type as its denominator; purchasers with zero cards of that type are excluded.
+- **Impact:** "my credit card" doesn't identify a unique card for about a third of credit-card-holding purchasers in this snapshot. This does not establish card holdings at the time of a past purchase.
 - **Handling:** evaluation fixtures carry card type and the last four digits.
 
 ### DF-014 Purchases fall outside the card's validity dates
