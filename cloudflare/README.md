@@ -40,7 +40,7 @@ This export reads only the fixed allowlisted customer and at most 20 transaction
 
 These are **one-time account actions**. They have not been run for this repository.
 
-1. In Cloudflare **Workers & Pages**, create a **new Worker** named `arabica-intake-demo`; keep any existing Pages project unchanged. Create a D1 database named `arabica-intake-demo` under **D1 SQL Database**. Copy its non-secret database UUID into `cloudflare/wrangler.jsonc` in place of the all-zero placeholder. The Worker name in Cloudflare must match the config `name`.
+1. In Cloudflare **Workers & Pages**, use the Worker named `factored-hackathon-2026-arabicaai`; keep any existing Pages project unchanged. Create a D1 database named `arabica-intake-demo` under **D1 SQL Database**. Copy its non-secret database UUID into `cloudflare/wrangler.jsonc` in place of the all-zero placeholder. The Worker name in Cloudflare must match the config `name`.
 2. Configure Cloudflare **Access** on the production `*.workers.dev` Worker URL with an allowlist of team email addresses. Protect previews too, or disable them until you have a separate preview database. A preview deployment otherwise uses the configured binding and can write to the same D1 database.
 3. Under the Worker's **Settings → Variables and Secrets**, set runtime `DEMO_ACCESS_USERNAME` and a long, unique `DEMO_ACCESS_PASSWORD`. Do not add them to the build command, GitHub, `.env`, or repository. The Worker returns 503 for non-health routes until both exist. Access and this Basic gate protect all routes, including static files.
 4. On a machine authenticated to your Cloudflare account, apply migrations and load only reviewed demo data. From `cloudflare/` run:
@@ -53,13 +53,13 @@ These are **one-time account actions**. They have not been run for this reposito
    ```
 
    The seed can be rerun: identical data remain the same; divergent values raise a constraint error. Do **not** upload the local PostgreSQL cases, `data/` directory, DuckDB, Parquet, or credentials.
-5. Connect the **new Worker** to this GitHub repository. In **Settings → Builds**, select the branch containing this variant as the production branch. Keep **Root directory** at the repository root so the Angular sibling directory is available. Set **Build command** to:
+5. Connect the Worker to this GitHub repository. In **Settings → Builds**, select `feat/lucas-intake-demo` as the production branch and disable preview builds until they have a separate D1 database. Set **Root directory** to `cloudflare`, where `wrangler.jsonc` lives. The checkout still includes the sibling Angular directory. Set **Build command** to:
 
    ```bash
-   npm --prefix demo-ui ci && npm --prefix demo-ui run build && npm --prefix cloudflare ci && npm --prefix cloudflare run prepare-assets && npm --prefix cloudflare test
+   npm ci && npm --prefix ../demo-ui ci && npm --prefix ../demo-ui run build && npm run prepare-assets && npm test
    ```
 
-   Set **Deploy command** to `npm --prefix cloudflare run deploy`. Cloudflare Builds supports a configurable production branch and commands. Restrict watch paths to `cloudflare/**` and `demo-ui/**` if you want to avoid builds from unrelated reports. The deploy guard stops the build until the real D1 UUID is committed. A GitHub connection alone does not deploy the existing Docker image.
+   Set **Deploy command** to `npm run deploy`. Cloudflare Builds supports a configurable production branch and commands. Restrict watch paths to `cloudflare/**` and `demo-ui/**` if you want to avoid builds from unrelated reports. The deploy guard stops the build until the real D1 UUID is committed. A GitHub connection alone does not deploy the existing Docker image.
 6. After the first successful deployment, open the Worker URL from an allowed email account. Confirm Access denies an unlisted email; the Basic gate denies a missing password; customer login lists only that identity's charges; case creation returns a reference; retry returns the same reference; and the agent view reads the persisted case. Restarting a Worker isolate must not erase a case or session because both are in D1. Check `GET /healthz` separately.
 
 ## Limits and costs

@@ -1,5 +1,5 @@
 {
-  "name": "arabica-intake-demo",
+  "name": "factored-hackathon-2026-arabicaai",
   "main": "src/worker.js",
   "compatibility_date": "2026-09-28",
   "workers_dev": true,
@@ -13,7 +13,7 @@
     {
       "binding": "DB",
       "database_name": "arabica-intake-demo",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "befa35e6-e735-4757-89b1-b4f82fdca20d",
       "migrations_dir": "migrations"
     }
   ]
