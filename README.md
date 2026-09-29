@@ -22,6 +22,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 | Intake API | `back-end/` | One online runtime: sessions, customer-scoped retrieval, idempotent cases, reference after commit, agent view |
 | Web client | `front-end/` | Customer and agent views; API contracts in `front-end/contracts/` |
 | Evaluation | `evals/intake` | ES/PT decision-point cases, checklist baseline, episode KPI scorer |
+| Data quality register | [`DATA_QUALITY.md`](DATA_QUALITY.md), `data_profiles/findings/` | Every dataset finding that changes or limits a decision, with its query, impact and handling |
 | Decisions | `Docs/ADRs/` | Scope, runtime, capacity and cost, each with its limitations and exit triggers |
 
 **Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/, behind Cloudflare Access (ask the team to be allowlisted) and a Basic gate. Sign-ins are simulated.
@@ -83,6 +84,7 @@ If the CSVs are installed locally, run `make setup` and `make pipeline-local`. O
 | `make pipeline-local` | Build and audit the supplied local CSVs entirely offline. |
 | `make bronze-full` | Rebuild Bronze when an older source partition was corrected or removed; follow with `make silver` and `make quality`. |
 | `make silver` | Rebuild typed analytical tables from local Bronze. |
+| `make findings` | Run the data findings queries on the Silver DuckDB and write aggregates to ignored `data/findings_runs/`. |
 | `make quality` | Check all 13 Bronze/Silver table pairs and their relationships. |
 | `make report QUALITY_REPORT=data/quality_runs/<run-id>/quality_results.json` | Rebuild an ignored Marketing/Product report run from the verified Silver database. |
 | `make docker-test` | Run offline tests in the code-only container. |
@@ -97,6 +99,7 @@ Docker reuses cached build layers on later runs. For a smaller first S3 check, f
 - [Data dictionary](Docs/LATAM_BANK_DATA_DICTIONARY.md): exact table, column, and relationship names.
 - [Dataset overview](Docs/LATAM_BANK_DATASET.md) and [hackathon brief](Docs/FACTORED_HACKATHON_2026.md): source scope and challenge context.
 - [Architecture](ARCHITECTURE.md) and [reproduction guide](REPRODUCIBILITY.md): pipeline behavior, memory limits, Docker, and troubleshooting commands.
+- [Data quality and findings register](DATA_QUALITY.md): what the data can and can't support, each finding backed by a reproducible query, and the evaluation data protocol ([ADR-005](Docs/ADRs/ADR-005-evaluation-data-protocol.md)).
 - [Quality parity record](data_pipelines/quality/PARITY.md): the 13-table audit, observed warnings, and comparison with the former CSV scanner.
 - [Decision records](Docs/ADRs/README.md): workflow scope, runtime, and capacity and cost, with their limitations.
 - [Silver transcript verification](Docs/intake/silver-transcript-verification.md): the current transcript reconciliation. `notebooks/07_silver_transcript_verification.ipynb` has a network-free readout. Older notebooks and reports are dated historical evidence.

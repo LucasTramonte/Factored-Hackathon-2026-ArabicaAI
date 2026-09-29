@@ -10,14 +10,14 @@ REPORT_RUN ?= $(CURDIR)/data_foundation/runs/$(shell date -u +%Y%m%dT%H%M%SZ)
 
 export S3_BUCKET AWS_REGION AWS_PROFILE DATA_DIR
 
-.PHONY: setup test test-evaluation compile bronze bronze-full bronze-local-full silver quality pipeline pipeline-local docker-build docker-test docker-pipeline report
+.PHONY: setup test test-evaluation compile bronze bronze-full bronze-local-full silver quality findings pipeline pipeline-local docker-build docker-test docker-pipeline report
 
 setup:
 	python3 -m venv .venv
 	.venv/bin/python -m pip install -r data_pipelines/bronze/requirements.txt
 
 test:
-	$(PYTHON) -m pytest data_pipelines data_foundation/tests intake_agent -q
+	$(PYTHON) -m pytest data_pipelines data_foundation/tests data_profiles/findings intake_agent -q
 
 test-evaluation:
 	$(PYTHON) -m pytest data_foundation/tests evals/intake/test_baseline.py -q
@@ -39,6 +39,9 @@ silver:
 
 quality:
 	$(PYTHON) -m data_pipelines.quality.run_quality
+
+findings:
+	$(PYTHON) -m data_profiles.findings.run_findings --db "$(DUCKDB_PATH)"
 
 pipeline:
 	$(MAKE) bronze
