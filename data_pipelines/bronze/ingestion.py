@@ -24,6 +24,7 @@ same DuckDB SQL without any network or S3 dependency.
 from __future__ import annotations
 
 import logging
+import glob
 import os
 import re
 import shutil
@@ -213,6 +214,7 @@ def ingest_fact(
     table_name: str,
     full_refresh: bool = False,
     data_dir: str = "data",
+    partition_date: date | None = None,
 ) -> IngestResult:
     """See ingest_dimension's docstring for what `data_dir` is and why it defaults to a
     CWD-relative "data" (tests rely on that default; production runs pass settings.data_dir)."""
@@ -233,7 +235,34 @@ def ingest_fact(
     ).fetchone()[0] > 0
 
     last_loaded = None if full_refresh else get_last_loaded_date(con, table_name)
-    available = list_available_partition_dates(con, base_path, table_name)
+    if partition_date is not None:
+        # Resolve one exact S3 day, avoiding a full-history prefix walk.
+        pattern = (f"{base_path}/{table_name}/year={partition_date:%Y}/"
+                   f"month={partition_date:%m}/day={partition_date:%d}/*.csv")
+        available = [partition_date] if con.execute(
+            "SELECT COUNT(*) FROM glob(?)", [pattern]
+        ).fetchone()[0] else []
+        if full_refresh and table_exists:
+            existing = con.execute(f"SELECT DISTINCT year, month, day FROM bronze.{table_name}").fetchall()
+            if any(date(int(y), int(m), int(d)) != partition_date for y, m, d in existing):
+                raise ValueError("Scoped refresh would discard other Bronze partitions")
+        if table_exists and last_loaded is not None and last_loaded != partition_date:
+            raise ValueError("Scoped ingestion requires an isolated one-day Bronze database")
+        # The DuckDB may be new while DATA_DIR still holds a full Parquet history: a scoped
+        # (full-refresh) write would then replace that history with one day. Refuse instead.
+        def _day(path: str) -> date | None:
+            parts = dict(part.split("=", 1) for part in os.path.relpath(path, local_dir).split(os.sep))
+            try:
+                return date(int(parts["year"]), int(parts["month"]), int(parts["day"]))
+            except (KeyError, ValueError):
+                return None
+        other_days = sorted({p for p in glob.glob(os.path.join(local_dir, "year=*", "month=*", "day=*"))
+                             if _day(p) != partition_date})
+        if other_days:
+            raise ValueError(f"Scoped ingestion requires an isolated DATA_DIR: {local_dir} already holds "
+                             f"{len(other_days)} other partition(s)")
+    else:
+        available = list_available_partition_dates(con, base_path, table_name)
 
     if not available:
         return IngestResult(table_name=table_name, kind="fact", rows=0, partitions_added=0,
@@ -278,7 +307,7 @@ def ingest_fact(
             # year=*/month=*/day=*/*.csv tree does it in one read_csv call, same as the original
             # notebook did before this pipeline existed -- and that approach was already proven to work
             # on all 7 fact tables at their real sizes (up to 15.6M rows for digital_events).
-            _copy_from(_full_history_glob(base_path, table_name))
+            _copy_from(pattern if partition_date is not None else _full_history_glob(base_path, table_name))
             logger.info("[%s] full refresh: %d partition(s) loaded in %.0fs",
                         table_name, len(dates_to_load), time.monotonic() - loop_start)
         else:
@@ -289,7 +318,7 @@ def ingest_fact(
                         table_name, len(dates_to_load), len(batches))
             for i, ((year, month), month_dates) in enumerate(batches, start=1):
                 t0 = time.monotonic()
-                _copy_from(_month_glob(base_path, table_name, year, month))
+                _copy_from(pattern if partition_date is not None else _month_glob(base_path, table_name, year, month))
                 logger.debug("[%s] batch %d/%d (%04d-%02d, %d new date(s)) loaded in %.1fs",
                              table_name, i, len(batches), year, month, len(month_dates),
                              time.monotonic() - t0)

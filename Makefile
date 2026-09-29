@@ -81,3 +81,46 @@ transcript-labels:
 pipeline-with-labels:
 	$(MAKE) pipeline
 	$(MAKE) transcript-labels
+
+.PHONY: intake-setup intake-test intake-ui-build intake-sample-bronze intake-sample-silver intake-sample-quality intake-sample-slice intake-seed-local
+# One-day intake sample: a separate ignored DuckDB so the full analytical database is never replaced.
+INTAKE_DATA_DIR ?= $(CURDIR)/data/demo_s3
+INTAKE_DATE ?= 2026-02-26
+INTAKE_QUALITY_RUN ?= intake-$(subst -,,$(INTAKE_DATE))
+INTAKE_SEED ?= $(INTAKE_DATA_DIR)/intake_slice_seed.sql
+
+intake-setup:
+	npm --prefix front-end ci
+	npm --prefix back-end ci
+
+intake-test:
+	$(PYTHON) -m pytest data_pipelines/gold -q
+	npm --prefix front-end test -- --watch=false --browsers=ChromeHeadless
+	$(MAKE) intake-ui-build
+	npm --prefix back-end test
+
+intake-ui-build:
+	npm --prefix front-end run build
+	npm --prefix back-end run prepare-assets
+
+intake-sample-bronze:
+	DATA_DIR="$(INTAKE_DATA_DIR)" DUCKDB_PATH="$(INTAKE_DATA_DIR)/latam_bank.duckdb" \
+	$(PYTHON) data_pipelines/bronze/run_ingestion.py --tables customers,products,daily_exchange_rates,transactions --partition-date $(INTAKE_DATE)
+
+intake-sample-silver:
+	DATA_DIR="$(INTAKE_DATA_DIR)" DUCKDB_PATH="$(INTAKE_DATA_DIR)/latam_bank.duckdb" \
+	$(PYTHON) data_pipelines/silver/run_silver.py --tables customers,products,transactions
+
+intake-sample-quality:
+	DATA_DIR="$(INTAKE_DATA_DIR)" DUCKDB_PATH="$(INTAKE_DATA_DIR)/latam_bank.duckdb" \
+	$(PYTHON) -m data_pipelines.quality.run_quality --tables customers,products,transactions,daily_exchange_rates --run-id $(INTAKE_QUALITY_RUN)
+
+intake-sample-slice:
+	$(PYTHON) -m data_pipelines.gold.run_intake_slice --db "$(INTAKE_DATA_DIR)/latam_bank.duckdb" \
+	--quality-report "$(INTAKE_DATA_DIR)/quality_runs/$(INTAKE_QUALITY_RUN)/quality_results.json" \
+	--business-date $(INTAKE_DATE) --seed-out "$(INTAKE_SEED)" --manifest-out "$(INTAKE_DATA_DIR)/intake_slice_manifest.json"
+
+intake-seed-local:
+	cd back-end && npx wrangler d1 migrations apply arabica-intake-demo --local
+	cd back-end && npx wrangler d1 execute arabica-intake-demo --local --file seeds/seed_fictitious.sql
+	cd back-end && npx wrangler d1 execute arabica-intake-demo --local --file "$(INTAKE_SEED)"

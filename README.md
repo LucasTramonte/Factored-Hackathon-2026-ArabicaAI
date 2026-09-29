@@ -1,8 +1,43 @@
-# LATAM Bank data foundation
+# ArabicaAI — Factored Hackathon 2026
 
-This repository supports the Factored Hackathon 2026 with a synthetic LATAM banking dataset. The current deliverables are a reproducible, read-only data pipeline, a quality audit, and rebuilt aggregate Marketing/Product reports from verified Silver tables.
+A customer reports a card charge they don't recognize, confirms which of their own transactions they mean, and gets a reference once the case is stored for human review. That is the V1 workflow ([ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). It is intake with a human handoff: no fraud verdicts, refunds or card blocks. The MVP is deterministic, and a language model is added only if the evaluation shows it's needed.
 
-## Start here
+The data is a synthetic LATAM banking dataset. Descriptive counts from it are not measured bank outcomes.
+
+## How it fits together
+
+```
+S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intake slice ─► reviewed D1 seed
+                   data_pipelines/ (Python + DuckDB, batch)                      │
+                                                                                 ▼
+ Angular client (front-end/) ─► Cloudflare Worker API + D1 (back-end/) ─► agent queue
+                                            ▲
+                     evals/intake (checklist baseline, episode scorer) over HTTP
+```
+
+| Component | Path | What it does |
+|---|---|---|
+| Data pipeline | `data_pipelines/bronze`, `silver`, `quality` | Reproducible, read-only S3 → typed Silver tables with a readiness audit |
+| Gold intake slice | `data_pipelines/gold` | Bounded, quality-gated sample → versioned D1 seed with provenance |
+| Intake API | `back-end/` | One online runtime: sessions, customer-scoped retrieval, idempotent cases, reference after commit, agent view |
+| Web client | `front-end/` | Customer and agent views; API contracts in `front-end/contracts/` |
+| Evaluation | `evals/intake` | ES/PT decision-point cases, checklist baseline, episode KPI scorer |
+| Decisions | `Docs/ADRs/` | Scope, runtime, capacity and cost, each with its limitations and exit triggers |
+
+**Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/, behind Cloudflare Access (ask the team to be allowlisted) and a Basic gate. Sign-ins are simulated.
+
+**Status (2026-09-29):**
+
+- The deterministic intake flow is deployed and tested. That covers the adversarial gate, session, isolation and idempotency suites and a D1 budget test.
+- It runs on the Free plan, which [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes at 10,000 episodes/day against measured volumes of 17–818 per day.
+- **Not done yet:** retrieval-outcome states, case kinds, ES/PT interface text, event instrumentation, and any AI. These are covered in the [intake roadmap](Docs/Plans/intake-roadmap.md).
+
+Quick starts:
+
+- **Data:** see below.
+- **Intake service:** see the [runbook](Docs/Plans/intake-demo.md).
+
+## Data pipeline: start here
 
 For local runs, you need Python 3.10+ and GNU Make. For container runs, you need Docker and GNU Make; Python is installed in the image. Full S3 runs need several GB of free disk space and access to the organizer's bucket through an AWS profile. The offline route below uses supplied local CSVs. The repository contains no raw data or credentials. Use an AWS profile or temporary role credentials; **do not add access keys to a repository `.env` file**.
 
@@ -52,6 +87,8 @@ If the CSVs are installed locally, run `make setup` and `make pipeline-local`. O
 | `make report QUALITY_REPORT=data/quality_runs/<run-id>/quality_results.json` | Rebuild an ignored Marketing/Product report run from the verified Silver database. |
 | `make docker-test` | Run offline tests in the code-only container. |
 | `make docker-pipeline` | Run the pipeline with local `data/` and `~/.aws` mounted at runtime. |
+| `make intake-setup` / `make intake-test` | Install and test the intake service: Gold slice, Angular specs, and Worker unit and local-D1 tests. |
+| `make intake-sample-slice` | Build the reviewed D1 seed from the one-day quality-gated sample (see the intake runbook). |
 
 Docker reuses cached build layers on later runs. For a smaller first S3 check, follow the targeted commands in [REPRODUCIBILITY.md](REPRODUCIBILITY.md). CI runs offline tests and compilation without S3 credentials. Docker checks remain available with `make docker-test`.
 
@@ -61,10 +98,8 @@ Docker reuses cached build layers on later runs. For a smaller first S3 check, f
 - [Dataset overview](Docs/LATAM_BANK_DATASET.md) and [hackathon brief](Docs/FACTORED_HACKATHON_2026.md): source scope and challenge context.
 - [Architecture](ARCHITECTURE.md) and [reproduction guide](REPRODUCIBILITY.md): pipeline behavior, memory limits, Docker, and troubleshooting commands.
 - [Quality parity record](data_pipelines/quality/PARITY.md): the 13-table audit, observed warnings, and comparison with the former CSV scanner.
+- [Decision records](Docs/ADRs/README.md): workflow scope, runtime, and capacity and cost, with their limitations.
+- [Silver transcript verification](Docs/intake/silver-transcript-verification.md): the current transcript reconciliation. `notebooks/07_silver_transcript_verification.ipynb` has a network-free readout. Older notebooks and reports are dated historical evidence.
 - [Marketing/Product evidence](data_foundation/reports/README.md) and [offline report hub](data_foundation/reports/index.html): reviewed aggregates, limits and reproducible source. The [customer-backward brief](Docs/Marketing-Product-PRFAQ.md) frames the proposed test.
 
 The dataset is synthetic. Descriptive counts from it should not be presented as measured bank outcomes or causal effects.
-
-## Roberto evaluation branch
-
-The current transcript reconciliation is documented in [Silver transcript verification](Docs/intake/silver-transcript-verification.md), with a network-free readout in `notebooks/07_silver_transcript_verification.ipynb`. Earlier notebooks/reports remain dated historical evidence; their presence does not restore the retired CSV production pipeline.
