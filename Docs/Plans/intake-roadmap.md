@@ -31,20 +31,26 @@ Each phase is its own PR, with adversarial tests first and a merge only when its
 1. **Deploy and measure (now).**
    - **Work:** push the restructure and update the Workers Builds settings. Run the remote checklist in `back-end/README.md`, then a low-rate remote run to capture CPU and end-to-end p50/p95. Record the AWS Pricing Calculator estimate.
    - **Exit:** ADR-004's implementation notes hold the measured numbers.
-2. **Outcome states and case kinds.**
+2. **Full data context in the product (next priority).** Today the live demo serves fictitious charges plus one dataset transaction. The evaluators provided a whole bank's data, so the demo should show it through Gold marts, one per domain, exported to D1 as reviewed, versioned seeds:
+   - **Demo cohort.** About 1,000 real (synthetic) customers, stratified by country, segment and accent, and deliberately including customers with `Cargo no reconocido` complaints. Each one comes with its full history: products, transactions, contacts and transcripts, complaints, surveys, digital activity and campaigns. That's about 155k rows at the measured per-customer averages (29.5 transactions, 104 digital events, 4.6 interactions and so on), well inside D1 Free's 500 MB per database, against 2.86 GB for all of Silver.
+   - **Bank-wide context** travels as precomputed aggregates (for example, how common a merchant or complaint type is), never as per-request scans.
+   - **Separation of responsibility.** Each domain gets its own Gold mart module (`data_pipelines/gold/<domain>.py`), its own store and route module in `back-end/src/modules/<domain>/`, and its own UI component in `front-end/src/app/features/<domain>/`. The customer and agent views compose those components, and no component reads another domain's data directly.
+   - **Excluded by design:** risk and value fields (`fraud_score`, `is_fraud`, credit score, income), following `data_profiles/fraud_readiness_findings.md` and the context-card rules in #15. Consent, segment and status are shown as current snapshots.
+   - **Exit:** the D1 budget and contract tests cover every new route, the manifest reconciles cohort counts to Silver, and the agent case view shows the customer's real context.
+3. **Outcome states and case kinds.**
    - **Work:** the retrieval outcome classification; technical and incomplete handoff cases; bounded server retry; the cross-key duplicate rule, enforced by a unique index over open cases.
    - **Exit:** the integration tests cover each outcome and a 10-way concurrent duplicate attempt.
-3. **Gold coverage.**
+4. **Gold coverage.**
    - **Work:** multi-day, multi-customer slice fixtures that include zero and several matches; `slice_version` and coverage in the API response; filters.
    - **Exit:** the Gold and API tests assert coverage and version end to end.
-4. **Human review and ES/PT.**
+5. **Human review and ES/PT.**
    - **Work:** case detail and status history; an agent role gate; ES/PT interface text.
    - **Exit:** the Angular specs and integration tests cover the status transitions, and nothing can set a refund or verdict.
-5. **Instrumentation.**
+6. **Instrumentation.**
    - **Work:** the API emits the event contract, and scripted ES/PT episodes run end to end against the local Worker.
    - **Exit:** `evals/intake` reports safe accepted intake over all eligible starts, from real service events.
-6. **AI, only if justified.**
-   - **Work:** if phase 5 shows checklist failures a model would fix, write an ADR covering the model, cost (ADR-004's envelope), data handling and the held-out comparison. The design input is the agent spec (PR #11).
+7. **AI, only if justified.**
+   - **Work:** if phase 6 shows checklist failures a model would fix, write an ADR covering the model, cost (ADR-004's envelope), data handling and the held-out comparison. The design input is the agent spec (PR #11).
    - **Exit:** the model beats the checklist on held-out cases with no increase in unsafe outcomes. Otherwise it doesn't ship.
 
 ## Evaluation boundary
