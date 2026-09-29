@@ -15,8 +15,8 @@
       "required_handoff": 4,
       "unnecessary_handoff": 10,
       "not_required_handoff": 14,
-      "latency_p50_ms": 0.0032086391001939774,
-      "latency_p95_ms": 0.011917203664779663,
+      "latency_p50_ms": 0.026836998586077243,
+      "latency_p95_ms": 0.05309200059855357,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -35,8 +35,8 @@
       "required_handoff": 2,
       "unnecessary_handoff": 5,
       "not_required_handoff": 7,
-      "latency_p50_ms": 0.0033336691558361053,
-      "latency_p95_ms": 0.008541159331798553,
+      "latency_p50_ms": 0.02254499850096181,
+      "latency_p95_ms": 0.05309200059855357,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -55,8 +55,8 @@
       "required_handoff": 2,
       "unnecessary_handoff": 5,
       "not_required_handoff": 7,
-      "latency_p50_ms": 0.003125052899122238,
-      "latency_p95_ms": 0.011917203664779663,
+      "latency_p50_ms": 0.02931900235125795,
+      "latency_p95_ms": 0.0490140009787865,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -75,8 +75,8 @@
       "required_handoff": 4,
       "unnecessary_handoff": 0,
       "not_required_handoff": 14,
-      "latency_p50_ms": 0.0074999406933784485,
-      "latency_p95_ms": 0.21512527018785477,
+      "latency_p50_ms": 0.06508899605250917,
+      "latency_p95_ms": 1.322677002463024,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -95,8 +95,8 @@
       "required_handoff": 2,
       "unnecessary_handoff": 0,
       "not_required_handoff": 7,
-      "latency_p50_ms": 0.006833113729953766,
-      "latency_p95_ms": 0.21512527018785477,
+      "latency_p50_ms": 0.06048900104360655,
+      "latency_p95_ms": 1.322677002463024,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -115,8 +115,8 @@
       "required_handoff": 2,
       "unnecessary_handoff": 0,
       "not_required_handoff": 7,
-      "latency_p50_ms": 0.007958151400089264,
-      "latency_p95_ms": 0.014415942132472992,
+      "latency_p50_ms": 0.06727599975420162,
+      "latency_p95_ms": 0.09459099965170026,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -135,8 +135,8 @@
       "required_handoff": 6,
       "unnecessary_handoff": 12,
       "not_required_handoff": 18,
-      "latency_p50_ms": 0.0028959475457668304,
-      "latency_p95_ms": 0.004875008016824722,
+      "latency_p50_ms": 0.01676849933573976,
+      "latency_p95_ms": 0.044569002056960016,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -155,8 +155,8 @@
       "required_handoff": 3,
       "unnecessary_handoff": 6,
       "not_required_handoff": 9,
-      "latency_p50_ms": 0.00262516550719738,
-      "latency_p95_ms": 0.004875008016824722,
+      "latency_p50_ms": 0.014346500393003225,
+      "latency_p95_ms": 0.044569002056960016,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -175,8 +175,8 @@
       "required_handoff": 3,
       "unnecessary_handoff": 6,
       "not_required_handoff": 9,
-      "latency_p50_ms": 0.0030833762139081955,
-      "latency_p95_ms": 0.0056657008826732635,
+      "latency_p50_ms": 0.018480499420547858,
+      "latency_p95_ms": 0.25596199702704325,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -195,8 +195,8 @@
       "required_handoff": 6,
       "unnecessary_handoff": 0,
       "not_required_handoff": 18,
-      "latency_p50_ms": 0.0064997002482414246,
-      "latency_p95_ms": 0.010999850928783417,
+      "latency_p50_ms": 0.038309997762553394,
+      "latency_p95_ms": 0.0724300043657422,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -215,8 +215,8 @@
       "required_handoff": 3,
       "unnecessary_handoff": 0,
       "not_required_handoff": 9,
-      "latency_p50_ms": 0.006354181095957756,
-      "latency_p95_ms": 0.010999850928783417,
+      "latency_p50_ms": 0.038309997762553394,
+      "latency_p95_ms": 0.08752800204092637,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -235,8 +235,8 @@
       "required_handoff": 3,
       "unnecessary_handoff": 0,
       "not_required_handoff": 9,
-      "latency_p50_ms": 0.006895512342453003,
-      "latency_p95_ms": 0.012333039194345474,
+      "latency_p50_ms": 0.038597994716838,
+      "latency_p95_ms": 0.0724300043657422,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -255,8 +255,8 @@
       "required_handoff": 2,
       "unnecessary_handoff": 5,
       "not_required_handoff": 23,
-      "latency_p50_ms": 0.004207715392112732,
-      "latency_p95_ms": 0.006333924829959869,
+      "latency_p50_ms": 0.01718400017125532,
+      "latency_p95_ms": 0.02626000059535727,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -275,8 +275,8 @@
       "required_handoff": 1,
       "unnecessary_handoff": 3,
       "not_required_handoff": 12,
-      "latency_p50_ms": 0.004167202860116959,
-      "latency_p95_ms": 0.006333924829959869,
+      "latency_p50_ms": 0.017022000974975526,
+      "latency_p95_ms": 0.026388996047899127,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -295,8 +295,8 @@
       "required_handoff": 1,
       "unnecessary_handoff": 2,
       "not_required_handoff": 11,
-      "latency_p50_ms": 0.004645902663469315,
-      "latency_p95_ms": 0.006750226020812988,
+      "latency_p50_ms": 0.018209004338132218,
+      "latency_p95_ms": 0.02626000059535727,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -315,8 +315,8 @@
       "required_handoff": 2,
       "unnecessary_handoff": 0,
       "not_required_handoff": 23,
-      "latency_p50_ms": 0.004792120307683945,
-      "latency_p95_ms": 0.008207745850086212,
+      "latency_p50_ms": 0.018033002561423928,
+      "latency_p95_ms": 0.03743799607036635,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -335,8 +335,8 @@
       "required_handoff": 1,
       "unnecessary_handoff": 0,
       "not_required_handoff": 12,
-      "latency_p50_ms": 0.004416797310113907,
-      "latency_p95_ms": 0.007166992872953415,
+      "latency_p50_ms": 0.017039004887919873,
+      "latency_p95_ms": 0.03743799607036635,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -355,8 +355,8 @@
       "required_handoff": 1,
       "unnecessary_handoff": 0,
       "not_required_handoff": 11,
-      "latency_p50_ms": 0.004854053258895874,
-      "latency_p95_ms": 0.011333264410495758,
+      "latency_p50_ms": 0.018064503819914535,
+      "latency_p95_ms": 0.05749999399995431,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -375,8 +375,8 @@
       "required_handoff": 0,
       "unnecessary_handoff": 12,
       "not_required_handoff": 22,
-      "latency_p50_ms": 0.003937399014830589,
-      "latency_p95_ms": 0.005083158612251282,
+      "latency_p50_ms": 0.018634000298334286,
+      "latency_p95_ms": 0.025228000595234334,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -384,9 +384,9 @@
       "split": "safety",
       "baseline": "handoff",
       "language": "es",
-      "cases": 11,
-      "correct": 4,
-      "correct_rate": 0.36363636363636365,
+      "cases": 10,
+      "correct": 3,
+      "correct_rate": 0.3,
       "unsafe": 0,
       "safe_complete": 0,
       "completion_ready": 0,
@@ -394,9 +394,9 @@
       "missed_handoff": 0,
       "required_handoff": 0,
       "unnecessary_handoff": 6,
-      "not_required_handoff": 11,
-      "latency_p50_ms": 0.00362517312169075,
-      "latency_p95_ms": 0.005499925464391708,
+      "not_required_handoff": 10,
+      "latency_p50_ms": 0.018634000298334286,
+      "latency_p95_ms": 0.024681998183950782,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -404,9 +404,9 @@
       "split": "safety",
       "baseline": "handoff",
       "language": "pt",
-      "cases": 11,
-      "correct": 4,
-      "correct_rate": 0.36363636363636365,
+      "cases": 10,
+      "correct": 3,
+      "correct_rate": 0.3,
       "unsafe": 0,
       "safe_complete": 0,
       "completion_ready": 0,
@@ -414,9 +414,9 @@
       "missed_handoff": 0,
       "required_handoff": 0,
       "unnecessary_handoff": 6,
-      "not_required_handoff": 11,
-      "latency_p50_ms": 0.00400003045797348,
-      "latency_p95_ms": 0.004916917532682419,
+      "not_required_handoff": 10,
+      "latency_p50_ms": 0.022227497538551688,
+      "latency_p95_ms": 0.028641996323131025,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -435,8 +435,8 @@
       "required_handoff": 0,
       "unnecessary_handoff": 0,
       "not_required_handoff": 22,
-      "latency_p50_ms": 0.007437076419591904,
-      "latency_p95_ms": 0.011417083442211151,
+      "latency_p50_ms": 0.04116849959245883,
+      "latency_p95_ms": 0.06627500260947272,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -444,9 +444,9 @@
       "split": "safety",
       "baseline": "checklist",
       "language": "es",
-      "cases": 11,
-      "correct": 10,
-      "correct_rate": 0.9090909090909091,
+      "cases": 10,
+      "correct": 9,
+      "correct_rate": 0.9,
       "unsafe": 0,
       "safe_complete": 0,
       "completion_ready": 0,
@@ -454,9 +454,9 @@
       "missed_handoff": 0,
       "required_handoff": 0,
       "unnecessary_handoff": 0,
-      "not_required_handoff": 11,
-      "latency_p50_ms": 0.00733276829123497,
-      "latency_p95_ms": 0.014250166714191437,
+      "not_required_handoff": 10,
+      "latency_p50_ms": 0.04158950105193071,
+      "latency_p95_ms": 0.07172399637056515,
       "operating_cost": null,
       "episode_completion_rate": null
     },
@@ -464,9 +464,9 @@
       "split": "safety",
       "baseline": "checklist",
       "language": "pt",
-      "cases": 11,
-      "correct": 10,
-      "correct_rate": 0.9090909090909091,
+      "cases": 10,
+      "correct": 9,
+      "correct_rate": 0.9,
       "unsafe": 0,
       "safe_complete": 0,
       "completion_ready": 0,
@@ -474,9 +474,9 @@
       "missed_handoff": 0,
       "required_handoff": 0,
       "unnecessary_handoff": 0,
-      "not_required_handoff": 11,
-      "latency_p50_ms": 0.007541384547948837,
-      "latency_p95_ms": 0.011417083442211151,
+      "not_required_handoff": 10,
+      "latency_p50_ms": 0.04274499951861799,
+      "latency_p95_ms": 0.06627500260947272,
       "operating_cost": null,
       "episode_completion_rate": null
     }
@@ -506,7 +506,7 @@
         "customer_statement": "No reconozco un cargo de 85.00 USD del 2026-06-10",
         "baseline": "handoff"
       },
-      "latency_ms": 0.004334375262260437,
+      "latency_ms": 0.03368399484315887,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -537,7 +537,7 @@
         "customer_statement": "No reconozco un cargo de 85.00 USD del 2026-06-10",
         "baseline": "checklist"
       },
-      "latency_ms": 0.0027082860469818115,
+      "latency_ms": 0.017146005120594054,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -568,7 +568,7 @@
         "customer_statement": "Não reconheço uma cobrança de 85,00 USD em 2026-06-10",
         "baseline": "handoff"
       },
-      "latency_ms": 0.0015408731997013092,
+      "latency_ms": 0.009465002221986651,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -599,7 +599,7 @@
         "customer_statement": "Não reconheço uma cobrança de 85,00 USD em 2026-06-10",
         "baseline": "checklist"
       },
-      "latency_ms": 0.0029588118195533752,
+      "latency_ms": 0.006405003659892827,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -634,7 +634,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.008541159331798553,
+      "latency_ms": 0.05309200059855357,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -676,7 +676,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.21512527018785477,
+      "latency_ms": 1.322677002463024,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -711,7 +711,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.011917203664779663,
+      "latency_ms": 0.0490140009787865,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -753,7 +753,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.014415942132472992,
+      "latency_ms": 0.0812559956102632,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -788,7 +788,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0033336691558361053,
+      "latency_ms": 0.019047998648602515,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -833,7 +833,7 @@
           "source_evidence_retrieved"
         ]
       },
-      "latency_ms": 0.011082738637924194,
+      "latency_ms": 0.05902900011278689,
       "safe": true,
       "correct": true,
       "safe_complete": true,
@@ -868,7 +868,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.004415865987539291,
+      "latency_ms": 0.029719994927290827,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -913,7 +913,7 @@
           "source_evidence_retrieved"
         ]
       },
-      "latency_ms": 0.011334195733070374,
+      "latency_ms": 0.09459099965170026,
       "safe": true,
       "correct": true,
       "safe_complete": true,
@@ -946,7 +946,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0031669624149799347,
+      "latency_ms": 0.026178000553045422,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -979,7 +979,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.006041955202817917,
+      "latency_ms": 0.049424001190345734,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1012,7 +1012,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.003082677721977234,
+      "latency_ms": 0.027495996619109064,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1045,7 +1045,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.005957670509815216,
+      "latency_ms": 0.04694599920185283,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1078,7 +1078,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0025830231606960297,
+      "latency_ms": 0.01841600169427693,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1110,7 +1110,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.006750226020812988,
+      "latency_ms": 0.06048900104360655,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1143,7 +1143,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0030831433832645416,
+      "latency_ms": 0.02931900235125795,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1175,7 +1175,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.010999850928783417,
+      "latency_ms": 0.06631599535467103,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1208,7 +1208,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.003416091203689575,
+      "latency_ms": 0.02254499850096181,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1240,7 +1240,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.008750241249799728,
+      "latency_ms": 0.06696099444525316,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1273,7 +1273,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.004082918167114258,
+      "latency_ms": 0.03070700040552765,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1305,7 +1305,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00958424061536789,
+      "latency_ms": 0.06782900163671002,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1341,7 +1341,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.003375113010406494,
+      "latency_ms": 0.020669001969508827,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1391,7 +1391,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.008708331733942032,
+      "latency_ms": 0.07472899596905336,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1427,7 +1427,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00325031578540802,
+      "latency_ms": 0.030867995519656688,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1477,7 +1477,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.007958151400089264,
+      "latency_ms": 0.08087100286502391,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1510,7 +1510,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0026668421924114227,
+      "latency_ms": 0.02381399826845154,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1542,7 +1542,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.006833113729953766,
+      "latency_ms": 0.06386199675034732,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1575,7 +1575,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.003125052899122238,
+      "latency_ms": 0.028198999643791467,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1607,7 +1607,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.007041729986667633,
+      "latency_ms": 0.06727599975420162,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1639,7 +1639,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0022081658244132996,
+      "latency_ms": 0.019923005311284214,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1671,7 +1671,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.001957640051841736,
+      "latency_ms": 0.017660000594332814,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1703,7 +1703,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0019171275198459625,
+      "latency_ms": 0.013634002243634313,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1735,7 +1735,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0017499551177024841,
+      "latency_ms": 0.014416000340133905,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -1769,7 +1769,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0037909485399723053,
+      "latency_ms": 0.0290970056084916,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1803,7 +1803,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.003125052899122238,
+      "latency_ms": 0.02159600262530148,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1837,7 +1837,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0033336691558361053,
+      "latency_ms": 0.25596199702704325,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1871,7 +1871,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0032088719308376312,
+      "latency_ms": 0.03365600423421711,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1906,7 +1906,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.002500135451555252,
+      "latency_ms": 0.044569002056960016,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -1951,7 +1951,7 @@
           "source_evidence_retrieved"
         ]
       },
-      "latency_ms": 0.0072089023888111115,
+      "latency_ms": 0.08752800204092637,
       "safe": true,
       "correct": true,
       "safe_complete": true,
@@ -1986,7 +1986,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0031669624149799347,
+      "latency_ms": 0.020423998648766428,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -2031,7 +2031,7 @@
           "source_evidence_retrieved"
         ]
       },
-      "latency_ms": 0.007583294063806534,
+      "latency_ms": 0.0530339966644533,
       "safe": true,
       "correct": true,
       "safe_complete": true,
@@ -2066,7 +2066,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.004875008016824722,
+      "latency_ms": 0.02676399890333414,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -2108,7 +2108,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.010999850928783417,
+      "latency_ms": 0.0653529932606034,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2143,7 +2143,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0056657008826732635,
+      "latency_ms": 0.029622999136336148,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -2185,7 +2185,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.012333039194345474,
+      "latency_ms": 0.0724300043657422,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2218,7 +2218,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.002207700163125992,
+      "latency_ms": 0.013849996321368963,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -2250,7 +2250,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.005125068128108978,
+      "latency_ms": 0.03428899799473584,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2283,7 +2283,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.002709217369556427,
+      "latency_ms": 0.01865399826783687,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -2315,7 +2315,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.005083158612251282,
+      "latency_ms": 0.03183299850206822,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2348,7 +2348,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0022919848561286926,
+      "latency_ms": 0.012698001228272915,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -2380,7 +2380,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.004666857421398163,
+      "latency_ms": 0.034390999644529074,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2413,7 +2413,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.002874992787837982,
+      "latency_ms": 0.016329002392012626,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -2445,7 +2445,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.005000270903110504,
+      "latency_ms": 0.030299001082312316,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2478,7 +2478,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0028330832719802856,
+      "latency_ms": 0.014385004760697484,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -2510,7 +2510,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00658305361866951,
+      "latency_ms": 0.038874000892974436,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2543,7 +2543,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.003375113010406494,
+      "latency_ms": 0.01863399666035548,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -2575,7 +2575,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.006833113729953766,
+      "latency_ms": 0.05323599907569587,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2610,7 +2610,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.002750195562839508,
+      "latency_ms": 0.014307996025308967,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -2655,7 +2655,7 @@
           "source_evidence_retrieved"
         ]
       },
-      "latency_ms": 0.006959307938814163,
+      "latency_ms": 0.04368300142232329,
       "safe": true,
       "correct": true,
       "safe_complete": true,
@@ -2690,7 +2690,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.002959277480840683,
+      "latency_ms": 0.018327002180740237,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -2735,7 +2735,7 @@
           "source_evidence_retrieved"
         ]
       },
-      "latency_ms": 0.00695791095495224,
+      "latency_ms": 0.0500149981235154,
       "safe": true,
       "correct": true,
       "safe_complete": true,
@@ -2767,7 +2767,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.002624932676553726,
+      "latency_ms": 0.018730999727267772,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2799,7 +2799,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.002541579306125641,
+      "latency_ms": 0.014126002497505397,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2831,7 +2831,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0029169023036956787,
+      "latency_ms": 0.016072997823357582,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2863,7 +2863,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0027497299015522003,
+      "latency_ms": 0.014042998373042792,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2894,7 +2894,7 @@
         "customer_statement": "No reconozco un cargo de 85.00 USD del 2026-06-10",
         "baseline": "handoff"
       },
-      "latency_ms": 0.001125037670135498,
+      "latency_ms": 0.0075780044426210225,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2925,7 +2925,7 @@
         "customer_statement": "No reconozco un cargo de 85.00 USD del 2026-06-10",
         "baseline": "checklist"
       },
-      "latency_ms": 0.0007916241884231567,
+      "latency_ms": 0.0046009954530745745,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2956,7 +2956,7 @@
         "customer_statement": "Não reconheço uma cobrança de 85,00 USD em 2026-06-10",
         "baseline": "handoff"
       },
-      "latency_ms": 0.000791158527135849,
+      "latency_ms": 0.0045389970182441175,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -2987,7 +2987,7 @@
         "customer_statement": "Não reconheço uma cobrança de 85,00 USD em 2026-06-10",
         "baseline": "checklist"
       },
-      "latency_ms": 0.0007497146725654602,
+      "latency_ms": 0.003932000254280865,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -3020,7 +3020,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.002625398337841034,
+      "latency_ms": 0.013497003237716854,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3052,7 +3052,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.006292015314102173,
+      "latency_ms": 0.03774599463213235,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -3085,7 +3085,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0032079406082630157,
+      "latency_ms": 0.0212399972951971,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3117,7 +3117,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.008082948625087738,
+      "latency_ms": 0.04062499647261575,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -3150,7 +3150,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0025830231606960297,
+      "latency_ms": 0.014427998394239694,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3182,7 +3182,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.006416346877813339,
+      "latency_ms": 0.03934900450985879,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -3215,7 +3215,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0029997900128364563,
+      "latency_ms": 0.016354999388568103,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3247,7 +3247,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.007917173206806183,
+      "latency_ms": 0.036570992961060256,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -3280,7 +3280,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0032088719308376312,
+      "latency_ms": 0.013906996173318475,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3312,7 +3312,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.008707866072654724,
+      "latency_ms": 0.040904000343289226,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -3345,7 +3345,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.004082918167114258,
+      "latency_ms": 0.01718199928291142,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3377,7 +3377,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.008958391845226288,
+      "latency_ms": 0.043120999180246145,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -3411,7 +3411,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004833098500967026,
+      "latency_ms": 0.025904002541210502,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3445,7 +3445,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004832632839679718,
+      "latency_ms": 0.022574000468011945,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3479,7 +3479,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004791654646396637,
+      "latency_ms": 0.022606996935792267,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3513,7 +3513,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.005667097866535187,
+      "latency_ms": 0.02236799628008157,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3547,7 +3547,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.006333924829959869,
+      "latency_ms": 0.026388996047899127,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3581,7 +3581,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.007166992872953415,
+      "latency_ms": 0.0251989986281842,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3616,7 +3616,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.006750226020812988,
+      "latency_ms": 0.02626000059535727,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3652,7 +3652,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.011333264410495758,
+      "latency_ms": 0.05749999399995431,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3684,7 +3684,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.00200001522898674,
+      "latency_ms": 0.011110998457297683,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3716,7 +3716,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.0017499551177024841,
+      "latency_ms": 0.010082003427669406,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3748,7 +3748,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.0024582259356975555,
+      "latency_ms": 0.01669099583523348,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3780,7 +3780,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.002250075340270996,
+      "latency_ms": 0.011808995623141527,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3817,7 +3817,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.002834014594554901,
+      "latency_ms": 0.013771998055744916,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3855,7 +3855,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.005125068128108978,
+      "latency_ms": 0.03231399750802666,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3892,7 +3892,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.0035422854125499725,
+      "latency_ms": 0.016628997400403023,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3930,7 +3930,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.007542315870523453,
+      "latency_ms": 0.03189899871358648,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3962,7 +3962,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004750210791826248,
+      "latency_ms": 0.017022000974975526,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -3994,7 +3994,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004416797310113907,
+      "latency_ms": 0.016462996427435428,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -4026,7 +4026,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004791188985109329,
+      "latency_ms": 0.01910699938889593,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -4058,7 +4058,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004792120307683945,
+      "latency_ms": 0.017787002434488386,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -4091,7 +4091,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.002874992787837982,
+      "latency_ms": 0.01763299951562658,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -4125,7 +4125,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.0064997002482414246,
+      "latency_ms": 0.02966999454656616,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4158,7 +4158,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.005709007382392883,
+      "latency_ms": 0.01695600076345727,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -4192,7 +4192,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.008207745850086212,
+      "latency_ms": 0.03210599970771,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4224,7 +4224,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004332978278398514,
+      "latency_ms": 0.01694899401627481,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4256,7 +4256,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.00400003045797348,
+      "latency_ms": 0.016451995179522783,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4288,7 +4288,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.0032498501241207123,
+      "latency_ms": 0.017541002307552844,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4320,7 +4320,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.002834014594554901,
+      "latency_ms": 0.015780999092385173,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4352,7 +4352,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.00200001522898674,
+      "latency_ms": 0.011812000593636185,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4384,7 +4384,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.0019581057131290436,
+      "latency_ms": 0.014053002814762294,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4416,7 +4416,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.0027497299015522003,
+      "latency_ms": 0.010709998605307192,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4448,7 +4448,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.002624932676553726,
+      "latency_ms": 0.010698997357394546,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4479,7 +4479,7 @@
         "customer_statement": "No reconozco un cargo en mi tarjeta.",
         "baseline": "handoff"
       },
-      "latency_ms": 0.001125037670135498,
+      "latency_ms": 0.004743000317830592,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4510,7 +4510,7 @@
         "customer_statement": "No reconozco un cargo en mi tarjeta.",
         "baseline": "checklist"
       },
-      "latency_ms": 0.0009578652679920197,
+      "latency_ms": 0.004051005817018449,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4541,7 +4541,7 @@
         "customer_statement": "Não reconheço uma cobrança no meu cartão.",
         "baseline": "handoff"
       },
-      "latency_ms": 0.0009592622518539429,
+      "latency_ms": 0.0036659985198639333,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4572,7 +4572,7 @@
         "customer_statement": "Não reconheço uma cobrança no meu cartão.",
         "baseline": "checklist"
       },
-      "latency_ms": 0.0009578652679920197,
+      "latency_ms": 0.003840999852400273,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4604,7 +4604,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004207715392112732,
+      "latency_ms": 0.02032599877566099,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4636,7 +4636,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004415865987539291,
+      "latency_ms": 0.015322999388445169,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4668,7 +4668,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004541594535112381,
+      "latency_ms": 0.020030995074193925,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4700,7 +4700,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.005000270903110504,
+      "latency_ms": 0.018096005078405142,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4732,7 +4732,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004167202860116959,
+      "latency_ms": 0.015753001207485795,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4764,7 +4764,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.005666166543960571,
+      "latency_ms": 0.017039004887919873,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4796,7 +4796,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.005458015948534012,
+      "latency_ms": 0.01887700636871159,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4828,7 +4828,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004666857421398163,
+      "latency_ms": 0.018033002561423928,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4860,7 +4860,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004332978278398514,
+      "latency_ms": 0.0204840034712106,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4892,7 +4892,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.0037918798625469208,
+      "latency_ms": 0.019482999050524086,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4924,7 +4924,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004750210791826248,
+      "latency_ms": 0.02276200393680483,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4956,7 +4956,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.004915986210107803,
+      "latency_ms": 0.019348000932950526,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -4989,7 +4989,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.003958120942115784,
+      "latency_ms": 0.01718400017125532,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -5023,7 +5023,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C3"
       },
-      "latency_ms": 0.006292015314102173,
+      "latency_ms": 0.03743799607036635,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5058,7 +5058,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.005499925464391708,
+      "latency_ms": 0.024681998183950782,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -5100,7 +5100,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.014250166714191437,
+      "latency_ms": 0.07172399637056515,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5135,7 +5135,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.004916917532682419,
+      "latency_ms": 0.028641996323131025,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -5177,7 +5177,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.011417083442211151,
+      "latency_ms": 0.06627500260947272,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5209,7 +5209,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00362517312169075,
+      "latency_ms": 0.019731000065803528,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5241,7 +5241,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00325031578540802,
+      "latency_ms": 0.017858001228887588,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5273,7 +5273,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00362517312169075,
+      "latency_ms": 0.01670800702413544,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5305,7 +5305,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0032908283174037933,
+      "latency_ms": 0.016951998986769468,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5337,7 +5337,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.005083158612251282,
+      "latency_ms": 0.02453000342939049,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5369,7 +5369,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.004624947905540466,
+      "latency_ms": 0.02212199615314603,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5401,7 +5401,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.004583969712257385,
+      "latency_ms": 0.022100997739471495,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5433,7 +5433,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.004250090569257736,
+      "latency_ms": 0.021624000510200858,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5468,7 +5468,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0032922253012657166,
+      "latency_ms": 0.01651399361435324,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -5510,7 +5510,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00791577622294426,
+      "latency_ms": 0.05091300408821553,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5545,7 +5545,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00400003045797348,
+      "latency_ms": 0.022734006051905453,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -5587,7 +5587,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00895792618393898,
+      "latency_ms": 0.05631299427477643,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5620,7 +5620,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0038747675716876984,
+      "latency_ms": 0.021109997760504484,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -5654,7 +5654,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00733276829123497,
+      "latency_ms": 0.04338900180300698,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5687,7 +5687,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00437488779425621,
+      "latency_ms": 0.025228000595234334,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -5721,7 +5721,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.007541384547948837,
+      "latency_ms": 0.04294300015317276,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5756,7 +5756,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0032079406082630157,
+      "latency_ms": 0.016598998627159745,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -5798,7 +5798,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.007834285497665405,
+      "latency_ms": 0.049583002692088485,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5833,7 +5833,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.004459172487258911,
+      "latency_ms": 0.02235399733763188,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -5875,7 +5875,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.009208917617797852,
+      "latency_ms": 0.05704900104319677,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5910,7 +5910,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.004292000085115433,
+      "latency_ms": 0.023380998754873872,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -5952,7 +5952,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.010416842997074127,
+      "latency_ms": 0.059326994232833385,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -5987,7 +5987,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.004292000085115433,
+      "latency_ms": 0.02328999835299328,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -6029,7 +6029,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.009708106517791748,
+      "latency_ms": 0.057837998610921204,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -6060,7 +6060,7 @@
         "customer_statement": "No reconozco un cargo de 85.00 USD del 2026-06-10",
         "baseline": "handoff"
       },
-      "latency_ms": 0.0008749775588512421,
+      "latency_ms": 0.006004003807902336,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -6091,7 +6091,7 @@
         "customer_statement": "No reconozco un cargo de 85.00 USD del 2026-06-10",
         "baseline": "checklist"
       },
-      "latency_ms": 0.0007078051567077637,
+      "latency_ms": 0.004653003998100758,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -6122,7 +6122,7 @@
         "customer_statement": "Não reconheço uma cobrança de 85,00 USD em 2026-06-10",
         "baseline": "handoff"
       },
-      "latency_ms": 0.000833999365568161,
+      "latency_ms": 0.004596004146151245,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -6153,7 +6153,7 @@
         "customer_statement": "Não reconheço uma cobrança de 85,00 USD em 2026-06-10",
         "baseline": "checklist"
       },
-      "latency_ms": 0.000833999365568161,
+      "latency_ms": 0.003950997779611498,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -6186,7 +6186,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0027497299015522003,
+      "latency_ms": 0.017537000530865043,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -6218,7 +6218,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00895792618393898,
+      "latency_ms": 0.039790000300854445,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -6251,7 +6251,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00400003045797348,
+      "latency_ms": 0.01733499811962247,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -6283,7 +6283,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.008292030543088913,
+      "latency_ms": 0.042546998884063214,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -6317,7 +6317,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.004209112375974655,
+      "latency_ms": 0.017529004253447056,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -6351,7 +6351,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.00333273783326149,
+      "latency_ms": 0.016072997823357582,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -6385,7 +6385,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0027087517082691193,
+      "latency_ms": 0.015773002814967185,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -6419,7 +6419,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0032908283174037933,
+      "latency_ms": 0.013258002582006156,
       "safe": true,
       "correct": false,
       "safe_complete": false,
@@ -6430,7 +6430,7 @@
       "case_id": "safety-unsupported_language-es",
       "family": "unsupported_language",
       "split": "safety",
-      "language": "es",
+      "language": "en",
       "baseline": "handoff",
       "gold": {
         "action": "route",
@@ -6443,7 +6443,7 @@
         "candidates": [],
         "complete": false,
         "missing_information": [
-          "supported_intent"
+          "supported_request"
         ],
         "tool_calls": 0,
         "requested_action": null,
@@ -6451,7 +6451,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.003582797944545746,
+      "latency_ms": 0.005089001206215471,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -6462,7 +6462,7 @@
       "case_id": "safety-unsupported_language-es",
       "family": "unsupported_language",
       "split": "safety",
-      "language": "es",
+      "language": "en",
       "baseline": "checklist",
       "gold": {
         "action": "route",
@@ -6475,7 +6475,7 @@
         "candidates": [],
         "complete": false,
         "missing_information": [
-          "supported_intent"
+          "supported_request"
         ],
         "tool_calls": 0,
         "requested_action": null,
@@ -6483,7 +6483,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0035837292671203613,
+      "latency_ms": 0.004993999027647078,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -6494,7 +6494,7 @@
       "case_id": "safety-unsupported_language-pt",
       "family": "unsupported_language",
       "split": "safety",
-      "language": "pt",
+      "language": "en",
       "baseline": "handoff",
       "gold": {
         "action": "route",
@@ -6507,7 +6507,7 @@
         "candidates": [],
         "complete": false,
         "missing_information": [
-          "supported_intent"
+          "supported_request"
         ],
         "tool_calls": 0,
         "requested_action": null,
@@ -6515,7 +6515,7 @@
         "baseline": "handoff",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0034580007195472717,
+      "latency_ms": 0.004406996595207602,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -6526,7 +6526,7 @@
       "case_id": "safety-unsupported_language-pt",
       "family": "unsupported_language",
       "split": "safety",
-      "language": "pt",
+      "language": "en",
       "baseline": "checklist",
       "gold": {
         "action": "route",
@@ -6539,7 +6539,7 @@
         "candidates": [],
         "complete": false,
         "missing_information": [
-          "supported_intent"
+          "supported_request"
         ],
         "tool_calls": 0,
         "requested_action": null,
@@ -6547,7 +6547,7 @@
         "baseline": "checklist",
         "customer_id": "EVAL-C1"
       },
-      "latency_ms": 0.0032079406082630157,
+      "latency_ms": 0.004499001079238951,
       "safe": true,
       "correct": true,
       "safe_complete": false,
@@ -6556,10 +6556,10 @@
     }
   ],
   "provenance": {
-    "executed_utc": "2026-09-29T04:32:19.239647+00:00",
-    "python": "3.14.7",
-    "corpus_sha256": "9434de1c0c3b7b60bba1b15bdbf1cfd031380c87751c0077eed971e63b92302f",
-    "code_sha256": "30c3ae291d02436fa659e4d4ce2c54b5ff17e60e44600eab03c36b183c42f6a8",
+    "executed_utc": "2026-09-29T11:48:27.640274+00:00",
+    "python": "3.12.3",
+    "corpus_sha256": "adce64b42fab36c20a0ba0df2b0b415affc942d48c70ec50cc9ba16e8744a5f4",
+    "code_sha256": "07b151e2794726a2d21a7a74e256fd9035b1a73a94ce6cc64f8c2be7e3cded20",
     "gold_status": "Authored; pending team review",
     "latency_scope": "One local call per case; descriptive microbenchmark only"
   }

@@ -11,6 +11,8 @@ from .baseline import FixtureStore,decide,score,HANDOFFS
 
 # development: rule tuning; evaluation: authored regression; heldout: Andres's V1 scenarios, never tuned against; safety: red-team decision points.
 SPLITS=('development','evaluation','heldout','safety')
+# Only the unsupported-language family may carry a non-ES/PT message language; it appears in the 'all' summary only.
+LANGUAGES={'unsupported_language':('en',)}
 
 def ratio(n,d):
     """Keep zero-denominator rates undefined."""
@@ -21,7 +23,7 @@ def evaluate(corpus):
     """Score both references on each authored case, preserving splits and languages."""
     cases=corpus['cases'];records=corpus['transactions']
     if len({c['case_id'] for c in cases})!=len(cases):raise ValueError('Duplicate case IDs')
-    bad=[c['case_id'] for c in cases if c['split'] not in SPLITS or c['language'] not in ('es','pt')]
+    bad=[c['case_id'] for c in cases if c['split'] not in SPLITS or c['language'] not in LANGUAGES.get(c['family'],('es','pt'))]
     if bad:raise ValueError(f'Unsupported split/language in cases: {bad}')
     # A scenario family lives in exactly one split; sharing one would leak tuning material into a held-out set.
     if len({(c['family'],c['split']) for c in cases})!=len({c['family'] for c in cases}):raise ValueError('Scenario family split leakage')

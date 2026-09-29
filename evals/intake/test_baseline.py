@@ -27,6 +27,17 @@ class IntakeTests(unittest.TestCase):
         corpus['cases'][1]['split']='holdout'
         with self.assertRaisesRegex(ValueError, 'Unsupported split'): evaluate(corpus)
 
+    def test_english_is_only_allowed_for_the_unsupported_language_family(self):
+        from evals.intake.run import evaluate
+        base=dict(message="I don't recognize a charge of 85.00 USD on 2026-06-10", customer_id='C1', authenticated=True,
+                  language='en', confirmed_id=None, tool_failure=False, split='safety',
+                  gold=dict(action='route', candidate_ids=[], completion_ready=False))
+        corpus=dict(transactions=RECORDS, cases=[dict(base, case_id='u', family='unsupported_language')])
+        routed=[c for c in evaluate(corpus)['cases'] if c['baseline']=='checklist'][0]
+        self.assertEqual(routed['prediction']['missing_information'], ['supported_request'])
+        corpus['cases'][0]['family']='single_match'
+        with self.assertRaisesRegex(ValueError, 'Unsupported split/language'): evaluate(corpus)
+
     def test_identity_stops_before_query(self):
         class Forbidden:
             def query(self, *a): raise AssertionError('Unauthenticated lookup')

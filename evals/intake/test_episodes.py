@@ -95,6 +95,12 @@ class EpisodeTests(unittest.TestCase):
             'model_version must be': [dict(ev('intake_started', 'z', 0), model_version=3)],
             'tool_status must be': [dict(e, tool_status='crashed') if e['event'] == 'handoff_created' else e for e in ACCEPTED],
             'failed tool cannot back': [dict(e, tool_status='failed') if e['event'] == 'handoff_created' else e for e in ACCEPTED],
+            'not a real UTC date': [dict(ev('intake_started', 'z', 0), ts='2026-02-30T25:61:00.000Z')],
+            'missing must be a non-empty list': [ev('intake_started', 'z', 0),
+                                                 ev('clarification_requested', 'z', 1, missing=['No reconozco este cargo'])],
+            'missing must be a non-empty list of': [ev('intake_started', 'z', 0), ev('clarification_requested', 'z', 1, missing='date')],
+            'non-empty list of': [ev('intake_started', 'z', 0), ev('clarification_requested', 'z', 1, missing=[])],
+            'authored scenario id': [ev('intake_started', 'z', 0, scenario='Cliente Silvia dice: no fui yo')],
         }
         for message, log in cases.items():
             with self.subTest(message):

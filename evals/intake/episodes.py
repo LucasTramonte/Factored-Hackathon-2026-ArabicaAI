@@ -5,6 +5,7 @@ outside the contract (a customer id, a name, a statement) rejects the whole log 
 leaking into analytics. Memory is O(events); logs are bounded evaluation runs, not streams.
 """
 from collections import Counter
+from datetime import datetime
 import re
 import statistics
 
@@ -22,6 +23,11 @@ OUTCOMES = ('accepted', 'abandoned', 'withdrawn', 'technical_failure', 'routed')
 SAFETY = ('assessed_safe', 'unsafe', 'not_assessed')
 CHAIN = ('transaction_confirmed', 'handoff_created', 'handoff_accepted')
 TS = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z')
+# Contract vocabulary for clarification_requested.missing (Docs/intake/intake-events.md).
+MISSING = ('date', 'currency', 'amount', 'matching_transaction', 'transaction_disambiguation',
+           'customer_confirmation', 'valid_customer_confirmation')
+# Authored scenario ids such as V1-01 or safety-unsupported_language-en; never free text.
+SCENARIO = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}')
 
 
 def ratio(n, d):
@@ -45,9 +51,18 @@ def _check_event(e):
         raise ValueError(f'Unsupported language: {e["language"]}')
     if not isinstance(e['ts'], str) or not TS.fullmatch(e['ts']):
         raise ValueError(f'ts must be millisecond UTC like 2026-09-29T14:00:00.000Z, got {e["ts"]!r}')
+    try:
+        datetime.strptime(e['ts'], '%Y-%m-%dT%H:%M:%S.%fZ')
+    except ValueError:
+        raise ValueError(f'ts is not a real UTC date and time: {e["ts"]!r}') from None
     for k in REFS & e.keys():
         if not isinstance(e[k], str) or not e[k]:
             raise ValueError(f'{name}.{k} must be a non-empty string reference, got {e[k]!r}')
+    if name == 'clarification_requested' and (not isinstance(e['missing'], list) or not e['missing']
+                                              or any(m not in MISSING for m in e['missing'])):
+        raise ValueError(f'clarification_requested.missing must be a non-empty list of {MISSING}, got {e["missing"]!r}')
+    if 'scenario' in e and (not isinstance(e['scenario'], str) or not SCENARIO.fullmatch(e['scenario'])):
+        raise ValueError(f'intake_started.scenario must be an authored scenario id, got {e["scenario"]!r}')
     if name == 'handoff_created' and e['kind'] not in KINDS:
         raise ValueError(f'handoff_created kind must be one of {KINDS}, got {e["kind"]!r}')
     if name == 'handoff_created' and e.get('tool_status', 'ok') not in TOOL_STATUS:

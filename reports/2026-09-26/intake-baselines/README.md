@@ -28,3 +28,5 @@ Confirm customer boundaries and required intake evidence, then review the author
 Note (28/09): `results.json` was regenerated after a one-word fix to a Portuguese case (`o` → `ou`); scores are unchanged and its `corpus_sha256` is current. `executed.ipynb` and `analysis.html` still show the pre-fix corpus hash and were not re-executed.
 
 Note (28/09, later): `results.json` regenerated again after corpus v0.2 added the `heldout` (25) and `safety` (22) splits; development and evaluation scores are unchanged (18/18, 22/24, 0 unsafe). See `Docs/intake/heldout-and-safety-cases.md`.
+
+Note (29/09): `results.json` regenerated after the two `unsupported_language` safety cases moved to `language: en` (CodeRabbit review on #16). Totals are unchanged (safety 20/22 checklist, 8/22 handoff-only, 0 unsafe); the English cases now count only in the `all` summary.
