@@ -81,7 +81,7 @@ class ArtifactTests(unittest.TestCase):
         specs = {s['situation_id']: s for s in self.draft['specs']}
         expected_keys = set('case_id session_language authenticated lookup confirmed_id as_of message purchases'.split())
         self.assertEqual(len(self.blind), 60)
-        for c, b in zip(self.draft['cases'], self.blind):
+        for c, b in zip(self.draft['cases'], self.blind, strict=True):
             s = specs[c['situation_id']]
             self.assertEqual(c['construction_gold'], evaluate(s, self.draft['fixture']))
             self.assertEqual(c['ambiguous_reading'], ambiguous_reading(s))
@@ -103,7 +103,7 @@ class ArtifactTests(unittest.TestCase):
             ('C', []), ('C', []), ('A', []), ('A', []), ('A', []), ('A', []), ('T', []), ('T', []),
             ('F', [18]), ('F', [30]), ('C', []), ('F', [6]), ('R', []), ('R', []), ('R', []), ('C', [27, 28]),
         ]
-        for s, (action, ids) in zip(self.draft['specs'], expected):
+        for s, (action, ids) in zip(self.draft['specs'], expected, strict=True):
             with self.subTest(situation=s['situation_id']):
                 self.assertEqual(evaluate(s, self.draft['fixture']),
                                  {'action': action, 'candidate_ids': [f'FRZ-T{i:02d}' for i in ids], 'completion_ready': action == 'H'})

@@ -164,11 +164,15 @@ def roberto_message() -> Path:
 def roberto_answers(text: str) -> str:
     """Parse a reply like '1b 2a 3c' and append one record per case to reviews/roberto.jsonl."""
     queue = json.loads((HERE / "queues.json").read_text(encoding="utf-8"))["es"]
-    picks = {int(n): letter for n, letter in re.findall(r"(\d+)\s*([a-h])", text.lower())}
+    tokens = [(int(n), letter) for n, letter in re.findall(r"(\d+)\s*([a-h])", text.lower())]
+    numbers = [n for n, _ in tokens]
+    duplicated = sorted({n for n in numbers if numbers.count(n) > 1})
+    picks = dict(tokens)
     missing = [n for n in range(1, len(queue) + 1) if n not in picks]
-    invalid = [n for n, letter in picks.items() if n > len(queue) or LETTERS.index(letter) >= len(queue[n - 1]["options"])]
-    if missing or invalid:
-        raise SystemExit(f"Faltam os itens {missing} ou há itens inválidos {invalid}; nada foi gravado.")
+    invalid = sorted(n for n, letter in picks.items()
+                     if not 1 <= n <= len(queue) or LETTERS.index(letter) >= len(queue[n - 1]["options"]))
+    if missing or invalid or duplicated:
+        raise SystemExit(f"Nada foi gravado. Faltando: {missing}; inválidos: {invalid}; repetidos: {duplicated}.")
     path = HERE / "reviews" / "roberto.jsonl"
     with path.open("a", encoding="utf-8") as f:
         for n, entry in enumerate(queue, 1):

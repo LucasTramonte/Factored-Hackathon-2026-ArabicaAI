@@ -35,6 +35,13 @@ class FrozenRunnerTests(unittest.TestCase):
         low, high = overall['correct_rate_ci95']
         self.assertTrue(0 <= low <= overall['correct_rate'] <= high <= 1)
 
+    def test_language_breakdowns_use_the_session_language_and_add_up(self):
+        rows = {(s['baseline'], s['language']): s['cases'] for s in evaluate(corpus())['summary'] if s['split'] == 'frozen_es_pt_v1'}
+        for baseline in ('handoff', 'checklist'):
+            self.assertEqual(rows[(baseline, 'es')], 1)
+            self.assertEqual(rows[(baseline, 'pt')], 1)  # the French message arrived in a Portuguese session
+            self.assertEqual(rows[(baseline, 'es')] + rows[(baseline, 'pt')], rows[(baseline, 'all')])
+
     def test_other_language_is_only_allowed_for_the_unsupported_family(self):
         c = corpus()
         c['cases'][1]['family'] = 'no_match'

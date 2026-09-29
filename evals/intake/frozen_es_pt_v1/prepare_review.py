@@ -131,7 +131,7 @@ def main():
     record = json.loads((ROOT / 'session_record.json').read_text(encoding='utf-8'))
     record.update(phase=3, status='portuguese_review_in_progress', next_step='Await answer to the pending Portuguese case; append every answer to reviews/lucas.jsonl.')
     for name in ('verifier_output.jsonl', 'prepare_review.py', 'queues.json', 'review_state.json', 'test_review.py'):
-        path = str(ROOT.relative_to(Path.cwd()) / name)
+        path = str((ROOT / name).relative_to(ROOT.parents[2]))  # repository-relative, whatever the cwd
         if path not in record['files_read']:
             record['files_read'].append(path)
     save('session_record.json', record)

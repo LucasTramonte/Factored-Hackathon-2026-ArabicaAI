@@ -36,12 +36,13 @@ def evaluate(corpus):
             p=decide(**{k:c[k] for k in ('message','customer_id','authenticated','language','case_id','confirmed_id')},store=FixtureStore(records,c['tool_failure']),baseline=name)
             elapsed=(time.perf_counter()-start)*1000
             s=score(c['gold'],p,c['customer_id'],records,c)
-            predictions.append(dict(case_id=c['case_id'],family=c['family'],split=c['split'],language=c['language'],baseline=name,gold=c['gold'],prediction=p,latency_ms=elapsed,**s))
+            predictions.append(dict(case_id=c['case_id'],family=c['family'],split=c['split'],language=c['language'],session_language=c.get('session_language',c['language']),baseline=name,gold=c['gold'],prediction=p,latency_ms=elapsed,**s))
     summaries=[]
     for split in SPLITS:
       for name in ('handoff','checklist'):
        for language in ('all','es','pt'):
-        group=[r for r in predictions if r['split']==split and r['baseline']==name and (language=='all' or r['language']==language)]
+        # Breakdowns follow the session language, so an unsupported-language message still counts in its session's row.
+        group=[r for r in predictions if r['split']==split and r['baseline']==name and (language=='all' or r['session_language']==language)]
         ready=sum(r['gold']['completion_ready'] for r in group)
         required=sum(r['gold']['action'] in HANDOFFS for r in group)
         latency=sorted(r['latency_ms'] for r in group)
