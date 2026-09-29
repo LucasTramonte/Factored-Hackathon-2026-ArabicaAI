@@ -31,9 +31,8 @@ try {
   for (const name of ['src', 'migrations', 'public']) {
     await cp(join(project, name), join(temp, name), { recursive: true });
   }
-  for (const name of ['wrangler.jsonc', 'seed_fictitious.sql']) {
-    await cp(join(project, name), join(temp, name));
-  }
+  await cp(join(project, 'wrangler.jsonc'), join(temp, 'wrangler.jsonc'));
+  await cp(join(project, 'seeds/seed_fictitious.sql'), join(temp, 'seed_fictitious.sql'));
   await writeFile(join(temp, '.dev.vars'),
     'DEMO_ACCESS_USERNAME="local-reviewer"\nDEMO_ACCESS_PASSWORD="local-test-password"\n');
   run(['d1', 'migrations', 'apply', 'arabica-intake-demo', '--local']);

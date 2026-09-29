@@ -24,10 +24,10 @@ Docs/Factored Hackathon - Arabica AI/latam-bank-architecture-en.excalidraw.md
 /tmp/
 /output/
 # Demo UI and Cloudflare Worker build outputs and local secrets
-demo-ui/node_modules/
-demo-ui/dist/
-demo-ui/.angular/
-cloudflare/node_modules/
-cloudflare/public/
-cloudflare/.wrangler/
-cloudflare/.dev.vars*
+front-end/node_modules/
+front-end/dist/
+front-end/.angular/
+back-end/node_modules/
+back-end/public/
+back-end/.wrangler/
+back-end/.dev.vars*

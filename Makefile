@@ -90,7 +90,7 @@ DEMO_QUALITY_RUN ?= demo-$(subst -,,$(DEMO_DATE))
 
 demo-setup:
 	$(PYTHON) -m pip install -r demo_pg/web-requirements.txt
-	npm --prefix demo-ui ci
+	npm --prefix front-end ci
 
 demo-migrate:
 	$(PYTHON) -m demo_pg.db.migrate
@@ -102,7 +102,7 @@ demo-test:
 	$(PYTHON) -m pytest data_pipelines/bronze/test_ingestion.py demo_pg/db/tests -q
 
 demo-ui-build:
-	npm --prefix demo-ui run build
+	npm --prefix front-end run build
 
 demo-docker-build:
 	docker build -f demo_pg/web.Dockerfile -t arabica-intake-demo:local .
