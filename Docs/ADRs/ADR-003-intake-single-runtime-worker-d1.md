@@ -15,7 +15,7 @@ Session handling, customer scoping, idempotent case creation, reference-after-co
 
 Constraints for this decision:
 
-- **Window.** Finalists are announced on 2026-10-15. The service has to run from 2026-09-29 until 2026-10-31, which leaves some margin after the announcement.
+- **Window.** Submissions close on 2026-10-05, finalists are announced on 2026-10-15 and awards follow on 2026-10-16 (kickoff deck, p. 6). The service has to run from 2026-09-29 until 2026-10-31, so the deployed link keeps working through judging.
 - **Budget.** No hosting spend. Lucas's AWS account is on the Free plan: $100 in credits, available until 2027-03-22, and no card on file, so it can't be charged. We keep those credits for estimating a later scale path, not for running the demo.
 - **MVP.** Deterministic, no model calls ([ADR-002](ADR-002-v1-workflow-unrecognized-charge-intake.md)).
 - **Volume.** The online store holds very little: a handful of customers, at most 20 transactions each, and dozens of cases. The heavy data (millions of rows) stays offline in DuckDB.
@@ -60,7 +60,7 @@ These limitations are accepted for the 2026-09-29 → 2026-10-31 window. Each ro
 
 ## Alternatives considered
 
-Prices were checked on 2026-09-29 (sources below). Free tiers cover a 15–32-day window, so cost didn't decide this. What decided it was the work needed before 2026-10-15, cold starts for judges, what we'd have to operate, and risk.
+Prices were checked on 2026-09-29 (sources below). Free tiers cover a 15–32-day window, so cost didn't decide this. What decided it was the work needed before submission on 2026-10-05, cold starts for judges, what we'd have to operate, and risk.
 
 | Option | Cost for the window | Why not now | Reopen if |
 |---|---|---|---|

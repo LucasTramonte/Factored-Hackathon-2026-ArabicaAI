@@ -1,8 +1,8 @@
 # Requirements traceability
 
-Roberto, updated 29 September 2026. This maps the 23 requirements in the team hub's section 3, "Initial Requirements," to merged evidence, open PRs, and remaining gaps. A merged PR is evidence for the capability it actually implements, not for a broader bank production claim.
+Roberto, updated 29 September 2026 (PR status refreshed by Lucas the same day). This maps the 23 requirements in the team hub's section 3, "Initial Requirements," to merged evidence, open PRs, and remaining gaps. A merged PR is evidence for the capability it actually implements, not for a broader bank production claim.
 
-Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ missing owner or decision. PR #12 and #13 reached `main` through merged PR #16. PR #15 is stacked on open PR #17; #18 is the evaluation follow-up.
+Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ missing owner or decision. PR #12 and #13 reached `main` through merged PR #16. PR #17 and PR #18 are merged, and PR #15 and the late #17 fixes reach `main` through open PR #19. Rows that cite #15 or #17 describe code that is in #19.
 
 ## Functional requirements
 
@@ -40,7 +40,7 @@ Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ mi
 | S5 | Unauthorized-access handling | 🟡 | #17 tests forged/expired sessions, actor isolation, and foreign transactions; #16 merged adversarial cases. | Lucas, Roberto |
 | S6 | Tool failure fallback | 🔵 | #8 harness models technical handoff; #11 specifies fail-closed runtime behavior. The live service has no agent tool calls yet. | Roberto |
 | S7 | Human escalation | 🟡 | #17 accepts reports into an agent queue. #9 scenarios define further handoff types; assignment and resolution history remain planned. | Lucas, Roberto |
-| S8 | Data retention defined | ⚪ | #17/ADR-004 documents Workers Logs retention, but case, session, event, and demo-reset retention still need one explicit policy. | Team decision |
+| S8 | Data retention defined | 🟡 | ADR-004 (in #19) keeps cases and sessions until 2026-10-31 with no age-based deletion, allows a cases-and-sessions reset before a recorded demo, and purges expired sessions at login. Event retention and a scripted, guarded reset remain. | Lucas, team acceptance |
 
 ## Decisions still needed
 
@@ -49,6 +49,8 @@ Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ mi
 3. **F1/N2:** choose whether bank-grade identity is required for the hackathon demonstration; the current demo identity is intentionally simulated.
 4. **F5:** decide when a normal, safely automated resolution path is needed; #17/ADR-002 records zero such resolutions in V1.
 5. **N7:** choose a price table and measure actual usage before reporting cost per interaction.
+6. **Learned component:** the brief requires at least one learned component evaluated against a baseline. None exists yet. The ADR-002 trigger is met (checklist 15/25 on `v1_authored`), so a field extractor needs its own ADR and a frozen, independently authored ES/PT set.
+7. **Submission:** submissions close on 2026-10-05 (kickoff deck, p. 6). The package is a public repository named `factored-hackathon-2026-[team name]`, the deployed link, 4–6 slides and a mandatory short demo and architecture video (p. 18).
 
 ## Evidence index
 
@@ -57,6 +59,7 @@ Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ mi
 | #1, #3 | Bronze/Silver pipeline and quality gate on `main` |
 | #8 | Evaluation harness and scoped decision-point cases on `main` |
 | #9 (open) | Personalization profile and ES/PT scenarios; reviewer fixes pushed |
+| #19 (open) | Context cards (#15), late #17 review fixes, D1 migration deploy guard, corrected submission dates |
 | #10 | Fraud-data readiness and label limitations on `main` |
 | #11 (open) | Smaller Worker/D1 agent V1 spec; load-time card and atomic dedupe |
 | #12, #13 → #16 (merged) | Safety and authored scenario splits, event contract, episode KPI scorer on `main` |
