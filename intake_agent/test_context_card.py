@@ -48,7 +48,7 @@ def test_short_product_numbers_never_expose_every_digit():
 
 @pytest.mark.parametrize('session_language, expected', [
     ('pt', 'pt-BR'), ('PT-br', 'pt-BR'), ('es-CO', 'es-CO'), ('es', 'es'), ('es-419', 'es-419'),
-    ('estonian', 'es-MX'), ('es;<script>', 'es-MX'), ('es-', 'es-MX'), ('ptx', 'es-MX'), ('', 'es-MX'), (None, 'es-MX')])
+    ('ES-MX', 'es-MX'), ('es_mx', 'es-MX'), ('es_419', 'es-419'), ('pt_BR', 'pt-BR'), ('estonian', 'es-MX'), ('es__MX', 'es-MX'), ('es;<script>', 'es-MX'), ('es-', 'es-MX'), ('ptx', 'es-MX'), ('', 'es-MX'), (None, 'es-MX')])
 def test_only_well_formed_session_tags_override_the_snapshot(session_language, expected):
     assert reply_language(session_language, {'locale_hint': 'es-MX'}) == expected
 

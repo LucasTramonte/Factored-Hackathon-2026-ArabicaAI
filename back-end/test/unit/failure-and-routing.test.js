@@ -121,13 +121,23 @@ test('a malformed stored context card degrades to null and login still works', a
     customerExists: async () => true, rotateSession: async () => {},
     findContextCard: async () => ({ card_version: 1, snapshot_at: '2026-09-29T00:00:00+00:00', card_json }),
     metrics: () => ({ queries: 0, rowsRead: 0, rowsWritten: 0 }) });
-  for (const stored of ['null', '[]', '"Ana"', '7', '{broken']) {
+  const valid = { first_name: 'Ana', locale_hint: 'es-AR', products: [] };
+  const product = { product_type: 'Credit card', last4: '4444', currency: 'ARS' };
+  const invalid = [{ ...valid, products: [null] }, { ...valid, products: ['x'] }, { ...valid, products: [[]] },
+    { ...valid, products: [{ ...product, last4: '22223333' }] }, { ...valid, products: [{ ...product, currency: 'ars' }] },
+    { ...valid, products: [{ ...product, product_number: '4111222233334444' }] },
+    { ...valid, products: [(({ currency, ...rest }) => rest)(product)] }, { ...valid, products: [{ ...product, product_type: 7 }] },
+    { ...valid, first_name: 7 }, { ...valid, first_name: '' }, { ...valid, locale_hint: 'estonian' }];
+  for (const stored of ['null', '[]', '"Ana"', '7', '{broken', ...invalid.map(x => JSON.stringify(x))]) {
     const res = await login(stored);
     assert.equal(res.status, 200, stored);
     const payload = await res.json();
     assert.equal(payload.context_card, null, stored);
     assertContract('customerSession', payload);
   }
+  const ok = await (await login(JSON.stringify({ ...valid, products: [product, { product_type: 'Account', last4: null, currency: null }] }))).json();
+  assertContract('customerSession', ok);
+  assert.equal(ok.context_card.products.length, 2);
   const res = await login(JSON.stringify({ first_name: 'Ana', locale_hint: 'es-AR', products: [],
     version: 9, snapshot_at: 'forged', product_number: '4111222233334444' }));
   const { context_card: card } = await res.json();

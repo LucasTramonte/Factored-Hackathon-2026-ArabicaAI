@@ -16,17 +16,33 @@ export function listIdentities() {
   return json({ items: identities.customers.map(({ customer_id, display_name }) => ({ customer_id, display_name })) });
 }
 
+const LOCALE = /^(es|pt)(-[A-Za-z0-9]+)*$/;
+const LAST4 = /^[0-9]{4}$/;
+const CURRENCY = /^[A-Z]{3}$/;
+const PRODUCT_KEYS = 'currency,last4,product_type';
+
+const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const nullable = (value, valid) => value === null || (typeof value === 'string' && valid(value));
+
+/** A stored product entry in exactly the shape of the session contract. */
+function validProduct(p) {
+  return isObject(p) && Object.keys(p).sort().join() === PRODUCT_KEYS && nullable(p.product_type, () => true) &&
+    nullable(p.last4, v => LAST4.test(v)) && nullable(p.currency, v => CURRENCY.test(v));
+}
+
 /**
  * The stored card as served: only the known fields, with ``version`` and ``snapshot_at`` taken from
- * their columns. A payload that is not a card object yields ``null`` so login stays available.
+ * their columns. A payload that does not match the session contract yields ``null``, so login stays
+ * available and a malformed card never reaches the client.
  */
 function contextCard(row) {
   if (!row) return null;
   let card;
   try { card = JSON.parse(row.card_json); } catch { return null; }
-  if (!card || typeof card !== 'object' || Array.isArray(card)) return null;
+  if (!isObject(card)) return null;
   const { first_name = null, locale_hint, products } = card;
-  if (typeof locale_hint !== 'string' || !Array.isArray(products)) return null;
+  if (!nullable(first_name, v => v.length > 0) || typeof locale_hint !== 'string' || !LOCALE.test(locale_hint) ||
+      !Array.isArray(products) || !products.every(validProduct)) return null;
   return { version: row.card_version, snapshot_at: row.snapshot_at, first_name, locale_hint, products };
 }
 

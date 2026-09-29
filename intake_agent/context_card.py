@@ -2,8 +2,7 @@
 import re
 
 CARD_VERSION = 1  # must match CHECK (card_version = ...) in back-end/migrations/0003_context_cards.sql
-SPANISH_TAG = re.compile(r'es(-[A-Za-z0-9]+)*')
-PORTUGUESE_TAG = re.compile(r'pt(-[A-Za-z0-9]+)*', re.IGNORECASE)
+LANGUAGE_TAG = re.compile(r'(es|pt)(-[a-z0-9]+)*')
 
 VARIANTS = {'mexican': 'es-MX', 'colombian': 'es-CO', 'argentine': 'es-AR',
             'México': 'es-MX', 'Colombia': 'es-CO', 'Argentina': 'es-AR'}
@@ -35,9 +34,16 @@ def build_context_card(con, customer_id: str) -> dict | None:
 
 
 def reply_language(session_language: str | None, card: dict) -> str:
-    """Use a well-formed session language tag; the snapshot locale is only the fallback."""
-    if session_language and PORTUGUESE_TAG.fullmatch(session_language):
+    """Use a well-formed session language tag; the snapshot locale is only the fallback.
+
+    Tags are matched case-insensitively with ``_`` read as ``-``. Portuguese always maps to
+    ``pt-BR``; a Spanish tag is returned with the language lowercased and a region uppercased.
+    """
+    tag = (session_language or '').replace('_', '-').lower()
+    match = LANGUAGE_TAG.fullmatch(tag)
+    if not match:
+        return card['locale_hint']
+    if match.group(1) == 'pt':
         return 'pt-BR'
-    if session_language and SPANISH_TAG.fullmatch(session_language):
-        return session_language
-    return card['locale_hint']
+    return '-'.join(part.upper() if i and part.isalpha() and len(part) == 2 else part
+                    for i, part in enumerate(tag.split('-')))
