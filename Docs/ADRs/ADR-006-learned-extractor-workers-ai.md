@@ -16,7 +16,8 @@ The question is which model, doing what, and how we avoid spending more than the
 ## Decision
 
 1. **The model extracts, and deterministic code decides.**
-   - The model reads the customer's message, the session language, the session time `as_of` and the closed merchant and category vocabulary (DF-006). It returns the intent and the facts the customer states, in the spec schema of `POLICY.md`.
+   - The model reads the customer's message, the session language, the session time `as_of` and the closed merchant and category vocabulary (DF-006).
+   - It returns exactly five extraction fields: `intent`, `stated_facts`, `invalid`, `demand` and `injection`. It never returns `customer_id`, `authenticated`, `confirmed_id`, `tool_failure` or `as_of`. The caller supplies those from trusted session state and adds them after the extracted fields, so no model output can override them. Any extra field fails validation (`evals/intake/systems.py`).
    - It never sees the customer's transactions or anyone else's data. It never picks an action, and never writes to D1.
    - The written policy applies the extracted facts to the customer's purchases: identity, ownership, confirmation and candidate matching. These are the same rules that define the frozen gold.
    - So the comparison with the checklist measures how well each system *reads the message*. Both sides follow the same policy.
@@ -45,7 +46,9 @@ The question is which model, doing what, and how we avoid spending more than the
 5. **Build and freeze.** Lucas and Roberto have seen frozen cases, so neither may write or tune the extractor.
    - It is built by an isolated agent in a clean checkout where the withheld files don't exist. It uses only `POLICY.md`, the `development` split and the checklist interface.
    - The instructions given to that agent are committed verbatim, so reviewers can check they contain no test content.
-   - Roberto reviews the code. The pre-registration and the `extractor-v1` tag follow `evals/intake/preregistration/`.
+   - Anyone who has seen a frozen case reviews only **non-behavioural** aspects: security, secrets, data handling, interfaces, tests and error paths. That covers Roberto, as the extractor's code reviewer, and Lucas.
+   - Any **behaviour-changing** revision needs the approval of a reviewer who has seen no frozen case (Manoella), and it is re-run by the builder on the `development` split only. That covers the prompt, the parsing, the thresholds or the model. An exposed reviewer's comments may flag a behaviour problem, but may not propose the fix.
+   - The pre-registration and the `extractor-v1` tag follow `evals/intake/preregistration/`.
 6. **Live service later.** The Worker calls the same prompt through its AI binding only after the frozen run, in a separate change behind a switch that falls back to the current deterministic flow.
 
 ## Consequences

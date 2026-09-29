@@ -84,6 +84,8 @@ The triggers are:
    ```
 3. Commit everything on a branch. **Don't create the tag**: a human reviews the code first, then tags `extractor-v1`.
 
+If a review asks for a behaviour change (prompt, parsing, thresholds or model), apply it only if Manoella, the one reviewer who has seen no frozen case, approved it. Re-run the development-split check afterwards. A request from Lucas or Roberto can only point out a problem; the fix must come from you or from Manoella.
+
 ## Report back
 
 Report:

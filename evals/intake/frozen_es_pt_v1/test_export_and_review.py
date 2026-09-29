@@ -65,7 +65,7 @@ class SpanishReplyTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_duplicates_zero_and_out_of_range_are_rejected_without_writing(self):
-        for reply in ('1a 1b 2a', '0a 1a 2a', '1a 2a 3a', '1a 2c', '1a'):
+        for reply in ('1a 1b 2a', '0a 1a 2a', '1a 2a 3a', '1a 2c', '1a', '1a 1i 2b', '1a; 2b', '1a 2b ok', '1 a 2b'):
             with self.assertRaises(SystemExit, msg=reply):
                 cr.roberto_answers(reply)
         self.assertFalse((self.root / 'reviews' / 'roberto.jsonl').exists())

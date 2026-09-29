@@ -93,9 +93,10 @@ def _prediction(case: dict, action: str, candidates: list[dict], system: str) ->
 
 def policy_prediction(case: dict, extracted: dict, records: list[dict], customers: list[dict], system: str) -> dict:
     """Apply the written policy to extracted facts and return a prediction ``baseline.score`` accepts."""
-    spec = {"customer_id": case["customer_id"], "authenticated": case.get("authenticated") is True,
+    # Session fields come last, so no extracted key could ever override identity or session state.
+    spec = {**extracted, "customer_id": case["customer_id"], "authenticated": case.get("authenticated") is True,
             "tool_failure": case.get("tool_failure", False), "confirmed_id": case.get("confirmed_id"),
-            "as_of": case.get("as_of"), **extracted}
+            "as_of": case.get("as_of")}
     result = POLICY.evaluate(spec, {"customers": customers, "transactions": records})
     by_id = {r["transaction_id"]: r for r in records}
     candidates = [{k: by_id[i].get(k) for k in EVIDENCE_FIELDS} for i in result["candidate_ids"]]

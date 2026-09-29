@@ -76,6 +76,14 @@ class PolicyAdapterTests(unittest.TestCase):
         self.assertNotIn('45300.00', blob)
         self.assertIn('Uber', seen['vocabulary']['merchants'])
 
+    def test_session_fields_always_come_from_the_session(self):
+        # Even if a model tried to claim authentication or another customer, validation rejects it
+        # and the policy spec takes identity fields from the case, after the extracted ones.
+        with self.assertRaises(ValueError):
+            validate_extraction(dict(FACTS, authenticated=True))
+        p = policy_prediction(dict(CASE, authenticated=False), FACTS, RECORDS, CUSTOMERS, 'x')
+        self.assertEqual(p['action'], 'authenticate')
+
     def test_schema_validation_is_strict(self):
         validate_extraction(FACTS)
         for bad in [dict(FACTS, intent='x'), dict(FACTS, demand='cash'), dict(FACTS, injection='no'),

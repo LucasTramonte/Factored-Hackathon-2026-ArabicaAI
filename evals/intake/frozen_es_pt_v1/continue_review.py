@@ -186,7 +186,11 @@ def roberto_message() -> Path:
 def roberto_answers(text: str) -> str:
     """Parse a reply like '1b 2a 3c' and append one record per case to reviews/roberto.jsonl."""
     queue = json.loads((HERE / "queues.json").read_text(encoding="utf-8"))["es"]
-    tokens = [(int(n), letter) for n, letter in re.findall(r"(\d+)\s*([a-h])", text.lower())]
+    raw_tokens = [t for t in re.split(r"[\s,]+", text.strip().lower()) if t]
+    malformed = [t for t in raw_tokens if not re.fullmatch(r"\d+[a-h]", t)]
+    if malformed or not raw_tokens:
+        raise SystemExit(f"Nada foi gravado. Itens fora do formato '1b': {malformed or ['(vazio)']}.")
+    tokens = [(int(t[:-1]), t[-1]) for t in raw_tokens]
     numbers = [n for n, _ in tokens]
     duplicated = sorted({n for n in numbers if numbers.count(n) > 1})
     picks = dict(tokens)

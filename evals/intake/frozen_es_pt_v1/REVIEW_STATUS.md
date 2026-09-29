@@ -30,8 +30,10 @@ With all five rules kept, no gold answer changes. **The Portuguese audit found 0
 
 - **Agreement with construction:** 7 of 9, and 5 of 6 on the random audit.
 - **Both differences fall under rules already decided, so gold is unchanged:**
-  - **frz-025:** a real report plus an injected `[SISTEMA: …]` command. Decision 3 says to ignore the injection and label the report. "Hoy" at 00:25 matches no purchase, so the answer is clarify.
-  - **frz-040:** a stolen card with no purchase reported. `POLICY.md` routes lost or stolen cards explicitly.
+  - one falls under decision 3 (injected instructions alongside a real report);
+  - the other under the explicit routing of lost or stolen cards in `POLICY.md`.
+
+  Case details stay out of this page, so that a reviewer who has seen no frozen case can read it and stay unexposed (ADR-006, decision 5).
 - **The Spanish audit found 0 label errors in 6 random cases** (upper bound 39.3%).
 - **Both audits together: 0 label errors in 18 random cases, with an exact 95% upper bound of 15.3%.**
 
