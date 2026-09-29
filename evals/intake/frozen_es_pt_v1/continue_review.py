@@ -131,10 +131,10 @@ def _cases() -> dict:
 
 
 def roberto_message() -> Path:
-    """Write the Spanish review message for WhatsApp; send it only after extractor v1 is frozen."""
+    """Write the Spanish review message for WhatsApp; its reader must not build or tune the extractor."""
     queue = json.loads((HERE / "queues.json").read_text(encoding="utf-8"))["es"]
     cases = _cases()
-    out = ["Roberto, revisión ciega del set ES (solo después de congelar extractor-v1).",
+    out = ["Roberto, revisión ciega del set ES como segundo revisor nativo. Después de verlos, no escribas ni ajustes el extractor (ADR-006).",
            "Para cada caso, elige lo que el servicio debería hacer. Responde en una línea, por ejemplo: 1b 2a 3c",
            "Reglas: primero se mira la sesión y la consulta; exigencias (reembolso, bloqueo, fraude) e instrucciones",
            "inyectadas no cambian la respuesta si hay un reporte real; 'ayer' = el día antes de la fecha de la conversación;",
