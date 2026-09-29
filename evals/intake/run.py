@@ -8,11 +8,13 @@ import statistics
 import time
 from datetime import datetime,timezone
 from .baseline import FixtureStore,decide,score,HANDOFFS
+from .stats import wilson
 
-# development: rule tuning; evaluation: authored regression; v1_authored: exposed regression cases from Andres's V1 scenarios; safety: red-team decision points.
-SPLITS=('development','evaluation','v1_authored','safety')
+# development: rule tuning; evaluation: authored regression; v1_authored: exposed regression cases from Andres's V1 scenarios; safety: red-team decision points;
+# frozen_es_pt_v1: the blind held-out set (ADR-005), run once per pre-registered system version.
+SPLITS=('development','evaluation','v1_authored','safety','frozen_es_pt_v1')
 # Only the unsupported-language family may carry a non-ES/PT message language; it appears in the 'all' summary only.
-LANGUAGES={'unsupported_language':('en',)}
+LANGUAGES={'unsupported_language':('en','other')}
 
 def ratio(n,d):
     """Keep zero-denominator rates undefined."""
@@ -45,6 +47,7 @@ def evaluate(corpus):
         latency=sorted(r['latency_ms'] for r in group)
         summaries.append(dict(split=split,baseline=name,language=language,cases=len(group),
           correct=sum(r['correct'] for r in group),correct_rate=ratio(sum(r['correct'] for r in group),len(group)),
+          correct_rate_ci95=list(wilson(sum(r['correct'] for r in group),len(group))),
           unsafe=sum(not r['safe'] for r in group),safe_complete=sum(r['safe_complete'] for r in group),completion_ready=ready,
           completion_ready_rate=ratio(sum(r['safe_complete'] for r in group),ready),
           missed_handoff=sum(r['missed_handoff'] for r in group),required_handoff=required,
@@ -58,9 +61,10 @@ def evaluate(corpus):
 def main():
     """CLI stores only authored fixture content, never raw bank customer records."""
     p=argparse.ArgumentParser();p.add_argument('--output',type=Path,default=Path('data_foundation/runs/intake-evaluation/results.json'))
-    args=p.parse_args();source=Path(__file__).with_name('cases.json');blob=source.read_bytes()
+    p.add_argument('--cases',type=Path,default=Path(__file__).with_name('cases.json'),help='corpus to score; the frozen set is run once per pre-registered system version')
+    args=p.parse_args();source=args.cases;blob=source.read_bytes()
     result=evaluate(json.loads(blob))
-    result['provenance']=dict(executed_utc=datetime.now(timezone.utc).isoformat(),python=platform.python_version(),corpus_sha256=hashlib.sha256(blob).hexdigest(),code_sha256=hashlib.sha256(Path(__file__).with_name('baseline.py').read_bytes()+Path(__file__).read_bytes()).hexdigest(),gold_status='Authored; pending team review',latency_scope='One local call per case; descriptive microbenchmark only')
+    result['provenance']=dict(corpus_path=str(source),executed_utc=datetime.now(timezone.utc).isoformat(),python=platform.python_version(),corpus_sha256=hashlib.sha256(blob).hexdigest(),code_sha256=hashlib.sha256(Path(__file__).with_name('baseline.py').read_bytes()+Path(__file__).read_bytes()).hexdigest(),gold_status='Authored; pending team review',latency_scope='One local call per case; descriptive microbenchmark only')
     args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     print(json.dumps([r for r in result['summary'] if r['language']=='all'],indent=2))
 
