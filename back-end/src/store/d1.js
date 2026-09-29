@@ -1,0 +1,58 @@
+/**
+ * Every SQL statement the service runs. Route handlers never build SQL, so this is the only module
+ * to replace if the store moves (for example to PostgreSQL through Hyperdrive).
+ *
+ * Each call uses ``.all()`` or ``.run()`` so D1's ``meta`` is available. ``metrics()`` reports
+ * queries, rows read and rows written for the current request; the budget tests use it.
+ */
+export function createStore(db) {
+  const totals = { queries: 0, rowsRead: 0, rowsWritten: 0 };
+  const track = result => {
+    totals.queries += 1;
+    totals.rowsRead += result?.meta?.rows_read ?? 0;
+    totals.rowsWritten += result?.meta?.rows_written ?? 0;
+    return result;
+  };
+  const all = async (sql, ...params) => track(await db.prepare(sql).bind(...params).all()).results;
+  const first = async (sql, ...params) => (await all(sql, ...params))[0] ?? null;
+  const run = async (sql, ...params) => track(await db.prepare(sql).bind(...params).run());
+
+  return {
+    metrics: () => ({ ...totals }),
+    ping: () => all('SELECT 1 AS ok'),
+    customerExists: async customerId => Boolean(await first('SELECT 1 AS ok FROM customers WHERE customer_id=?', customerId)),
+
+    deleteExpiredSessions: now => run('DELETE FROM sessions WHERE expires_at<=?', now),
+    deleteSession: hash => run('DELETE FROM sessions WHERE token_hash=?', hash),
+    insertSession: (hash, actor, customerId, expiresAt) =>
+      run('INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)', hash, actor, customerId, expiresAt),
+    findSession: (hash, actor, now) =>
+      first('SELECT customer_id FROM sessions WHERE token_hash=? AND actor=? AND expires_at>?', hash, actor, now),
+
+    listTransactions: (customerId, limit) => all(
+      'SELECT transaction_id, occurred_at, source_occurred_at, merchant_name, amount, currency FROM transactions '
+      + 'WHERE customer_id=? ORDER BY occurred_at DESC, source_occurred_at DESC, transaction_id LIMIT ?', customerId, limit),
+    ownsTransaction: async (customerId, transactionId) => Boolean(await first(
+      'SELECT 1 AS ok FROM transactions WHERE customer_id=? AND transaction_id=?', customerId, transactionId)),
+
+    /** Insert unless this customer already used the key; returns the new case id or ``null``. */
+    insertCase: async ({ caseId, customerId, transactionId, idempotencyKey, statement }) => {
+      const row = await first(
+        'INSERT INTO cases(case_id,customer_id,transaction_id,idempotency_key,customer_statement,customer_confirmed) '
+        + 'VALUES(?,?,?,?,?,1) ON CONFLICT(customer_id,idempotency_key) DO NOTHING RETURNING case_id',
+        caseId, customerId, transactionId, idempotencyKey, statement);
+      return row ? row.case_id : null;
+    },
+    findCaseByKey: (customerId, idempotencyKey) => first(
+      'SELECT case_id, transaction_id, customer_statement, status, accepted_at FROM cases '
+      + 'WHERE customer_id=? AND idempotency_key=?', customerId, idempotencyKey),
+
+    listAgentCases: limit => all(
+      'SELECT c.case_id AS protocol, c.customer_id, u.display_name, c.transaction_id, t.merchant_name, '
+      + 't.occurred_at, t.source_occurred_at, t.amount, t.currency, c.customer_statement, '
+      + 'c.customer_confirmed, c.status, c.accepted_at FROM cases c '
+      + 'JOIN customers u ON u.customer_id=c.customer_id '
+      + 'JOIN transactions t ON t.transaction_id=c.transaction_id AND t.customer_id=c.customer_id '
+      + 'ORDER BY c.accepted_at DESC, c.case_id LIMIT ?', limit)
+  };
+}

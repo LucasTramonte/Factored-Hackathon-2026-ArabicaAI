@@ -1,5 +1,6 @@
 /** Run the Worker against a fresh, isolated local D1 and compiled UI assets. */
-import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -34,7 +35,7 @@ try {
   await cp(join(project, 'wrangler.jsonc'), join(temp, 'wrangler.jsonc'));
   await cp(join(project, 'seeds/seed_fictitious.sql'), join(temp, 'seed_fictitious.sql'));
   await writeFile(join(temp, '.dev.vars'),
-    'DEMO_ACCESS_USERNAME="local-reviewer"\nDEMO_ACCESS_PASSWORD="local-test-password"\n');
+    'DEMO_ACCESS_USERNAME="local-reviewer"\nDEMO_ACCESS_PASSWORD="local-test-password"\nDEMO_EXPOSE_DB_METRICS="1"\n');
   run(['d1', 'migrations', 'apply', 'arabica-intake-demo', '--local']);
   run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file', 'seed_fictitious.sql']);
   run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file', 'seed_fictitious.sql']);
@@ -46,7 +47,13 @@ try {
   await writeFile(join(temp, 'restore.sql'), "UPDATE transactions SET amount='125.50' WHERE transaction_id='demo-tx-001';\n");
   run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file', 'restore.sql']);
   run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file',
-    join(project, 'test/sample_seed.sql')]);
+    join(project, 'test/integration/sample_seed.sql')]);
+  // A customer session that expired long ago, so tests can prove expiry is enforced server-side.
+  const expiredToken = 'e'.repeat(64);
+  const expiredHash = createHash('sha256').update(expiredToken).digest('hex');
+  await writeFile(join(temp, 'expired.sql'),
+    `INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES('${expiredHash}','customer','demo-ana',1);\n`);
+  run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file', 'expired.sql']);
   server = spawn(process.execPath, [wrangler, 'dev', '--local', '--ip', '127.0.0.1', '--port', String(port)],
     { cwd: temp, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
@@ -63,8 +70,10 @@ try {
     await new Promise(done => setTimeout(done, 250));
   }
   if (!ready) throw new Error('Local Worker did not start:\n' + output);
-  const tested = spawnSync(process.execPath, ['--test', join(project, 'test/live-flow.test.js')], {
-    cwd: temp, env: { ...env, WORKER_TEST_URL: `http://127.0.0.1:${port}` },
+  const suites = (await readdir(join(project, 'test/integration'))).filter(name => name.endsWith('.test.js')).sort()
+    .map(name => join(project, 'test/integration', name));
+  const tested = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...suites], {
+    cwd: temp, env: { ...env, WORKER_TEST_URL: `http://127.0.0.1:${port}`, EXPIRED_TOKEN: 'e'.repeat(64) },
     encoding: 'utf8', timeout: 60_000
   });
   process.stdout.write(tested.stdout);

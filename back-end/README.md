@@ -1,69 +1,80 @@
-# Cloudflare variant of the intake demo
+# Intake API (Cloudflare Worker + D1)
 
-This is a **separate, bounded** deployment of the existing synthetic demo. Angular is served as Worker Static Assets; a JavaScript Worker implements the same customer and agent API; D1 stores customers, charges, accepted cases, and one-hour sessions. The existing FastAPI/PostgreSQL version remains intact. Neither browser nor Worker reads S3. The ignored SQL seed is exported only from the one-day, quality-gated PostgreSQL sample produced by the existing Bronze/Silver loader.
+This is the only online implementation of the intake service ([ADR-003](../Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)).
 
-The Worker does not decide fraud, issue refunds, or authenticate bank customers. It provides a simulated identity and confirms a request only after D1 commits it. Cloudflare Access plus the Worker's Basic gate restrict the team preview; those gates are not banking authentication.
+- **Worker (JavaScript, ES modules):** serves the API.
+- **D1:** stores customers, charges, cases and sessions.
+- **Angular build:** served from `front-end/` as static assets.
 
-## Local checks — no Cloudflare account needed
+The Worker never reads S3, DuckDB or Silver. The data it serves is loaded as a reviewed seed from the Gold slice (`data_pipelines/gold/`).
 
-Use Node **22 or newer** for Wrangler 4.143.0. Cloudflare Builds currently supplies Node 24 by default. From the repository root:
+The service does not decide fraud, issue refunds or authenticate bank customers. It confirms a report only after D1 has stored it.
+
+## Layout
+
+| Path | Responsibility |
+|---|---|
+| `src/index.js` | Entry point. It turns any unexpected error into a generic 503. It adds D1 counters only when `DEMO_EXPOSE_DB_METRICS=1`, which is set in local tests only. |
+| `src/router.js` | Exact route table. The access gate runs before method checks. Other methods on API paths get 405, unknown API paths get 404. |
+| `src/http.js` | JSON responses, cookies, and body parsing capped at 16 KB. |
+| `src/auth/access-gate.js` | Basic gate for API routes, second to Cloudflare Access. It fails closed when not configured. |
+| `src/auth/session.js` | Random 256-bit tokens. Only their SHA-256 is stored, and customer and agent sessions are kept separate. |
+| `src/modules/customer/` | Login, own charges, and case creation with validation. |
+| `src/modules/agent/` | Agent session and the read-only case view. |
+| `src/store/d1.js` | Every SQL statement. This is the only module to replace if the store changes. |
+| `src/config/identities.json` | Allowlisted demo identities, shared with the Gold slice. |
+| `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. |
+| `seeds/seed_fictitious.sql` | Fictitious identities and charges. Rerunning it is a no-op, and drift makes it fail. |
+| `test/unit/` | Pure-module tests: validation, gate, sessions, failure injection, routing, the contract validator. |
+| `test/integration/` | Tests against local D1: main flow, adversarial matrix, D1 budget. All JSON is checked against `front-end/contracts/`. |
+
+## Run and test locally
+
+These steps need Node 22 or newer and no Cloudflare account. From the repository root:
 
 ```bash
-npm --prefix demo-ui ci
-npm --prefix demo-ui run build
-npm --prefix cloudflare ci
-npm --prefix cloudflare run prepare-assets
-npm --prefix cloudflare test
+npm --prefix front-end ci && npm --prefix front-end run build
+npm --prefix back-end ci && npm --prefix back-end run prepare-assets
+npm --prefix back-end test          # unit tests, then integration tests on a throwaway local D1
 ```
 
-The test command creates a temporary local D1 database, applies migrations, seeds fictitious fixture data, starts Wrangler, checks the HTTP flow, and removes the temporary database. It does not touch the persistent local PostgreSQL demo or a remote Cloudflare resource.
-
-To browse the Worker locally, create `cloudflare/.dev.vars` (ignored by Git) with your own `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD`, then from `cloudflare/`:
+To browse locally, create `back-end/.dev.vars` (ignored by Git) with `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD`. Then, from `back-end/`:
 
 ```bash
 npx wrangler d1 migrations apply arabica-intake-demo --local
-npx wrangler d1 execute arabica-intake-demo --local --file seed_fictitious.sql
+npx wrangler d1 execute arabica-intake-demo --local --file seeds/seed_fictitious.sql
+npx wrangler d1 execute arabica-intake-demo --local --file ../data/demo_s3/intake_slice_seed.sql   # optional; from make intake-sample-slice
 npx wrangler dev --local
 ```
 
-The placeholder D1 ID in `wrangler.jsonc` is valid for **local development only**. `npm run deploy` refuses to publish it. To include the previously reviewed dataset row locally, first run the one-day PostgreSQL sample load documented in [the demo plan](../Docs/Plans/intake-demo.md), then from the repository root:
+## Deployment
 
-```bash
-.venv/bin/python -m cloudflare.export_sample
-cd cloudflare
-npx wrangler d1 execute arabica-intake-demo --local --file ../data/cloudflare_sample_seed.sql
-```
+The Worker `factored-hackathon-2026-arabicaai` deploys through Cloudflare Workers Builds from the production branch. Build settings:
 
-This export reads only the fixed allowlisted customer and at most 20 transaction IDs named by the existing `intake_demo.sample_loads` manifest. The exporter rejects missing ownership, incomplete provenance, or a wrong event date; D1 rejects a divergent seed rerun. Its output stays under ignored `data/`; it contains no cases. The D1 provenance table stores source file, product ID, business date, and mapping; the public API never returns it.
+- **Root directory:** `back-end`
+- **Build command:** `npm ci && npm --prefix ../front-end ci && npm --prefix ../front-end run build && npm run prepare-assets && npm test`
+- **Deploy command:** `npm run deploy`
+- **Watch paths:** `back-end/**`, `front-end/**`
 
-## Prepare the remote resource
+Preview builds share the production D1 binding. Keep them disabled until a separate preview database exists.
 
-These are **one-time account actions**. The team pilot has a Worker and D1 database with migrations and the fictitious seed applied; other accounts must repeat setup with their own D1 ID. Verify runtime secrets and the live flow before sharing the URL.
+Runtime secrets `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` live only in the Worker's settings, never in the repository or build logs. Without them, every API route returns 503. Cloudflare Access with an email allowlist or one-time PIN protects the whole hostname, static files included. `scripts/predeploy.mjs` refuses to deploy a placeholder D1 ID.
 
-1. In Cloudflare **Workers & Pages**, use the Worker named `factored-hackathon-2026-arabicaai`; keep any existing Pages project unchanged. Create a D1 database named `arabica-intake-demo` under **D1 SQL Database**. Copy its non-secret database UUID into `cloudflare/wrangler.jsonc` in place of the all-zero placeholder. The Worker name in Cloudflare must match the config `name`.
-2. Configure Cloudflare **Access** on the production `*.workers.dev` Worker URL with an allowlist of team email addresses. Protect previews too, or disable them until you have a separate preview database. A preview deployment otherwise uses the configured binding and can write to the same D1 database.
-3. Under the Worker's **Settings → Variables and Secrets**, set runtime `DEMO_ACCESS_USERNAME` and a long, unique `DEMO_ACCESS_PASSWORD`. Do not add them to the build command, GitHub, `.env`, or repository. The Worker returns 503 for non-health routes until both exist. Access and this Basic gate protect all routes, including static files.
-4. On a machine authenticated to your Cloudflare account, apply migrations and load only reviewed demo data. From `cloudflare/` run:
+Schema changes: `npx wrangler d1 migrations apply arabica-intake-demo --remote`, after the same migration has passed the local tests. To load reviewed data, run `npx wrangler d1 execute arabica-intake-demo --remote --file <seed>` for the fictitious seed, or for a Gold slice seed whose manifest has been reviewed. Never upload `data/`, DuckDB, Parquet or credentials.
 
-   ```bash
-   npx wrangler d1 migrations apply arabica-intake-demo --remote
-   npx wrangler d1 execute arabica-intake-demo --remote --file seed_fictitious.sql
-   # Optional: run the bounded export shown above, inspect its local SQL file, then:
-   npx wrangler d1 execute arabica-intake-demo --remote --file ../data/cloudflare_sample_seed.sql
-   ```
+## Remote checks after a deploy
 
-   The seed can be rerun: identical data remain the same; divergent values raise a constraint error. Do **not** upload the local PostgreSQL cases, `data/` directory, DuckDB, Parquet, or credentials.
-5. Connect the Worker to this GitHub repository. In **Settings → Builds**, select `feat/lucas-intake-demo` as the production branch and disable preview builds until they have a separate D1 database. Set **Root directory** to `cloudflare`, where `wrangler.jsonc` lives. The checkout still includes the sibling Angular directory. Set **Build command** to:
+Record the date and the results of each check in ADR-004's implementation notes:
 
-   ```bash
-   npm ci && npm --prefix ../demo-ui ci && npm --prefix ../demo-ui run build && npm run prepare-assets && npm test
-   ```
+1. Cloudflare Access denies an email that isn't on the allowlist.
+2. A missing Basic credential returns 401 on `/transactions`.
+3. Each customer sees only their own charges.
+4. A confirmed case returns a reference, and a retry returns the same one.
+5. The agent view shows the case.
+6. The case is still there after a new deploy.
+7. Static files load without adding Worker requests in Workers analytics.
+8. `GET /healthz` returns `{"status":"ok"}`.
 
-   Set **Deploy command** to `npm run deploy`. Cloudflare Builds supports a configurable production branch and commands. Restrict watch paths to `cloudflare/**` and `demo-ui/**` if you want to avoid builds from unrelated reports. The deploy guard stops the build until the real D1 UUID is committed. A GitHub connection alone does not deploy the existing Docker image.
-6. After the first successful deployment, open the Worker URL from an allowed email account. Confirm Access denies an unlisted email; the Basic gate denies a missing password; customer login lists only that identity's charges; case creation returns a reference; retry returns the same reference; and the agent view reads the persisted case. Restarting a Worker isolate must not erase a case or session because both are in D1. Check `GET /healthz` separately.
+## Limits
 
-## Limits and costs
-
-The Free plan currently allows 100,000 Worker requests/day and 10 ms CPU per request, while D1 allows 5 million rows read/day, 100,000 rows written/day and up to 500 MB per database. At the workbook's 10 planned requests per episode, 9,000 episodes/day would imply 90,000 Worker requests/day **before extra requests**, close to the cap. Static asset requests may be free, but this demo routes all requests through the Worker to enforce its Basic gate, so measure them. Test actual CPU, D1 row scans, retries, and peak behavior before claiming the free plan can support any target volume. AI model calls have separate prices. The `workers.dev` address is suitable for a private hackathon demo, not a bank production SLA.
-
-Official references: [Git build settings](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/), [Worker static assets](https://developers.cloudflare.com/workers/static-assets/), [D1 migrations](https://developers.cloudflare.com/d1/platform/migrations/), [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [Access for workers.dev](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/).
+Free plan: 100,000 Worker requests per day, 10 ms of CPU per request, 50 D1 queries per invocation, 5 million rows read and 100,000 rows written per day, and 500 MB per database. Measured cost of one customer episode: 3 requests, 9 queries, 10 rows read, 7 rows written. [ADR-004](../Docs/ADRs/ADR-004-intake-capacity-and-cost.md) turns these numbers into capacity and cost.

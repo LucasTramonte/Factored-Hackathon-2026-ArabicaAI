@@ -1,0 +1,71 @@
+/** The main customer and agent flow against local D1; every JSON body is checked against the contracts. */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { assertContract } from '../support/contract.js';
+import { base, client } from '../support/client.js';
+
+test('page is static; the API needs the gate; customers are isolated; replay and handoff work', async () => {
+  const page = await fetch(base + '/');
+  assert.equal(page.status, 200, 'static assets are served without the API gate (Cloudflare Access covers them)');
+  assert.match(await page.text(), /<app-root|ArabicaDemoUi/);
+  assert.equal((await client({ authorization: null }).call('/transactions')).status, 401);
+
+  const ana = client();
+  const bruno = client();
+  const noSession = await ana.call('/transactions');
+  assert.equal(noSession.status, 401);
+  assertContract('error', noSession.body);
+  const login = await ana.call('/demo/session', { customer_id: 'demo-ana' });
+  assert.equal(login.status, 200);
+  assertContract('customerSession', login.body);
+  assert.equal((await bruno.call('/demo/session', { customer_id: 'demo-bruno' })).status, 200);
+
+  const anaRows = await ana.call('/transactions');
+  assertContract('transactionList', anaRows.body);
+  assert.deepEqual(new Set(anaRows.body.items.map(x => x.transaction_id)), new Set(['demo-tx-001', 'demo-tx-002']));
+  assert.deepEqual((await bruno.call('/transactions')).body.items.map(x => x.transaction_id), ['demo-tx-003']);
+
+  const request = { transaction_id: 'demo-tx-001', customer_statement: 'I do not recognize this charge.',
+    customer_confirmed: true, idempotency_key: crypto.randomUUID() };
+  assert.equal((await ana.call('/cases', { ...request, customer_confirmed: false })).status, 422);
+  assert.equal((await ana.call('/cases', { ...request, customer_confirmed: 'true' })).status, 422);
+  assert.equal((await bruno.call('/cases', request)).status, 404);
+  const first = await ana.call('/cases', request);
+  assert.equal(first.status, 201);
+  assertContract('caseReceipt', first.body);
+  assert.equal(first.body.replayed, false);
+  const retry = await ana.call('/cases', request);
+  assert.equal(retry.status, 200);
+  assertContract('caseReceipt', retry.body);
+  assert.equal(retry.body.protocol, first.body.protocol);
+  assert.equal(retry.body.replayed, true);
+  assert.equal((await ana.call('/cases', { ...request, customer_statement: 'A changed statement.' })).status, 409);
+
+  const agent = client();
+  assert.equal((await agent.call('/agent/cases')).status, 401);
+  const agentLogin = await agent.call('/demo/agent-session', {});
+  assert.equal(agentLogin.status, 200);
+  assertContract('agentSession', agentLogin.body);
+  const cases = await agent.call('/agent/cases');
+  assertContract('agentCaseList', cases.body);
+  assert.ok(cases.body.items.some(x => x.protocol === first.body.protocol && x.customer_confirmed === true));
+});
+
+test('dataset sample keeps the source wall time and original amount', async () => {
+  const sample = client();
+  assert.equal((await sample.call('/demo/session', { customer_id: 'CLI-U53R5AZVLET0' })).status, 200);
+  const list = await sample.call('/transactions');
+  assertContract('transactionList', list.body);
+  assert.equal(list.body.items.length, 1);
+  assert.equal(list.body.items[0].occurred_at, null);
+  assert.equal(list.body.items[0].source_occurred_at, '2026-02-26T13:21:51');
+  assert.equal(list.body.items[0].amount, '29763.49');
+  assert.equal(list.body.items[0].currency, 'ARS');
+});
+
+test('health check is public and reveals nothing else', async () => {
+  const res = await fetch(base + '/healthz');
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assertContract('health', body);
+});
