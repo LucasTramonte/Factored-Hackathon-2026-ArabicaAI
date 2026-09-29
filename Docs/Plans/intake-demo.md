@@ -82,3 +82,5 @@ The Worker `factored-hackathon-2026-arabicaai` runs at https://factored-hackatho
 - A retry with the same key and content returns the same reference, and different content gets 409. A second case for the same charge under a new key is possible: there is no cross-key duplicate rule yet (tracked in the roadmap).
 - If the browser tab is closed with a request pending, the pending state is lost, but no duplicate is created.
 - No historical complaint is linked to a transaction, so none is joined here by `customer_id` alone.
+
+Next steps and the gap to the target workflow are in the [intake roadmap](intake-roadmap.md).
