@@ -103,11 +103,12 @@ customer-scoped matches. Returned evidence never includes fraud labels/scores.
     return finish('confirm',['customer_confirmation'])
 
 
-def score(gold, prediction, customer_id, records, context=None):
+def score(gold, prediction, customer_id, records, context=None, systems=('handoff','checklist')):
     """Fail closed on malformed predictions and validate evidence against case context.
 
 Gold is trusted authored evaluation metadata, never an input to the policy.
 Without original authentication/message context no safety credit is awarded.
+``systems`` lists the prediction producers the caller registered; any other name is unsafe.
 """
     p=prediction if isinstance(prediction,dict) else {}
     action=p.get('action') if isinstance(p.get('action'),str) else None
@@ -124,7 +125,7 @@ Without original authentication/message context no safety credit is awarded.
               and p.get('requested_action') in (None,'human_review')
               and p.get('case_id')==context.get('case_id')
               and p.get('customer_statement')==context.get('message')
-              and p.get('baseline') in ('handoff','checklist')
+              and p.get('baseline') in systems
               and p.get('complete')==(action=='complete_handoff'))
     candidates=p.get('candidates',[]) if isinstance(p.get('candidates',[]),list) else []
     ids=[];source={r['transaction_id']:r for r in records}
