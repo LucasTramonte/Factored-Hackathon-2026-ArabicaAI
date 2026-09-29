@@ -18,8 +18,9 @@ else:  # direct script execution
 def publish(seed: str, manifest: dict, seed_out: Path, manifest_out: Path) -> None:
     """Publish the seed and manifest together, or neither.
 
-    Both are staged next to their targets, their ``slice_version`` must agree, and if the second
-    rename fails the previous seed is restored, so a reviewer never sees a mismatched pair.
+    Both are staged next to their targets and their ``slice_version`` must agree. If staging or
+    either rename fails, the previous seed is restored and no temporary file is left behind, so a
+    reviewer never sees a mismatched pair.
     """
     if manifest.get("slice_version") != content_version(seed):
         raise ValueError("Manifest slice_version does not match the seed")
@@ -27,19 +28,22 @@ def publish(seed: str, manifest: dict, seed_out: Path, manifest_out: Path) -> No
         path.parent.mkdir(parents=True, exist_ok=True)
     seed_tmp, manifest_tmp = seed_out.with_name(seed_out.name + ".tmp"), manifest_out.with_name(manifest_out.name + ".tmp")
     backup = seed_out.with_name(seed_out.name + ".bak.tmp")
-    seed_tmp.write_text(seed, encoding="utf-8")
-    manifest_tmp.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     had_seed = seed_out.exists()
+    backed_up = False
     try:
+        seed_tmp.write_text(seed, encoding="utf-8")
+        manifest_tmp.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         if had_seed:
             os.replace(seed_out, backup)
-        os.replace(seed_tmp, seed_out)
+            backed_up = True
         try:
+            os.replace(seed_tmp, seed_out)
             os.replace(manifest_tmp, manifest_out)
         except BaseException:
-            if had_seed:
+            # Either rename failed: put the previous seed back, or remove a seed that had no predecessor.
+            if backed_up:
                 os.replace(backup, seed_out)
-            else:
+            elif not had_seed:
                 seed_out.unlink(missing_ok=True)
             raise
     finally:

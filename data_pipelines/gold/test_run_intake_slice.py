@@ -43,3 +43,39 @@ def test_a_failed_manifest_publish_restores_the_previous_pair(tmp_path, monkeypa
         run.publish(body, {"slice_version": content_version(body)}, seed, manifest)
     assert seed.read_text() == "old seed" and manifest.read_text() == "old manifest"
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_a_failed_seed_publish_restores_the_previous_seed(tmp_path, monkeypatch):
+    seed, manifest = tmp_path / "seed.sql", tmp_path / "manifest.json"
+    seed.write_text("old seed")
+    manifest.write_text("old manifest")
+    body = "INSERT INTO customers VALUES ('new');\n"
+    real = os.replace
+
+    def flaky(src, dst):
+        if str(src).endswith("seed.sql.tmp"):
+            raise OSError("rename failed")
+        return real(src, dst)
+
+    monkeypatch.setattr(run.os, "replace", flaky)
+    with pytest.raises(OSError):
+        run.publish(body, {"slice_version": content_version(body)}, seed, manifest)
+    assert seed.read_text() == "old seed" and manifest.read_text() == "old manifest"
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_a_failed_staging_write_leaves_no_temp_files(tmp_path, monkeypatch):
+    seed, manifest = tmp_path / "seed.sql", tmp_path / "manifest.json"
+    body = "INSERT INTO customers VALUES ('new');\n"
+    real_write = run.Path.write_text
+
+    def failing_write(self, *args, **kwargs):
+        if self.name == "manifest.json.tmp":
+            raise OSError("disk full")
+        return real_write(self, *args, **kwargs)
+
+    monkeypatch.setattr(run.Path, "write_text", failing_write)
+    with pytest.raises(OSError):
+        run.publish(body, {"slice_version": content_version(body)}, seed, manifest)
+    assert not seed.exists() and not manifest.exists()
+    assert not list(tmp_path.glob("*.tmp"))
