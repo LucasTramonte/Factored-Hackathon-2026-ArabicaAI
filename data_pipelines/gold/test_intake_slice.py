@@ -34,14 +34,15 @@ def make_db(tmp_path: Path, rows=None, products=None, customers=None, bronze=Non
         con.execute("CREATE TABLE silver.dim_products(product_id VARCHAR, customer_id VARCHAR)")
         con.execute("CREATE TABLE silver.fact_transactions(transaction_id VARCHAR, customer_id VARCHAR, product_id VARCHAR,"
                     " transaction_date TIMESTAMP, merchant_name VARCHAR, currency VARCHAR, transaction_type VARCHAR,"
-                    " transaction_status VARCHAR)")
+                    " transaction_status VARCHAR, process_date DATE DEFAULT DATE '2026-02-26')")
         con.execute("CREATE TABLE bronze.transactions(transaction_id VARCHAR, amount VARCHAR, _source_file VARCHAR)")
         if customers:
             con.executemany("INSERT INTO silver.dim_customers VALUES (?)", customers)
         if products:
             con.executemany("INSERT INTO silver.dim_products VALUES (?, ?)", products)
         if rows:
-            con.executemany("INSERT INTO silver.fact_transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
+            con.executemany("INSERT INTO silver.fact_transactions (transaction_id, customer_id, product_id, transaction_date,"
+                            " merchant_name, currency, transaction_type, transaction_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
         if bronze:
             con.executemany("INSERT INTO bronze.transactions VALUES (?, ?, ?)", bronze)
     return path
@@ -83,7 +84,7 @@ def test_seed_applies_to_the_real_schema_and_keeps_source_values(tmp_path):
     assert con.execute("SELECT display_name FROM customers").fetchone() == ("Dataset customer (synthetic)",)
     assert con.execute("SELECT product_id, source_file, business_date FROM sample_provenance").fetchone() == (
         "P1", "transactions/2026/02/26/part.csv", "2026-02-26")
-    assert manifest["selected"] == 1 and manifest["eligible_sample_rows"] == 1
+    assert manifest["selected"] == 1 and manifest["eligible_rows_in_loaded_partitions"] == 1
     assert manifest["selected_records"] == [{"transaction_id": "T1", "customer_id": CUSTOMER, "product_id": "P1",
                                              "source_file": "transactions/2026/02/26/part.csv"}]
     assert "INSERT INTO cases" not in seed and "INSERT INTO sessions" not in seed
@@ -136,6 +137,7 @@ def test_quality_gate_fails_closed(tmp_path, override, message):
 @pytest.mark.parametrize("kwargs, message", [
     (dict(products=[]), "ownership"),
     (dict(products=[("P1", "someone-else")]), "ownership"),
+    (dict(products=[("P1", None)]), "ownership"),
     (dict(customers=[]), "ownership"),
     (dict(rows=[("T1", CUSTOMER, "P1", "2026-02-26 10:00:00", "A", "ARS", "Purchase", "Approved")] * 2), "duplicated"),
     (dict(rows=[("T1", CUSTOMER, "P1", "2026-02-27 10:00:00", "A", "ARS", "Purchase", "Approved")]), "No eligible"),
@@ -183,7 +185,7 @@ def test_filters_keep_other_customers_types_and_days_out(tmp_path):
                  customers=[(CUSTOMER,), ("CLI-OTHER",)], bronze=[(t, "1.00", "a.csv") for t in ("T1", "T2", "T3", "T4", "T5")])
     seed, manifest = build(tmp_path, db)
     assert [r[0] for r in d1(seed).execute("SELECT transaction_id FROM transactions")] == ["T1"]
-    assert manifest["eligible_sample_rows"] == 2  # T1 and T5 are eligible on the day; only T1 is allowlisted
+    assert manifest["eligible_rows_in_loaded_partitions"] == 2  # T1 and T5 are eligible on the day; only T1 is allowlisted
 
 
 def test_row_cap_is_enforced(tmp_path):
@@ -194,3 +196,26 @@ def test_row_cap_is_enforced(tmp_path):
     for bad in (0, 101):
         with pytest.raises(ValueError, match="max_rows"):
             build(tmp_path, db, max_rows=bad)
+
+
+def test_version_changes_when_content_hidden_behind_comment_like_lines_changes(tmp_path):
+    versions = set()
+    for merchant in ("Shop\n--A", "Shop\n--B"):
+        db = make_db(tmp_path, rows=[("T1", CUSTOMER, "P1", "2026-02-26 13:21:51", merchant, "ARS", "Purchase", "Approved")])
+        seed, manifest = build(tmp_path, db)
+        assert manifest["slice_version"] == gold.content_version(seed)
+        versions.add(manifest["slice_version"])
+    assert len(versions) == 2
+
+
+def test_manifest_states_partition_scope_and_out_of_day_rows(tmp_path):
+    """The loaded storage partition can hold other business days; they are counted, never served."""
+    rows = [("T1", CUSTOMER, "P1", "2026-02-26 13:21:51", "Shop", "ARS", "Purchase", "Approved"),
+            ("T2", CUSTOMER, "P1", "2026-02-27 00:10:00", "Shop", "ARS", "Purchase", "Approved")]
+    db = make_db(tmp_path, rows=rows, bronze=[("T1", "1.00", "a.csv"), ("T2", "2.00", "a.csv")])
+    seed, manifest = build(tmp_path, db)
+    assert [r[0] for r in d1(seed).execute("SELECT transaction_id FROM transactions")] == ["T1"]
+    assert manifest["loaded_process_dates"] == ["2026-02-26"]
+    assert manifest["rows_outside_business_date_in_loaded_partitions"] == 1
+    assert manifest["eligible_rows_in_loaded_partitions"] == 1
+    assert "other storage partitions" in manifest["completeness"]

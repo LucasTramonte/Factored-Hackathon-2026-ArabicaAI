@@ -37,10 +37,10 @@ The measurements come from `back-end/test/integration/budget.test.js`, which run
 
 | Unit | Worker requests | D1 queries | D1 rows read | D1 rows written | Source |
 |---|---|---|---|---|---|
-| Page load (gated HTML document) | 1 | 0 | 0 | 0 | code |
+| Page load (gated HTML document + identity list) | 2 | 0 | 0 | 0 | code |
 | Customer: login + list + create case | 3 | 9 | 10 | 7 | measured |
 | Agent refresh (session + 50-case page) | 2 | 4 | ≤155 | 3 | 13 rows measured with few cases; 155 is the full-page upper bound |
-| **Episode (one of each)** | **6** | **13** | **165** | **10** | |
+| **Episode (one of each)** | **7** | **13** | **165** | **10** | |
 
 Rows written include D1's index writes. A case takes about **367 bytes** with a typical 77-character statement and about **4.3 KB** at the 2,000-character maximum. Worker CPU per request is **not measured yet**. The handlers are light (a SHA-256, JSON and indexed queries), and the workbook assumes 5 ms against the 10 ms limit until Workers analytics gives a real number.
 
@@ -50,10 +50,10 @@ Rows written include D1's index writes. A case takes about **367 bytes** with a 
 
    | Scenario | Episodes/day | Worker requests | Rows read | Rows written | Highest use of a Free limit | Within Free |
    |---|---|---|---|---|---|---|
-   | S1 | 17 | 102 (0.1%) | 2,805 (0.06%) | 170 (0.2%) | 0.2% | yes |
-   | S2 | 145 | 870 (0.9%) | 23,925 (0.5%) | 1,450 (1.5%) | 1.5% | yes |
-   | S3 | 818 | 4,908 (4.9%) | 134,970 (2.7%) | 8,180 (8.2%) | 8.2% | yes |
-   | S4 | 8,180 | 49,080 (49%) | 1,349,700 (27%) | 81,800 (82%) | 82% | **no, upgrade** |
+   | S1 | 17 | 119 (0.1%) | 2,805 (0.06%) | 170 (0.2%) | 0.2% | yes |
+   | S2 | 145 | 1,015 (1.0%) | 23,925 (0.5%) | 1,450 (1.5%) | 1.5% | yes |
+   | S3 | 818 | 5,726 (5.7%) | 134,970 (2.7%) | 8,180 (8.2%) | 8.2% | yes |
+   | S4 | 8,180 | 57,260 (57%) | 1,349,700 (27%) | 81,800 (82%) | 82% | **no, upgrade** |
 
 2. **Upgrade triggers, checked weekly in Workers and D1 analytics:**
    - **Workers Paid ($5/month):** any daily Free limit above 70% for 3 days in a row, or any Worker CPU p95 above 8 ms.
@@ -92,7 +92,7 @@ Rows written include D1's index writes. A case takes about **367 bytes** with a 
       - **API:** API Gateway HTTP API plus Lambda at 512 MB and 100 ms.
       - **Data:** first DynamoDB on demand; then, as a separate estimate, RDS PostgreSQL db.t4g.micro Single-AZ with 20 GB gp3 and 7-day backups, plus a NAT gateway.
       - **AI, optional:** Bedrock, Claude Haiku 4.5.
-   3. Enter the S3 and S4 monthly volumes from the workbook's *Cloudflare capacity* and *Monthly cost* sheets. For S3 that is 4,908 × 30 Worker requests, of which 4,090 × 30 are API calls, plus 8,180 × 30 writes and 134,970 × 30 reads.
+   3. Enter the S3 and S4 monthly volumes from the workbook's *Cloudflare capacity* and *Monthly cost* sheets. For S3 that is 5,726 × 30 Worker requests, of which 4,090 × 30 are API calls that touch D1, plus 8,180 × 30 writes and 134,970 × 30 reads.
    4. Save the public link and export CSV to `Docs/Costs/Intake/aws-pricing-calculator-<YYYY-MM-DD>.csv`. Record the link, the date and the RDS lines here, and replace the indicative RDS inputs in the workbook.
    5. State in the record that the calculator excludes tax and credits and doesn't check Free-plan eligibility for this account.
 7. **Operating the window:**

@@ -33,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     args.seed_out.write_text(seed, encoding="utf-8")
     args.manifest_out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"slice_version={manifest['slice_version']} selected={manifest['selected']} "
-          f"eligible={manifest['eligible_sample_rows']} seed={args.seed_out} manifest={args.manifest_out}")
+          f"eligible={manifest['eligible_rows_in_loaded_partitions']} outside_day={manifest['rows_outside_business_date_in_loaded_partitions']} seed={args.seed_out} manifest={args.manifest_out}")
     return 0
 
 

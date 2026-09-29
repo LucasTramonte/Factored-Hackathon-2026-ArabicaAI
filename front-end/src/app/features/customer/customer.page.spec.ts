@@ -13,7 +13,9 @@ describe('CustomerPage', () => {
     accepted_at: '2026-09-29T12:00:00Z', replayed: false, scope: 'synthetic_demo_only', next_step: 'Await review' };
 
   beforeEach(async () => {
-    service = jasmine.createSpyObj<CustomerService>('CustomerService', ['signIn', 'transactions', 'submitCase']);
+    service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'transactions', 'submitCase']);
+    service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
+      { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo();
     service.transactions.and.resolveTo([tx]);
     await TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }] })
@@ -76,5 +78,36 @@ describe('CustomerPage', () => {
     await Promise.all([page.submit(), page.submit()]);
     await page.submit();
     expect(service.submitCase).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads the identity choices from the API instead of a hard-coded list', async () => {
+    const fixture = TestBed.createComponent(CustomerPage);
+    await fixture.componentInstance.ngOnInit();
+    fixture.detectChanges();
+    const options = [...(fixture.nativeElement as HTMLElement).querySelectorAll('option')].map(o => o.textContent?.trim());
+    expect(options).toEqual(['Ana (demo)', 'Bruno (demo)']);
+    expect(fixture.componentInstance.identity).toBe('demo-ana');
+  });
+
+  it('counts the statement in code points, as the server does', async () => {
+    await readyToSubmit();
+    page.statement = '😀😀😀😀😀';
+    await page.submit();
+    expect(service.submitCase).not.toHaveBeenCalled();
+    expect(page.error()).toContain('10 characters');
+  });
+
+  it('a definitive rejection unfreezes the form; the next submit uses a new key', async () => {
+    await readyToSubmit();
+    service.submitCase.and.returnValues(Promise.reject(new ApiError(422, 'Check the fields.')), Promise.resolve(receipt));
+    await page.submit();
+    expect(page.pending()).toBeNull();
+    expect(page.identityLocked()).toBeFalse();
+    expect(page.error()).toBe('Check the fields.');
+    page.statement = 'A corrected description of the charge.';
+    await page.submit();
+    const [first, second] = service.submitCase.calls.allArgs().map(args => args[0]);
+    expect(second.idempotency_key).not.toBe(first.idempotency_key);
+    expect(second.customer_statement).toBe('A corrected description of the charge.');
   });
 });

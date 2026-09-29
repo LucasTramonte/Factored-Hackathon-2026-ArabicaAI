@@ -5,80 +5,292 @@
   "description": "Response bodies the Angular client relies on. back-end/test validates every integration-test response against these definitions, so a change here and in the Worker must land together.",
   "$defs": {
     "error": {
-      "type": "object", "additionalProperties": false, "required": ["detail"],
-      "properties": { "detail": { "type": "string", "minLength": 1 } }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "detail"
+      ],
+      "properties": {
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "health": {
-      "type": "object", "additionalProperties": false, "required": ["status"],
-      "properties": { "status": { "const": "ok" } }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "const": "ok"
+        }
+      }
     },
     "customerSession": {
-      "type": "object", "additionalProperties": false, "required": ["customer_id", "mode"],
-      "properties": { "customer_id": { "type": "string", "minLength": 1 }, "mode": { "const": "simulated_login" } }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "customer_id",
+        "mode"
+      ],
+      "properties": {
+        "customer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "const": "simulated_login"
+        }
+      }
     },
     "agentSession": {
-      "type": "object", "additionalProperties": false, "required": ["role", "mode"],
-      "properties": { "role": { "const": "agent" }, "mode": { "const": "simulated_login" } }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "mode"
+      ],
+      "properties": {
+        "role": {
+          "const": "agent"
+        },
+        "mode": {
+          "const": "simulated_login"
+        }
+      }
     },
     "transaction": {
-      "type": "object", "additionalProperties": false,
-      "required": ["transaction_id", "occurred_at", "source_occurred_at", "merchant_name", "amount", "currency"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transaction_id",
+        "occurred_at",
+        "source_occurred_at",
+        "merchant_name",
+        "amount",
+        "currency"
+      ],
       "properties": {
-        "transaction_id": { "type": "string", "minLength": 1 },
-        "occurred_at": { "type": ["string", "null"] },
-        "source_occurred_at": { "type": ["string", "null"] },
-        "merchant_name": { "type": "string" },
-        "amount": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,2})?$" },
-        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+        "transaction_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "occurred_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_occurred_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "merchant_name": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]{1,2})?$"
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        }
       }
     },
     "transactionList": {
-      "type": "object", "additionalProperties": false, "required": ["items", "has_more", "coverage"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "has_more",
+        "coverage"
+      ],
       "properties": {
-        "items": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/transaction" } },
-        "has_more": { "type": "boolean" },
-        "coverage": { "type": "string" }
+        "items": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/transaction"
+          }
+        },
+        "has_more": {
+          "type": "boolean"
+        },
+        "coverage": {
+          "type": "string"
+        }
       }
     },
     "caseReceipt": {
-      "type": "object", "additionalProperties": false,
-      "required": ["protocol", "transaction_id", "status", "accepted_at", "replayed", "scope", "next_step"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "transaction_id",
+        "status",
+        "accepted_at",
+        "replayed",
+        "scope",
+        "next_step"
+      ],
       "properties": {
-        "protocol": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
-        "transaction_id": { "type": "string", "minLength": 1 },
-        "status": { "const": "accepted" },
-        "accepted_at": { "type": "string", "minLength": 1 },
-        "replayed": { "type": "boolean" },
-        "scope": { "const": "synthetic_demo_only" },
-        "next_step": { "type": "string", "minLength": 1 }
+        "protocol": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "transaction_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "const": "accepted"
+        },
+        "accepted_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "scope": {
+          "const": "synthetic_demo_only"
+        },
+        "next_step": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "agentCase": {
-      "type": "object", "additionalProperties": false,
-      "required": ["protocol", "customer_id", "display_name", "transaction_id", "merchant_name", "occurred_at",
-                   "source_occurred_at", "amount", "currency", "customer_statement", "customer_confirmed", "status", "accepted_at"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "customer_id",
+        "display_name",
+        "transaction_id",
+        "merchant_name",
+        "occurred_at",
+        "source_occurred_at",
+        "amount",
+        "currency",
+        "customer_statement",
+        "customer_confirmed",
+        "status",
+        "accepted_at"
+      ],
       "properties": {
-        "protocol": { "type": "string", "minLength": 1 },
-        "customer_id": { "type": "string", "minLength": 1 },
-        "display_name": { "type": "string" },
-        "transaction_id": { "type": "string", "minLength": 1 },
-        "merchant_name": { "type": "string" },
-        "occurred_at": { "type": ["string", "null"] },
-        "source_occurred_at": { "type": ["string", "null"] },
-        "amount": { "type": "string" },
-        "currency": { "type": "string" },
-        "customer_statement": { "type": "string", "minLength": 10, "maxLength": 2000 },
-        "customer_confirmed": { "const": true },
-        "status": { "const": "accepted" },
-        "accepted_at": { "type": "string", "minLength": 1 }
+        "protocol": {
+          "type": "string",
+          "minLength": 1
+        },
+        "customer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "transaction_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "merchant_name": {
+          "type": "string"
+        },
+        "occurred_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_occurred_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "amount": {
+          "type": "string"
+        },
+        "currency": {
+          "type": "string"
+        },
+        "customer_statement": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 2000
+        },
+        "customer_confirmed": {
+          "const": true
+        },
+        "status": {
+          "const": "accepted"
+        },
+        "accepted_at": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "agentCaseList": {
-      "type": "object", "additionalProperties": false, "required": ["items", "has_more", "scope"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "has_more",
+        "scope"
+      ],
       "properties": {
-        "items": { "type": "array", "maxItems": 50, "items": { "$ref": "#/$defs/agentCase" } },
-        "has_more": { "type": "boolean" },
-        "scope": { "const": "synthetic_demo_only" }
+        "items": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/agentCase"
+          }
+        },
+        "has_more": {
+          "type": "boolean"
+        },
+        "scope": {
+          "const": "synthetic_demo_only"
+        }
+      }
+    },
+    "identityList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "customer_id",
+              "display_name"
+            ],
+            "properties": {
+              "customer_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "display_name": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
       }
     }
   }

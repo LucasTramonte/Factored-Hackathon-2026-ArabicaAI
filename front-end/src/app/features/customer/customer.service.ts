@@ -1,11 +1,15 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from '../../core/http/api.service';
-import { CaseBody, Receipt, Transaction, TransactionList } from '../../shared/models/intake.model';
+import { CaseBody, Identity, Receipt, Transaction, TransactionList } from '../../shared/models/intake.model';
 
 /** Customer calls: simulated sign-in, own charges, case submission. */
 @Injectable({ providedIn: 'root' })
 export class CustomerService {
   private readonly api = inject(ApiService);
+
+  async identities(): Promise<Identity[]> {
+    return (await this.api.request<{ items: Identity[] }>('/demo/identities')).items;
+  }
 
   async signIn(customerId: string): Promise<void> {
     await this.api.request('/demo/session', { customer_id: customerId });

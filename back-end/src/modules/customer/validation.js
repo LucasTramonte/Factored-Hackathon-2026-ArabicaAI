@@ -9,6 +9,10 @@ export function validateCaseRequest(body) {
   if (!Object.hasOwn(body, 'customer_confirmed') || body.customer_confirmed !== true) {
     return invalid('Explicit confirmation is required');
   }
+  // A lone surrogate would be replaced with U+FFFD when stored as UTF-8, so the read-back would differ.
+  if ([body.customer_statement, body.transaction_id].some(v => typeof v === 'string' && !v.isWellFormed())) {
+    return invalid('Text must be valid Unicode');
+  }
   const statement = typeof body.customer_statement === 'string' ? body.customer_statement.trim() : '';
   const length = [...statement].length;
   if (length < 10 || length > 2000) return invalid('Describe the charge in 10–2000 characters');

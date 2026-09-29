@@ -3,7 +3,9 @@
   <h2>1. Sign in as a customer</h2>
   <label>Demo identity
     <select [(ngModel)]="identity" [disabled]="busy() || identityLocked()">
-      <option value="demo-ana">Ana</option><option value="demo-bruno">Bruno</option><option value="CLI-U53R5AZVLET0">Dataset customer (synthetic)</option>
+      @for (person of identities(); track person.customer_id) {
+        <option [value]="person.customer_id">{{ person.display_name }}</option>
+      }
     </select>
   </label>
   <button (click)="login()" [disabled]="busy()">{{ identityLocked() ? 'Renew same session' : 'Sign in and view charges' }}</button>
@@ -39,7 +41,7 @@
         I do not recognize the selected charge and want to submit a review request.</label>
     </fieldset>
     @if (!receipt()) {
-      <button (click)="submit()" [disabled]="busy() || (!pending() && (!selected || !confirmed || statement.trim().length < 10))">
+      <button (click)="submit()" [disabled]="busy() || (!pending() && (!selected || !confirmed || !statement.trim()))">
         {{ pending() ? 'Retry the same request' : 'Confirm and submit request' }}
       </button>
     }

@@ -28,7 +28,7 @@ INPUTS = [
     ("window_days", "Evaluation window", 32, "days", "2026-09-29 to 2026-10-31", "fact"),
     ("month_days", "Days per modeled month", 30, "days", "Comparable 30-day month", "assumption"),
     ("peak", "Busiest-hour factor over the daily average", 3, "x", "Synthetic hourly profile is flat (~4.2%/hour); 3x is a stress assumption", "assumption"),
-    ("doc_req", "Worker requests per page load (gated HTML document)", 1, "requests/episode", "run_worker_first covers /, /index.html, /agent", "code-derived"),
+    ("doc_req", "Worker requests per page load (gated HTML document + identity list)", 2, "requests/episode", "run_worker_first covers /, /index.html, /agent; GET /demo/identities touches no D1", "code-derived"),
     ("cust_req", "Customer API requests per episode", 3, "requests/episode", "login, list charges, create case (budget test)", "measured locally"),
     ("cust_q", "D1 queries per customer episode", 9, "queries/episode", "back-end/test/integration/budget.test.js", "measured locally"),
     ("cust_read", "D1 rows read per customer episode", 10, "rows/episode", "budget test, local D1", "measured locally"),
@@ -146,11 +146,14 @@ def model(v: dict) -> dict:
 
 
 def neurons_per_episode(v: dict) -> dict:
+    """Workers AI neurons per episode for each model (token assumptions x published neuron rates)."""
     return {"workers_ai_gpt_oss_20b": (v["ai_in"] * v["oss_in"] + v["ai_out"] * v["oss_out"]) / 1e6,
             "workers_ai_llama_3_3_70b": (v["ai_in"] * v["llama_in"] + v["ai_out"] * v["llama_out"]) / 1e6}
 
 
 def ai_per_episode(v: dict) -> dict:
+    """USD per episode at list rates. Workers AI figures ignore the daily free allocation, which
+    ``model`` reports separately as ``ai_free_episodes_day``."""
     n = neurons_per_episode(v)
     return {"workers_ai_gpt_oss_20b": n["workers_ai_gpt_oss_20b"] * v["wai_rate"] / 1000,
             "workers_ai_llama_3_3_70b": n["workers_ai_llama_3_3_70b"] * v["wai_rate"] / 1000,
@@ -171,6 +174,7 @@ def title(ws, text: str, last_col: int, subtitle: str | None = None) -> None:
 
 
 def header(ws, row: int, labels) -> None:
+    """Style one header row."""
     for col, label in enumerate(labels, start=1):
         c = ws.cell(row, col, label)
         c.fill = PatternFill("solid", fgColor=TEAL)
@@ -180,6 +184,7 @@ def header(ws, row: int, labels) -> None:
 
 
 def grid(ws, first_row: int, rows: list[tuple], widths: dict, formats: dict | None = None) -> None:
+    """Write rows starting at ``first_row`` with wrapped cells, optional per-column number formats and widths."""
     for r, values in enumerate(rows, start=first_row):
         for c, value in enumerate(values, start=1):
             cell = ws.cell(r, c, value)
@@ -191,6 +196,7 @@ def grid(ws, first_row: int, rows: list[tuple], widths: dict, formats: dict | No
 
 
 def build() -> Workbook:
+    """Assemble every sheet; all derived cells are formulas over the Inputs sheet."""
     wb = Workbook()
     wb.calculation = CalcProperties(calcMode="auto", fullCalcOnLoad=True)
     r = REF
@@ -301,6 +307,7 @@ def build() -> Workbook:
 
 
 def main() -> int:
+    """Write the workbook; with ``--print``, also print the figures ADR-004 quotes."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--print", action="store_true", help="print the figures ADR-004 quotes")
     args = parser.parse_args()

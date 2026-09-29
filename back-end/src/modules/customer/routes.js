@@ -11,6 +11,11 @@ const ALLOWED = new Set(identities.customers.map(c => c.customer_id));
 const PAGE = 20;
 const NOT_CONFIRMED = 'Acceptance not confirmed; retry with the same idempotency key';
 
+/** GET /demo/identities: the simulated identities the client may offer; no D1 access. */
+export function listIdentities() {
+  return json({ items: identities.customers.map(({ customer_id, display_name }) => ({ customer_id, display_name })) });
+}
+
 /** POST /demo/session: start a simulated session for an allowlisted identity. */
 export async function startCustomerSession(request, env, store) {
   const body = await readJsonBody(request);

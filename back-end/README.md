@@ -72,9 +72,9 @@ Record the date and the results of each check in ADR-004's implementation notes:
 4. A confirmed case returns a reference, and a retry returns the same one.
 5. The agent view shows the case.
 6. The case is still there after a new deploy.
-7. A page load adds one Worker request (the document); bundles don't add any.
+7. A page load adds two Worker requests (the document and the identity list); bundles don't add any.
 8. `GET /healthz` returns `{"status":"ok"}`.
 
 ## Limits
 
-Free plan: 100,000 Worker requests per day, 10 ms of CPU per request, 50 D1 queries per invocation, 5 million rows read and 100,000 rows written per day, and 500 MB per database. Measured cost of one customer episode: 3 requests, 9 queries, 10 rows read, 7 rows written. [ADR-004](../Docs/ADRs/ADR-004-intake-capacity-and-cost.md) turns these numbers into capacity and cost.
+Free plan: 100,000 Worker requests per day, 10 ms of CPU per request, 50 D1 queries per invocation, 5 million rows read and 100,000 rows written per day, and 500 MB per database. Measured D1 cost of one customer episode: 3 API requests, 9 queries, 10 rows read, 7 rows written; a page load adds 2 Worker requests (document + identity list) that touch no D1. [ADR-004](../Docs/ADRs/ADR-004-intake-capacity-and-cost.md) turns these numbers into capacity and cost.

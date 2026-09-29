@@ -47,3 +47,9 @@ test('SQL-looking text is accepted as data', () => {
   const statement = "'); DELETE FROM cases; -- I do not recognize it";
   assert.equal(validateCaseRequest({ ...ok, customer_statement: statement }).value.statement, statement);
 });
+
+test('lone UTF-16 surrogates are rejected before they reach storage', () => {
+  assert.equal(validateCaseRequest({ ...ok, customer_statement: 'I do not know this \ud800 charge at all' }).error?.status, 422);
+  assert.equal(validateCaseRequest({ ...ok, transaction_id: 'tx-\udc00' }).error?.status, 422);
+  assert.ok(validateCaseRequest({ ...ok, customer_statement: 'Emoji pairs are fine 😀😀😀' }).value);
+});

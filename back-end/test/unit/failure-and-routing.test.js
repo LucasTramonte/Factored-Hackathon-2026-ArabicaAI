@@ -93,3 +93,24 @@ test('database metrics are exposed only when explicitly enabled', () => {
   const shown = withMetrics(new Response('{}'), { ...env, DEMO_EXPOSE_DB_METRICS: '1' }, store);
   assert.equal(shown.headers.get('X-D1-Metrics'), 'queries=2;rows_read=5;rows_written=1');
 });
+
+test('the body limit stops reading a stream without Content-Length', async () => {
+  let pulled = 0;
+  const chunk = new TextEncoder().encode('x'.repeat(1024));
+  const stream = new ReadableStream({ pull(controller) { pulled += 1; controller.enqueue(chunk); if (pulled > 200) controller.close(); } });
+  const request = new Request('https://d.example/cases', { method: 'POST', body: stream, duplex: 'half' });
+  const result = await readJsonBody(request);
+  assert.equal(result.error.status, 413);
+  assert.ok(pulled <= 20, `read ${pulled} KB before stopping`);
+});
+
+test('identity list is served behind the gate from the shared config, without D1', async () => {
+  const store = { metrics: () => ({ queries: 0, rowsRead: 0, rowsWritten: 0 }) };
+  const req = headers => new Request('https://d.example/demo/identities', { headers });
+  assert.equal((await route(req({}), env, store)).status, 401);
+  const res = await route(req({ Authorization: auth }), env, store);
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.deepEqual(body.items.map(x => x.customer_id), ['demo-ana', 'demo-bruno', 'CLI-U53R5AZVLET0']);
+  assert.ok(body.items.every(x => Object.keys(x).sort().join() === 'customer_id,display_name'));
+});

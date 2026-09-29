@@ -1,4 +1,9 @@
 /** API shapes, kept in step with front-end/contracts/intake-api.schema.json. */
+export interface Identity {
+  customer_id: string;
+  display_name: string;
+}
+
 export interface Transaction {
   transaction_id: string;
   merchant_name: string;

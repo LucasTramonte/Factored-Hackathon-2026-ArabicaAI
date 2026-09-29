@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { assertContract } from '../support/contract.js';
 import { auth, base, client } from '../support/client.js';
 
-const API = { '/demo/session': 'POST', '/transactions': 'GET', '/cases': 'POST', '/demo/agent-session': 'POST', '/agent/cases': 'GET' };
+const API = { '/demo/identities': 'GET', '/demo/session': 'POST', '/transactions': 'GET', '/cases': 'POST', '/demo/agent-session': 'POST', '/agent/cases': 'GET' };
 const wrong = 'Basic ' + Buffer.from('local-reviewer:wrong').toString('base64');
 const uuid = () => crypto.randomUUID();
 

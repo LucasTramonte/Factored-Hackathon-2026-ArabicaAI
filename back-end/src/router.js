@@ -5,10 +5,11 @@
  */
 import { checkAccessGate } from './auth/access-gate.js';
 import { fail, json } from './http.js';
-import { createCase, listTransactions, startCustomerSession } from './modules/customer/routes.js';
+import { createCase, listIdentities, listTransactions, startCustomerSession } from './modules/customer/routes.js';
 import { listAgentCases, startAgentSession } from './modules/agent/routes.js';
 
 export const API_ROUTES = {
+  '/demo/identities': { GET: listIdentities },
   '/demo/session': { POST: startCustomerSession },
   '/transactions': { GET: listTransactions },
   '/cases': { POST: createCase },

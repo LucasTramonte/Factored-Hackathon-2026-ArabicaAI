@@ -14,6 +14,10 @@ test('page is static; the API needs the gate; customers are isolated; replay and
   assert.equal((await fetch(base + '/favicon.ico')).status, 200, 'static files are served without the Worker');
   assert.equal((await client({ authorization: null }).call('/transactions')).status, 401);
 
+  const ids = await client().call('/demo/identities');
+  assert.equal(ids.status, 200);
+  assertContract('identityList', ids.body);
+
   const ana = client();
   const bruno = client();
   const noSession = await ana.call('/transactions');

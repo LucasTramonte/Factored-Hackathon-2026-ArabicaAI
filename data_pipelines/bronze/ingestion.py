@@ -24,6 +24,7 @@ same DuckDB SQL without any network or S3 dependency.
 from __future__ import annotations
 
 import logging
+import glob
 import os
 import re
 import shutil
@@ -247,6 +248,19 @@ def ingest_fact(
                 raise ValueError("Scoped refresh would discard other Bronze partitions")
         if table_exists and last_loaded is not None and last_loaded != partition_date:
             raise ValueError("Scoped ingestion requires an isolated one-day Bronze database")
+        # The DuckDB may be new while DATA_DIR still holds a full Parquet history: a scoped
+        # (full-refresh) write would then replace that history with one day. Refuse instead.
+        def _day(path: str) -> date | None:
+            parts = dict(part.split("=", 1) for part in os.path.relpath(path, local_dir).split(os.sep))
+            try:
+                return date(int(parts["year"]), int(parts["month"]), int(parts["day"]))
+            except (KeyError, ValueError):
+                return None
+        other_days = sorted({p for p in glob.glob(os.path.join(local_dir, "year=*", "month=*", "day=*"))
+                             if _day(p) != partition_date})
+        if other_days:
+            raise ValueError(f"Scoped ingestion requires an isolated DATA_DIR: {local_dir} already holds "
+                             f"{len(other_days)} other partition(s)")
     else:
         available = list_available_partition_dates(con, base_path, table_name)
 

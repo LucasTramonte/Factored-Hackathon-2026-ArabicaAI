@@ -80,7 +80,7 @@ def validate_sample(con: duckdb.DuckDBPyConnection, business_date: date) -> dict
         SELECT count(*), count(DISTINCT t.transaction_id),
                count(*) FILTER (WHERE p.product_id IS NULL),
                count(*) FILTER (WHERE c.customer_id IS NULL),
-               count(*) FILTER (WHERE p.product_id IS NOT NULL AND p.customer_id <> t.customer_id)
+               count(*) FILTER (WHERE p.product_id IS NOT NULL AND p.customer_id IS DISTINCT FROM t.customer_id)
         FROM silver.fact_transactions t
         LEFT JOIN silver.dim_products p ON p.product_id = t.product_id
         LEFT JOIN silver.dim_customers c ON c.customer_id = t.customer_id
@@ -95,6 +95,23 @@ def validate_sample(con: duckdb.DuckDBPyConnection, business_date: date) -> dict
     if checks["rows"] == 0:
         raise ValueError("No eligible transactions on the selected business date")
     return checks
+
+
+def partition_scope(con: duckdb.DuckDBPyConnection, business_date: date) -> dict:
+    """Which storage partitions are loaded, and how many of their rows belong to other business days.
+
+    ``process_date`` is the storage partition. It only says what was loaded; business-day filtering
+    always uses ``transaction_date``.
+    """
+    columns = {r[0] for r in con.execute("SELECT column_name FROM information_schema.columns "
+                                         "WHERE table_schema='silver' AND table_name='fact_transactions'").fetchall()}
+    if "process_date" not in columns:
+        return {"loaded_process_dates": [], "rows_outside_business_date_in_loaded_partitions": None}
+    dates = [str(r[0]) for r in con.execute(
+        "SELECT DISTINCT process_date FROM silver.fact_transactions ORDER BY 1").fetchall()]
+    outside = con.execute("SELECT count(*) FROM silver.fact_transactions WHERE CAST(transaction_date AS DATE) <> ?",
+                          [business_date]).fetchone()[0]
+    return {"loaded_process_dates": dates, "rows_outside_business_date_in_loaded_partitions": outside}
 
 
 def _validated(raw: tuple) -> SliceRow:
@@ -146,43 +163,63 @@ def quote(value: str | None) -> str:
 
 
 def content_version(seed: str) -> str:
-    """Stable version of a seed: hash of its SQL statements, ignoring comment lines."""
-    body = "\n".join(line for line in seed.splitlines() if not line.startswith("--"))
-    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    """Stable version of a seed: hash of everything after its leading header comment lines.
+
+    Only the header at the top is skipped. Lines further down that start with ``--``, for example
+    inside a merchant name containing a newline, are part of the content.
+    """
+    lines = seed.split("\n")
+    start = 0
+    while start < len(lines) and lines[start].startswith("-- "):
+        start += 1
+    return hashlib.sha256("\n".join(lines[start:]).encode("utf-8")).hexdigest()[:16]
 
 
-def render_seed(rows: list[SliceRow], business_date: date, display_names: dict[str, str]) -> str:
-    """Idempotent D1 seed. A rerun is a no-op; any stored difference sets a NOT NULL column to NULL and fails."""
-    lines: list[str] = []
-    for customer_id in sorted({r.customer_id for r in rows}):
-        lines.append(
-            "INSERT INTO customers(customer_id,display_name) VALUES "
-            f"({quote(customer_id)},{quote(display_names[customer_id])}) "
+def customer_statement(customer_id: str, display_name: str) -> str:
+    """Idempotent customer upsert; a different stored name makes the rerun fail."""
+    return ("INSERT INTO customers(customer_id,display_name) VALUES "
+            f"({quote(customer_id)},{quote(display_name)}) "
             "ON CONFLICT(customer_id) DO UPDATE SET display_name=CASE "
             "WHEN customers.display_name=excluded.display_name THEN customers.display_name ELSE NULL END;")
-    for r in rows:
-        values = [r.transaction_id, r.customer_id, None, r.source_occurred_at, r.merchant_name, r.amount, r.currency]
-        lines.append(
-            "INSERT INTO transactions(transaction_id,customer_id,occurred_at,source_occurred_at,merchant_name,amount,currency) "
+
+
+def transaction_statement(transaction_id: str, customer_id: str, occurred_at: str | None, source_occurred_at: str | None,
+                          merchant_name: str, amount: str, currency: str) -> str:
+    """Idempotent transaction upsert; any difference in a stored column makes the rerun fail."""
+    values = [transaction_id, customer_id, occurred_at, source_occurred_at, merchant_name, amount, currency]
+    return ("INSERT INTO transactions(transaction_id,customer_id,occurred_at,source_occurred_at,merchant_name,amount,currency) "
             f"VALUES ({','.join(quote(v) for v in values)}) "
             "ON CONFLICT(transaction_id) DO UPDATE SET customer_id=CASE WHEN "
             "transactions.customer_id=excluded.customer_id AND transactions.occurred_at IS excluded.occurred_at AND "
             "transactions.source_occurred_at IS excluded.source_occurred_at AND "
             "transactions.merchant_name=excluded.merchant_name AND transactions.amount=excluded.amount AND "
             "transactions.currency=excluded.currency THEN transactions.customer_id ELSE NULL END;")
-    for r in rows:
-        values = [r.transaction_id, r.product_id, r.source_file, str(business_date), MAPPING]
-        lines.append(
-            "INSERT INTO sample_provenance(transaction_id,product_id,source_file,business_date,mapping) "
+
+
+def provenance_statement(transaction_id: str, product_id: str, source_file: str, business_date: date) -> str:
+    """Idempotent provenance upsert for a dataset-backed transaction."""
+    values = [transaction_id, product_id, source_file, str(business_date), MAPPING]
+    return ("INSERT INTO sample_provenance(transaction_id,product_id,source_file,business_date,mapping) "
             f"VALUES ({','.join(quote(v) for v in values)}) "
             "ON CONFLICT(transaction_id) DO UPDATE SET product_id=CASE WHEN "
             "sample_provenance.product_id=excluded.product_id AND sample_provenance.source_file=excluded.source_file AND "
             "sample_provenance.business_date=excluded.business_date AND sample_provenance.mapping=excluded.mapping "
             "THEN sample_provenance.product_id ELSE NULL END;")
-    body = "\n".join(lines) + "\n"
-    header = (f"-- Gold intake slice for {business_date}; slice_version: {content_version(body)}\n"
-              "-- Generated from a quality-gated Silver sample. Contains no cases or sessions.\n")
-    return header + body
+
+
+def with_header(body: str, first_line: str) -> str:
+    """Prefix a seed body with its header; the version covers only the body."""
+    return f"-- {first_line}; slice_version: {content_version(body)}\n" + \
+        "-- Contains no cases or sessions. Generated file: do not edit by hand.\n" + body
+
+
+def render_seed(rows: list[SliceRow], business_date: date, display_names: dict[str, str]) -> str:
+    """Idempotent D1 seed. A rerun is a no-op; any stored difference sets a NOT NULL column to NULL and fails."""
+    lines = [customer_statement(c, display_names[c]) for c in sorted({r.customer_id for r in rows})]
+    lines += [transaction_statement(r.transaction_id, r.customer_id, None, r.source_occurred_at, r.merchant_name,
+                                    r.amount, r.currency) for r in rows]
+    lines += [provenance_statement(r.transaction_id, r.product_id, r.source_file, business_date) for r in rows]
+    return with_header("\n".join(lines) + "\n", f"Gold intake slice for {business_date} from a quality-gated Silver sample")
 
 
 def build_slice(db_path: Path, quality_path: Path, business_date: date, customer_ids: tuple[str, ...],
@@ -201,11 +238,14 @@ def build_slice(db_path: Path, quality_path: Path, business_date: date, customer
         con.execute("SET threads=2")
         con.execute("SET temp_directory=?", [str(temp_dir)])
         checks = validate_sample(con, business_date)
+        scope = partition_scope(con, business_date)
         rows = select_rows(con, business_date, tuple(customer_ids), max_rows)
     seed = render_seed(rows, business_date, allowlist)
     manifest = {
         "slice_version": content_version(seed), "business_date": str(business_date),
-        "eligible_sample_rows": checks["rows"], "selected": len(rows),
+        "eligible_rows_in_loaded_partitions": checks["rows"], "selected": len(rows), **scope,
+        "completeness": ("Eligible rows are counted only within the loaded storage partitions; business-day rows "
+                         "stored in other storage partitions are not included."),
         "source_files": sorted({r.source_file for r in rows}), "scope": "one_day_allowlist",
         "filters": {"business_date": str(business_date), "transaction_type": "Purchase", "transaction_status": "Approved"},
         "mapping": MAPPING, "quality_generated_at_utc": meta["generated_at_utc"],
