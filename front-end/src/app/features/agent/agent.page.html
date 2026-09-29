@@ -1,0 +1,25 @@
+@if (error()) { <p class="error" role="alert">{{ error() }}</p> }
+<section>
+  <h2>Agent view</h2><p>Separate simulated agent access. Shows the 50 most recent cases.</p>
+  <button (click)="load()" [disabled]="busy()">Sign in as an agent and refresh cases</button>
+  @if (loaded()) {
+    @for (item of cases(); track item.protocol) {
+      <article><h3>{{ item.display_name }} · {{ item.amount }} {{ item.currency }}</h3>
+        <p>{{ item.merchant_name }} · {{ item.transaction_id }}</p>
+        <p>{{ item.customer_statement }}</p>
+        <p>Charge date:
+          @if (item.source_occurred_at) {
+            {{ sourceTime(item.source_occurred_at) }} (Source timezone not provided)
+          } @else if (item.occurred_at) {
+            {{ item.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} UTC
+          } @else {
+            Date unavailable
+          }
+        </p>
+        <small>Reference: {{ item.protocol }}<br>
+          Accepted in demo: {{ item.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} UTC</small>
+      </article>
+    } @empty { <p>No cases returned.</p> }
+  }
+</section>
+@if (busy()) { <p role="status">Working…</p> }

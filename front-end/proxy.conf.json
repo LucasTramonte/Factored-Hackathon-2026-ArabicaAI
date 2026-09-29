@@ -1,18 +1,22 @@
 {
   "/demo/**": {
-    "target": "http://127.0.0.1:8001",
+    "target": "http://127.0.0.1:8787",
     "secure": false
   },
   "/transactions": {
-    "target": "http://127.0.0.1:8001",
+    "target": "http://127.0.0.1:8787",
     "secure": false
   },
   "/cases": {
-    "target": "http://127.0.0.1:8001",
+    "target": "http://127.0.0.1:8787",
     "secure": false
   },
-  "/agent/**": {
-    "target": "http://127.0.0.1:8001",
+  "/agent/cases": {
+    "target": "http://127.0.0.1:8787",
+    "secure": false
+  },
+  "/healthz": {
+    "target": "http://127.0.0.1:8787",
     "secure": false
   }
 }

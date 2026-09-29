@@ -1,87 +1,9 @@
 <main>
   <header><span class="badge">SYNTHETIC DEMO · SIMULATED ACCESS</span>
-    <h1>ArabicaAI</h1><p>Do not recognize a charge? Submit it for review.</p>
+    <h1>ArabicaAI</h1><p>Don't recognize a charge? Submit it for review.</p>
     <small>Simulated sign-in. No refund or card block will be made.</small>
+    <nav><a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Customer</a>
+      · <a routerLink="/agent" routerLinkActive="active">Agent</a></nav>
   </header>
-  @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-  <section>
-    <h2>1. Sign in as a customer</h2>
-    <label>Demo identity
-      <select [(ngModel)]="identity" [disabled]="busy() || !!pending()">
-        <option value="demo-ana">Ana</option><option value="demo-bruno">Bruno</option><option value="CLI-U53R5AZVLET0">Dataset customer (synthetic; currently Inactive)</option>
-      </select>
-    </label>
-    <button (click)="login()" [disabled]="busy()">{{ pending() ? 'Renew same session' : 'Sign in and view charges' }}</button>
-    @if (client()) { <p>Session: {{ client() }}</p> }
-  </section>
-  @if (client()) {
-    <section>
-      <h2>2. Select and confirm</h2>
-      <fieldset [disabled]="busy() || !!pending() || !!receipt()">
-        <legend>Charges for this customer</legend>
-        @for (tx of transactions(); track tx.transaction_id) {
-          <label class="transaction">
-            <input type="radio" name="transaction" [value]="tx.transaction_id"
-              [(ngModel)]="selected" (ngModelChange)="confirmed = false">
-            <span><strong>{{ tx.merchant_name }}</strong><br>
-              {{ tx.amount }} {{ tx.currency }} ·
-              @if (tx.source_occurred_at) {
-                {{ sourceDate(tx.source_occurred_at) }} (Source timezone not provided)
-              } @else if (tx.occurred_at) {
-                {{ tx.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} UTC
-              } @else {
-                Date unavailable
-              }
-              <small>{{ tx.transaction_id }}</small>
-            </span>
-          </label>
-        } @empty { <p>No charges loaded. This does not establish that the customer has no charges.</p> }
-        <label>Describe what happened
-          <textarea [(ngModel)]="statement" (ngModelChange)="confirmed = false"
-            rows="3" maxlength="2000" placeholder="I do not recognize this purchase..."></textarea>
-        </label>
-        <label class="check"><input type="checkbox" [(ngModel)]="confirmed">
-          I do not recognize the selected charge and want to submit a review request.</label>
-      </fieldset>
-      @if (!receipt()) {
-        <button (click)="submit()" [disabled]="busy() || (!pending() && (!selected || !confirmed || statement.trim().length < 10))">
-          {{ pending() ? 'Retry the same request' : 'Confirm and submit request' }}
-        </button>
-      }
-      @if (pending()) {
-        <p role="status">Acceptance is not confirmed. Keep this tab open and retry; the request details are unchanged.</p>
-      }
-      @if (receipt(); as result) {
-        <div class="success" role="status"><h3>Request accepted in the demo</h3>
-          <p>Reference: <strong>{{ result.protocol }}</strong></p>
-          <p>Next step: ask an agent to review this case. No refund has been initiated.</p>
-          @if (result.replayed) { <p>Existing request retrieved; no new case was created.</p> }
-        </div>
-      }
-    </section>
-  }
-  <section>
-    <h2>Agent view</h2><p>Separate simulated agent access. Shows the 50 most recent local cases.</p>
-    <button (click)="loadAgent()" [disabled]="busy()">Sign in as an agent and refresh cases</button>
-    @if (agentLoaded()) {
-      @for (item of cases(); track item.protocol) {
-        <article><h3>{{ item.display_name }} · {{ item.amount }} {{ item.currency }}</h3>
-          <p>{{ item.merchant_name }} · {{ item.transaction_id }}</p>
-          <p>{{ item.customer_statement }}</p>
-          <p>Charge date:
-            @if (item.source_occurred_at) {
-              {{ sourceDate(item.source_occurred_at) }} (Source timezone not provided)
-            } @else if (item.occurred_at) {
-              {{ item.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} UTC
-            } @else {
-              Date unavailable
-            }
-          </p>
-          <small>Reference: {{ item.protocol }}<br>
-            Accepted in demo: {{ item.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} UTC</small>
-        </article>
-      } @empty { <p>No cases returned.</p> }
-    }
-  </section>
-  @if (busy()) { <p role="status">Working…</p> }
+  <router-outlet />
 </main>
