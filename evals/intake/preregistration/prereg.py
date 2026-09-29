@@ -64,7 +64,12 @@ def fill(path: Path, system: str, prompt: Path, model: str, params: dict, repo: 
 
 
 def _same_at_commit(repo: Path, commit: str, file: str, digest: str) -> bool:
-    return sha256_bytes(_git(repo, "show", f"{commit}:{file}", text=False)) == digest
+    """Whether ``file`` at ``commit`` has ``digest``; a file absent from that commit is a refusal, not a crash."""
+    try:
+        blob = _git(repo, "show", f"{commit}:{file}", text=False)
+    except subprocess.CalledProcessError as exc:
+        raise ValueError(f"{file} is not in the registered commit {commit[:7]}") from exc
+    return sha256_bytes(blob) == digest
 
 
 def check(path: Path, repo: Path = Path("."), target: str | None = None) -> dict:

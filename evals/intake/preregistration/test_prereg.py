@@ -49,6 +49,13 @@ class PreregTests(unittest.TestCase):
         git(self.repo, 'commit', '-qm', 'publish the test set')
         check(self.repo / 'reg.md', repo=self.repo, target='ext:extract')
 
+    def test_a_file_missing_at_the_registered_commit_is_a_clear_refusal(self):
+        (self.repo / 'late.py').write_text('def extract(*a):\n    return {}\n')  # never committed
+        fill(self.repo / 'reg.md', 'x-v1', Path('prompt.md'), 'm', {}, repo=self.repo,
+             target='late:extract', implementation=Path('late.py'))
+        with self.assertRaisesRegex(ValueError, 'not in the registered commit'):
+            check(self.repo / 'reg.md', repo=self.repo, target='late:extract')
+
     def test_a_changed_prompt_is_refused(self):
         (self.repo / 'prompt.md').write_text('Extract the stated facts. Also handle "uns 40 mil".\n')
         with self.assertRaisesRegex(ValueError, 'prompt file changed'):
