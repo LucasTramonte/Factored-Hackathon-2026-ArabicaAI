@@ -153,7 +153,7 @@ class ExplorationTests(unittest.TestCase):
         self.assertEqual(quality['fields']['process_date:invalid'], 1)
 
     def test_incomplete_or_invalid_partition_path_fails_the_scan(self):
-        for name in ('year=2026/month=01/part.csv', 'year=2026/month=13/day=01/part.csv'):
+        for name in ('year=2026/month=01/part.csv', 'year=2026/month=13/day=01/part.csv', 'year=2026/month=01/day=01oops/part.csv'):
             path = self.csv('transactions', [{'transaction_id': '1', 'process_date': '2026-01-01'}], name=name)
             with self.assertRaises(ValueError):
                 analysis.load_table(self.connection(), 'transactions', [path])

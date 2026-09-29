@@ -30,7 +30,8 @@ def discover_files(data_root, contract):
 
 def partition_date_from_path(path):
     """Read historical year/month/day partitions without reviving the CSV scanner."""
-    parts = dict(re.findall(r'(year|month|day)=(\d+)', str(path)))
+    matches = (re.fullmatch(r'(year|month|day)=(\d+)', part) for part in Path(path).parts)
+    parts = dict(m.groups() for m in matches if m)
     if not parts:
         return None
     if not {'year', 'month', 'day'} <= parts.keys():
