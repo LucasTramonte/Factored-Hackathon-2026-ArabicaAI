@@ -90,6 +90,11 @@ class EpisodeTests(unittest.TestCase):
             'intake_ended, last': [ev('intake_started', 'z', 0), ended('z', 1, 'abandoned'), ev('clarification_requested', 'z', 2, missing=['date'])],
             'ts must be': [dict(ev('intake_started', 'z', 0), ts='2026-09-29T10:00:00Z')],
             'ts must be millisecond': [dict(ev('intake_started', 'z', 0), ts='2026-09-29T10:00:00.000+02:00')],
+            'non-empty string reference': [dict(e, case_ref=None) if e['event'] in ('handoff_created', 'handoff_accepted') else e for e in ACCEPTED],
+            'case_ref must be a non-empty': [dict(e, case_ref='') if e['event'] == 'handoff_created' else e for e in ACCEPTED],
+            'model_version must be': [dict(ev('intake_started', 'z', 0), model_version=3)],
+            'tool_status must be': [dict(e, tool_status='crashed') if e['event'] == 'handoff_created' else e for e in ACCEPTED],
+            'failed tool cannot back': [dict(e, tool_status='failed') if e['event'] == 'handoff_created' else e for e in ACCEPTED],
         }
         for message, log in cases.items():
             with self.subTest(message):

@@ -16,6 +16,8 @@ REQUIRED = {'intake_started': set(), 'clarification_requested': {'missing'}, 'tr
             'intake_ended': {'outcome', 'safety', *USAGE}}
 OPTIONAL = {'intake_started': {'scenario'}, 'handoff_created': {'tool_status'}}
 KINDS = ('complete', 'technical', 'incomplete')
+TOOL_STATUS = ('ok', 'failed', 'timeout')
+REFS = {'case_id', 'session_ref', 'model_version', 'case_ref', 'transaction_ref', 'accepted_by'}
 OUTCOMES = ('accepted', 'abandoned', 'withdrawn', 'technical_failure', 'routed')
 SAFETY = ('assessed_safe', 'unsafe', 'not_assessed')
 CHAIN = ('transaction_confirmed', 'handoff_created', 'handoff_accepted')
@@ -43,8 +45,15 @@ def _check_event(e):
         raise ValueError(f'Unsupported language: {e["language"]}')
     if not isinstance(e['ts'], str) or not TS.fullmatch(e['ts']):
         raise ValueError(f'ts must be millisecond UTC like 2026-09-29T14:00:00.000Z, got {e["ts"]!r}')
+    for k in REFS & e.keys():
+        if not isinstance(e[k], str) or not e[k]:
+            raise ValueError(f'{name}.{k} must be a non-empty string reference, got {e[k]!r}')
     if name == 'handoff_created' and e['kind'] not in KINDS:
         raise ValueError(f'handoff_created kind must be one of {KINDS}, got {e["kind"]!r}')
+    if name == 'handoff_created' and e.get('tool_status', 'ok') not in TOOL_STATUS:
+        raise ValueError(f'handoff_created tool_status must be one of {TOOL_STATUS}, got {e["tool_status"]!r}')
+    if name == 'handoff_created' and e['kind'] == 'complete' and e.get('tool_status', 'ok') != 'ok':
+        raise ValueError(f'handoff_created for {e["case_id"]}: a failed tool cannot back a complete handoff')
     if name == 'intake_ended' and (e['outcome'] not in OUTCOMES or e['safety'] not in SAFETY
                                    or any(type(e[k]) is not int or e[k] < 0 for k in USAGE)):
         raise ValueError(f'intake_ended for {e["case_id"]} needs a known outcome, safety and non-negative integer usage')
