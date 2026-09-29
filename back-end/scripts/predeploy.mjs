@@ -6,11 +6,17 @@
  * remote state cannot be read, the deploy stops.
  */
 import { execFileSync } from 'node:child_process';
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { experimental_readRawConfig as readRawConfig } from 'wrangler';
 
 const ROOT = resolve(import.meta.dirname, '..');
+
+/** The raw Wrangler configuration, parsed by Wrangler itself so JSONC comments and trailing commas work. */
+export async function readWranglerConfig(path = resolve(ROOT, 'wrangler.jsonc')) {
+  return (await readRawConfig({ config: path })).rawConfig;
+}
 
 /** Migration file names in `migrations/`, sorted as Wrangler applies them. */
 export async function localMigrations() {
@@ -35,7 +41,7 @@ export function appliedFromWranglerJson(text) {
 }
 
 async function main() {
-  const config = JSON.parse(await readFile(resolve(ROOT, 'wrangler.jsonc'), 'utf8'));
+  const config = await readWranglerConfig();
   const db = config.d1_databases?.[0];
   if (!db || db.database_id === '00000000-0000-0000-0000-000000000000') {
     throw new Error('Create the remote D1 database and replace the placeholder database_id before deployment');

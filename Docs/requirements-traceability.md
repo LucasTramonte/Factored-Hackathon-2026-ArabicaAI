@@ -63,6 +63,6 @@ Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ mi
 | #10 | Fraud-data readiness and label limitations on `main` |
 | #11 (open) | Smaller Worker/D1 agent V1 spec; load-time card and atomic dedupe |
 | #12, #13 → #16 (merged) | Safety and authored scenario splits, event contract, episode KPI scorer on `main` |
-| #18 (open) | Explicit event sequence, pending safety/usage, and `v1_authored` split name |
-| #15 (open, stacked on #17) | Minimal card built by Gold and read from D1 at session start |
-| #17 (open) | Worker/D1 intake demo, Gold slice, session and case flows, capacity and cost |
+| #18 (merged) | Explicit event sequence, pending safety/usage, and `v1_authored` split name on `main` |
+| #15 (merged into the intake branch; reaches `main` via #19) | Minimal card built by Gold and read from D1 at session start |
+| #17 (merged) | Worker/D1 intake demo, Gold slice, session and case flows, capacity and cost on `main`; its late review fixes are in #19 |
