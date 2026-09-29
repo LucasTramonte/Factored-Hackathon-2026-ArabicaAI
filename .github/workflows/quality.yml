@@ -29,3 +29,34 @@ jobs:
 
       - name: Compile pipeline package
         run: python -m compileall -q data_pipelines data_foundation
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            front-end/package-lock.json
+            back-end/package-lock.json
+
+      - name: Install front-end and back-end dependencies
+        run: |
+          npm --prefix front-end ci
+          npm --prefix back-end ci
+
+      - name: Run Angular specs
+        run: npm --prefix front-end test -- --watch=false --browsers=ChromeHeadless
+
+      - name: Build the client and bundle it into the Worker
+        run: |
+          npm --prefix front-end run build
+          npm --prefix back-end run prepare-assets
+
+      - name: Run Worker unit and local D1 integration tests
+        run: npm --prefix back-end test
