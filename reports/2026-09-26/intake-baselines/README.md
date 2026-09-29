@@ -26,3 +26,5 @@ Independent review identified parsing and scorer boundary gaps; regressions were
 Confirm customer boundaries and required intake evidence, then review the authored gold cases. Andrés/Lucas should help create a fresh unseen ES/PT set and multi-turn episodes. Compare the future learned extractor against these fixed references on that same workload. Manoella's service layer must enforce identity and permissions, persist accepted handoffs and instrument actual tool outcomes. No business savings, fraud losses or operating improvement is claimed.
 
 Note (28/09): `results.json` was regenerated after a one-word fix to a Portuguese case (`o` → `ou`); scores are unchanged and its `corpus_sha256` is current. `executed.ipynb` and `analysis.html` still show the pre-fix corpus hash and were not re-executed.
+
+Note (28/09, later): `results.json` regenerated again after corpus v0.2 added the `heldout` (25) and `safety` (22) splits; development and evaluation scores are unchanged (18/18, 22/24, 0 unsafe). See `Docs/intake/heldout-and-safety-cases.md`.
