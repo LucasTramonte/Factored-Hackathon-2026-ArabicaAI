@@ -80,7 +80,7 @@ Ordered by rubric weight. "Have" refers to work already on `main` or in open PRs
 | 5 | Human agent console | Handoff with request, facts, actions, evidence, open questions | handoff contract | one page listing cases with the package |
 | 6 | Guardrails outside the model | Controlled automation; failure handling | designed in contract | session-scoped queries; fraud fields stripped from tool output; out-of-scope refusal; tool inputs validated; fail closed to handoff |
 | 7 | Evaluation runner and results page | Measured quality; baseline | 42 + 33 authored ES/PT cases; checklist baseline; KPI definitions | two layers, never mixed (section 8): decision-point scoring with the existing `baseline.score()`, and episode-level runs for safe accepted intake |
-| 8 | Event log | Lineage; latency and cost | event names in contract | append-only; case_id, model version, tool calls, timestamps |
+| 8 | Event log | Lineage; latency and cost | event names in contract | append-only; case_id, model version, tool calls, input and output tokens per LLM call, timestamps |
 | 9 | "Why did it say that" panel | Explainability | same data | show the card and tool results behind each reply |
 | 10 | Limitations page | Required by the brief | written already | no PT transcripts; 546 templated texts; no complaint→transaction key; `fraud_score` tie |
 | 11 | Red-team cases | Required failure scenarios | — | ~10 cases: injection, unauthorized access, missing data, tool failure, multilingual ambiguity |
@@ -104,17 +104,24 @@ browser ── session ──▶ agent service ──▶ context card (DuckDB, r
 
 Deterministic: session, card, tool execution, case commit, reference, logging, permission checks. AI: greeting, extraction, clarification wording, next-steps wording. Human: the decision on the case.
 
-**Who decides scope.** Every agent turn returns a structured object, not only prose: `{intent, action, slots, candidate_ids, confirmed_id, reply_text}`. The LLM proposes `intent` and `action`; code checks them against the allowed actions for the current state and executes tools itself. An `unsupported` intent is an AI judgement gated by code; those episodes are logged and excluded from the intake denominator per the contract.
+**Who decides scope.** Every agent turn returns a structured object, not only prose: `{intent, action, slots, candidate_ids, confirmed_id, reply_text}`. `action` uses the scorer's vocabulary from `evals/intake/baseline.py`: `authenticate`, `route`, `clarify`, `confirm`, `complete_handoff`, `technical_handoff`, `incomplete_handoff`. Mapping: `unsupported` intent → `route`; accepted intake → `complete_handoff`. The LLM proposes `intent` and `action`; code checks them against the allowed actions for the current state and executes tools itself. An `unsupported` intent is an AI judgement gated by code; those episodes are logged and excluded from the intake denominator per the contract.
+
+**Tool semantics.**
+- `search_transactions(customer_id, amount?, date?, currency?, merchant?)`: `customer_id` from the session only. Date matches the calendar day, or a ±3-day window when the customer gave a relative date ("el martes"). Amount matches within 1% of `amount` in the stated currency; currency defaults to the card's country currency. Merchant is a case-insensitive substring. At most 10 candidates are returned; more means clarify. Output fields: `transaction_id, transaction_date, amount, currency, transaction_type, merchant_name, transaction_status`. `is_fraud` and `fraud_score` are never selected.
+- `get_open_cases(customer_id)`: reads the case store and `fact_complaints` with status Open, In Process or Escalated. If an open case already covers the confirmed `transaction_id`, the agent reports that reference instead of creating a new case (this prevents cross-session duplicates, which the session-scoped idempotency key alone does not).
+- `create_case(kind, transaction_id?, customer_statement, missing_evidence?)`: only callable by code after the state machine reaches approval or a handoff condition.
+- Session expiry: 15 minutes idle; the expired-session red-team case uses it.
 
 ## 6a. Cases, references and idempotency
 
 | Kind | When | Reference | In console |
 |---|---|---|---|
 | `accepted_intake` | customer confirmed exactly one owned transaction and approved the statement | `CS-YYYY-NNNN`, minted after commit | yes, status `accepted` |
-| `technical_handoff` | tool failure, or no confirmed match after two clarifications, with the customer still present | `CS-YYYY-NNNN`, minted after commit; the customer needs a number to follow up | yes, status `incomplete`, missing evidence listed |
+| `technical_handoff` | tool failure or data error, customer still present | `CS-YYYY-NNNN`, minted after commit; the customer needs a number to follow up | yes, status `incomplete`, missing evidence listed |
+| `incomplete_handoff` | no confirmed match after two clarifications, customer still present | same | same |
 | no case | expired session, unauthenticated, out-of-scope, or customer abandoned before approval | none | no; event log only |
 
-Idempotency key: `sha256(customer_id, session_id, kind, transaction_id or "")`. A retry with the same key returns the existing case and reference; nothing is duplicated.
+Case kinds match the scorer's handoff actions one to one. Idempotency key: `sha256(customer_id, session_id, kind, transaction_id or "")`. A retry with the same key returns the existing case and reference; nothing is duplicated.
 
 ## 7. Error handling
 
@@ -130,7 +137,7 @@ Idempotency key: `sha256(customer_id, session_id, kind, transaction_id or "")`. 
 ## 8. Testing and evaluation
 
 - Unit tests for card builder, slot parsing, transaction scoping, idempotent case creation, and the action gate.
-- **Layer 1, decision points.** Each existing case is one turn with a known state. The agent's structured object (`action`, `candidate_ids`, `confirmed_id`) is scored by the existing `baseline.score()` against the same gold, so checklist and agent share one scorer. Reports: correct next action, unsafe, missed and unnecessary handoff, by language.
+- **Layer 1, decision points.** Each existing case is one turn with a known state. An adapter turns the agent's structured object into the checklist output shape that `baseline.score()` requires (`case_id`, `candidates` with the five evidence fields, `tool_calls`, `customer_statement`, `complete`, `requested_action`, `confirmed_facts`), and `score()` is extended to accept `baseline='agent'`. That is a small change to PR #8's code. Checklist and agent then share one scorer. Reports: correct next action, unsafe, missed and unnecessary handoff, by language.
 - **Layer 2, episodes.** Scripted multi-turn conversations (Andres's 33 scenarios once merged, plus ~10 red-team scripts) run end to end against the live service with a fixed fault schedule. Each episode counts once. Reports: safe accepted intake / all eligible starts, unsafe, duplicates, handoff completeness, p50/p95, cost per attempt. Layer 1 rates are never combined with layer 2 rates.
 - Andres's set is the closest thing to independently authored cases; Roberto's 42 are regression material. No target set before the first run.
 
