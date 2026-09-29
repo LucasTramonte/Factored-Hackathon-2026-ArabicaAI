@@ -1,6 +1,6 @@
 # LATAM Bank data foundation
 
-This repository supports the Factored Hackathon 2026 with a synthetic LATAM banking dataset. The current deliverable is a reproducible, read-only data pipeline and a quality audit for future Marketing and Product analysis. The earlier HTML reports were withdrawn while their metrics are revalidated.
+This repository supports the Factored Hackathon 2026 with a synthetic LATAM banking dataset. The current deliverables are a reproducible, read-only data pipeline, a quality audit, and rebuilt aggregate Marketing/Product reports from verified Silver tables.
 
 ## Start here
 
@@ -49,10 +49,11 @@ If the CSVs are installed locally, run `make setup` and `make pipeline-local`. O
 | `make bronze-full` | Rebuild Bronze when an older source partition was corrected or removed; follow with `make silver` and `make quality`. |
 | `make silver` | Rebuild typed analytical tables from local Bronze. |
 | `make quality` | Check all 13 Bronze/Silver table pairs and their relationships. |
+| `make report QUALITY_REPORT=data/quality_runs/<run-id>/quality_results.json` | Rebuild an ignored Marketing/Product report run from the verified Silver database. |
 | `make docker-test` | Run offline tests in the code-only container. |
 | `make docker-pipeline` | Run the pipeline with local `data/` and `~/.aws` mounted at runtime. |
 
-Docker reuses cached build layers on later runs. For a smaller first S3 check, follow the targeted commands in [REPRODUCIBILITY.md](REPRODUCIBILITY.md). CI runs offline tests and a Docker build; it does not need S3 credentials.
+Docker reuses cached build layers on later runs. For a smaller first S3 check, follow the targeted commands in [REPRODUCIBILITY.md](REPRODUCIBILITY.md). CI runs offline tests and compilation without S3 credentials. Docker checks remain available with `make docker-test`.
 
 ## Where to look next
 
@@ -60,6 +61,10 @@ Docker reuses cached build layers on later runs. For a smaller first S3 check, f
 - [Dataset overview](Docs/LATAM_BANK_DATASET.md) and [hackathon brief](Docs/FACTORED_HACKATHON_2026.md): source scope and challenge context.
 - [Architecture](ARCHITECTURE.md) and [reproduction guide](REPRODUCIBILITY.md): pipeline behavior, memory limits, Docker, and troubleshooting commands.
 - [Quality parity record](data_pipelines/quality/PARITY.md): the 13-table audit, observed warnings, and comparison with the former CSV scanner.
-- [Marketing/Product rebuild plan](Docs/Plans/marketing-product-trust.md) and [report hub](data_foundation/reports/README.md): why the old reports are unavailable and what evidence is needed before publishing new HTML.
+- [Marketing/Product evidence](data_foundation/reports/README.md) and [offline report hub](data_foundation/reports/index.html): reviewed aggregates, limits and reproducible source. The [customer-backward brief](Docs/Marketing-Product-PRFAQ.md) frames the proposed test.
 
 The dataset is synthetic. Descriptive counts from it should not be presented as measured bank outcomes or causal effects.
+
+## Roberto evaluation branch
+
+The current transcript reconciliation is documented in [Silver transcript verification](Docs/intake/silver-transcript-verification.md), with a network-free readout in `notebooks/07_silver_transcript_verification.ipynb`. Earlier notebooks/reports remain dated historical evidence; their presence does not restore the retired CSV production pipeline.

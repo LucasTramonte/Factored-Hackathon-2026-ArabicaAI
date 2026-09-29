@@ -4,20 +4,26 @@ AWS_REGION ?= us-east-2
 AWS_PROFILE ?= default
 DATA_DIR ?= $(CURDIR)/data
 SOURCE_DIR ?= $(CURDIR)/data
+DUCKDB_PATH ?= $(DATA_DIR)/latam_bank.duckdb
+QUALITY_REPORT ?=
+REPORT_RUN ?= $(CURDIR)/data_foundation/runs/$(shell date -u +%Y%m%dT%H%M%SZ)
 
 export S3_BUCKET AWS_REGION AWS_PROFILE DATA_DIR
 
-.PHONY: setup test compile bronze bronze-full bronze-local-full silver quality pipeline pipeline-local docker-build docker-test docker-pipeline
+.PHONY: setup test test-evaluation compile bronze bronze-full bronze-local-full silver quality pipeline pipeline-local docker-build docker-test docker-pipeline report
 
 setup:
 	python3 -m venv .venv
 	.venv/bin/python -m pip install -r data_pipelines/bronze/requirements.txt
 
 test:
-	$(PYTHON) -m pytest data_pipelines -q
+	$(PYTHON) -m pytest data_pipelines data_foundation/tests -q
+
+test-evaluation:
+	$(PYTHON) -m pytest data_foundation/tests evals/intake/test_baseline.py -q
 
 compile:
-	$(PYTHON) -m compileall -q data_pipelines
+	$(PYTHON) -m compileall -q data_pipelines data_foundation
 
 bronze:
 	$(PYTHON) data_pipelines/bronze/run_ingestion.py
@@ -44,6 +50,10 @@ pipeline-local:
 	$(MAKE) silver
 	$(MAKE) quality
 
+report:
+	@test -n "$(QUALITY_REPORT)" || (echo "Set QUALITY_REPORT to a full quality_results.json" && exit 1)
+	$(PYTHON) -m data_foundation.scripts.run_marketing_product --db "$(DUCKDB_PATH)" --quality "$(QUALITY_REPORT)" --output "$(REPORT_RUN)"
+
 docker-build:
 	docker build --tag latam-bank-pipeline:test .
 
@@ -59,3 +69,15 @@ docker-pipeline: docker-build
 		-e AWS_SHARED_CREDENTIALS_FILE=/run/aws/credentials \
 		-e AWS_PROFILE=$(AWS_PROFILE) -e AWS_REGION=$(AWS_REGION) -e S3_BUCKET=$(S3_BUCKET) \
 		latam-bank-pipeline:test sh -c 'python data_pipelines/bronze/run_ingestion.py && python data_pipelines/silver/run_silver.py && python -m data_pipelines.quality.run_quality'
+
+# Explicit opt-in: imports authorized local caches, never calls Jev.
+JEV_FIRST_CACHE ?= data_foundation/runs/jev-label-audit/audit.sqlite
+JEV_SECOND_CACHE ?= data_foundation/runs/jev-second-pass/second-pass.sqlite
+.PHONY: transcript-labels pipeline-with-labels
+transcript-labels:
+	$(PYTHON) -m data_pipelines.quality.run_quality --db "$(DATA_DIR)/latam_bank.duckdb" --tables call_center_interactions,call_transcripts
+	$(PYTHON) -m data_pipelines.transcript_labels --db "$(DATA_DIR)/latam_bank.duckdb" --first "$(JEV_FIRST_CACHE)" --second "$(JEV_SECOND_CACHE)"
+
+pipeline-with-labels:
+	$(MAKE) pipeline
+	$(MAKE) transcript-labels
