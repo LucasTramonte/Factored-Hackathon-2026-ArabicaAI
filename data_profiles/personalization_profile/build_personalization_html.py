@@ -7,8 +7,9 @@ CDN calls -- opens correctly with no network access), the same numbers as
 personalization_profile.md and personalization_analysis.ipynb, and the recommended-variables table
 at the end. This is meant to be skimmed by a teammate or judge in a couple of minutes, not explored.
 
-Re-runs the same read-only DuckDB queries directly (rather than parsing the notebook's outputs), so
-this script alone is enough to regenerate the report from a fresh Silver build.
+Measurements and every conclusion shown come from personalization_metrics.py (shared with the
+markdown profile and the notebook), so this script alone regenerates the report from a fresh Silver
+build and its text cannot contradict its own numbers.
 
 Usage:
     python build_personalization_html.py                       # writes personalization_report.html
@@ -19,34 +20,18 @@ from __future__ import annotations
 import argparse
 import base64
 import io
-import os
 import sys
 import time
-import warnings
 from pathlib import Path
 from typing import List
 
-import duckdb
 import matplotlib
-
-# pandas warns that DuckDBPyConnection is not a SQLAlchemy/sqlite3 connection -- read_sql works
-# fine against it regardless (this project's other scripts use the same pattern); suppressed here
-# rather than switching to con.execute(...).fetchdf(), which would just be more verbose for the
-# same result.
-warnings.filterwarnings("ignore", message="pandas only supports SQLAlchemy")
 
 matplotlib.use("Agg")  # headless -- this script never opens a display window
 import matplotlib.pyplot as plt
 import pandas as pd
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-
-
-def resolve_duckdb_path() -> Path:
-    default_root = SCRIPT_DIR.parent.parent
-    project_root = Path(os.environ.get("PROJECT_ROOT", default_root)).resolve()
-    data_dir = Path(os.environ.get("DATA_DIR", project_root / "data")).resolve()
-    return Path(os.environ.get("DUCKDB_PATH", data_dir / "latam_bank.duckdb"))
+import personalization_metrics as pm
 
 
 def fig_to_base64(fig) -> str:
@@ -58,164 +43,74 @@ def fig_to_base64(fig) -> str:
 
 
 def df_to_html_table(df: pd.DataFrame) -> str:
-    return df.to_html(index=False, border=0, classes="data-table")
+    return df.to_html(index=False, border=0, classes="data-table", na_rep="(null)")
+
+
+def bar_chart(labels, values, size, color="#2b6cb0", horizontal=False, xlabel=None, ylabel=None, title=None,
+              value_suffix=None):
+    """One bar chart as base64 PNG; labels are stringified so NULL categories stay visible."""
+    labels = ["(null)" if v is None else str(v) for v in labels]
+    fig, ax = plt.subplots(figsize=size)
+    (ax.barh if horizontal else ax.bar)(labels, values, color=color)
+    if horizontal:
+        ax.set_xlim(0, 100)
+        for y, v in enumerate(values):
+            ax.text(v + 1, y, f"{v}{value_suffix or ''}", va="center", fontsize=9)
+    else:
+        ax.tick_params(axis="x", rotation=20)
+    if xlabel:
+        ax.set_xlabel(xlabel)
+    if ylabel:
+        ax.set_ylabel(ylabel)
+    if title:
+        ax.set_title(title)
+    fig.tight_layout()
+    return fig_to_base64(fig)
 
 
 def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", default=str(SCRIPT_DIR / "personalization_report.html"))
+    parser.add_argument("--output", default=str(pm.SCRIPT_DIR / "personalization_report.html"))
     parser.add_argument("--memory-limit", default="3GB")
     args = parser.parse_args(argv if argv is not None else sys.argv[1:])
 
-    db_path = resolve_duckdb_path()
+    db_path = pm.resolve_duckdb_path()
     if not db_path.is_file():
         print(f"No DuckDB file at {db_path}", file=sys.stderr)
         return 1
 
     t0 = time.monotonic()
-    con = duckdb.connect(str(db_path), read_only=True)
-    temp_dir = db_path.parent / "duckdb_tmp"
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    con.execute("SET memory_limit=?", [args.memory_limit])
-    con.execute("SET temp_directory=?", [str(temp_dir)])
-    con.execute("SET threads=?", [int(os.environ.get("DUCKDB_THREADS", "2"))])
+    with pm.connect(db_path, args.memory_limit) as con:
+        m = pm.measure(con)
+    elapsed = time.monotonic() - t0
+    r = pm.readings(m)
+    total_customers = m["total_customers"]
+    agree = m["accent_agreement"]
 
-    total_customers = con.execute("SELECT count(*) FROM silver.dim_customers").fetchone()[0]
-
-    # ---- 1. Coverage chart -----------------------------------------------------------
-    coverage_queries = {
-        "call_center_interactions": "SELECT count(DISTINCT customer_id) FROM silver.fact_call_center_interactions",
-        "call_transcripts": "SELECT count(DISTINCT customer_id) FROM silver.fact_call_transcripts",
-        "complaints": "SELECT count(DISTINCT customer_id) FROM silver.fact_complaints",
-        "satisfaction_surveys": "SELECT count(DISTINCT customer_id) FROM silver.fact_satisfaction_surveys",
-        "digital_events": "SELECT count(DISTINCT customer_id) FROM silver.fact_digital_events",
-        "transactions": "SELECT count(DISTINCT customer_id) FROM silver.fact_transactions",
-    }
-    coverage = pd.DataFrame(
-        [(name, con.execute(q).fetchone()[0]) for name, q in coverage_queries.items()],
-        columns=["source", "customers_with_signal"],
-    )
-    coverage["% of customers"] = (100 * coverage["customers_with_signal"] / total_customers).round(1)
+    coverage = pd.DataFrame(m["coverage"]).rename(columns={
+        "customers": "customers_with_signal", "pct": "% of customers", "orphan_ids": "orphan fact IDs"})
     coverage = coverage.sort_values("% of customers")
-
-    fig, ax = plt.subplots(figsize=(6.5, 3.5))
-    ax.barh(coverage["source"], coverage["% of customers"], color="#2b6cb0")
-    ax.set_xlim(0, 100)
-    ax.set_xlabel("% of all customers with >=1 record")
-    for y, v in enumerate(coverage["% of customers"]):
-        ax.text(v + 1, y, f"{v}%", va="center", fontsize=9)
-    fig.tight_layout()
-    coverage_img = fig_to_base64(fig)
-
-    # ---- 2. Accent chart --------------------------------------------------------------
-    accent_dim = pd.read_sql(
-        "SELECT NULLIF(detected_accent,'') AS detected_accent, count(*) AS customers "
-        "FROM silver.dim_customers GROUP BY 1 ORDER BY 2 DESC", con,
-    )
-    accent_dim["detected_accent"] = accent_dim["detected_accent"].fillna("(blank)")
-    fig, ax = plt.subplots(figsize=(5.5, 3.5))
-    ax.bar(accent_dim["detected_accent"], accent_dim["customers"], color="#2b6cb0")
-    ax.set_ylabel("customers")
-    fig.tight_layout()
-    accent_img = fig_to_base64(fig)
-
-    agree = con.execute(
-        """
-        WITH per_customer AS (
-            SELECT i.customer_id, c.detected_accent AS profile_accent,
-                   mode(i.customer_detected_accent) AS interaction_mode_accent
-            FROM silver.fact_call_center_interactions i
-            JOIN silver.dim_customers c USING (customer_id)
-            WHERE i.customer_detected_accent IS NOT NULL AND c.detected_accent IS NOT NULL
-            GROUP BY 1, 2
-        )
-        SELECT count(*), sum(CASE WHEN profile_accent = interaction_mode_accent THEN 1 ELSE 0 END)
-        FROM per_customer
-        """
-    ).fetchone()
-    blank_accent = con.execute(
-        "SELECT count(*) FROM silver.dim_customers WHERE detected_accent IS NULL OR detected_accent = ''"
-    ).fetchone()[0]
-
-    # ---- 3. Language ------------------------------------------------------------------
-    lang = pd.read_sql(
-        "SELECT detected_language, count(*) AS transcripts FROM silver.fact_call_transcripts "
-        "GROUP BY 1 ORDER BY 2 DESC", con,
-    )
-    pt_count = con.execute(
-        "SELECT count(*) FROM silver.fact_call_transcripts WHERE lower(detected_language) LIKE 'pt%'"
-    ).fetchone()[0]
-
-    # ---- 4. Segment / country / channel -------------------------------------------
-    segment = pd.read_sql("SELECT segment, count(*) AS customers FROM silver.dim_customers GROUP BY 1 ORDER BY 2 DESC", con)
-    channel = pd.read_sql("SELECT channel, count(*) AS events FROM silver.fact_digital_events GROUP BY 1 ORDER BY 2 DESC", con)
+    coverage_img = bar_chart(coverage["source"], coverage["% of customers"], (6.5, 3.5), horizontal=True,
+                             xlabel="% of all customers with >=1 record", value_suffix="%")
+    accent_img = bar_chart([a for a, _ in m["accent_dim"]], [n for _, n in m["accent_dim"]], (5.5, 3.5),
+                           ylabel="customers")
+    lang = pd.DataFrame(m["languages"], columns=["detected_language", "transcripts"])
 
     fig, axes = plt.subplots(1, 2, figsize=(9, 3.5))
-    axes[0].bar(segment["segment"], segment["customers"], color="#2b6cb0")
-    axes[0].set_title("Customers by segment")
-    axes[0].tick_params(axis="x", rotation=20)
-    axes[1].bar(channel["channel"], channel["events"], color="#b7791f")
-    axes[1].set_title("Digital events by channel")
-    axes[1].tick_params(axis="x", rotation=20)
+    for ax, rows, title, color in ((axes[0], m["segments"], "Customers by segment", "#2b6cb0"),
+                                   (axes[1], m["channels"], "Digital events by channel", "#b7791f")):
+        ax.bar(["(null)" if k is None else str(k) for k, _ in rows], [n for _, n in rows], color=color)
+        ax.set_title(title)
+        ax.tick_params(axis="x", rotation=20)
     fig.tight_layout()
     segment_channel_img = fig_to_base64(fig)
 
-    # ---- 5. Repeat contact / complaints -------------------------------------------
-    reason_volume = pd.read_sql(
-        "SELECT reason_category, count(*) AS interactions FROM silver.fact_call_center_interactions "
-        "GROUP BY 1 ORDER BY 2 DESC", con,
-    )
-    fig, ax = plt.subplots(figsize=(6.5, 3.5))
-    ax.bar(reason_volume["reason_category"], reason_volume["interactions"], color="#2b6cb0")
-    ax.tick_params(axis="x", rotation=20)
-    ax.set_ylabel("interactions")
-    fig.tight_layout()
-    reason_img = fig_to_base64(fig)
-
-    repeat = con.execute(
-        """
-        WITH per_cust AS (
-            SELECT customer_id, reason_category, count(*) AS n
-            FROM silver.fact_call_center_interactions GROUP BY 1, 2
-        )
-        SELECT count(DISTINCT customer_id) FROM per_cust WHERE n >= 2
-        """
-    ).fetchone()[0]
-    open_complaints = con.execute(
-        "SELECT count(DISTINCT customer_id) FROM silver.fact_complaints "
-        "WHERE status IN ('Open', 'In Process', 'Escalated')"
-    ).fetchone()[0]
-
-    # ---- 6. Sentiment / consent ----------------------------------------------------
-    sent_null = con.execute(
-        "SELECT count(*), sum(CASE WHEN sentiment_score IS NULL THEN 1 ELSE 0 END) "
-        "FROM silver.fact_call_center_interactions"
-    ).fetchone()
-    consent = pd.read_sql(
-        "SELECT accepts_marketing, count(*) AS customers FROM silver.dim_customers GROUP BY 1", con,
-    )
-
-    con.close()
-    elapsed = time.monotonic() - t0
-
-    # ---- Recommended variables table ------------------------------------------------
-    recommended = pd.DataFrame([
-        ("preferred_accent", "dim_customers -> interaction mode -> transcript mode",
-         "100% agreement where both exist; ~30% blank in the dimension alone", "Include, with 3-step fallback"),
-        ("preferred_language", "call_transcripts.detected_language",
-         "100% es, 0% pt in this dataset", "Include for Spanish only; Portuguese is a documented data gap"),
-        ("segment, country", "dim_customers", "Well-populated, no nulls found", "Include directly"),
-        ("preferred_digital_channel", "mode of fact_digital_events.channel",
-         "100% coverage, well distributed across 4 channels", "Include"),
-        ("repeat_contact_flag", "fact_call_center_interactions by reason_category",
-         "75% of customers qualify", "Include"),
-        ("open_complaint_flag", "fact_complaints.status", "28% of customers", "Include"),
-        ("avg_sentiment_score", "fact_call_center_interactions.sentiment_score",
-         "0% null, 99% customer coverage", "Include"),
-        ("csat_avg / nps_avg / ces_avg", "fact_satisfaction_surveys, split by survey_type",
-         "Scales differ per type; blending would be wrong", "Include as 3 separate columns"),
-        ("accepts_marketing", "dim_customers", "Clean 50/50 split, no nulls", "Include as a gate, not a style"),
-    ], columns=["Variable", "Source", "Evidence", "Decision"])
+    reason_img = bar_chart([k for k, *_ in m["reasons"]], [n for _, n, _ in m["reasons"]], (6.5, 3.5),
+                           ylabel="interactions")
+    surveys = pd.DataFrame(m["surveys"], columns=["survey_type", "surveys", "avg_main_score", "min", "max"])
+    consent = pd.DataFrame(m["consent"], columns=["accepts_marketing", "customers"])
+    recommended = pd.DataFrame(pm.recommended(m), columns=["Variable", "Source", "Evidence", "Decision"])
+    sentiment = m["sentiment"]
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -241,55 +136,50 @@ def main(argv: List[str] | None = None) -> int:
 <body>
 
 <h1>Response personalization: recommended variables</h1>
-<p>Analysis of real <code>silver.*</code> data ({total_customers:,} customers) to determine which
+<p>Analysis of <code>silver.*</code> data ({total_customers:,} customers) to determine which
 signals support <code>gold.customer_personalization_profile</code> before building it.</p>
 
 <h2>1. Signal coverage by customer</h2>
-<p class="note">No customer is completely "cold": everyone has at least one digital event or
-interaction. However, coverage drops substantially for complaints (36%) and transcripts (68%), so
-neither can be the only personalization signal for a customer.</p>
+<p class="note">{r["coverage"]}</p>
 <img src="data:image/png;base64,{coverage_img}" alt="Signal coverage by customer">
-{df_to_html_table(coverage[['source', 'customers_with_signal', '% of customers']])}
+{df_to_html_table(coverage[["source", "customers_with_signal", "% of customers", "orphan fact IDs"]])}
 
 <h2>2. Accent: domain and cross-source consistency</h2>
-<div class="metric">Comparable customers: <b>{agree[0]:,}</b></div>
-<div class="metric">Profile vs. interaction agreement: <b>{100*agree[1]/agree[0]:.1f}%</b></div>
-<div class="metric">Customers with a blank accent: <b>{blank_accent:,} ({100*blank_accent/total_customers:.1f}%)</b></div>
+<div class="metric">Comparable customers: <b>{agree["compared"]:,}</b></div>
+<div class="metric">Profile vs. interaction agreement: <b>{agree["pct"]}%</b></div>
+<div class="metric">Customers with a blank accent: <b>{m["blank_accent"]:,} ({pm.pct(m["blank_accent"], total_customers)}%)</b></div>
 <img src="data:image/png;base64,{accent_img}" alt="Accent distribution">
-<p class="note">Where both sources are available, they agree 100% of the time, which supports the
-signal's reliability. However, the profile is blank for roughly 30% of customers, so the profile
-needs a fallback chain: customer profile -> interaction mode -> transcript mode -> explicit null.</p>
+<p class="note">{r["accent"]}</p>
 
 <h2>3. Language: Spanish/Portuguese requirement check</h2>
 {df_to_html_table(lang)}
-<div class="metric">Portuguese transcripts: <b>{pt_count:,}</b></div>
-<p class="note"><b>Critical finding:</b> the dataset contains no Portuguese samples. Portuguese
-personalization cannot be derived from these data; it must be built with manually authored cases
-and reported as a dataset limitation rather than presented as validated behavior.</p>
+<div class="metric">Portuguese transcripts: <b>{m["pt_transcripts"]:,}</b></div>
+<p class="note">{r["language"]}</p>
 
 <h2>4. Segment, country, and digital channel</h2>
 <img src="data:image/png;base64,{segment_channel_img}" alt="Segment and digital channel distributions">
-<p class="note">Segments are unbalanced (Basic 60%, Premium 10%), so segment-based evaluation will
-have less evidence for Premium and Student customers. Country and channel are well distributed.</p>
+<p class="note">{r["segment"]} {r["country_channel"]}</p>
 
 <h2>5. Repeat contact and open complaints</h2>
 <img src="data:image/png;base64,{reason_img}" alt="Contact reasons">
-<div class="metric">Customers with >=2 contacts for the same reason: <b>{repeat:,} ({100*repeat/total_customers:.1f}%)</b></div>
-<div class="metric">Customers with an open complaint now: <b>{open_complaints:,} ({100*open_complaints/total_customers:.1f}%)</b></div>
+<div class="metric">Customers with >=2 contacts for the same reason: <b>{m["repeat_contact"]:,} ({pm.pct(m["repeat_contact"], total_customers)}%)</b></div>
+<div class="metric">Customers with an open complaint now: <b>{m["open_complaints"]:,} ({pm.pct(m["open_complaints"], total_customers)}%)</b></div>
+<p class="note">{r["repeat"]}</p>
 
 <h2>6. Sentiment, satisfaction, and consent</h2>
-<div class="metric">Missing sentiment_score values: <b>{sent_null[1]:,}/{sent_null[0]:,} (0%)</b></div>
+<div class="metric">Missing sentiment_score values: <b>{sentiment["null"]:,}/{sentiment["interactions"]:,} ({sentiment["null_pct"]}%)</b></div>
+{df_to_html_table(surveys)}
+<p class="note">{r["sentiment"]}</p>
 {df_to_html_table(consent)}
-<p class="note"><code>accepts_marketing</code> is almost perfectly balanced and has no nulls, making
-it a reliable gate for proactive personalization rather than a personalization style itself.</p>
+<p class="note">{r["consent"]}</p>
 
 <h2>7. Recommended variables for gold.customer_personalization_profile</h2>
 {df_to_html_table(recommended)}
 
 <footer>
-Generated from <code>silver.*</code> (read-only). Database contains {total_customers:,} customers.
-Queries completed in {elapsed:.1f}s. The dataset is synthetic; these counts describe the hackathon
-sample and not real customer behavior.
+Generated from <code>{pm.display_path(db_path)}</code> (<code>silver.*</code>, read-only). Database contains
+{total_customers:,} customers. Queries completed in {elapsed:.1f}s. The dataset is synthetic; these counts
+describe the hackathon sample and not real customer behavior.
 </footer>
 
 </body>
