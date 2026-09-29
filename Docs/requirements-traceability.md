@@ -1,67 +1,64 @@
 # Requirements traceability
 
-Roberto, 29 September 2026. Maps every requirement in the team hub (Notion, section 3 "Initial Requirements", read 29/09) to where it is satisfied, planned, or unowned. "Done" (✅) means merged to `main`; 🟡 means in an open PR with the number given; "Planned" names the component in the design spec (PR #11, section 5) and its owner if one exists. Update this table when a PR merges or an owner changes; it is the production-readiness evidence for the final submission.
+Roberto, updated 29 September 2026. This maps the 23 requirements in the team hub's section 3, "Initial Requirements," to merged evidence, open PRs, and remaining gaps. A merged PR is evidence for the capability it actually implements, not for a broader bank production claim.
 
-Status key: ✅ done · 🟡 in an open PR · 🔵 planned, owner named · ⚪ planned, no owner · ❌ not planned
+Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ missing owner or decision. PR #12 and #13 merged into the old #8 branch, not `main`; their path to `main` is open PR #16. PR #15 is stacked on open PR #17.
 
 ## Functional requirements
 
-| # | Requirement | Status | Evidence or plan | Owner |
+| # | Requirement | Status | Evidence and remaining scope | Owner |
 |---|---|---|---|---|
-| F1 | Users can log in securely | ⚪ | Spec component 2: demo login choosing a customer, session with expiry. No real OAuth in scope. | none |
-| F2 | Users can access relevant account information | 🟡 | Context card (spec section 4): products held, open complaints, last contact. `intake_agent/context_card.py` (PR #15). | Roberto |
-| F3 | Users can ask customer-service questions | 🔵 | Spec component 1: web chat, es/pt. Angular (Lucas's proposal) or plain HTML served by FastAPI. | Lucas / Roberto |
-| F4 | System can retrieve permitted customer/account information | 🟡 | Session-scoped `FixtureStore.query` and ownership checks in `evals/intake/baseline.py` and `source_smoke.py` (PR #8). Production tool: spec `search_transactions`, scoped by session `customer_id`; Lucas's architecture decision (`Docs/Factored Hackathon - Arabica AI/`) assigns tools to Manoella. | Roberto (harness), Manoella (tools) |
-| F5 | System can complete eligible service workflows | 🔵 | Unrecognized-charge intake end to end: spec section 2 user story, components 3 and 4. | Roberto |
-| F6 | System can request confirmation before sensitive actions | 🟡 | Contract: singleton match → `confirm`; case committed only after customer approval (PR #8, spec steps 7-8). Scored by `baseline.score()`. | Roberto |
-| F7 | System can escalate cases to a human agent | 🟡 | Three handoff kinds (`HANDOFFS` in `evals/intake/baseline.py` and the contract, PR #8); Andrés's handoff contract in `Docs/intake/v1_scenarios.md` (PR #9); Lucas's architecture decision assigns the handoff contract to Manoella. Console: spec component 5. | Roberto, Andrés, Manoella |
-| F8 | Users receive confirmation after completed actions | 🔵 | Reference minted only after the case row commits; `handoff_accepted` event is the durable receipt (PR #13 event contract). Case store is in Roberto's slice (spec 1a); backend integration with Lucas. | Roberto, Lucas |
+| F1 | Users can log in securely | 🟡 | #17 has expiring, rotating demo sessions behind a team gate; customer selection is simulated. Real bank authentication remains out of scope. | Lucas |
+| F2 | Users can access relevant account information | 🟡 | #17 serves own selected charges; #15 adds a load-time card with active products. Full account history is planned in `Docs/Plans/intake-roadmap.md`. | Lucas, Roberto |
+| F3 | Users can ask customer-service questions | 🔵 | #17 is a deterministic charge-intake UI, not an open question channel. The smaller agent V1 is specified in #11. | Roberto |
+| F4 | System retrieves permitted account information | 🟡 | #8 merged the scoped evaluation harness. #17 scopes transaction reads to the session customer; #15 snapshots a bounded card. More domains need Gold marts. | Lucas, Roberto |
+| F5 | System completes eligible service workflows | 🟡 | #17 accepts an unrecognized-charge report for human review. It does not resolve a dispute or perform a safe automated resolution. | Lucas |
+| F6 | System requests confirmation before sensitive actions | 🟡 | #17 requires explicit customer confirmation before case insertion; #8 evaluates the confirmation step. | Lucas, Roberto |
+| F7 | System escalates cases to a human agent | 🟡 | #17 stores accepted cases and lists them in the agent view. #9 defines scenario-specific handoffs; technical/incomplete outcomes remain planned. | Lucas, Roberto |
+| F8 | Users receive confirmation after completed actions | 🟡 | #17 returns a durable case reference only after insert and readback. #16 defines the corresponding event contract. | Lucas, Roberto |
 
 ## Non-functional requirements
 
-| # | Requirement | Status | Evidence or plan | Owner |
+| # | Requirement | Status | Evidence and remaining scope | Owner |
 |---|---|---|---|---|
-| N1 | Response time target defined | ❌ | No target set. Contract says targets come after a measured baseline. Event contract records `duration_ms`; p50/p95 in `episodes.py` (PR #13). Decide a target on 01/10 after the first measured run. | Team decision |
-| N2 | Authentication and authorization implemented | ⚪ | Identity is a trusted harness input today (PR #8). Production: spec component 2 plus tool permissions in code (component 6). | none |
-| N3 | Customer data protected | 🟡 | S3 read-only, credentials outside source (AGENTS.md); tool evidence limited to `EVIDENCE_FIELDS` in `baseline.py` and column projection in `source_smoke.py` (PR #8); risk fields excluded from the context card by design (PR #10 findings, spec section 4); events carry references, never customer content (PR #13). | Roberto, Manoella |
-| N4 | System is traceable/auditable | 🟡 | Provenance hashes in evaluation results (PR #8); quality-run records and Silver audit (`data_foundation`); append-only event log with `case_id`, `model_version`, tool status (PR #13). | Roberto |
-| N5 | System supports expected workload | ❌ | Lucas's 28/09 capacity note: dataset volume is not a traffic forecast; investigate daily/hourly peaks by interaction type before sizing. Not started. | Lucas |
-| N6 | Monitoring and error handling implemented | ⚪ | Error handling designed (spec section 7: fail closed to technical handoff, idempotent retries). Monitoring: nothing planned beyond the event log. | none |
-| N7 | Cost per interaction measured | 🔵 | Tokens and calls per episode in the event contract; `operating_cost` stays `null` until a price table is agreed (PR #13). Lucas's cost worksheet covers infrastructure only. | Roberto (measure), Lucas (prices) |
+| N1 | Response time target defined | ⚪ | #17/ADR-004 records measured Worker/D1 latency, but no accepted p50/p95 target. Set a target from a repeatable run. | Team decision |
+| N2 | Authentication and authorization implemented | 🟡 | #17 enforces a team gate, expiring sessions, actor roles, and own-transaction checks. Its simulated customer selection is explicitly not bank authentication. | Lucas |
+| N3 | Customer data protected | 🟡 | Main has read-only S3 pipeline rules; #17 gates the demo and scopes D1 reads; #15 excludes risk, balance, contact, and identity fields from the card. Retention remains open. | Lucas, Roberto |
+| N4 | System is traceable/auditable | 🟡 | Main has pipeline quality and #8 evaluation provenance. #17 records Gold seed provenance; #16 adds the episode event contract and scorer. Runtime event emission is pending. | Roberto, Lucas |
+| N5 | System supports expected workload | 🟡 | #17/ADR-004 models bounded traffic scenarios and D1 limits. The bank's production traffic is undisclosed, so these are capacity scenarios rather than forecasts. | Lucas |
+| N6 | Monitoring and error handling implemented | 🟡 | #17 has health, fail-closed API errors, Worker observability, and a D1 budget test. Application error counters and #16 episode events are not emitted yet. | Lucas, Roberto |
+| N7 | Cost per interaction measured | 🔵 | #17/ADR-004 estimates infrastructure and an AI envelope. #16 leaves `operating_cost` null until actual usage and a price table exist. | Lucas, Roberto |
 
 ## Safety and extended requirements
 
-| # | Requirement | Status | Evidence or plan | Owner |
+| # | Requirement | Status | Evidence and remaining scope | Owner |
 |---|---|---|---|---|
-| S1 | Transaction and action logging | 🔵 | Event contract v1 (PR #13); tool calls counted per episode. Emit calls to agree with Lucas. | Roberto |
-| S2 | Audit trail | 🔵 | Event log (spec component 8) plus case storage with the customer statement and evidence references (spec component 4, section 6a). | Roberto |
-| S3 | Tool permissions enforced outside the LLM | 🟡 | Harness: `decide()` authorizes lookups from session identity only, never from text; `score()` marks any foreign evidence unsafe (PR #8). Production: spec component 6. | Roberto |
-| S4 | Prompt-injection handling | 🟡 | Safety split: injection in three shapes plus Andrés's V1-14, all scored, 0 unsafe on the checklist (PR #12). Agent must match. | Roberto |
-| S5 | Unauthorized-access handling | 🟡 | `unauthenticated`, `expired_identity`, `foreign_confirmation`, `impersonated_staff` cases (PR #8, #12); `third_party_card` is in the held-out split (PR #12). | Roberto |
-| S6 | Tool failure fallback | 🟡 | `technical_handoff` on any tool error, never invented evidence (PR #8); spec section 7. | Roberto |
-| S7 | Human escalation | 🟡 | See F7. | Roberto, Andrés, Manoella |
-| S8 | Data retention defined | ❌ | Nothing written. Needs a one-paragraph policy: case storage retention, event log retention, and what the demo deletes on reset. | none |
+| S1 | Transaction and action logging | 🟡 | #16 defines event fields and episode ordering; #17 has durable case rows. Runtime event emission is pending. | Roberto |
+| S2 | Audit trail | 🟡 | #17 has case receipts and Gold provenance; #16 adds event references and scoring. No end-to-end runtime event log yet. | Lucas, Roberto |
+| S3 | Tool permissions enforced outside the LLM | 🟡 | #8 evaluation and #17 D1 routes derive customer identity from the session and enforce ownership outside model text. Agent tools are not implemented. | Lucas, Roberto |
+| S4 | Prompt-injection handling | 🟡 | #16 carries the held-out safety split and unsafe-action scorer. A live agent has not yet been tested against it. | Roberto |
+| S5 | Unauthorized-access handling | 🟡 | #17 tests forged/expired sessions, actor isolation, and foreign transactions; #16 adds adversarial cases. | Lucas, Roberto |
+| S6 | Tool failure fallback | 🔵 | #8 harness models technical handoff; #11 specifies fail-closed runtime behavior. The live service has no agent tool calls yet. | Roberto |
+| S7 | Human escalation | 🟡 | #17 accepts reports into an agent queue. #9 scenarios define further handoff types; assignment and resolution history remain planned. | Lucas, Roberto |
+| S8 | Data retention defined | ⚪ | #17/ADR-004 documents Workers Logs retention, but case, session, event, and demo-reset retention still need one explicit policy. | Team decision |
 
-## Gaps with no owner (decide at standup)
+## Decisions still needed
 
-1. **F1 / N2 login and session**: someone must own the demo login and session expiry. Without it F1, N2 and the expired-session safety case cannot be demonstrated live.
-2. **N6 monitoring**: at minimum, a health endpoint and an error counter surfaced on the evaluation page.
-3. **S8 data retention**: one paragraph, but it must exist for the privacy rubric.
-4. **N1 response-time target**: set after the first measured run on 01/10, not before.
-5. **N5 workload**: Lucas flagged it; nobody scheduled the peak analysis.
+1. **N1:** set a measured p50/p95 target after the first repeatable end-to-end run.
+2. **S8:** define retention and reset behavior for cases, sessions, and future event logs.
+3. **F1/N2:** choose whether bank-grade identity is required for the hackathon demonstration; the current demo identity is intentionally simulated.
+4. **F5:** decide when a normal, safely automated resolution path is needed; #17/ADR-002 records zero such resolutions in V1.
+5. **N7:** choose a price table and measure actual usage before reporting cost per interaction.
 
 ## Evidence index
 
-| PR | What it proves |
+| PR | Evidence |
 |---|---|
-| #1, #3 | Bronze/Silver pipelines and the quality gate: sound data practice, reproducibility |
-| #4 | Marketing and product evidence on Bronze/Silver (Lucas) |
-| #6 | Provisional transcript enrichment kept separate from original labels |
-| #7 | Marketing and product measurement limits documented |
-| #8 (open) | KPI contract v0.2, checklist baseline, 42 decision-point cases, strict scoring |
-| #9 (open) | Personalization signal profile; 17 scenarios with ES/PT phrasings; handoff contract |
-| #10 | Fraud readiness: `fraud_score` tied to the label, no label timing, fraud decisions excluded |
-| #11 (open) | Design spec: one agent per customer, permissions never vary |
-| #12 (open) | Held-out and safety splits, 0 unsafe on the checklist |
-| #13 (open) | Event contract v1 and episode KPI scorer |
-| #15 (open) | Context card module, no callers until #11 is approved |
+| #1, #3 | Bronze/Silver pipeline and quality gate on `main` |
+| #8 | Evaluation harness and scoped decision-point cases on `main` |
+| #9 (open) | Personalization profile and ES/PT scenarios; reviewer fixes pushed |
+| #10 | Fraud-data readiness and label limitations on `main` |
+| #11 (open) | Smaller Worker/D1 agent V1 spec; load-time card and atomic dedupe |
+| #12, #13 → #16 (open, approved) | Held-out/safety splits, event contract, episode KPI scorer; not on `main` yet |
+| #15 (open, stacked on #17) | Minimal card built by Gold and read from D1 at session start |
+| #17 (open) | Worker/D1 intake demo, Gold slice, session and case flows, capacity and cost |
