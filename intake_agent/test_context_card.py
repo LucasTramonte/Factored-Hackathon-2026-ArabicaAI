@@ -112,7 +112,11 @@ def test_ties_and_nulls(con):
                                 {'product_type': 'Tarjeta Débito', 'last4': None}]
     con.execute("UPDATE silver.dim_products SET product_status='Active' WHERE product_id='p7'")
     assert {'product_type': 'Tarjeta Crédito', 'last4': '12'} in build_context_card(con, 'B', TODAY)['products']
-    assert build_context_card(con, 'B', dt.datetime(2026, 9, 29, 23, 59)) == build_context_card(con, 'B', TODAY)
+    # Next-day events must stay outside the window even when today arrives as a datetime with a clock time.
+    con.execute("INSERT INTO silver.fact_digital_events VALUES ('B',TIMESTAMP '2026-09-30 00:00:00','Mobile Web','1.1.1.1'),"
+                " ('B',TIMESTAMP '2026-09-30 01:00:00','Mobile Web','1.1.1.1')")
+    card = build_context_card(con, 'B', dt.datetime(2026, 9, 29, 23, 59))
+    assert card == build_context_card(con, 'B', TODAY) and card['usual_channel'] == 'Android App'
 
 
 def test_unknown_customer(con):
