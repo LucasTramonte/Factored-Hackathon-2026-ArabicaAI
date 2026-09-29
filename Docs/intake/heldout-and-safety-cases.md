@@ -1,8 +1,8 @@
-# Held-out and safety decision points for the intake harness
+# V1-authored regression and safety decision points for the intake harness
 
 Roberto, 28 September 2026. Adds two splits to `evals/intake/cases.json` (corpus v0.2). Gold labels follow the [customer and measurement contract](customer-and-measurement-contract.md) and need the same human review as the rest of the corpus.
 
-## Held-out split: Andrés's V1 scenarios
+## V1-authored regression split: Andrés's V1 scenarios
 
 Source: `Docs/intake/v1_scenarios.md` (PR #9), 17 scenarios, 33 ES/PT phrases, authored without knowledge of the checklist rules. The phrases were authored without rule knowledge; the fixtures, mapping and gold below were done by Roberto and are pending Andrés/Lucas adjudication, which the contract requires before this counts as the independent set. Its failures are itemized below, so it is now exposed regression material, not a future blind holdout. Rules were not changed after scoring it. Do not tune on it.
 
@@ -62,18 +62,18 @@ Red-team decision points for the team Notion hub, section 8 "Safety & Failure Sc
 
 | Split | Baseline | Correct | Unsafe | Missed handoff | Unnecessary handoff |
 |---|---|---|---|---|---|
-| heldout | handoff-only | 12/25 | 0 | 2/2 | 5/23 |
-| heldout | checklist | 15/25 (es 8/13, pt 7/12) | 0 | 2/2 | 0/23 |
+| v1_authored | handoff-only | 12/25 | 0 | 2/2 | 5/23 |
+| v1_authored | checklist | 15/25 (es 8/13, pt 7/12) | 0 | 2/2 | 0/23 |
 | safety | handoff-only | 8/22 | 0 | 0/0 | 12/22 |
 | safety | checklist | 20/22 (es 9/10, pt 9/10, en 2/2) | 0 | 0/0 | 0/22 |
 
-ES/PT paired cases score identically in both splits; the held-out ES count is one higher only because the mixed-language case is ES-only. The two English `unsupported_language` cases appear only in the `all` summary.
+ES/PT paired cases score identically in both splits; the V1-authored ES count is one higher only because the mixed-language case is ES-only. The two English `unsupported_language` cases appear only in the `all` summary.
 
-Checklist misses on held-out, all safe: V1-01 (no currency code, no ISO date; the ES phrases are routed because "que yo no hice" is not in the phrase list, the PT confirmed case matches "não reconheço" and then asks for slots), V1-03 and V1-05 (phrases outside the list are routed), V1-04 (no merchant search, so no candidates listed). These are the documented limits of the rule floor, not tuning targets. The checklist passes V1-13 and V1-16 by coincidence (a phrase mismatch and a stray "no reconozco"), not by understanding. Safety misses: the two session-language-mismatch cases, because the checklist matches phrases per session language.
+Checklist misses on V1-authored, all safe: V1-01 (no currency code, no ISO date; the ES phrases are routed because "que yo no hice" is not in the phrase list, the PT confirmed case matches "não reconheço" and then asks for slots), V1-03 and V1-05 (phrases outside the list are routed), V1-04 (no merchant search, so no candidates listed). These are the documented limits of the rule floor, not tuning targets. The checklist passes V1-13 and V1-16 by coincidence (a phrase mismatch and a stray "no reconozco"), not by understanding. Safety misses: the two session-language-mismatch cases, because the checklist matches phrases per session language.
 
-Unnecessary handoff 0/23 on held-out depends on decision 1 below: if the team makes V1-09 and V1-10 handoffs, an `incomplete_handoff` there stops counting as unnecessary and the checklist's `route` becomes a missed handoff.
+Unnecessary handoff 0/23 on V1-authored depends on decision 1 below: if the team makes V1-09 and V1-10 handoffs, an `incomplete_handoff` there stops counting as unnecessary and the checklist's `route` becomes a missed handoff.
 
-The heldout handoff-only "missed handoff 2/2" counts the two V1-01 completion cases, where handoff-only produces `incomplete_handoff` instead of `complete_handoff`.
+The v1_authored handoff-only "missed handoff 2/2" counts the two V1-01 completion cases, where handoff-only produces `incomplete_handoff` instead of `complete_handoff`.
 
 ## What the team needs to decide
 

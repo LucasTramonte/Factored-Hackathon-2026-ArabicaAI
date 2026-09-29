@@ -3,8 +3,9 @@ import unittest
 from evals.intake.episodes import summarize
 
 
-def ev(name, case_id, ts, language='es', **fields):
-    return dict(event=name, version='1', case_id=case_id, ts=f'2026-09-29T10:{ts:02d}:00.000Z', session_ref='s-'+case_id,
+def ev(name, case_id, ts, language='es', seq=None, **fields):
+    return dict(event=name, version='1', case_id=case_id, ts=f'2026-09-29T10:{ts:02d}:00.000Z', seq=ts if seq is None else seq,
+                session_ref='s-'+case_id,
                 language=language, model_version='checklist-0.1', **fields)
 
 
@@ -38,7 +39,8 @@ class EpisodeTests(unittest.TestCase):
         self.assertEqual(total['safe_accepted'], 1)
         self.assertEqual(total['safe_accepted_intake_rate'], 0.2)
         self.assertEqual(total['unsafe'], 1)
-        self.assertEqual(total['not_assessed'], 0)
+        self.assertEqual(total['not_assessed'], 1)
+        self.assertEqual(total['usage_unknown_episodes'], 1)
         self.assertEqual(total['outcomes'], dict(accepted=2, abandoned=1, technical_failure=1, pending=1))
         self.assertEqual(total['clarifications_per_episode'], 0.4)
         self.assertEqual((total['llm_calls'], total['input_tokens'], total['output_tokens'], total['tool_calls']), (12, 5400, 1000, 5))
@@ -60,9 +62,11 @@ class EpisodeTests(unittest.TestCase):
         cases = {
             'full chain': [e for e in ACCEPTED if e['event'] != 'handoff_accepted'],
             'transaction_confirmed': [e for e in ACCEPTED if e['event'] != 'transaction_confirmed'],
-            'order': [dict(e, ts='2026-09-29T10:02:30.000Z') if e['event'] == 'handoff_accepted' else e for e in ACCEPTED],
+            'order': [dict(e, seq=4) if e['event'] == 'handoff_created' else
+                      dict(e, seq=3) if e['event'] == 'handoff_accepted' else e for e in ACCEPTED],
             'matching handoff_created': [dict(e, case_ref='REF-9') if e['event'] == 'handoff_accepted' else e for e in ACCEPTED],
-            'repeats a chain event': ACCEPTED + [ev('handoff_created', 'a', 3, kind='complete', case_ref='REF-1')],
+            'repeats a chain event': ACCEPTED[:4] + [ev('handoff_created', 'a', 4, kind='complete', case_ref='REF-1')]
+                                     + [dict(ACCEPTED[4], seq=5), dict(ACCEPTED[5], seq=6)],
             'kind must be': [dict(e, kind='Complete') if e['event'] == 'handoff_created' else e for e in ACCEPTED],
         }
         for message, log in cases.items():
@@ -101,11 +105,17 @@ class EpisodeTests(unittest.TestCase):
             'missing must be a non-empty list of': [ev('intake_started', 'z', 0), ev('clarification_requested', 'z', 1, missing='date')],
             'non-empty list of': [ev('intake_started', 'z', 0), ev('clarification_requested', 'z', 1, missing=[])],
             'authored scenario id': [ev('intake_started', 'z', 0, scenario='Cliente Silvia dice: no fui yo')],
+            'seq must be': [dict(ev('intake_started', 'z', 0), seq=True)],
+            'repeats a seq': [ev('intake_started', 'z', 0), ended('z', 1, 'abandoned', seq=0)],
         }
         for message, log in cases.items():
             with self.subTest(message):
                 with self.assertRaisesRegex(ValueError, message):
                     summarize(log)
+
+    def test_seq_orders_events_with_the_same_millisecond_timestamp(self):
+        tied = [dict(e, ts='2026-09-29T10:00:00.000Z') for e in ACCEPTED]
+        self.assertEqual(summarize(list(reversed(tied)))['all']['safe_accepted'], 1)
 
 
 if __name__ == '__main__':
