@@ -15,6 +15,7 @@ silently continuing on partial data, which the original notebook's silent try/ex
 from __future__ import annotations
 
 import argparse
+from datetime import date
 import logging
 import sys
 from typing import List
@@ -28,6 +29,7 @@ from ingestion import IngestResult, ingest_dimension, ingest_fact
 
 def parse_args(argv: List[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Ingest LATAM Bank tables from S3 or local CSVs into Bronze.")
+    parser.add_argument("--partition-date", type=date.fromisoformat, help="Load exactly one fact partition (YYYY-MM-DD) into an isolated DuckDB.")
     parser.add_argument("--local-source", type=str, help="Root containing the supplied local CSV tables; no S3 or AWS credentials needed.")
     parser.add_argument(
         "--full-refresh", action="store_true",
@@ -44,7 +46,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def run(settings: Settings, tables_filter: List[str] | None, full_refresh: bool, local_source: str | None = None) -> List[IngestResult]:
+def run(settings: Settings, tables_filter: List[str] | None, full_refresh: bool, local_source: str | None = None, partition_date: date | None = None) -> List[IngestResult]:
     """Ingest selected tables from S3 or local CSVs into the configured Bronze store."""
     tables = ALL_TABLES if not tables_filter else [t for t in ALL_TABLES if t.name in tables_filter]
 
@@ -64,7 +66,7 @@ def run(settings: Settings, tables_filter: List[str] | None, full_refresh: bool,
                     result = ingest_dimension(con, base_path, table.name, data_dir=data_dir)
                 else:
                     result = ingest_fact(
-                        con, base_path, table.name, full_refresh=full_refresh, data_dir=data_dir
+                        con, base_path, table.name, full_refresh=full_refresh, data_dir=data_dir, partition_date=partition_date
                     )
             except Exception as e:  # noqa: BLE001 -- intentionally broad: one table's failure
                                      # must not stop the rest, but must be visible in the summary.
@@ -107,7 +109,7 @@ def main(argv: List[str] | None = None) -> int:
         settings.project_root, settings.data_dir, settings.duckdb_path,
     )
 
-    results = run(settings, tables_filter, args.full_refresh, args.local_source)
+    results = run(settings, tables_filter, args.full_refresh, args.local_source, args.partition_date)
     print_summary(results)
 
     failures = [r for r in results if r.status in {"failed", "no_data_found"}]

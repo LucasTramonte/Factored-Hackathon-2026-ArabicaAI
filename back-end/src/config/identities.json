@@ -1,0 +1,8 @@
+{
+  "description": "Simulated identities the demo accepts. The Worker's login allowlist and the Gold intake slice both read this file; edit it only together with a reviewed seed.",
+  "customers": [
+    { "customer_id": "demo-ana", "display_name": "Ana (demo)", "source": "fictitious" },
+    { "customer_id": "demo-bruno", "display_name": "Bruno (demo)", "source": "fictitious" },
+    { "customer_id": "CLI-U53R5AZVLET0", "display_name": "Dataset customer (synthetic)", "source": "dataset" }
+  ]
+}
