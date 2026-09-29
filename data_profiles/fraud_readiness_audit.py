@@ -40,7 +40,8 @@ QUERIES = {
         SELECT t.currency,
                count(*) AS comparable,
                count(*) FILTER (WHERE abs(t.amount_usd / (t.amount * fx.exchange_rate) - 1) > 0.01) AS off_by_over_1pct,
-               round(median(t.amount_usd / (t.amount * fx.exchange_rate)), 4) AS median_ratio
+               round(median(t.amount_usd / (t.amount * fx.exchange_rate)), 4) AS median_ratio,
+               round(sum(t.amount_usd) / sum(t.amount * fx.exchange_rate), 4) AS amount_weighted_ratio
         FROM silver.fact_transactions t
         JOIN silver.dim_fx_rates fx ON fx.source_currency = trim(t.currency) AND fx.target_currency = 'USD'
              AND fx.rate_date = CAST(t.transaction_date AS DATE)
@@ -58,7 +59,7 @@ QUERIES = {
                                                      WHERE NOT is_fraud)) AS above_nonfraud_max
         FROM silver.fact_transactions GROUP BY 1 ORDER BY 1""",
     "Label/score separation (AUC: chance a fraud row outscores a non-fraud row)": """
-        WITH r AS (SELECT is_fraud, rank() OVER (ORDER BY fraud_score) AS rk
+        WITH r AS (SELECT is_fraud, rank() OVER (ORDER BY fraud_score) + (count(*) OVER (PARTITION BY fraud_score) - 1) / 2.0 AS rk
                    FROM silver.fact_transactions WHERE fraud_score IS NOT NULL AND is_fraud IS NOT NULL),
              n AS (SELECT count(*) FILTER (WHERE is_fraud) AS pos, count(*) FILTER (WHERE NOT is_fraud) AS neg FROM r)
         SELECT pos, neg, round((sum(rk) FILTER (WHERE is_fraud) - pos * (pos + 1) / 2.0) / (pos * neg), 4) AS auc

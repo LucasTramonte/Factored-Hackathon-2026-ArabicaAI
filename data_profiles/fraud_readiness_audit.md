@@ -54,10 +54,10 @@ Source: `data/latam_bank.duckdb` (Silver + Bronze), synthetic data.
 
 ## Daily FX rate vs source amount_usd (rows where both exist)
 
-| currency | comparable | off_by_over_1pct | median_ratio |
-|---|---|---|---|
-| COP | 1,134,663 | 593,669 | 1.0 |
-| ARS | 752,317 | 361,501 | 0.9994 |
+| currency | comparable | off_by_over_1pct | median_ratio | amount_weighted_ratio |
+|---|---|---|---|---|
+| COP | 1,134,663 | 593,669 | 1.0 | 1.0005 |
+| ARS | 752,317 | 361,501 | 0.9994 | 0.9995 |
 
 ## fraud_score distribution by label
 
@@ -77,7 +77,7 @@ Source: `data/latam_bank.duckdb` (Silver + Bronze), synthetic data.
 
 | pos | neg | auc |
 |---|---|---|
-| 3,425 | 3,536,426 | 0.8468 |
+| 3,425 | 3,536,426 | 0.8469 |
 
 ## Processing lag (process_date - transaction_date, days) by label
 
