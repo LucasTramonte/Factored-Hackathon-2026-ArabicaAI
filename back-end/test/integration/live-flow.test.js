@@ -63,6 +63,7 @@ test('dataset sample keeps the source wall time and original amount', async () =
   const sample = client();
   const login = await sample.call('/demo/session', { customer_id: 'CLI-U53R5AZVLET0' });
   assert.equal(login.status, 200);
+  assertContract('customerSession', login.body);
   assert.deepEqual(login.body.context_card.products[0],
     { product_type: 'Credit card', last4: '4444', currency: 'ARS' });
   assert.equal(login.body.context_card.snapshot_at, '2026-09-29T00:00:00+00:00');

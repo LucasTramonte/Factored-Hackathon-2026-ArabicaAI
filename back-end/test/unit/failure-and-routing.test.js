@@ -5,6 +5,7 @@ import worker, { withMetrics } from '../../src/index.js';
 import { route } from '../../src/router.js';
 import { readJsonBody, MAX_BODY_BYTES } from '../../src/http.js';
 import { tokenHash } from '../../src/auth/session.js';
+import { assertContract } from '../support/contract.js';
 
 const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p' };
 const auth = 'Basic ' + Buffer.from('u:p').toString('base64');
@@ -113,4 +114,23 @@ test('identity list is served behind the gate from the shared config, without D1
   const body = await res.json();
   assert.deepEqual(body.items.map(x => x.customer_id), ['demo-ana', 'demo-bruno', 'CLI-U53R5AZVLET0']);
   assert.ok(body.items.every(x => Object.keys(x).sort().join() === 'customer_id,display_name'));
+});
+
+test('a malformed stored context card degrades to null and login still works', async () => {
+  const login = card_json => route(post('/demo/session', { customer_id: 'demo-ana' }, ''), env, {
+    customerExists: async () => true, rotateSession: async () => {},
+    findContextCard: async () => ({ card_version: 1, snapshot_at: '2026-09-29T00:00:00+00:00', card_json }),
+    metrics: () => ({ queries: 0, rowsRead: 0, rowsWritten: 0 }) });
+  for (const stored of ['null', '[]', '"Ana"', '7', '{broken']) {
+    const res = await login(stored);
+    assert.equal(res.status, 200, stored);
+    const payload = await res.json();
+    assert.equal(payload.context_card, null, stored);
+    assertContract('customerSession', payload);
+  }
+  const res = await login(JSON.stringify({ first_name: 'Ana', locale_hint: 'es-AR', products: [],
+    version: 9, snapshot_at: 'forged', product_number: '4111222233334444' }));
+  const { context_card: card } = await res.json();
+  assert.deepEqual(card, { version: 1, snapshot_at: '2026-09-29T00:00:00+00:00', first_name: 'Ana',
+    locale_hint: 'es-AR', products: [] });
 });

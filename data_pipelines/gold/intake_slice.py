@@ -22,7 +22,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import duckdb
-from intake_agent.context_card import build_context_card
+from intake_agent.context_card import CARD_VERSION, build_context_card
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 IDENTITIES = REPO_ROOT / "back-end/src/config/identities.json"
@@ -230,7 +230,7 @@ def render_seed(rows: list[SliceRow], business_date: date, display_names: dict[s
     for customer_id, card in sorted(cards.items()):
         payload = json.dumps(card, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
         lines.append('INSERT INTO context_cards(customer_id,card_version,snapshot_at,card_json) VALUES '
-                     f'({quote(customer_id)},1,{quote(snapshot_at)},{quote(payload)}) '
+                     f'({quote(customer_id)},{CARD_VERSION},{quote(snapshot_at)},{quote(payload)}) '
                      'ON CONFLICT(customer_id) DO UPDATE SET card_json=CASE WHEN '
                      'context_cards.card_version=excluded.card_version AND '
                      'context_cards.snapshot_at=excluded.snapshot_at AND '
@@ -259,6 +259,8 @@ def build_slice(db_path: Path, quality_path: Path, business_date: date, customer
         cards = {cid: build_context_card(con, cid) for cid in sorted({r.customer_id for r in rows})}
         if any(card is None for card in cards.values()):
             raise ValueError('Selected customer has no context card')
+        if any(not (card['first_name'] or '').strip() for card in cards.values()):
+            raise ValueError('Selected customer has no first_name; the dictionary defines it as NOT NULL')
     seed = render_seed(rows, business_date, allowlist, cards, meta['generated_at_utc'])
     manifest = {
         "slice_version": content_version(seed), "business_date": str(business_date),

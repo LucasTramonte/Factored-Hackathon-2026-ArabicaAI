@@ -3,7 +3,9 @@ import json
 
 import duckdb
 
-from intake_agent.context_card import build_context_card, reply_language
+import pytest
+
+from intake_agent.context_card import CARD_VERSION, build_context_card, reply_language
 
 
 def test_minimal_card_and_session_language():
@@ -32,3 +34,25 @@ def test_null_products_and_locale_fallback():
         con.execute("INSERT INTO silver.dim_products VALUES ('B','Account',NULL,NULL,'Active')")
         assert build_context_card(con, 'B') == {'first_name': None, 'locale_hint': 'es-419',
                                                 'products': [{'product_type': 'Account', 'last4': None, 'currency': None}]}
+
+
+def test_short_product_numbers_never_expose_every_digit():
+    with duckdb.connect() as con:
+        con.execute('CREATE SCHEMA silver')
+        con.execute('CREATE TABLE silver.dim_customers(customer_id VARCHAR, first_name VARCHAR, country VARCHAR, detected_accent VARCHAR)')
+        con.execute("INSERT INTO silver.dim_customers VALUES ('C','Caro','Colombia',NULL)")
+        con.execute('CREATE TABLE silver.dim_products(customer_id VARCHAR, product_type VARCHAR, product_number VARCHAR, currency VARCHAR, product_status VARCHAR)')
+        con.execute("INSERT INTO silver.dim_products VALUES ('C','A','123','COP','Active'), ('C','B','','COP','Active'), ('C','C','9876','COP','Active')")
+        assert [p['last4'] for p in build_context_card(con, 'C')['products']] == [None, None, '9876']
+
+
+@pytest.mark.parametrize('session_language, expected', [
+    ('pt', 'pt-BR'), ('PT-br', 'pt-BR'), ('es-CO', 'es-CO'), ('es', 'es'), ('es-419', 'es-419'),
+    ('estonian', 'es-MX'), ('es;<script>', 'es-MX'), ('es-', 'es-MX'), ('ptx', 'es-MX'), ('', 'es-MX'), (None, 'es-MX')])
+def test_only_well_formed_session_tags_override_the_snapshot(session_language, expected):
+    assert reply_language(session_language, {'locale_hint': 'es-MX'}) == expected
+
+
+def test_card_version_matches_the_migration_check():
+    from data_pipelines.gold.intake_slice import MIGRATIONS
+    assert f'CHECK (card_version = {CARD_VERSION})' in (MIGRATIONS / '0003_context_cards.sql').read_text()

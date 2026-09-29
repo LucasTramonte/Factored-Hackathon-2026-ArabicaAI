@@ -242,3 +242,12 @@ def test_served_timestamp_must_equal_the_bronze_source_string(tmp_path):
         db = make_db(tmp_path, bronze=[("T1", "29763.49", "a.csv", raw)])
         with pytest.raises(ValueError, match="Bronze timestamp"):
             build(tmp_path, db)
+
+
+@pytest.mark.parametrize("first_name", [None, "", "  "])
+def test_a_card_without_a_first_name_blocks_the_slice(tmp_path, first_name):
+    db = make_db(tmp_path)
+    with duckdb.connect(str(db)) as con:
+        con.execute("UPDATE silver.dim_customers SET first_name=?", [first_name])
+    with pytest.raises(ValueError, match="first_name"):
+        build(tmp_path, db)
