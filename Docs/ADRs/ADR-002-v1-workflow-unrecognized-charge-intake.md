@@ -35,7 +35,7 @@ The data supports the choice and also limits what we can claim from it:
 ## Alternatives considered
 
 - **Read-only account inquiry as the primary path (ADR-001's recommendation).** It gives a real automated-resolution numerator, but inquiry intents aren't labelled in the data and the team has no fixtures or harness for them. Rejected for V1. Reopen it if the team wants a second workflow after 2026-10-15.
-- **Fraud triage.** `fraud_score` is tied to the label and there is no decision-time label (see `data_profiles/fraud_readiness_findings.md`). Rejected.
+- **Fraud triage.** `fraud_score` is tied to the label and there is no decision-time label (see `data_profiles/fraud_readiness_findings.md`). Rejected. Reopen it if the data gains a fraud signal available at conversation time that isn't derived from the label, or a decision-time label with outcomes such as confirmed fraud or recovered amounts, plus an agreed false-positive cost.
 - **AI-first intake.** Without a deterministic baseline, a model's benefit can't be measured, and the cost and data-handling questions come first. Rejected for the MVP. Reopen it when the evaluation shows a checklist failure a model would fix.
 
 ## Implementation notes

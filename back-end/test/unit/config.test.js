@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 
 const config = JSON.parse(readFileSync(resolve(import.meta.dirname, '../../wrangler.jsonc'), 'utf8'));
 
-test('Smart Placement runs the Worker next to D1', () => {
+test('Smart Placement (adaptive) is enabled so Cloudflare can move the Worker nearer D1', () => {
   assert.equal(config.placement?.mode, 'smart');
 });
 

@@ -58,7 +58,7 @@ The Worker `factored-hackathon-2026-arabicaai` deploys through Cloudflare Worker
 
 Preview builds share the production D1 binding. Keep them disabled until a separate preview database exists.
 
-Smart Placement is on (`placement.mode = "smart"`), so the Worker runs next to D1 instead of next to the visitor. Each D1 query from São Paulo took about 150 ms before this change (ADR-004).
+Smart Placement is on (`placement.mode = "smart"`). It is adaptive: Cloudflare may run the Worker nearer D1 once telemetry shows a benefit, and the `cf-placement` response header shows where it actually ran. Each D1 query from São Paulo took about 150 ms before this change (ADR-004).
 
 Runtime secrets `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` live only in the Worker's settings, never in the repository or build logs. Without them, every API route returns 503. Cloudflare Access with an email allowlist or one-time PIN protects the whole hostname, static files included. `scripts/predeploy.mjs` refuses to deploy a placeholder D1 ID.
 

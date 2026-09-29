@@ -41,3 +41,12 @@ def test_only_fictitious_identities_can_own_fictitious_charges(tmp_path):
                    '"occurred_at": "2026-09-25T14:00:00+00:00", "merchant_name": "M", "amount": "1.00", "currency": "BRL"}]}')
     with pytest.raises(ValueError, match="fictitious"):
         fs.render_fictitious_seed(bad)
+
+
+@pytest.mark.parametrize("amount", ["0", "0.00", "00.0"])
+def test_zero_amounts_are_rejected(tmp_path, amount):
+    bad = tmp_path / "zero.json"
+    bad.write_text('{"transactions": [{"transaction_id": "x", "customer_id": "demo-ana", '
+                   f'"occurred_at": "2026-09-25T14:00:00+00:00", "merchant_name": "M", "amount": "{amount}", "currency": "BRL"}}]}}')
+    with pytest.raises(ValueError, match="amount"):
+        fs.render_fictitious_seed(bad)

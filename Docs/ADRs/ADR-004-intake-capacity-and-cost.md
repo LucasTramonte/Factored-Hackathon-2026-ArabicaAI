@@ -46,14 +46,16 @@ Rows written include D1's index writes. A case takes about **367 bytes** with a 
 
 ## Decision
 
-1. **Run on the Workers + D1 Free plan through 2026-10-31.** On the plan's own limits, the service carries **10,000 episodes a day**, and rows written is the binding constraint (100,000 per day ÷ 10 per episode). That is 588× S1, 69× S2 and 12× S3.
+1. **Run on the Workers + D1 Free plan through 2026-10-31.** The daily quotas bound the service at **10,000 episodes a day**, with rows written as the binding quota (100,000 per day ÷ 10 per episode). That is 588× S1, 69× S2 and 12× S3.
 
-   | Scenario | Episodes/day | Worker requests | Rows read | Rows written | Highest use of a Free limit | Within Free |
-   |---|---|---|---|---|---|---|
-   | S1 | 17 | 119 (0.1%) | 2,805 (0.06%) | 170 (0.2%) | 0.2% | yes |
-   | S2 | 145 | 1,015 (1.0%) | 23,925 (0.5%) | 1,450 (1.5%) | 1.5% | yes |
-   | S3 | 818 | 5,726 (5.7%) | 134,970 (2.7%) | 8,180 (8.2%) | 8.2% | yes |
-   | S4 | 8,180 | 57,260 (57%) | 1,349,700 (27%) | 81,800 (82%) | 82% | **no, upgrade** |
+   **That figure is a daily-quota bound, not a whole-window capacity.** Storage is cumulative. At 10,000 episodes a day, the 500 MB database cap lasts about 136 days with typical cases (367 bytes) but only **about 12 days with 2,000-character statements** (4.3 KB). Across the window, stored cases use at most 0.5% (S1), 4% (S2) and 22% (S3) of the cap, even at maximum statement length. S4 would need 223% at maximum length, so storage binds before the daily quotas there.
+
+   | Scenario | Episodes/day | Worker requests | Rows read | Rows written | Highest use of a daily Free limit | Within daily Free limits | 70% upgrade policy |
+   |---|---|---|---|---|---|---|---|
+   | S1 | 17 | 119 (0.1%) | 2,805 (0.06%) | 170 (0.2%) | 0.2% | yes | not triggered |
+   | S2 | 145 | 1,015 (1.0%) | 23,925 (0.5%) | 1,450 (1.5%) | 1.5% | yes | not triggered |
+   | S3 | 818 | 5,726 (5.7%) | 134,970 (2.7%) | 8,180 (8.2%) | 8.2% | yes | not triggered |
+   | S4 | 8,180 | 57,260 (57%) | 1,349,700 (27%) | 81,800 (82%) | 82% | yes | **triggered: move to Workers Paid** |
 
 2. **Upgrade triggers, checked weekly in Workers and D1 analytics:**
    - **Workers Paid ($5/month):** any daily Free limit above 70% for 3 days in a row, or any Worker CPU p95 above 8 ms.
@@ -62,17 +64,17 @@ Rows written include D1's index writes. A case takes about **367 bytes** with a 
 3. **No capacity claim beyond what was measured.** The per-episode figures come from local tests. Production latency (p50/p95) and CPU are reported only after the remote run in the implementation notes.
 4. **Cost envelope.** Before tax, in USD per month:
 
-   | Scenario | Cloudflare Free | Workers Paid | AWS serverless equivalent | AWS O4: Lambda + RDS + NAT (indicative) |
+   | Scenario | Cloudflare Free | Workers Paid | AWS serverless equivalent | AWS O4: API + Lambda + RDS + NAT, no DynamoDB (indicative) |
    |---|---|---|---|---|
-   | S1 | $0 | $5.00 | $0.01 | $50.49 |
-   | S2 | $0 | $5.00 | $0.09 | $50.57 |
-   | S3 | $0 | $5.00 | $0.53 | $51.01 |
-   | S4 | exceeds Free | $5.00 | $5.34 | $55.82 |
+   | S1 | $0 | $5.00 | $0.01 | $50.48 |
+   | S2 | $0 | $5.00 | $0.09 | $50.50 |
+   | S3 | $0 | $5.00 | $0.53 | $50.60 |
+   | S4 | $0 (within limits; the policy calls for Paid) | $5.00 | $5.34 | $51.75 |
 
    The table uses these assumptions:
    - **Workers Paid:** every scenario stays inside the included usage (10 M requests, 30 M CPU-ms, 25 B rows read and 50 M rows written a month), so only the base fee applies.
    - **AWS serverless equivalent:** API Gateway HTTP API at $1.00/M, without the 12-month free tier; Lambda with 512 MB, 100 ms and the always-free 1 M requests and 400k GB-s; DynamoDB on demand, with D1 rows mapped to request units; CloudFront Free for static files.
-   - **AWS O4:** adds a NAT gateway ($0.045/h) and its public IPv4 ($0.005/h), both from the official VPC page, to an RDS db.t4g.micro with 20 GB. The RDS figures ($11.68 + $2.30) are indicative, because the fetched pricing page didn't show them, and must be confirmed in the AWS Pricing Calculator (point 6).
+   - **AWS O4:** uses RDS instead of DynamoDB, so it adds only the shared API Gateway and Lambda costs to RDS and NAT. It adds a NAT gateway ($0.045/h) and its public IPv4 ($0.005/h), both from the official VPC page, to an RDS db.t4g.micro with 20 GB. The RDS figures ($11.68 + $2.30) are indicative, because the fetched pricing page didn't show them, and must be confirmed in the AWS Pricing Calculator (point 6).
 
    **Cost per attempted case is $0 on Free.** On Paid it is $5 ÷ (episodes per month): $0.0098 at S1 and $0.0002 at S3. **Cost per successful automated resolution is `not defined`**, because V1 has no automated resolution (ADR-002).
 5. **AI is only an envelope, not a plan.** No model runs in the MVP. If a later ADR approves one, the per-episode costs at 12k input and 2k output tokens (unmeasured) are:
@@ -148,7 +150,7 @@ Rows written include D1's index writes. A case takes about **367 bytes** with a 
   - **Static bundles:** they no longer reach the Worker. The episode made 7 Worker requests, as modelled.
   - **Functional checks:** Access and the Basic gate held, the customer saw only their own charges, a case got a reference, and the agent view showed it. All requests succeeded and there were no errors.
   - **Change made after this measurement:**
-    - **Smart Placement** (`placement.mode = "smart"` in `wrangler.jsonc`, checked by `test/unit/config.test.js`) runs the Worker next to D1.
+    - **Smart Placement** (`placement.mode = "smart"` in `wrangler.jsonc`, checked by `test/unit/config.test.js`) is an adaptive setting. Cloudflare moves the Worker closer to D1 only if observed telemetry shows that helps, so no location is claimed until the `cf-placement` header confirms it.
     - **Login writes in one batch:** purging expired sessions, revoking the old token and inserting the new one run as one atomic `db.batch()`, so login drops to 2 round trips. The budget test now caps round trips per request (login 2, list 2, create 4, agent 1–2).
 
     Re-measured at 11:05 BRT on 2026-09-29, one episode after the deploy of `aa0c804`:

@@ -7,6 +7,7 @@ Regenerate with ``python -m data_pipelines.gold.fictitious_seed``.
 from __future__ import annotations
 
 import json
+from decimal import Decimal
 from pathlib import Path
 
 from .intake_slice import AMOUNT, CURRENCY, IDENTITIES, REPO_ROOT, customer_statement, transaction_statement, with_header
@@ -23,7 +24,7 @@ def render_fictitious_seed(data: Path = DATA, identities: Path = IDENTITIES) -> 
     for t in rows:
         if t["customer_id"] not in people:
             raise ValueError(f"{t['transaction_id']}: owner {t['customer_id']} is not a fictitious identity")
-        if not AMOUNT.fullmatch(t["amount"]) or not CURRENCY.fullmatch(t["currency"]):
+        if not AMOUNT.fullmatch(t["amount"]) or Decimal(t["amount"]) <= 0 or not CURRENCY.fullmatch(t["currency"]):
             raise ValueError(f"{t['transaction_id']}: invalid amount or currency")
     owners = sorted({t["customer_id"] for t in rows} | set(people))
     lines = [customer_statement(c, people[c]) for c in owners]

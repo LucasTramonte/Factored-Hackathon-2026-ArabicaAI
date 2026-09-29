@@ -30,6 +30,7 @@ REQUIRED_TABLES = ("dim_customers", "dim_products", "fact_transactions")
 MAPPING = "Silver Purchase/Approved owner match; Bronze original amount"
 AMOUNT = re.compile(r"[0-9]+(\.[0-9]{1,2})?")
 CURRENCY = re.compile(r"[A-Z]{3}")
+SOURCE_TS = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}")
 
 
 @dataclass(frozen=True)
@@ -61,7 +62,7 @@ def check_quality_gate(db_path: Path, quality_path: Path, business_date: date) -
     checked_at = datetime.fromisoformat(meta["generated_at_utc"])
     if checked_at.tzinfo is None:
         raise ValueError("Quality timestamp has no timezone")
-    if db_path.stat().st_mtime > checked_at.timestamp() + 1:
+    if db_path.stat().st_mtime > checked_at.timestamp():
         raise ValueError("DuckDB changed after the focused quality check")
     if not any(w.get("table") == "transactions" and w.get("last_loaded_date") == str(business_date)
                for w in meta.get("watermarks", [])):
@@ -115,7 +116,7 @@ def partition_scope(con: duckdb.DuckDBPyConnection, business_date: date) -> dict
 
 
 def _validated(raw: tuple) -> SliceRow:
-    tx_id, customer_id, product_id, when, merchant, currency, amount, source_file, bronze_rows = raw
+    tx_id, customer_id, product_id, when, merchant, currency, amount, source_file, bronze_rows, raw_ts = raw
     if bronze_rows != 1:
         raise ValueError(f"No unique Bronze source row for {tx_id}")
     if not isinstance(amount, str) or not AMOUNT.fullmatch(amount) or Decimal(amount) <= 0:
@@ -124,7 +125,11 @@ def _validated(raw: tuple) -> SliceRow:
         raise ValueError(f"Invalid currency for {tx_id}: {currency!r}")
     if not isinstance(merchant, str) or not merchant:
         raise ValueError(f"Missing merchant for {tx_id}")
-    return SliceRow(tx_id, customer_id, product_id, when.isoformat(), merchant, amount, currency, source_file)
+    # Serve the ISO form of the source wall time, and prove it is the Bronze string itself.
+    served = when.isoformat()
+    if not isinstance(raw_ts, str) or not SOURCE_TS.fullmatch(raw_ts) or raw_ts.replace(" ", "T") != served:
+        raise ValueError(f"Bronze timestamp {raw_ts!r} for {tx_id} does not match Silver {served!r}")
+    return SliceRow(tx_id, customer_id, product_id, served, merchant, amount, currency, source_file)
 
 
 def select_rows(con: duckdb.DuckDBPyConnection, business_date: date, customer_ids: tuple[str, ...],
@@ -140,12 +145,13 @@ def select_rows(con: duckdb.DuckDBPyConnection, business_date: date, customer_id
               AND t.transaction_type = 'Purchase' AND t.transaction_status = 'Approved'
               AND t.customer_id IN (SELECT unnest(?::VARCHAR[]))
         ), raw AS (
-            SELECT transaction_id, count(*) AS n, any_value(amount) AS amount, any_value(_source_file) AS source_file
+            SELECT transaction_id, count(*) AS n, any_value(amount) AS amount, any_value(_source_file) AS source_file,
+                   any_value(transaction_date) AS raw_ts
             FROM bronze.transactions WHERE transaction_id IN (SELECT transaction_id FROM picked)
             GROUP BY transaction_id
         )
         SELECT picked.transaction_id, picked.customer_id, picked.product_id, picked.transaction_date,
-               picked.merchant_name, picked.currency, raw.amount, raw.source_file, coalesce(raw.n, 0)
+               picked.merchant_name, picked.currency, raw.amount, raw.source_file, coalesce(raw.n, 0), raw.raw_ts
         FROM picked LEFT JOIN raw USING (transaction_id)
         ORDER BY picked.transaction_id
         LIMIT ?

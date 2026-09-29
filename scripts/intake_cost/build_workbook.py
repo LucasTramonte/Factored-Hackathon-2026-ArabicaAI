@@ -123,21 +123,27 @@ def model(v: dict) -> dict:
                 + max(0, read * m - v["paid_read_incl"]) * v["paid_read_rate"] / 1e6
                 + max(0, write * m - v["paid_write_incl"]) * v["paid_write_rate"] / 1e6)
         lam = d * api_req * m
-        aws = (max(0, lam - v["lambda_free_req"]) * v["lambda_req_rate"] / 1e6
+        api = (max(0, lam - v["lambda_free_req"]) * v["lambda_req_rate"] / 1e6
                + max(0, lam * v["lambda_mem"] * v["lambda_dur"] - v["lambda_free_gbs"]) * v["lambda_gbs_rate"]
-               + lam * v["apigw_rate"] / 1e6
-               + write * m * v["ddb_wru_rate"] / 1e6 + read * m * v["ddb_read_ratio"] * v["ddb_rru_rate"] / 1e6)
+               + lam * v["apigw_rate"] / 1e6)
+        ddb = write * m * v["ddb_wru_rate"] / 1e6 + read * m * v["ddb_read_ratio"] * v["ddb_rru_rate"] / 1e6
         out[s] = {
             "episodes_day": d, "worker_req_day": req, "rows_read_day": read, "rows_written_day": write,
             "util": util, "binding": max(util, key=util.get), "max_util": max(util.values()),
-            "free_ok": max(util.values()) <= v["trigger"],
+            "within_free_limits": max(util.values()) <= 1,
+            "upgrade_policy_triggered": max(util.values()) > v["trigger"],
             "storage_mb_window": d * v["window_days"] * v["bytes_case"] / 1e6,
             "storage_mb_window_max": d * v["window_days"] * v["bytes_case_max"] / 1e6,
             "peak_writes_s": write / 86400 * v["peak"],
-            "cf_paid_month": paid, "aws_serverless_month": aws, "aws_o4_month": aws + fixed_o4,
+            "storage_share_window_max": d * v["window_days"] * v["bytes_case_max"] / (v["d1_db_mb"] * 1e6),
+            "cf_paid_month": paid, "aws_serverless_month": api + ddb, "aws_o4_month": api + fixed_o4,
             "ai_month": {name: d * m * cost for name, cost in ai_per_episode(v).items()},
         }
-    out["capacity_free_episodes_day"] = min(v["cf_req_day"] / per_req, v["d1_read_day"] / per_read, v["d1_write_day"] / per_write)
+    # Daily-quota bound only; storage is a separate, cumulative limit reported next to it.
+    cap = min(v["cf_req_day"] / per_req, v["d1_read_day"] / per_read, v["d1_write_day"] / per_write)
+    out["capacity_free_episodes_day"] = cap
+    out["storage_days_at_capacity"] = {"typical": v["d1_db_mb"] * 1e6 / (cap * v["bytes_case"]),
+                                       "max_statement": v["d1_db_mb"] * 1e6 / (cap * v["bytes_case_max"])}
     out["per_episode"] = {"worker_requests": per_req, "rows_read": per_read, "rows_written": per_write}
     out["o4_fixed_month"] = fixed_o4
     out["ai_per_episode"] = ai_per_episode(v)
@@ -239,26 +245,34 @@ def build() -> Workbook:
     title(cf, "Workers + D1 Free: daily usage per scenario and binding constraint", 12,
           "A customer episode plus one agent refresh per case. Utilization above the trigger means Workers Paid.")
     header(cf, 4, ("Scenario", "Episodes/day", "Worker requests/day", "% of 100k requests", "D1 rows read/day", "% of 5M reads",
-                   "D1 rows written/day", "% of 100k writes", "Highest utilization", "Within Free (<= trigger)?",
-                   "Cases stored by 2026-10-31 (MB, typical)", "Peak D1 writes/s"))
+                   "D1 rows written/day", "% of 100k writes", "Highest utilization", "Within daily Free limits?",
+                   "Cases stored by 2026-10-31 (MB, typical)", "Peak D1 writes/s", "Upgrade policy (> trigger)?",
+                   "Share of 500 MB by 2026-10-31 (2,000-char cases)"))
     for i, s in enumerate(SCENARIOS):
         row = 5 + i
         cells = [s.upper(), f"={r[s]}", f"=B{row}*{per_req}", f"=C{row}/{r['cf_req_day']}", f"=B{row}*{per_read}",
                  f"=E{row}/{r['d1_read_day']}", f"=B{row}*{per_write}", f"=G{row}/{r['d1_write_day']}",
-                 f"=MAX(D{row},F{row},H{row})", f'=IF(I{row}<={r["trigger"]},"yes","no: upgrade")',
-                 f"=B{row}*{r['window_days']}*{r['bytes_case']}/1000000", f"=G{row}/86400*{r['peak']}"]
+                 f"=MAX(D{row},F{row},H{row})", f'=IF(I{row}<=1,"yes","no: exceeds Free")',
+                 f"=B{row}*{r['window_days']}*{r['bytes_case']}/1000000", f"=G{row}/86400*{r['peak']}",
+                 f'=IF(I{row}>{r["trigger"]},"yes: move to Paid","no")',
+                 f"=B{row}*{r['window_days']}*{r['bytes_case_max']}/({r['d1_db_mb']}*1000000)"]
         grid(cf, row, [tuple(cells)], {}, {2: "#,##0", 3: "#,##0", 4: "0.0%", 5: "#,##0", 6: "0.0%", 7: "#,##0",
-                                            8: "0.0%", 9: "0.0%", 11: "#,##0.0", 12: "0.00"})
-    cf.cell(10, 1, "Free capacity (episodes/day)").font = Font(bold=True)
+                                            8: "0.0%", 9: "0.0%", 11: "#,##0.0", 12: "0.00", 14: "0.0%"})
+    cf.cell(10, 1, "Daily-quota bound (episodes/day)").font = Font(bold=True)
     cf.cell(10, 2, f"=MIN({r['cf_req_day']}/{per_req},{r['d1_read_day']}/{per_read},{r['d1_write_day']}/{per_write})").number_format = "#,##0"
-    for col, width in zip("ABCDEFGHIJKL", (12, 13, 15, 12, 15, 12, 15, 12, 13, 16, 18, 12)):
+    cf.cell(11, 1, "Days until 500 MB at that rate (typical case)").font = Font(bold=True)
+    cf.cell(11, 2, f"={r['d1_db_mb']}*1000000/(B10*{r['bytes_case']})").number_format = "#,##0"
+    cf.cell(12, 1, "Days until 500 MB at that rate (2,000-char cases)").font = Font(bold=True)
+    cf.cell(12, 2, f"={r['d1_db_mb']}*1000000/(B10*{r['bytes_case_max']})").number_format = "#,##0.0"
+    cf.cell(13, 1, "The daily-quota bound is not a whole-window capacity: storage is cumulative and can bind first.")
+    for col, width in zip("ABCDEFGHIJKLMN", (12, 13, 15, 12, 15, 12, 15, 12, 13, 16, 18, 12, 16, 18)):
         cf.column_dimensions[col].width = width
 
     cost = wb.create_sheet("Monthly cost")
     title(cost, "Monthly cost per scenario (USD, before tax)", 6,
           "Cloudflare Paid includes its $5 base. The AWS serverless equivalent is API Gateway HTTP + Lambda + DynamoDB on-demand, with CloudFront Free for static files.")
     header(cost, 4, ("Scenario", "Cloudflare Free", "Cloudflare Workers Paid", "AWS serverless equivalent",
-                     "AWS O4: Lambda + RDS + NAT (indicative)", "Note"))
+                     "AWS O4: API + Lambda + RDS + NAT, no DynamoDB (indicative)", "Note"))
     m = r["month_days"]
     for i, s in enumerate(SCENARIOS):
         row = 5 + i
@@ -269,13 +283,15 @@ def build() -> Workbook:
                 f"+MAX(0,{read}*{m}-{r['paid_read_incl']})*{r['paid_read_rate']}/1000000"
                 f"+MAX(0,{write}*{m}-{r['paid_write_incl']})*{r['paid_write_rate']}/1000000")
         lam = f"({r[s]}*{api_req}*{m})"
-        aws = (f"=MAX(0,{lam}-{r['lambda_free_req']})*{r['lambda_req_rate']}/1000000"
+        api = (f"MAX(0,{lam}-{r['lambda_free_req']})*{r['lambda_req_rate']}/1000000"
                f"+MAX(0,{lam}*{r['lambda_mem']}*{r['lambda_dur']}-{r['lambda_free_gbs']})*{r['lambda_gbs_rate']}"
-               f"+{lam}*{r['apigw_rate']}/1000000+{write}*{m}*{r['ddb_wru_rate']}/1000000"
-               f"+{read}*{m}*{r['ddb_read_ratio']}*{r['ddb_rru_rate']}/1000000")
-        o4 = f"=D{row}+{r['rds_month']}+{r['rds_storage']}+({r['nat_hour']}+{r['ipv4_hour']})*{r['hours_month']}"
-        free = f'=IF(\'Cloudflare capacity\'!I{row}<={r["trigger"]},0,"exceeds Free")'
-        grid(cost, row, [(s.upper(), free, paid, aws, o4, "RDS rows are indicative; confirm in the AWS Pricing Calculator")], {},
+               f"+{lam}*{r['apigw_rate']}/1000000")
+        ddb = f"{write}*{m}*{r['ddb_wru_rate']}/1000000+{read}*{m}*{r['ddb_read_ratio']}*{r['ddb_rru_rate']}/1000000"
+        aws = f"={api}+{ddb}"
+        o4 = f"={api}+{r['rds_month']}+{r['rds_storage']}+({r['nat_hour']}+{r['ipv4_hour']})*{r['hours_month']}"
+        free = f'=IF(\'Cloudflare capacity\'!I{row}<=1,0,"exceeds Free")'
+        note = f'=IF(\'Cloudflare capacity\'!I{row}>{r["trigger"]},"Within Free, but the upgrade policy calls for Workers Paid. ","")&"O4 uses RDS instead of DynamoDB; RDS rows are indicative (AWS Pricing Calculator)."'
+        grid(cost, row, [(s.upper(), free, paid, aws, o4, note)], {},
              {2: '"$"#,##0.00', 3: '"$"#,##0.00', 4: '"$"#,##0.00', 5: '"$"#,##0.00'})
     for col, width in zip("ABCDEF", (12, 16, 20, 22, 28, 58)):
         cost.column_dimensions[col].width = width

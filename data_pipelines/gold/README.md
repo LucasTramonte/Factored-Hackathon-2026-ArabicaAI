@@ -7,7 +7,7 @@ What it enforces before writing anything:
 - **Quality gate.** The focused quality run must be ready, error-free, taken on this exact database after its last change, and must include the business day's transactions watermark.
 - **Grain and ownership.** Every Purchase/Approved row of the day has a unique `transaction_id`, a product and a customer, and the product belongs to the transaction's customer. One bad row stops the slice.
 - **Scope.** Only dataset customers listed in `back-end/src/config/identities.json`, the same file the Worker's login uses, and at most `--max-rows` rows (1–100, default 20).
-- **Source values.** The original Bronze amount string, which must be positive with at most two decimals and no exponent or spaces. A three-letter currency, a non-empty merchant, and a timezone-free source timestamp kept as the source wrote it.
+- **Source values.** The original Bronze amount string, which must be positive with at most two decimals and no exponent or spaces. A three-letter currency and a non-empty merchant. The timezone-free source timestamp is served in ISO form (`2026-02-26T13:21:51`), and the slice checks that it is exactly the Bronze string (`2026-02-26 13:21:51`), so no parsing can shift it.
 - **One Bronze row per selected transaction.**
 
 Output properties:
