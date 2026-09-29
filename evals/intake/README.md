@@ -28,6 +28,10 @@ The `v1_authored` split maps Andrés's V1 scenarios (`Docs/intake/v1_scenarios.m
 
 The decision-point completion-ready proxy is not the episode-level primary KPI. Operating cost and episode completion are null until measured. Local one-call timings exclude service/model/network work. Zero observed unsafe cases does not establish production safety, and does not mean zero wrongly refused cases: routing an in-scope request out (the two checklist misses) is scored as incorrect, not unsafe.
 
+## Frozen held-out set
+
+[`frozen_es_pt_v1/`](frozen_es_pt_v1/README.md) is the blind ES/PT set for comparing the checklist with a learned extractor ([ADR-005](../../Docs/ADRs/ADR-005-evaluation-data-protocol.md)). Its gold comes from structured specs through a tested rules script, checked by an independent verifier and a human audit. The case files are withheld behind a hash commitment until the extractor is pre-registered in [`preregistration/`](preregistration/README.md). `python -m evals.intake.run --cases <file>` scores any corpus, and the summary now includes Wilson intervals (`stats.py`).
+
 ## Iteration record
 
 1. Wrote safety/denominator tests before implementation; implemented two transparent references.

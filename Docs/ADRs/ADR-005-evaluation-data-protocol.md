@@ -23,13 +23,16 @@ So leakage can happen in two places: dataset statistics that reach design decisi
    - Dimension tables are current snapshots. They are used for structural facts only.
    - A model trained on dataset rows is scored on the holdout window once, after the model and its thresholds are frozen.
    - `data_profiles/findings/run_findings.py` bounds every `design` query to the design window and has no option to move it.
-3. **The intake comparison uses a blind, frozen, authored set.**
-   - The cases are drafted in an isolated session with an allowlist of readable files. The session can't see the checklist, the existing cases or the extractor.
-   - A person labels every case with the policy-correct next action, blind to scenario family and to any system output. A second person labels a subset, and we report Cohen's kappa.
-   - Disagreements and uncertain cases are adjudicated in writing.
-   - The set is frozen by SHA-256 and a git tag before any system is tuned against it. The git history then proves the order.
+3. **The intake comparison uses a blind, frozen, authored set, labelled by construction and verified.**
+   - Cases are drafted in an isolated session with an allowlist of readable files. That session can't see the checklist, the existing cases or the extractor.
+   - Each case starts as a structured spec (intent and stated facts), and the message is written from the spec. A tested rules script applies the written policy to the spec and the fixture, which gives the gold answer. This follows the outline-then-paraphrase pattern of Shah et al. (2018) and Rastogi et al. (2020).
+   - An independent verifier from a different model family re-derives facts and answers from the message alone, in a fresh context. It reads only the messages and the policy.
+   - Humans answer multiple-choice questions on every verifier disagreement plus a seeded random audit sample. They see plain-language options with the rule stated, never codes or model answers.
+   - Disagreements are adjudicated in writing, as policy decisions that apply to every similar case. The audit reports errors over n with an exact Clopper–Pearson upper bound.
    - Labels follow the policy given the facts, including the session time `as_of`, not what a baseline can currently parse.
+   - Until the extractor is frozen, the case files stay off the repository. A SHA-256 commitment of each file is committed (`evals/intake/frozen_es_pt_v1/COMMITMENT.json`), and the files must match it when they are published.
 4. **Tuning boundaries:**
+   - The extractor is pre-registered before its author sees any case of the frozen set: model, prompt hash, parameters, primary metric and a git tag (`evals/intake/preregistration/`). The author verifies the Spanish cases only after that tag exists.
    - The extractor and its thresholds are tuned only on the existing `development` split.
    - The frozen set is run once per system version. A fix after that produces a new system version, never new cases.
    - The Gold demo slice (business day 2026-02-26) is serving data and is never used for tuning.
@@ -43,11 +46,14 @@ So leakage can happen in two places: dataset statistics that reach design decisi
 
 - **+** One rule for the whole team: a data statistic either comes from the design window or it doesn't inform a design choice.
 - **+** The runner and its tests enforce the window. It isn't left to discipline.
-- **+** The freeze order is auditable from git, which is stronger evidence than a statement.
+- **+** The freeze order is auditable from git, which is stronger evidence than a statement: the hash commitment, the pre-registration tag and the publication of the set happen in that order.
+- **+** Human effort drops to the cases where automation disagrees, plus a small audit whose error bound we report. That meets the brief's requirement to validate a model-assisted judgment against human or deterministic ones.
 - **−** The holdout window can't help with tuning, even when a question looks harmless.
 - **−** An authored coverage set can't estimate real prevalence or real phrasing (DF-001, DF-012). Results say how systems behave on stated scenarios, not how often each scenario occurs.
 - **−** About 60 cases give wide intervals (about ±8 points on a 90% rate). Siblings reduce the effective sample further.
 - **−** Dimension snapshots can carry post-design information (DF-013, DF-014). We accept that for structural facts only.
+- **−** Errors the generator and the verifier share can pass without a flag. The audit sample bounds that rate, but with 12 cases the bound is wide (about 22% at zero errors).
+- **−** Generator, verifier and extractor may share a model family (Codex/GPT with gpt-oss, or Claude with Haiku). The model families used are recorded, and gold comes from the rules, not from either model.
 
 ## Alternatives considered
 
@@ -60,4 +66,4 @@ So leakage can happen in two places: dataset statistics that reach design decisi
 
 - Register and queries: [`DATA_QUALITY.md`](../../DATA_QUALITY.md) and `data_profiles/findings/`. Run with `make findings`.
 - The disclosure in the register records the one full-period profiling that happened before this protocol.
-- The frozen set's files, manifest and tag are added in their own PR. The manifest records the drafting model, the files the drafting session read, the labellers, kappa and the assumptions (45-day lookback, fixture density).
+- The method, tooling and review status are in [`evals/intake/frozen_es_pt_v1/`](../../evals/intake/frozen_es_pt_v1/README.md). The case files are published, checked against `COMMITMENT.json` and tagged `eval-es-pt-v1` in a later PR, after the extractor is pre-registered and the Spanish review and adjudication are done. The manifest records the drafting model, the files the drafting session read, the reviewers, the audit error bounds and the assumptions (45-day lookback, fixture density).
