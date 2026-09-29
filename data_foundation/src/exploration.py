@@ -30,8 +30,10 @@ def discover_files(data_root, contract):
 
 def partition_date_from_path(path):
     """Read historical year/month/day partitions without reviving the CSV scanner."""
-    matches = (re.fullmatch(r'(year|month|day)=(\d+)', part) for part in Path(path).parts)
-    parts = dict(m.groups() for m in matches if m)
+    matches = [m for m in (re.fullmatch(r'(year|month|day)=(\d+)', part) for part in Path(path).parts) if m]
+    if len(matches) != len({m.group(1) for m in matches}):
+        raise ValueError(f'Duplicate partition component in path: {path}')
+    parts = dict(m.groups() for m in matches)
     if not parts:
         return None
     if not {'year', 'month', 'day'} <= parts.keys():
