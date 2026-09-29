@@ -22,6 +22,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import duckdb
+from intake_agent.context_card import CARD_VERSION, build_context_card
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 IDENTITIES = REPO_ROOT / "back-end/src/config/identities.json"
@@ -219,12 +220,21 @@ def with_header(body: str, first_line: str) -> str:
         "-- Contains no cases or sessions. Generated file: do not edit by hand.\n" + body
 
 
-def render_seed(rows: list[SliceRow], business_date: date, display_names: dict[str, str]) -> str:
+def render_seed(rows: list[SliceRow], business_date: date, display_names: dict[str, str],
+                cards: dict[str, dict], snapshot_at: str) -> str:
     """Idempotent D1 seed. A rerun is a no-op; any stored difference sets a NOT NULL column to NULL and fails."""
     lines = [customer_statement(c, display_names[c]) for c in sorted({r.customer_id for r in rows})]
     lines += [transaction_statement(r.transaction_id, r.customer_id, None, r.source_occurred_at, r.merchant_name,
                                     r.amount, r.currency) for r in rows]
     lines += [provenance_statement(r.transaction_id, r.product_id, r.source_file, business_date) for r in rows]
+    for customer_id, card in sorted(cards.items()):
+        payload = json.dumps(card, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+        lines.append('INSERT INTO context_cards(customer_id,card_version,snapshot_at,card_json) VALUES '
+                     f'({quote(customer_id)},{CARD_VERSION},{quote(snapshot_at)},{quote(payload)}) '
+                     'ON CONFLICT(customer_id) DO UPDATE SET card_json=CASE WHEN '
+                     'context_cards.card_version=excluded.card_version AND '
+                     'context_cards.snapshot_at=excluded.snapshot_at AND '
+                     'context_cards.card_json=excluded.card_json THEN context_cards.card_json ELSE NULL END;')
     return with_header("\n".join(lines) + "\n", f"Gold intake slice for {business_date} from a quality-gated Silver sample")
 
 
@@ -246,7 +256,12 @@ def build_slice(db_path: Path, quality_path: Path, business_date: date, customer
         checks = validate_sample(con, business_date)
         scope = partition_scope(con, business_date)
         rows = select_rows(con, business_date, tuple(customer_ids), max_rows)
-    seed = render_seed(rows, business_date, allowlist)
+        cards = {cid: build_context_card(con, cid) for cid in sorted({r.customer_id for r in rows})}
+        if any(card is None for card in cards.values()):
+            raise ValueError('Selected customer has no context card')
+        if any(not (card['first_name'] or '').strip() for card in cards.values()):
+            raise ValueError('Selected customer has no first_name; the dictionary defines it as NOT NULL')
+    seed = render_seed(rows, business_date, allowlist, cards, meta['generated_at_utc'])
     manifest = {
         "slice_version": content_version(seed), "business_date": str(business_date),
         "eligible_rows_in_loaded_partitions": checks["rows"], "selected": len(rows), **scope,

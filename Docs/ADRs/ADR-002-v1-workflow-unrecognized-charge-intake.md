@@ -29,14 +29,15 @@ The data supports the choice and also limits what we can claim from it:
 - **+** A deterministic MVP gives a baseline that any later AI has to beat on the same cases.
 - **+** The safety boundary is easy to explain: nothing moves money, and a person decides.
 - **−** The brief's "safe automated resolution" has no V1 numerator. Cost per successful automated resolution is reported as `not defined`.
+- **−** V1 alone doesn't meet two parts of the brief. The prototype must include a normal resolution path (Scope, item 1), and at least one learned component must be evaluated against a baseline (Sound Data and ML Practice). Both need follow-up work before submission.
 - **−** Portuguese results show the system can handle Portuguese, not that there is Portuguese demand.
 - **−** Without complaint-to-transaction links, we can't estimate the business value of faster intake from this data.
 
 ## Alternatives considered
 
-- **Read-only account inquiry as the primary path (ADR-001's recommendation).** It gives a real automated-resolution numerator, but inquiry intents aren't labelled in the data and the team has no fixtures or harness for them. Rejected for V1. Reopen it if the team wants a second workflow after 2026-10-15.
+- **Read-only account inquiry as the primary path (ADR-001's recommendation).** It gives a real automated-resolution numerator, but inquiry intents aren't labelled in the data and the team has no fixtures or harness for them. Rejected as the primary V1 path. It is the candidate for the brief's normal resolution path: a bounded recent-transactions view that reuses the customer-scoped transaction read, measured separately from intake. It needs its own ADR.
 - **Fraud triage.** `fraud_score` is tied to the label and there is no decision-time label (see `data_profiles/fraud_readiness_findings.md`). Rejected. Reopen it if the data gains a fraud signal available at conversation time that isn't derived from the label, or a decision-time label with outcomes such as confirmed fraud or recovered amounts, plus an agreed false-positive cost.
-- **AI-first intake.** Without a deterministic baseline, a model's benefit can't be measured, and the cost and data-handling questions come first. Rejected for the MVP. Reopen it when the evaluation shows a checklist failure a model would fix.
+- **AI-first intake.** Without a deterministic baseline, a model's benefit can't be measured, and the cost and data-handling questions come first. Rejected for the MVP. Reopen it when the evaluation shows a checklist failure a model would fix. That condition is now met: the checklist gets 15/25 on the `v1_authored` split, and the misses are currency codes, non-ISO dates and paraphrases (`evals/intake/README.md`). The next step is an ADR for a field extractor. It is scored against the checklist on a frozen, independently authored ES/PT set, while identity, ownership and confirmation stay deterministic.
 
 ## Implementation notes
 

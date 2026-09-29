@@ -43,6 +43,31 @@
         },
         "mode": {
           "const": "simulated_login"
+        },
+        "context_card": {
+          "type": ["object", "null"],
+          "description": "Snapshot prepared by the quality-gated load; locale_hint never overrides session language.",
+          "additionalProperties": false,
+          "required": ["version", "snapshot_at", "first_name", "locale_hint", "products"],
+          "properties": {
+            "version": { "const": 1 },
+            "snapshot_at": { "type": "string", "minLength": 1 },
+            "first_name": { "type": ["string", "null"], "minLength": 1 },
+            "locale_hint": { "type": "string", "pattern": "^(es|pt)(-[A-Za-z0-9]+)*$" },
+            "products": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["product_type", "last4", "currency"],
+                "properties": {
+                  "product_type": { "type": ["string", "null"] },
+                  "last4": { "type": ["string", "null"], "pattern": "^[0-9]{4}$" },
+                  "currency": { "type": ["string", "null"], "pattern": "^[A-Z]{3}$" }
+                }
+              }
+            }
+          }
         }
       }
     },

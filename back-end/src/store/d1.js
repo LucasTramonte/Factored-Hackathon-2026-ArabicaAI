@@ -25,6 +25,8 @@ export function createStore(db) {
     metrics: () => ({ ...totals }),
     ping: () => all('SELECT 1 AS ok'),
     customerExists: async customerId => Boolean(await first('SELECT 1 AS ok FROM customers WHERE customer_id=?', customerId)),
+    findContextCard: customerId => first(
+      'SELECT card_version, snapshot_at, card_json FROM context_cards WHERE customer_id=?', customerId),
 
     /** In one atomic batch: purge expired sessions, revoke the presented token, insert the new one. */
     rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt }) => batch([

@@ -17,3 +17,18 @@ test('violations are reported', () => {
     source_occurred_at: null, merchant_name: 'm', amount: '1.234', currency: 'ARS' }], has_more: false, coverage: 'c' }), /amount/);
   assert.throws(() => assertContract('nope', {}), /Unknown contract/);
 });
+
+test('the context card shape is part of the session contract', () => {
+  const card = { version: 1, snapshot_at: '2026-09-29T00:00:00+00:00', first_name: 'Ana', locale_hint: 'es-AR',
+    products: [{ product_type: 'Credit card', last4: '4444', currency: 'ARS' }] };
+  const session = context_card => ({ customer_id: 'demo-ana', mode: 'simulated_login', context_card });
+  assertContract('customerSession', session(card));
+  assertContract('customerSession', session(null));
+  assertContract('customerSession', session({ ...card, first_name: null, products: [{ product_type: 'Account', last4: null, currency: null }] }));
+  for (const bad of [{ ...card, version: 2 }, { ...card, product_number: '4111222233334444' },
+    { ...card, locale_hint: 'estonian' }, (({ products, ...rest }) => rest)(card),
+    { ...card, products: [{ ...card.products[0], last4: '22223333' }] },
+    { ...card, products: [{ ...card.products[0], balance: 10 }] }]) {
+    assert.throws(() => assertContract('customerSession', session(bad)), /violated/);
+  }
+});

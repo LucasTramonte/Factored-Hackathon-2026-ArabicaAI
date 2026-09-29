@@ -9,7 +9,7 @@
 
 The brief asks for capacity limits, latency and cost trade-offs, cost per attempted case, the workload behind each figure, and the cost assumptions. On Slack, Factored confirmed that the dataset sample (about 780–900 call-center interactions a day) doesn't represent production volume. They said a prototype isn't expected to handle full volume, and that recognizing sizing limits is part of the evaluation. So this record sizes the service against the volumes we measured and the limits of the platform, and it makes no production forecast.
 
-- **Window:** 2026-09-29 → 2026-10-31. Finalists are announced on 2026-10-15; the rest is margin.
+- **Window:** 2026-09-29 → 2026-10-31. Submissions close on 2026-10-05 and finalists are announced on 2026-10-15 (kickoff deck, p. 6); the service stays up through judging.
 - **Runtime:** Cloudflare Workers + D1 ([ADR-003](ADR-003-intake-single-runtime-worker-d1.md)).
 - **MVP:** deterministic, with no model calls ([ADR-002](ADR-002-v1-workflow-unrecognized-charge-intake.md)).
 - **Current state:** on 2026-09-29, production D1 held the fictitious seed and no cases.
@@ -99,9 +99,9 @@ Rows written include D1's index writes. A case takes about **367 bytes** with a 
    5. State in the record that the calculator excludes tax and credits and doesn't check Free-plan eligibility for this account.
 7. **Operating the window:**
    - **Monitoring:** Workers observability logs and traces are enabled at 100% sampling. A weekly check covers requests per day, errors, CPU p95, D1 rows read and written, and database size, against the triggers in point 2.
-   - **Access:** Cloudflare Access (email allowlist or one-time PIN, free up to 50 users) in front of the whole hostname, and the Basic gate on the API and HTML documents. Neither is customer authentication.
-   - **Retention:** demo cases and sessions are deleted after 2026-10-31 with `DELETE FROM cases; DELETE FROM sessions;` on the remote D1, run after a final export for the record. Expired sessions are purged on every login. D1 Time Travel keeps 7 days on Free for recovery. No real customer data is ever loaded.
-   - **Remaining deployment work before any real pilot:** real authentication; a preview database separate from production; alerting on the triggers; a load test against the deployed Worker; a cross-key duplicate rule; a data-handling approval for any AI provider.
+   - **Access:** Cloudflare Access (email allowlist or one-time PIN, free up to 50 users) required in front of the whole hostname, with its denial of unlisted emails still to be confirmed on the remote checklist, and the Basic gate on the API and HTML documents. Neither is customer authentication.
+   - **Retention:** demo cases and sessions are deleted after 2026-10-31 with `DELETE FROM cases; DELETE FROM sessions;` on the remote D1, run after a final export for the record. No case is deleted by age before then, so judges see the cases shown in the recorded demo. Before each recorded demo, the team may reset cases and sessions only. Customers, transactions, context cards and provenance stay until the seed version is replaced. Expired sessions are purged on every login. D1 Time Travel keeps 7 days on Free for recovery. No real customer data is ever loaded.
+   - **Remaining deployment work before any real pilot:** real authentication; a preview database separate from production (until then, non-production branch builds stay disabled); alerting on the triggers; a load test against the deployed Worker; a cross-key duplicate rule; a data-handling approval for any AI provider.
 
 ## Consequences
 

@@ -10,7 +10,7 @@ import { client } from '../support/client.js';
 // Ceilings per request: [queries, rows_read, rows_written, round_trips]. D1 Free allows 50 queries per invocation;
 // round trips drive latency (about 150 ms each when the Worker runs far from D1).
 const CEILING = {
-  login: [4, 8, 6, 2],
+  login: [5, 10, 6, 3],
   list: [2, 25, 0, 2],
   create: [4, 12, 6, 4],
   agentLogin: [3, 6, 6, 1],
