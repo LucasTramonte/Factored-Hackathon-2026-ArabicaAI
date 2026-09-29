@@ -2,7 +2,8 @@
 import re
 
 CARD_VERSION = 1  # must match CHECK (card_version = ...) in back-end/migrations/0003_context_cards.sql
-LANGUAGE_TAG = re.compile(r'(es|pt)(-[a-z0-9]+)*')
+# BCP 47 shape: 2-8 character subtags; a singleton (e.g. x) must be followed by at least one subtag.
+LANGUAGE_TAG = re.compile(r'(es|pt)(-[a-z0-9]{2,8})*(-[a-z0-9](-[a-z0-9]{2,8})+)*')
 
 VARIANTS = {'mexican': 'es-MX', 'colombian': 'es-CO', 'argentine': 'es-AR',
             'México': 'es-MX', 'Colombia': 'es-CO', 'Argentina': 'es-AR'}
