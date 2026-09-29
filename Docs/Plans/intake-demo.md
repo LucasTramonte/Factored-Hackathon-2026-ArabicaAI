@@ -1,48 +1,84 @@
-# Charge-intake demo: reproducible handoff
+# Charge-intake demo: runbook
 
-## What the customer can do
+## What it does
 
-The selected V1 is unrecognized-charge intake: sign in with a **simulated** identity, inspect only that identity's charges, select one, describe it, explicitly confirm, and receive a reference **after** PostgreSQL commits the case. An agent can then read the persisted request. The reference confirms local acceptance for review, not fraud, reimbursement, card blocking, or final resolution. A read-only account/payment inquiry remains a comparison workflow in the [Gold request](marketing-product-gold-contract.md). The hackathon also asks for a normal resolution path, an ambiguous case, safe human handoff, and Spanish/Portuguese demonstrations in [the challenge brief](../FACTORED_HACKATHON_2026.md); this demo currently covers intake/handoff only.
+The V1 workflow ([ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)):
 
-AI has not been added. The next bounded experiment is a checklist versus AI for clarifying a customer's description and drafting an agent summary. Both must use only permitted transaction evidence; the customer must confirm the statement and the backend must accept it. Evaluate held-out, human-reviewed Spanish and Portuguese case families, including ambiguous/unrecognized, unauthorized, missing evidence, and safe transfer. Count safe accepted intakes over **all eligible starts**, plus failures, abandonment, harmful suggestions, duplicate requests, and agent usefulness. The current interface has no start-to-receipt instrumentation, so it has no end-to-end baseline or model gain yet. Do not treat a handoff as a completed dispute resolution.
+1. A customer signs in with a **simulated** identity and sees only their own charges.
+2. They pick one, describe it and explicitly confirm.
+3. They get a reference once the case is stored.
+4. A simulated agent reads the case.
 
-## Sources and one-day sample
+The reference means "accepted for human review". It is not a fraud decision, a refund, a card block or a resolution. The MVP is deterministic, and no model is called. The runtime is one Cloudflare Worker with D1 ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Capacity and cost are covered in [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md).
 
-The production source is the authorized S3 `data/` prefix configured in `Makefile`. DuckDB's temporary `credential_chain` secret uses an AWS profile or role. S3 is read-only; the browser and request handlers never access it. The same Bronze and Silver code can read local CSVs for offline fixtures. Use a separate ignored DuckDB under `data/demo_s3` so the full analytical database cannot be replaced by this one-day build.
+| Part | Path | Role |
+|---|---|---|
+| Batch data | `data_pipelines/bronze`, `silver`, `quality`, `gold` | Bounded one-day sample → validated D1 seed and manifest |
+| API | `back-end/` | Worker + D1: sessions, customer scope, idempotent cases, agent view |
+| Web client | `front-end/` | Angular customer and agent views; response contracts in `front-end/contracts/` |
+
+## Local run (no Cloudflare account)
+
+You need Python 3.10+ and Node 22+. From the repository root:
 
 ```bash
-make setup
-make demo-setup
-make demo-test
-make demo-migrate
-make demo-seed
-make demo-sample-bronze AWS_PROFILE=default
-make demo-sample-silver
-make demo-sample-quality
-make demo-sample-load
-make demo-ui-build
+make setup                 # Python pipeline dependencies in .venv
+make intake-setup          # npm ci for front-end and back-end
+make intake-test           # Gold slice tests, Angular specs, Worker unit and integration tests
 ```
 
-`DEMO_DATE=2026-02-26`, `DEMO_DATA_DIR=data/demo_s3`, and `DEMO_CUSTOMER_ID=CLI-U53R5AZVLET0` are defaults for this demonstration. A different identity requires an explicit update to the loader's fixed allowlist and API login Literal after checking ownership. Do not add a public customer search. For local offline reproduction, call `run_ingestion.py` with `--local-source "$PWD/data"`, `--tables customers,products,daily_exchange_rates,transactions`, `--partition-date 2026-02-26`, and `DATA_DIR`/`DUCKDB_PATH` pointed at a separate ignored directory. This is the **existing** extractor with one exact fact-day path; it does not list or read all fact partitions. If the selected source day changes, use `--full-refresh --partition-date ...` only on an isolated one-day database and rerun Silver, quality and the loader. The loader rejects an existing PostgreSQL row if its content differs; it never silently overwrites cases or source transactions.
+`make intake-test` builds the UI and runs the Worker against a throwaway local D1. For browsing, see [back-end/README.md](../../back-end/README.md).
 
-The loader projects needed columns, filters `transaction_date` and `Purchase/Approved` before joining, checks unique transaction IDs and N:1 product/customer links, and selects at most 20 rows for the fixed allowlist. DuckDB is limited to 1 GB with disk spill for the load; Bronze defaults to 2 GB and Silver to 3 GB with ignored spill directories. `process_date` is a storage/process field; the query uses the business `transaction_date`. Source `amount` is parsed as decimal in its original currency; `amount_usd` is deliberately unused. Source `transaction_date` remains a timezone-free PostgreSQL timestamp and the UI labels it accordingly. The selected source file, business date, source/customer/product/transaction IDs and mapping are stored in an ignored local manifest and in `intake_demo.sample_loads` for traceability. Silver removes duplicate transaction IDs before the selection; the sample loader requires one matching Bronze row for each selected ID.
+## One-day dataset slice
 
-In the checked 2026-02-26 sample, Bronze/Silver contained 150,000 customers, 400,000 products, 13,164 FX records and 3,787 transactions. Of that day, 625 distinct transactions were `Purchase/Approved`; the selected customer had one. The focused quality run reported 0 errors and 1 warning: 4,407/150,000 customer rows had `customer_status` outside its contract domain. The selected customer's `Inactive` is a current snapshot, not status at purchase time. The selected transaction's product and customer each joined once with matching ownership. A two-way `EXCEPT ALL` comparison found zero row differences between local CSV and S3 Bronze for all four selected tables after excluding `_source_file` and `_ingested_at`; the S3 loader found the previously inserted PostgreSQL row identical and added zero rows. These checks describe one day and dimensions, not overall dataset quality.
+The production source is the authorized S3 `data/` prefix configured in the `Makefile`. S3 is read-only. The browser and the Worker never touch it. The sample uses a separate ignored DuckDB under `data/demo_s3`, so the full analytical database is never replaced.
 
-The observed customer CSV contains `first_name`, `last_name`, `last_updated` and other fields absent from the summary dictionary; products also has additional fields. The observed transaction columns match the detailed dictionary. The [Silver mapping](../../data_pipelines/silver/table_specs.py) and focused quality report determine executable columns; dictionary omissions are recorded rather than silently discarded.
+```bash
+make intake-sample-bronze AWS_PROFILE=default    # exact fact-day path; it doesn't list other partitions
+make intake-sample-silver
+make intake-sample-quality
+make intake-sample-slice                          # D1 seed + manifest under data/demo_s3/
+make intake-seed-local                            # migrations, fictitious seed and slice into local D1
+```
 
-## Local state and limitations
+Defaults: `INTAKE_DATE=2026-02-26`, `INTAKE_DATA_DIR=data/demo_s3`. The dataset identity is allowlisted in `back-end/src/config/identities.json`, which the Worker and the slice both read. Adding an identity means editing that file together with a reviewed seed. There is no public customer search. For an offline build, pass `--local-source "$PWD/data"` to `run_ingestion.py` with `DATA_DIR`/`DUCKDB_PATH` pointed at a separate ignored directory.
 
-`DEMO_DATABASE_DSN` overrides the local DSN. Local PostgreSQL's `trust` authentication is only for this machine; never expose that container. `make demo-migrate` applies versioned SQL transactionally; `make demo-seed` adds only three fictitious charges and refuses conflicting values. Neither command seeds accepted cases. The four existing local cases remain. The API limits customers to their simulated session, gives the agent a separate simulated session, and commits before returning a reference. A retry with the same UUID and content returns the same reference; different content gets 409. Another UUID can create a second case for the same charge, so no cross-key duplicate policy is claimed.
+The slice checks and writes the following ([data_pipelines/gold/README.md](../../data_pipelines/gold/README.md)):
 
-When a request fails, the UI holds its payload and key in memory for retry and does not let the identity change. Reloading the tab loses this pending state. Simulated sessions also disappear when the one-worker API restarts; accepted cases remain in PostgreSQL. The client must reauthenticate after restart. No historical complaint is joined to this transaction by customer ID alone.
+- a ready quality run for this exact database and day;
+- unique IDs and N:1 product/customer ownership;
+- at most 20 allowlisted rows;
+- one Bronze row per selected transaction;
+- the original Bronze amount and currency (`amount_usd` is deliberately unused);
+- the timezone-free source timestamp.
 
-## PostgreSQL deployment alternative
+The seed can be rerun safely, and D1 rejects any row that changed since it was stored.
 
-`make demo-docker-build` builds a code-only, non-root web image with Angular and FastAPI on one origin. `demo_pg/loader.Dockerfile` builds a separate bounded S3 job image; the web image has no DuckDB, S3 code or AWS credentials. Neither image contains CSVs, DuckDB, cases or secrets. For a private team link on Render, use one **paid** `0.5c-512mb` web instance and a managed `0.1c-256mb` PostgreSQL in the same region. As checked on 2026-09-28, these plans are **$7 + $6 = $13/month** before extra storage, bandwidth and job compute; [current pricing](https://render.com/pricing) can change. A separately provisioned, short-lived one-off S3 load job adds usage charges; the 4 GB `2c-4g` plan is listed at $85/month equivalent and one-off jobs are billed per second. Render's [pre-deploy command](https://render.com/docs/deploys) is only available for paid web instances, so use `python -m demo_pg.db.migrate` there for versioned, nondestructive migrations before serving traffic; run the fictitious seed as a reviewed one-time setup action. Do not run migrations or ingestion on web startup.
+**Checked on 2026-02-26:**
 
-Use HTTPS and the **internal authenticated** PostgreSQL connection string in `DEMO_DATABASE_DSN`. Render [allows external PostgreSQL connections by default](https://render.com/docs/postgresql-creating-connecting); explicitly **clear the database's external IP allowlist** before sharing. Set `DEMO_PUBLIC=1`, `DEMO_ACCESS_USERNAME`, and a long random `DEMO_ACCESS_PASSWORD` as platform secrets. The server rejects startup without them. Set health path `/healthz`. Use a separate job service from `demo_pg/loader.Dockerfile`, with its own `DEMO_DATABASE_DSN` and read-only AWS credentials restricted to the required S3 prefix. Run `python -m demo_pg.db.run_sample` there with a 4 GB or larger job plan, then remove its credentials and stop/delete that service. The job uses only one transaction day and three dimensions, never the full fact history. No data or credentials are embedded in either image.
+- Bronze/Silver held 150,000 customers, 400,000 products, 13,164 FX records and 3,787 transactions.
+- 625 transactions were `Purchase/Approved`, and the allowlisted customer had one.
+- The focused quality run reported 0 errors and 1 warning: 4,407/150,000 customer rows had `customer_status` outside its domain.
+- The product and customer of the selected transaction each joined once.
+- A two-way `EXCEPT ALL` found no row differences between local CSV and S3 Bronze for the four tables.
+- On 2026-09-29 the Gold slice produced the same transaction and provenance statements as the previous loader.
 
-The Basic prompt is a team access gate, not bank authentication; every allowed teammate can still use simulated customer and agent views. Keep one web worker and one instance because sessions are in memory. The container serves the Angular build and API on the same origin with a SPA fallback that excludes API routes. The development proxy is not used in production. Render's [free tier](https://render.com/docs/free) could host an ephemeral prototype, but free web has no pre-deploy command, sleeps after 15 minutes idle, and free PostgreSQL expires after 30 days without managed backups. It is not the proposed sharing configuration.
+These checks describe one day and the dimensions, not the whole dataset.
 
-The separate [Cloudflare Worker + D1 pilot](../../cloudflare/README.md) has been deployed. This Render/PostgreSQL alternative has not been deployed. Recheck prices and access controls before using it; a remote end-to-end test must cover customer isolation, acceptance/reference, agent retrieval, retry and access denial.
+The observed customer CSV has fields such as `first_name`, `last_name` and `last_updated` that the summary dictionary omits, and the products file has extra fields too. The [Silver mapping](../../data_pipelines/silver/table_specs.py) decides which columns are used. Omissions are recorded rather than silently dropped.
+
+## Deployed preview
+
+The Worker `factored-hackathon-2026-arabicaai` runs at https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Cloudflare Access (email allowlist) and a Basic gate protect it. Neither is bank authentication.
+
+- On 2026-09-29, production D1 held both migrations, the fictitious seed and no cases.
+- Loading the Gold slice into production is a reviewed, manual step (`back-end/README.md`, "Deployment").
+- Build settings and the post-deploy checklist are in [back-end/README.md](../../back-end/README.md).
+
+## Known limits
+
+- Simulated identities: anyone who passes Access can act as any demo customer.
+- Sessions last one hour and are stored in D1.
+- A retry with the same key and content returns the same reference, and different content gets 409. A second case for the same charge under a new key is possible: there is no cross-key duplicate rule yet (tracked in the roadmap).
+- If the browser tab is closed with a request pending, the pending state is lost, but no duplicate is created.
+- No historical complaint is linked to a transaction, so none is joined here by `customer_id` alone.
