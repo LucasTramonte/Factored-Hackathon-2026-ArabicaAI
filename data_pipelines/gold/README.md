@@ -15,6 +15,7 @@ Output properties:
 - **Idempotent seed.** A rerun changes nothing. If a stored row differs, the rerun sets a NOT NULL column to NULL and D1 rejects it, so drift is never silently overwritten.
 - **Content-addressed.** `slice_version` is a hash of the SQL statements, so the same inputs give the same seed byte for byte.
 - **No cases or sessions**, and no data outside the allowlist.
+- **Versioned context cards.** The same quality-gated load snapshots first name, a Spanish locale hint, and active product type/last four/currency. `snapshot_at` is the quality-run time. The Worker reads one D1 row at session start; session or message language takes precedence over the hint. Transaction matching uses each transaction's currency.
 - **Partition scope stated, not hidden.** Business-day filtering uses `transaction_date`. The storage partition (`process_date`) only says what was loaded. The manifest records `loaded_process_dates`, the rows in those partitions that belong to other business days (986 on 2026-02-26), and a completeness note: business-day rows stored in other partitions are not included.
 
 The fictitious seed (`back-end/seeds/seed_fictitious.sql`) is generated from `back-end/seeds/fictitious.json` by `python -m data_pipelines.gold.fictitious_seed`, using the same statement builders. A test fails if the committed file differs from the generator.

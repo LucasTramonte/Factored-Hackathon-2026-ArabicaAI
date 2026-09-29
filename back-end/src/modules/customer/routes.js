@@ -23,7 +23,10 @@ export async function startCustomerSession(request, env, store) {
   const customerId = body.value?.customer_id;
   if (typeof customerId !== 'string' || !ALLOWED.has(customerId)) return fail(422, 'Select an allowed demo identity');
   if (!await store.customerExists(customerId)) return fail(503, 'Demo identity is not loaded');
-  return json({ customer_id: customerId, mode: 'simulated_login' }, 200,
+  const card = await store.findContextCard(customerId);
+  return json({ customer_id: customerId, mode: 'simulated_login', context_card: card ? {
+    version: card.card_version, snapshot_at: card.snapshot_at, ...JSON.parse(card.card_json)
+  } : null }, 200,
     { 'Set-Cookie': await startSession(request, store, 'customer', customerId) });
 }
 

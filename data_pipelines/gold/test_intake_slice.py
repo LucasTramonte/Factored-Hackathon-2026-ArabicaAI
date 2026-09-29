@@ -32,16 +32,16 @@ def make_db(tmp_path: Path, rows=None, products=None, customers=None, bronze=Non
     bronze = [b if len(b) == 4 else (*b, when.get(b[0], "2026-02-26 13:21:51")) for b in bronze]
     with duckdb.connect(str(path)) as con:
         con.execute("CREATE SCHEMA bronze; CREATE SCHEMA silver")
-        con.execute("CREATE TABLE silver.dim_customers(customer_id VARCHAR)")
-        con.execute("CREATE TABLE silver.dim_products(product_id VARCHAR, customer_id VARCHAR)")
+        con.execute("CREATE TABLE silver.dim_customers(customer_id VARCHAR, first_name VARCHAR, country VARCHAR, detected_accent VARCHAR)")
+        con.execute("CREATE TABLE silver.dim_products(product_id VARCHAR, customer_id VARCHAR, product_type VARCHAR, product_number VARCHAR, currency VARCHAR, product_status VARCHAR)")
         con.execute("CREATE TABLE silver.fact_transactions(transaction_id VARCHAR, customer_id VARCHAR, product_id VARCHAR,"
                     " transaction_date TIMESTAMP, merchant_name VARCHAR, currency VARCHAR, transaction_type VARCHAR,"
                     " transaction_status VARCHAR, process_date DATE DEFAULT DATE '2026-02-26')")
         con.execute("CREATE TABLE bronze.transactions(transaction_id VARCHAR, amount VARCHAR, _source_file VARCHAR, transaction_date VARCHAR)")
         if customers:
-            con.executemany("INSERT INTO silver.dim_customers VALUES (?)", customers)
+            con.executemany("INSERT INTO silver.dim_customers VALUES (?, 'Ana', 'Argentina', NULL)", customers)
         if products:
-            con.executemany("INSERT INTO silver.dim_products VALUES (?, ?)", products)
+            con.executemany("INSERT INTO silver.dim_products VALUES (?, ?, 'Credit card', '4111222233334444', 'ARS', 'Active')", products)
         if rows:
             con.executemany("INSERT INTO silver.fact_transactions (transaction_id, customer_id, product_id, transaction_date,"
                             " merchant_name, currency, transaction_type, transaction_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", rows)
@@ -84,6 +84,9 @@ def test_seed_applies_to_the_real_schema_and_keeps_source_values(tmp_path):
                        "FROM transactions").fetchall() == [
         ("T1", CUSTOMER, None, "2026-02-26T13:21:51", "Shop", "29763.49", "ARS")]
     assert con.execute("SELECT display_name FROM customers").fetchone() == ("Dataset customer (synthetic)",)
+    card = json.loads(con.execute("SELECT card_json FROM context_cards WHERE customer_id=?", [CUSTOMER]).fetchone()[0])
+    assert card == {"first_name": "Ana", "locale_hint": "es-AR", "products": [
+        {"currency": "ARS", "last4": "4444", "product_type": "Credit card"}]}
     assert con.execute("SELECT product_id, source_file, business_date FROM sample_provenance").fetchone() == (
         "P1", "transactions/2026/02/26/part.csv", "2026-02-26")
     assert manifest["selected"] == 1 and manifest["eligible_rows_in_loaded_partitions"] == 1
@@ -227,7 +230,7 @@ def test_any_database_change_after_the_quality_run_is_rejected(tmp_path):
     db = make_db(tmp_path)
     quality = make_quality(tmp_path, db, generated_at_utc=datetime.now(timezone.utc).isoformat())
     with duckdb.connect(str(db)) as con:  # a write straight after the quality run, well inside one second
-        con.execute("INSERT INTO silver.dim_customers VALUES ('CLI-LATE')")
+        con.execute("INSERT INTO silver.dim_customers(customer_id) VALUES ('CLI-LATE')")
     with pytest.raises(ValueError, match="changed after"):
         gold.build_slice(db, quality, DAY, (CUSTOMER,))
 

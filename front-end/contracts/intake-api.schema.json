@@ -43,6 +43,10 @@
         },
         "mode": {
           "const": "simulated_login"
+        },
+        "context_card": {
+          "type": ["object", "null"],
+          "description": "Snapshot prepared by the quality-gated load; locale_hint never overrides session language."
         }
       }
     },
