@@ -35,12 +35,16 @@ class ExportTests(unittest.TestCase):
                   last4='1111', transaction_country='México')
         spec = dict(situation_id='s1', family='mixed_language', customer_id='C1', authenticated=True, confirmed_id=None,
                     tool_failure=False, as_of='2026-02-27T09:00:00')
-        draft = dict(fixture=dict(transactions=[tx]), specs=[spec], cases=[
+        customer = dict(customer_id='C1', country='México', segment='Basic',
+                        cards=[dict(product_type='Tarjeta Crédito', last4='1111', currency='USD')])
+        draft = dict(fixture=dict(transactions=[tx], customers=[customer]), specs=[spec], cases=[
             dict(case_id='c1', situation_id='s1', language='es-pt', session_language='pt', message='no reconheço un uber',
                  construction_gold=dict(action='C', candidate_ids=[], completion_ready=False))])
         corpus = build_corpus(draft)
         self.assertEqual(corpus['cases'][0]['gold']['action'], 'clarify')
         self.assertEqual(corpus['cases'][0]['message_language'], 'es-pt')
+        self.assertEqual(corpus['cases'][0]['segment'], 'Basic')
+        self.assertEqual(corpus['customers'][0]['country'], 'México')
         rows = [r for r in evaluate(corpus)['summary'] if r['split'] == 'frozen_es_pt_v1' and r['language'] == 'pt']
         self.assertTrue(all(r['cases'] == 1 for r in rows))
 

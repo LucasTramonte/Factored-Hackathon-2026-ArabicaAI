@@ -38,6 +38,7 @@ def runner_language(message_language: str, session_language: str, family: str) -
 def build_corpus(draft: dict) -> dict:
     """Runner corpus from the draft: fixture transactions plus one case per message."""
     specs = {s["situation_id"]: s for s in draft["specs"]}
+    segments = {c["customer_id"]: c.get("segment") for c in draft["fixture"].get("customers", [])}
     cases = []
     for c in draft["cases"]:
         s = specs[c["situation_id"]]
@@ -45,11 +46,13 @@ def build_corpus(draft: dict) -> dict:
             "case_id": c["case_id"], "situation_id": c["situation_id"], "family": s["family"], "split": "frozen_es_pt_v1",
             "language": runner_language(c["language"], c["session_language"], s["family"]),
             "message_language": c["language"], "session_language": c["session_language"],
-            "customer_id": s["customer_id"], "authenticated": s["authenticated"], "confirmed_id": s["confirmed_id"],
+            "customer_id": s["customer_id"], "segment": segments.get(s["customer_id"]),
+            "authenticated": s["authenticated"], "confirmed_id": s["confirmed_id"],
             "tool_failure": s["tool_failure"], "as_of": s["as_of"], "message": c["message"],
             "gold": to_runner_gold(c["construction_gold"]),
         })
-    return {"version": "frozen-es-pt-v1", "transactions": draft["fixture"]["transactions"], "cases": cases}
+    return {"version": "frozen-es-pt-v1", "transactions": draft["fixture"]["transactions"],
+            "customers": draft["fixture"].get("customers", []), "cases": cases}
 
 
 def main() -> None:

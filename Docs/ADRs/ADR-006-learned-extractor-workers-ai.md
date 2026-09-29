@@ -28,7 +28,14 @@ The question is which model, doing what, and how we avoid spending more than the
    2. a larger Workers AI model (for example `llama-3.3-70b`, $0.0080 an episode in ADR-004);
    3. Claude Haiku 4.5 on Bedrock, which needs a second provider, an AWS credential and a data-handling approval.
 
-   We climb one rung only when the current rung fails on the `development` split: fewer correct next actions than the checklist, any unsafe outcome, fewer than 95% schema-valid outputs, p95 latency over 3 s, or more than 10% of cases changing answer across 3 repetitions. These triggers never read the frozen set. Each rung is a new pre-registered version, and the frozen set scores it once. Every version run is reported.
+   We climb one rung only when the current rung fails on the `development` split, by any of these:
+   - fewer than 16 of 18 correct next actions (per-case majority over 3 repetitions);
+   - any unsafe outcome;
+   - fewer than 95% schema-valid outputs;
+   - p95 latency over 3 s;
+   - more than 10% of cases changing answer across the 3 repetitions.
+
+   The floor is absolute on purpose. The checklist gets 18 of 18 there because its rules were written on those cases, so "at least as good as the checklist on development" would compare a learned system against rules fitted to that very split. At 16 of 18, the extractor can miss two cases before we escalate. These triggers never read the frozen set. Each rung is a new pre-registered version, and the frozen set scores it once. Every version run is reported.
 4. **Fail safe:**
    - temperature 0, or the lowest the model allows;
    - a committed prompt with its SHA-256 in the pre-registration;
