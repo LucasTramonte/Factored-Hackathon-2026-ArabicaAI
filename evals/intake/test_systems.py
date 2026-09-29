@@ -84,6 +84,12 @@ class PolicyAdapterTests(unittest.TestCase):
         p = policy_prediction(dict(CASE, authenticated=False), FACTS, RECORDS, CUSTOMERS, 'x')
         self.assertEqual(p['action'], 'authenticate')
 
+    def test_malformed_fact_values_fall_back_to_clarify_instead_of_crashing(self):
+        bad = dict(FACTS, stated_facts=dict(merchant='Uber', amount=dict(value='45300.00')))  # no 'approx'
+        p, meta = FactExtractorSystem('x', extractor_returning(bad, []))(CASE, RECORDS, CUSTOMERS)
+        self.assertEqual((p['action'], p['candidates']), ('clarify', []))
+        self.assertIn('invalid', meta['error'])
+
     def test_schema_validation_is_strict(self):
         validate_extraction(FACTS)
         for bad in [dict(FACTS, intent='x'), dict(FACTS, demand='cash'), dict(FACTS, injection='no'),

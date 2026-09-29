@@ -10,11 +10,11 @@ Last updated 2026-09-29. This page gives aggregates and case IDs only. No messag
 | Independent verification | Done | Answers agree with construction on 60/60 cases, facts on 58/60; 4 readings just after midnight flagged |
 | Portuguese review (Lucas) | Done | 15 questions: 3 flagged + 12 random audit (seed 20260929) |
 | Policy decisions | Done: all five rules kept (Lucas, 2026-09-29); Roberto and Manoella can object on PR #21 | Five questions below |
-| Spanish review (Lucas, with a translation aid) | Done | 9 questions: 3 flagged + 6 audit. Roberto no longer reviews, so he stays blind to every case |
+| Spanish review (Lucas, with a translation aid) | Done | 9 questions: 3 flagged + 6 audit |
 | Harness for learned systems | Done | `run.py --system/--repetitions/--split/--preregistration`, `systems.py`, `prereg.py`; checklist scores pinned unchanged |
 | Publication rehearsal (local) | Done | Hashes verified, 60 cases valid for the runner, manifest drafted; nothing scored |
 | Blind builder setup | Done | `make_clean_checkout.py` (14 withheld paths verified absent) and verbatim `extractor-v1-builder-instructions.md` |
-| Roberto's native Spanish review | **Pending**: Roberto | 9 questions, second reviewer next to Lucas |
+| Roberto's native Spanish review | **Pending**: Roberto | The same 9 questions, as a native second reviewer next to Lucas. After seeing them he is exposed, so he doesn't build the extractor and reviews its code for non-behavioural aspects only (ADR-006, decision 5) |
 | Extractor v1 build and pre-registration | **Pending**: isolated agent, then Roberto's code review and the `extractor-v1` tag | ADR-006 |
 | Publish, verify hashes, tag `eval-es-pt-v1` | Pending | |
 | Run checklist and extractor v1 once each | Pending | `python -m evals.intake.run --cases ...` |

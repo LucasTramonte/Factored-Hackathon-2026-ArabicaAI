@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -21,8 +22,18 @@ from pathlib import Path
 BLOCK = re.compile(r"```json prereg\n(.*?)\n```", re.S)
 
 
-def _git(repo: Path, *args: str) -> str:
-    return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True).stdout.strip()
+GIT_LOCATION_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
+                     "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR", "GIT_NAMESPACE")
+
+
+def clean_git_env() -> dict:
+    """The environment without variables that could point git at another repository or index."""
+    return {k: v for k, v in os.environ.items() if k not in GIT_LOCATION_VARS}
+
+
+def _git(repo: Path, *args: str, text: bool = True):
+    out = subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=text, env=clean_git_env()).stdout
+    return out.strip() if text else out
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -37,10 +48,13 @@ def read(path: Path) -> dict:
     return json.loads(match.group(1))
 
 
-def fill(path: Path, system: str, prompt: Path, model: str, params: dict, repo: Path = Path(".")) -> dict:
-    """Write (or replace) the block with the prompt hash and the current commit. The tag comes next."""
+def fill(path: Path, system: str, prompt: Path, model: str, params: dict, repo: Path = Path("."),
+         target: str | None = None, implementation: Path | None = None) -> dict:
+    """Write (or replace) the block: prompt and implementation hashes, target and current commit. The tag comes next."""
     data = {"system": system, "tag": system, "commit": _git(repo, "rev-parse", "HEAD"),
             "prompt_file": str(prompt), "prompt_sha256": sha256_bytes((repo / prompt).read_bytes()),
+            "target": target, "implementation_file": str(implementation) if implementation else None,
+            "implementation_sha256": sha256_bytes((repo / implementation).read_bytes()) if implementation else None,
             "model": model, "params": params, "registered_utc": datetime.now(timezone.utc).isoformat()}
     block = "```json prereg\n" + json.dumps(data, indent=2, sort_keys=True) + "\n```"
     text = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -49,9 +63,24 @@ def fill(path: Path, system: str, prompt: Path, model: str, params: dict, repo: 
     return data
 
 
-def check(path: Path, repo: Path = Path(".")) -> dict:
-    """Raise ``ValueError`` unless the registration still describes exactly what will run."""
+def _same_at_commit(repo: Path, commit: str, file: str, digest: str) -> bool:
+    return sha256_bytes(_git(repo, "show", f"{commit}:{file}", text=False)) == digest
+
+
+def check(path: Path, repo: Path = Path("."), target: str | None = None) -> dict:
+    """Raise ``ValueError`` unless the registration still describes exactly what will run.
+
+    ``target`` is the ``module:callable`` about to be scored: it must equal the registered target, and
+    the registered implementation file must be byte-identical now and at the registered commit. Later
+    commits that only add files (for example publishing the test set) don't invalidate a registration.
+    """
     data = read(path)
+    if target is not None:
+        if data.get("target") != target:
+            raise ValueError(f"{target} is not the registered target ({data.get('target')})")
+        impl = data.get("implementation_file")
+        if not impl or sha256_bytes((repo / impl).read_bytes()) != data.get("implementation_sha256"):
+            raise ValueError("implementation changed since registration (or none was registered)")
     current = sha256_bytes((repo / data["prompt_file"]).read_bytes())
     if current != data["prompt_sha256"]:
         raise ValueError("prompt file changed since registration")
@@ -61,10 +90,10 @@ def check(path: Path, repo: Path = Path(".")) -> dict:
         raise ValueError(f"tag {data['tag']} does not exist") from exc
     if tagged != data["commit"]:
         raise ValueError(f"tag {data['tag']} points to {tagged[:7]}, not the registered {data['commit'][:7]}")
-    at_commit = subprocess.run(["git", "-C", str(repo), "show", f"{data['commit']}:{data['prompt_file']}"],
-                               check=True, capture_output=True).stdout
-    if sha256_bytes(at_commit) != data["prompt_sha256"]:
+    if not _same_at_commit(repo, data["commit"], data["prompt_file"], data["prompt_sha256"]):
         raise ValueError("prompt at the registered commit differs from the recorded hash")
+    if target is not None and not _same_at_commit(repo, data["commit"], data["implementation_file"], data["implementation_sha256"]):
+        raise ValueError("implementation at the registered commit differs from the recorded hash")
     return data
 
 
@@ -76,13 +105,16 @@ def main() -> None:
     f.add_argument("--system", required=True)
     f.add_argument("--prompt", type=Path, required=True)
     f.add_argument("--model", required=True)
+    f.add_argument("--target", required=True, help="module:callable the runner will score")
+    f.add_argument("--implementation", type=Path, required=True, help="the file that defines the target")
     f.add_argument("--param", action="append", default=[], help="key=value, e.g. temperature=0")
     c = sub.add_parser("check")
     c.add_argument("--file", type=Path, required=True)
     args = p.parse_args()
     if args.cmd == "fill":
         params = dict(kv.split("=", 1) for kv in args.param)
-        print(json.dumps(fill(args.file, args.system, args.prompt, args.model, params), indent=2))
+        print(json.dumps(fill(args.file, args.system, args.prompt, args.model, params,
+                              target=args.target, implementation=args.implementation), indent=2))
         print(f"Now commit, then: git tag {args.system} && git push origin {args.system}")
     else:
         print(json.dumps(check(args.file), indent=2))

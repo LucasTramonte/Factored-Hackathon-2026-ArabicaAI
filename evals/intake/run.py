@@ -121,7 +121,7 @@ def main():
         regs=dict(x.split('=',1) for x in args.preregistration)
         for name in systems:
             if name not in regs:raise SystemExit(f'{name}: a pre-registration is required to score frozen_es_pt_v1 (--preregistration {name}=<file>)')
-            data=check_registration(Path(regs[name]))
+            data=check_registration(Path(regs[name]),target=targets[name])
             if data['system']!=name:raise SystemExit(f"{name}: registration is for {data['system']}")
             registrations[name]=data
     result=evaluate(corpus,systems,args.repetitions,args.split)

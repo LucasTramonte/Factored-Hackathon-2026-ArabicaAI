@@ -80,7 +80,8 @@ The triggers are:
 2. Run:
    ```sh
    python -m evals.intake.preregistration.prereg fill --file evals/intake/preregistration/extractor-v1.md \
-     --system extractor-v1 --prompt intake_agent/extractor/prompt.md --model @cf/openai/gpt-oss-20b --param temperature=0
+     --system extractor-v1 --prompt intake_agent/extractor/prompt.md --model @cf/openai/gpt-oss-20b --param temperature=0 \
+     --target intake_agent.extractor.workers_ai:extract --implementation intake_agent/extractor/workers_ai.py
    ```
 3. Commit everything on a branch. **Don't create the tag**: a human reviews the code first, then tags `extractor-v1`.
 

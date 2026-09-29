@@ -14,5 +14,10 @@ The checklist baseline needs no registration. Its decision code (`decide()` in `
 ## Tools
 
 - `prereg.py fill` writes the machine-readable block (prompt SHA-256, commit, model, parameters) at the end of the registration file. `prereg.py check` verifies it.
-- `python -m evals.intake.run --system NAME=module:callable --preregistration NAME=<file> --repetitions 3` refuses to score a system on `frozen_es_pt_v1` unless the check passes: the prompt is unchanged, and the tag points to the registered commit.
+- `python -m evals.intake.run --system NAME=module:callable --preregistration NAME=<file> --repetitions 3` refuses to score a system on `frozen_es_pt_v1` unless the check passes:
+  - the `module:callable` is the registered target;
+  - its implementation file and the prompt are byte-identical now and at the registered commit;
+  - the tag points to that commit.
+
+  Later commits that only add files, such as publishing the test set, don't invalidate a registration. `git` runs with repository-location variables (`GIT_DIR`, `GIT_WORK_TREE`, …) removed, so the checks can't be pointed at another repository.
 - `make_clean_checkout.py` creates a worktree and proves that no withheld frozen file is present or tracked. [`extractor-v1-builder-instructions.md`](extractor-v1-builder-instructions.md) holds the verbatim instructions for the blind builder.

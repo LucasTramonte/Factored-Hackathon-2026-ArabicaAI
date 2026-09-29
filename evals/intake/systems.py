@@ -117,9 +117,10 @@ class FactExtractorSystem:
         try:
             out = self.extract(case["message"], case.get("session_language", case.get("language")), case.get("as_of"), VOCABULARY)
             extracted = validate_extraction(out["extracted"])
+            # Inside the guard: a malformed fact value (e.g. an amount without "approx") must clarify, not crash.
+            prediction = policy_prediction(case, extracted, records, customers, self.name)
         except TimeoutError as exc:
             return _prediction(case, "technical_handoff", [], self.name), {"usage": {}, "extracted": None, "error": f"timeout: {exc}"}
         except (ValueError, KeyError, TypeError) as exc:
             return _prediction(case, "clarify", [], self.name), {"usage": {}, "extracted": None, "error": f"invalid output: {exc}"}
-        return (policy_prediction(case, extracted, records, customers, self.name),
-                {"usage": out.get("usage", {}), "extracted": extracted, "error": None})
+        return prediction, {"usage": out.get("usage", {}), "extracted": extracted, "error": None}
