@@ -151,7 +151,16 @@ Rows written include D1's index writes. A case takes about **367 bytes** with a 
     - **Smart Placement** (`placement.mode = "smart"` in `wrangler.jsonc`, checked by `test/unit/config.test.js`) runs the Worker next to D1.
     - **Login writes in one batch:** purging expired sessions, revoking the old token and inserting the new one run as one atomic `db.batch()`, so login drops to 2 round trips. The budget test now caps round trips per request (login 2, list 2, create 4, agent 1–2).
 
-    Re-measure with a new export after deploy.
+    Re-measured at 11:05 BRT on 2026-09-29, one episode after the deploy of `aa0c804`:
+
+    | Request | Before | After |
+    |---|---|---|
+    | `POST /demo/session` | 514 ms | 418 ms (2 round trips) |
+    | `POST /demo/agent-session` | 302 ms | 161 ms (1 round trip) |
+    | `GET /transactions` | 290 ms | 294 ms |
+    | `POST /cases` | 595 ms | 611 ms |
+
+    The batch works. Smart Placement had not moved the Worker yet: it needs observed traffic first, and per-query time was still about 145 ms. Check the `cf-placement` response header (`local-GRU` means not moved; `remote-…` means moved) and re-measure once it reads `remote-…`.
 
     Caveats:
     - Cloudflare needs some traffic before it moves the Worker.
