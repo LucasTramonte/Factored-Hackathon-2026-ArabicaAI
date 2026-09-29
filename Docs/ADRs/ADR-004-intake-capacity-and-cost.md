@@ -128,7 +128,30 @@ Rows written include D1's index writes. A case takes about **367 bytes** with a 
   - agent list 2/250/0.
 
   Tighten them if the measured values stay lower after the deploy.
-- **Remote check (to record after the deploy):** date, results of the checklist in `back-end/README.md`, Worker CPU p50/p95 and end-to-end p50/p95 from a low-rate run with a dedicated test identity.
+- **Measured in production, 2026-09-29.** One manual episode after the deploy of version `529907dd`: Workers Logs export, 13 invocations and 13 D1 spans. It's a single sample, not a load test.
+  - **Placement:** the Worker ran in GRU (São Paulo, region SAM). The D1 primary is in ENAM and was served from ORD (Chicago).
+  - **CPU per request:** 0–4 ms, under the 10 ms Free limit. The workbook's 5 ms assumption was conservative.
+  - **D1 round trip from the Worker:** 136–186 ms, median 148 ms. Latency is dominated by the distance to D1, not by compute.
+  - **Wall time per request:**
+
+    | Request | Wall time |
+    |---|---|
+    | `GET /demo/identities` | 1 ms |
+    | `GET /` (document) | 252 ms |
+    | `GET /transactions` | 297 ms |
+    | `POST /demo/agent-session` | 309 ms |
+    | `GET /agent/cases` | 278 ms |
+    | `POST /demo/session` | 524 ms |
+    | `POST /cases` | 605 ms |
+
+    The customer path (login, list, case) adds up to about 1.4 s of server time.
+  - **Static bundles:** they no longer reach the Worker. The episode made 7 Worker requests, as modelled.
+  - **Functional checks:** Access and the Basic gate held, the customer saw only their own charges, a case got a reference, and the agent view showed it. All requests succeeded and there were no errors.
+  - **Next change:** Smart Placement (`placement.mode = "smart"`) to run the Worker next to D1, and one `db.batch()` for the three login writes. Re-measure after the change.
+- **Observability limits:**
+  - Workers Logs Free allows 200,000 events per day. After that, 1% head sampling applies for the rest of the day. One episode produced about 29 events, so full-fidelity logs cover about 6,900 episodes per day, which is below the 10,000-episode capacity. `head_sampling_rate` can be lowered if that matters.
+  - Logs are retained for 3 days on Free.
+  - `Authorization` and `Cookie` are redacted, and request bodies are logged only as sizes. The client IP (`cf-connecting-ip`) is logged, which is personal data, so exported logs stay in ignored `data/observability/` and are never committed.
 - **Sources (checked 2026-09-29):**
   - Cloudflare: [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/), [Zero Trust plans](https://www.cloudflare.com/plans/zero-trust-services/).
   - AWS: [Free plan](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html), [Lambda](https://aws.amazon.com/lambda/pricing/), [API Gateway](https://aws.amazon.com/api-gateway/pricing/), [DynamoDB on demand](https://aws.amazon.com/dynamodb/pricing/on-demand/), [VPC/NAT](https://aws.amazon.com/vpc/pricing/), [CloudFront](https://aws.amazon.com/cloudfront/pricing/), [RDS for PostgreSQL](https://aws.amazon.com/rds/postgresql/pricing/), [Pricing Calculator](https://docs.aws.amazon.com/pricing-calculator/latest/userguide/what-is-pricing-calculator.html).
