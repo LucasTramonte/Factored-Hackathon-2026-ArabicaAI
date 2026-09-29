@@ -1,0 +1,5 @@
+# Regenerate the markdown profile, HTML report and executed notebook:
+#   pip install -r data_profiles/personalization_profile/requirements.txt
+# Same pinned notebook stack as notebooks/ (pandas, matplotlib, nbformat, nbclient, nbconvert, ipykernel).
+-r ../../notebooks/requirements.txt
+duckdb>=1.1.0

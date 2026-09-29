@@ -34,3 +34,6 @@ back-end/.dev.vars*
 
 # Exported Cloudflare logs contain client IPs and request IDs; keep them under ignored data/observability/
 /logs-*.json
+
+# Files of Hackathon
+/files/
