@@ -10,7 +10,7 @@ import re
 import statistics
 
 VERSION = '1'
-BASE = {'event', 'version', 'case_id', 'ts', 'session_ref', 'language', 'model_version'}
+BASE = {'event', 'version', 'case_id', 'ts', 'seq', 'session_ref', 'language', 'model_version'}
 USAGE = ('duration_ms', 'llm_calls', 'input_tokens', 'output_tokens', 'tool_calls')
 REQUIRED = {'intake_started': set(), 'clarification_requested': {'missing'}, 'transaction_confirmed': {'transaction_ref'},
             'handoff_created': {'kind', 'case_ref'}, 'handoff_accepted': {'case_ref', 'accepted_by'},
@@ -47,6 +47,8 @@ def _check_event(e):
         raise ValueError(f'{name} carries fields outside the contract (customer content?): {sorted(e.keys() - allowed)}')
     if e['version'] != VERSION:
         raise ValueError(f'Unsupported event version: {e["version"]}')
+    if type(e['seq']) is not int or e['seq'] < 0:
+        raise ValueError(f'{name}.seq must be a non-negative integer')
     if e['language'] not in ('es', 'pt'):
         raise ValueError(f'Unsupported language: {e["language"]}')
     if not isinstance(e['ts'], str) or not TS.fullmatch(e['ts']):
@@ -76,6 +78,8 @@ def _check_event(e):
 
 def _check_episode(case_id, seq):
     """Enforce one start, at most one end, single-shot evidence chain in order, and a complete chain behind 'accepted'."""
+    if len({e['seq'] for e in seq}) != len(seq):
+        raise ValueError(f'Episode {case_id} repeats a seq value')
     names = [e['event'] for e in seq]
     if names.count('intake_started') != 1 or names[0] != 'intake_started':
         raise ValueError(f'Episode {case_id} needs exactly one intake_started, first')
@@ -116,7 +120,9 @@ def _summary(episodes):
     accepted = sum(map(_safe_accepted, episodes))
     return dict(
         eligible_started=len(episodes), safe_accepted=accepted, safe_accepted_intake_rate=ratio(accepted, len(episodes)),
-        unsafe=sum(e['safety'] == 'unsafe' for e in ended), not_assessed=sum(e['safety'] == 'not_assessed' for e in ended),
+        unsafe=sum(e['safety'] == 'unsafe' for e in ended),
+        not_assessed=sum(e['safety'] == 'not_assessed' for e in ended) + len(episodes) - len(ended),
+        usage_unknown_episodes=len(episodes) - len(ended),
         outcomes={k: v for k, v in outcomes.items() if v},
         clarifications_per_episode=ratio(sum(e['event'] == 'clarification_requested' for seq in episodes for e in seq), len(episodes)),
         latency_p50_ms=statistics.median(latency) if latency else None,
@@ -129,7 +135,7 @@ def summarize(events):
     for e in events:
         _check_event(e)
     groups = {}
-    for e in sorted(events, key=lambda e: (e['case_id'], e['ts'])):
+    for e in sorted(events, key=lambda e: (e['case_id'], e['seq'])):
         groups.setdefault(e['case_id'], []).append(e)
     for case_id, seq in groups.items():
         _check_episode(case_id, seq)
