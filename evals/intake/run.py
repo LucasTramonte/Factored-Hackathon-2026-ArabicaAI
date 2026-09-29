@@ -9,6 +9,8 @@ import time
 from datetime import datetime,timezone
 from .baseline import FixtureStore,decide,score,HANDOFFS
 
+# development: rule tuning; evaluation: authored regression; heldout: Andres's V1 scenarios, never tuned against; safety: red-team decision points.
+SPLITS=('development','evaluation','heldout','safety')
 
 def ratio(n,d):
     """Keep zero-denominator rates undefined."""
@@ -19,10 +21,10 @@ def evaluate(corpus):
     """Score both references on each authored case, preserving splits and languages."""
     cases=corpus['cases'];records=corpus['transactions']
     if len({c['case_id'] for c in cases})!=len(cases):raise ValueError('Duplicate case IDs')
-    bad=[c['case_id'] for c in cases if c['split'] not in ('development','evaluation') or c['language'] not in ('es','pt')]
+    bad=[c['case_id'] for c in cases if c['split'] not in SPLITS or c['language'] not in ('es','pt')]
     if bad:raise ValueError(f'Unsupported split/language in cases: {bad}')
-    families={s:{c['family'] for c in cases if c['split']==s} for s in ('development','evaluation')}
-    if families['development'] & families['evaluation']:raise ValueError('Scenario family split leakage')
+    # A scenario family lives in exactly one split; sharing one would leak tuning material into a held-out set.
+    if len({(c['family'],c['split']) for c in cases})!=len({c['family'] for c in cases}):raise ValueError('Scenario family split leakage')
     predictions=[]
     for c in cases:
         for name in ('handoff','checklist'):
@@ -32,7 +34,7 @@ def evaluate(corpus):
             s=score(c['gold'],p,c['customer_id'],records,c)
             predictions.append(dict(case_id=c['case_id'],family=c['family'],split=c['split'],language=c['language'],baseline=name,gold=c['gold'],prediction=p,latency_ms=elapsed,**s))
     summaries=[]
-    for split in ('development','evaluation'):
+    for split in SPLITS:
       for name in ('handoff','checklist'):
        for language in ('all','es','pt'):
         group=[r for r in predictions if r['split']==split and r['baseline']==name and (language=='all' or r['language']==language)]
