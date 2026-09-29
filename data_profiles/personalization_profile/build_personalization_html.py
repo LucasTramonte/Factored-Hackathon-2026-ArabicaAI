@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import html as html_lib
 import io
 import sys
 import time
@@ -83,7 +84,7 @@ def main(argv: List[str] | None = None) -> int:
     with pm.connect(db_path, args.memory_limit) as con:
         m = pm.measure(con)
     elapsed = time.monotonic() - t0
-    r = pm.readings(m)
+    r = {key: pm.reading_html(value) for key, value in pm.readings(m).items()}
     total_customers = m["total_customers"]
     agree = m["accent_agreement"]
 
@@ -177,7 +178,7 @@ signals support <code>gold.customer_personalization_profile</code> before buildi
 {df_to_html_table(recommended)}
 
 <footer>
-Generated from <code>{pm.display_path(db_path)}</code> (<code>silver.*</code>, read-only). Database contains
+Generated from <code>{html_lib.escape(pm.display_path(db_path))}</code> (<code>silver.*</code>, read-only). Database contains
 {total_customers:,} customers. Queries completed in {elapsed:.1f}s. The dataset is synthetic; these counts
 describe the hackathon sample and not real customer behavior.
 </footer>

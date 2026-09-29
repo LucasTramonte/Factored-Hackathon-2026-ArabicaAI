@@ -20,6 +20,14 @@ import os
 from pathlib import Path
 
 import duckdb
+import html
+import re
+
+
+def reading_html(value: str) -> str:
+    """Escape measured text, then render its Markdown code spans."""
+    safe = html.escape(value)
+    return re.sub(r"`([^`]+)`", lambda match: f"<code>{match.group(1)}</code>", safe)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT_DEFAULT = SCRIPT_DIR.parent.parent

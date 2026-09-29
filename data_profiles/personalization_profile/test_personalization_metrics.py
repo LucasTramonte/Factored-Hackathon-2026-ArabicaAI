@@ -67,3 +67,8 @@ def test_display_path_never_prints_a_home_directory(tmp_path):
     assert pm.display_path(pm.PROJECT_ROOT_DEFAULT / 'data' / 'latam_bank.duckdb') == 'data/latam_bank.duckdb'
     assert pm.display_path(tmp_path / 'x.duckdb') == 'x.duckdb'
     assert str(Path.home()) not in pm.display_path(Path.home() / 'elsewhere' / 'x.duckdb')
+
+
+def test_html_reading_escapes_source_values_and_keeps_code_spans():
+    assert pm.reading_html('Source `<unsafe>` & <script>x</script>') == (
+        'Source <code>&lt;unsafe&gt;</code> &amp; &lt;script&gt;x&lt;/script&gt;')

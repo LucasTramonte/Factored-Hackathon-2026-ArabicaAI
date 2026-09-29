@@ -75,7 +75,7 @@ The fixture is the data condition set up for the test. For scenarios that need a
 - "12 de marzo" (V1-01) is 2026-03-12.
 - "3 de enero" (V1-05) is 2026-01-03.
 
-These fall after or on the harness fixture rows (`EVAL-B1` to `EVAL-B4`, dated 2026-03-12 to 2026-05-05), so no expected match is a future transaction.
+The current single-turn harness has `EVAL-B1` to `EVAL-B4` (2026-03-12 to 2026-05-05). It does not implement V1-02, V1-07 or V1-17: a later episode fixture for V1-02 needs a matching Pending/Reversed row on 2026-05-15; V1-07 needs a 2026-05-15 row with an explicitly fixture-only fraud flag; V1-17 needs the lookup to fail for 2026-05-11. V1-05 deliberately has no matching row on 2026-01-03. These cases cannot be counted as passing until those conditions are built and checked.
 
 **Currency.** When a phrase says "dólares" (the same word in ES and PT), the fixture row is in USD, its source currency. Examples are `EVAL-B1` (450.00 USD), the 800 USD in V1-05 and the 9,000 USD in V1-08. Customers in México, Colombia and Argentina also hold USD transactions, so this is a real case, not a conversion. Never convert a local-currency row to match the phrase.
 
