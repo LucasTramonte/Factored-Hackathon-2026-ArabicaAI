@@ -41,6 +41,7 @@ def con():
         ('A',TIMESTAMP '2026-09-01 10:00:00','Cargo duplicado','Open',42.0),
         ('A',TIMESTAMP '2026-09-15 10:00:00','Cajero no entregó','Escalated',42.0),
         ('A',TIMESTAMP '2026-09-20 10:00:00','Tarifa','Resolved',42.0),
+        ('A',TIMESTAMP '2026-09-08 10:00:00','Transferencia fallida','In Process',42.0),
         ('B',TIMESTAMP '2026-09-21 10:00:00','Otro','Open',42.0)''')
     con.execute('''CREATE TABLE silver.fact_call_center_interactions(customer_id VARCHAR, interaction_date TIMESTAMP,
         contact_reason VARCHAR, reason_category VARCHAR, sentiment_score DOUBLE)''')
@@ -74,6 +75,7 @@ def test_full_card(con):
                                 {'product_type': 'Cuenta Ahorro', 'last4': '9999'},
                                 {'product_type': 'Tarjeta Crédito', 'last4': '4444'}]
     assert card['open_complaints'] == [{'subcategory': 'Cajero no entregó', 'status': 'Escalated', 'created': '2026-09-15'},
+                                       {'subcategory': 'Transferencia fallida', 'status': 'In Process', 'created': '2026-09-08'},
                                        {'subcategory': 'Cargo duplicado', 'status': 'Open', 'created': '2026-09-01'}]
     assert card['last_contact'] == {'reason': 'Reclamo cargo', 'category': 'Queja', 'date': '2026-09-10'}
     assert card['usual_channel'] == 'iOS App'
@@ -95,6 +97,22 @@ def test_empty_customer(con):
     card = build_context_card(con, 'B', TODAY)
     assert card['usual_channel'] == 'web' and card['currency'] is None and card['products'] == []
     assert card['open_complaints'] == [] and card['last_contact'] is None and card['age_band'] is None
+
+
+def test_ties_and_nulls(con):
+    # B: 1 ARS Active + 1 COP Active + 1 USD Closed -> alphabetical tie among Active only.
+    con.execute("""INSERT INTO silver.dim_products VALUES
+        ('p6','B','Tarjeta Débito',NULL,'COP','Active',0,0,0,0,0),
+        ('p7','B','Tarjeta Crédito','12','USD','Closed',0,0,0,0,0)""")
+    con.execute("INSERT INTO silver.fact_digital_events VALUES ('B',TIMESTAMP '2026-09-04 08:00:00','Android App','1.1.1.1')")
+    card = build_context_card(con, 'B', TODAY)
+    assert card['currency'] == 'ARS'
+    assert card['usual_channel'] == 'Android App'
+    assert card['products'] == [{'product_type': 'Cuenta Ahorro', 'last4': '0000'},
+                                {'product_type': 'Tarjeta Débito', 'last4': None}]
+    con.execute("UPDATE silver.dim_products SET product_status='Active' WHERE product_id='p7'")
+    assert {'product_type': 'Tarjeta Crédito', 'last4': '12'} in build_context_card(con, 'B', TODAY)['products']
+    assert build_context_card(con, 'B', dt.datetime(2026, 9, 29, 23, 59)) == build_context_card(con, 'B', TODAY)
 
 
 def test_unknown_customer(con):

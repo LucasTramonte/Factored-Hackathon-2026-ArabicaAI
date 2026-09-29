@@ -17,8 +17,14 @@ def build_context_card(con, customer_id: str, today: dt.date) -> dict | None:
     """Return the context card for ``customer_id`` or None when the customer is unknown.
 
     Reads only identity, language and product/case-history columns from ``silver.*``.
-    ``today`` is the session date used for the age band and the 90-day channel window.
+    ``today`` (date, or datetime reduced to its date) drives the age band and the
+    inclusive ``[today-90, today]`` channel window (91 calendar days). ``currency``
+    comes from the customer's Active products, never from country: Mexican
+    customers also transact in USD (see ``data_profiles/fraud_readiness_findings.md``).
+    ``products[].last4`` is None when the product number is NULL; ``usual_channel``
+    falls back to ``'web'``, which is not an observed channel value.
     """
+    today = today.date() if isinstance(today, dt.datetime) else today
     row = con.execute(
         'SELECT first_name, date_of_birth, country, detected_accent, segment '
         'FROM silver.dim_customers WHERE customer_id = ?', [customer_id]).fetchone()
@@ -63,7 +69,10 @@ def style_defaults(card: dict) -> dict:
 
 
 def age_band(dob: dt.date | None, today: dt.date) -> str | None:
-    """Age band with exact birthday arithmetic; None when date of birth is missing."""
+    """Age band with exact birthday arithmetic; None when date of birth is missing.
+
+    Ages under 18 fall in '18-29' (no separate minor band).
+    """
     if dob is None:
         return None
     age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
@@ -86,8 +95,9 @@ def _language_variant(accent, country):
 
 def _usual_currency(con, customer_id):
     row = con.execute(
-        'SELECT currency FROM silver.dim_products WHERE customer_id = ? '
-        'GROUP BY currency ORDER BY count(*) DESC, currency LIMIT 1', [customer_id]).fetchone()
+        'SELECT currency FROM silver.dim_products WHERE customer_id = ? AND product_status = ? '
+        'GROUP BY currency ORDER BY count(*) DESC, currency LIMIT 1',
+        [customer_id, ACTIVE_STATUS]).fetchone()
     return row[0] if row else None
 
 
@@ -102,7 +112,7 @@ def _products(con, customer_id):
 def _open_complaints(con, customer_id):
     rows = con.execute(
         'SELECT subcategory, status, CAST(creation_date AS DATE) FROM silver.fact_complaints '
-        'WHERE customer_id = ? AND status IN (?, ?, ?) ORDER BY creation_date DESC',
+        'WHERE customer_id = ? AND status IN (?, ?, ?) ORDER BY creation_date DESC, subcategory, status',
         [customer_id, *OPEN_STATUSES]).fetchall()
     return [{'subcategory': s, 'status': st, 'created': d.isoformat()} for s, st, d in rows]
 
@@ -111,7 +121,7 @@ def _last_contact(con, customer_id):
     row = con.execute(
         'SELECT contact_reason, reason_category, CAST(interaction_date AS DATE) '
         'FROM silver.fact_call_center_interactions WHERE customer_id = ? '
-        'ORDER BY interaction_date DESC LIMIT 1', [customer_id]).fetchone()
+        'ORDER BY interaction_date DESC, contact_reason LIMIT 1', [customer_id]).fetchone()
     if row is None:
         return None
     return {'reason': row[0], 'category': row[1], 'date': row[2].isoformat()}
