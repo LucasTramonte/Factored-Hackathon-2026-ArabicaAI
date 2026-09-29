@@ -1,4 +1,4 @@
-# Intake demo cost estimate — reviewed 28 September 2026
+# Intake demo cost estimate — reviewed 29 September 2026
 
 ## Decision to make
 
@@ -26,6 +26,10 @@ These are **constant-capacity price floors**, before taxes and unpriced items. T
 - **AWS single VM alternative:** [Lightsail](https://aws.amazon.com/lightsail/pricing/) lists a **$24/month** public-IPv4 Linux 4 GB, 2-vCPU, 80-GB instance. Add an assumed **20 billable snapshot GB-month × $0.05 = $1**, and an optional **$1/month 5-GB object storage bundle**: **$26/month fixed**. This variant runs PostgreSQL on the same VM, so the team owns database operations, restore checks, patching, and resource contention. The 20-GB snapshot figure is a billing assumption, not a proven backup size or retention policy.
 - **AWS managed database alternative:** The same [Lightsail pricing](https://aws.amazon.com/lightsail/pricing/) lists a **$30/month** standard, encrypted, 2-GB managed database. Added to the preceding VM assumptions, the fixed total is **$56/month**. This differs materially from Render's 256-MB database; the options are not performance-equivalent.
 - **Credits:** set to **$0** until eligibility is confirmed. The [AWS Free Tier](https://aws.amazon.com/free/) advertises credits for eligible new accounts, but those cannot be assumed and do not pay a separate model provider's API bill. The [AWS Pricing Calculator](https://calculator.aws/) should be used for a region-specific AWS quote. This workbook is not its export.
+
+## Cloudflare Worker + D1 candidate
+
+A [Cloudflare Worker can serve a Python or JavaScript API and static assets](https://developers.cloudflare.com/workers/static-assets/) without an always-on laptop. We have a separate JavaScript Worker + D1 variant in [`cloudflare/`](cloudflare/README.md) that passed local D1 flow tests. If it stays inside the [Workers Free limits](https://developers.cloudflare.com/workers/platform/pricing/) and [D1 Free limits](https://developers.cloudflare.com/d1/platform/limits/), its fixed Cloudflare hosting charge could be **$0/month**; hypothetical model API usage remains separate. This is **not yet a verified quote or production capacity result**: the current demo has no measured Worker CPU, D1 row scans, storage growth, retries, or peak load. At 9,000 episodes/day × 10 planned requests, the scenario already reaches 90,000 Worker requests/day before extra requests, close to the 100,000/day Free cap. The workbook shows this request comparison on a separate tab and leaves hosting suitability conditional. The Cloudflare variant is not yet deployed.
 
 ## Equations and operating limits
 

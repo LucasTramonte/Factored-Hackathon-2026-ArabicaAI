@@ -96,15 +96,17 @@ readme["A10"] = "Important limit"
 readme["B10"] = "Lightsail VM self-hosts PostgreSQL in the $24 scenario; managed DB is a separate $30 add-on."
 readme["A11"] = "Editing"
 readme["B11"] = "Change pale-yellow values on Inputs. Blue-green cells on Scenarios recalculate in Excel/LibreOffice."
+readme["A12"] = "Cloudflare candidate"
+readme["B12"] = "Worker + D1 may have $0 fixed cloud cost inside Free limits; a code migration and CPU/D1 checks are required. See its separate sheet."
 readme["A13"] = "Not in estimate"
 readme["B13"] = "Taxes, exchange rates, domain, paid logs, egress overages, S3 transfer, model tools/audio, labor, support, HA, security operations."
 readme["A15"] = "Reviewed"
-readme["B15"] = "2026-09-28; prices should be rechecked before spending. No credits assumed."
+readme["B15"] = "2026-09-29; prices should be rechecked before spending. No credits assumed."
 readme.column_dimensions["A"].width = 22
 readme.column_dimensions["B"].width = 105
 for row in range(3, 16):
     readme.cell(row, 2).alignment = Alignment(wrap_text=True, vertical="top")
-    readme.row_dimensions[row].height = 32 if row in (3, 5, 6, 7, 8, 9, 10, 11, 13) else 22
+    readme.row_dimensions[row].height = 32 if row in (3, 5, 6, 7, 8, 9, 10, 11, 12, 13) else 22
 
 ws = wb.create_sheet("Inputs")
 title(ws, "Editable inputs | yellow = change with evidence", 5)
@@ -212,6 +214,8 @@ sources = [
     ("Render", "$7/mo web, $6/mo Postgres, $0.30/GB-month allocated Postgres storage", "https://render.com/pricing", "Paid proposed deployment; job, egress, taxes extra"),
     ("AWS credits", "Up to $200 for eligible new accounts; workbook assumes zero", "https://aws.amazon.com/free/", "AWS credits cannot reduce separate OpenAI bill"),
     ("Official AWS calculator", "Use for region and service-specific quote before purchase", "https://calculator.aws/", "This workbook is not a calculator export"),
+    ("Cloudflare Workers Free", "100,000 requests/day, 10 ms CPU/request", "https://developers.cloudflare.com/workers/platform/pricing/", "Conditional free candidate; this report has no measured CPU usage"),
+    ("Cloudflare D1 Free", "5M rows read/day, 100k rows written/day, 500 MB per database", "https://developers.cloudflare.com/d1/platform/limits/", "No measured D1 row scans or storage forecast"),
 ]
 for r, values in enumerate(sources, start=4):
     for col, value in enumerate(values, start=1):
@@ -224,6 +228,37 @@ for r, values in enumerate(sources, start=4):
 for col, width in {"A": 24, "B": 78, "C": 74, "D": 63}.items():
     src.column_dimensions[col].width = width
 src.freeze_panes = "A4"
+
+cf = wb.create_sheet("Cloudflare candidate")
+title(cf, "Cloudflare Worker + D1 | conditional Free plan", 7)
+cf["A2"] = "A connected GitHub repo does not migrate the current PostgreSQL demo. The Worker variant must pass live CPU and D1 checks."
+cf.merge_cells("A2:G2")
+header(cf, 4, ("Scenario", "Episodes/day", "Planned Worker req/day", "Free req/day cap", "Request headroom", "Request-cap check", "Illustrative AI USD/month"))
+for r, source_row in enumerate(range(5, 9), start=5):
+    cf.cell(r, 1, f"=Scenarios!A{source_row}")
+    cf.cell(r, 2, f"=Scenarios!B{source_row}")
+    cf.cell(r, 3, f"=B{r}*Inputs!B9")
+    cf.cell(r, 4, 100000)
+    cf.cell(r, 5, f"=D{r}-C{r}")
+    cf.cell(r, 6, f'=IF(C{r}<=D{r},"under request cap","over request cap")')
+    cf.cell(r, 7, f"=Scenarios!J{source_row}")
+    cf.cell(r, 7).number_format = '"$"#,##0.00'
+    cf.row_dimensions[r].height = 28
+cf["A10"] = "Potential fixed hosting"
+cf["B10"] = "$0 only while Worker and D1 stay inside Free quotas; not a capacity promise."
+cf.merge_cells("B10:G10")
+cf["A11"] = "Still unmeasured"
+cf["B11"] = "CPU ms/request (Free: 10 ms); D1 rows read/write, DB size, retries, static requests, peak traffic."
+cf.merge_cells("B11:G11")
+cf["A12"] = "Model charges"
+cf["B12"] = "AI usage in column G is hypothetical and billed separately from Cloudflare. Current demo uses no model."
+cf.merge_cells("B12:G12")
+cf["A13"] = "Readiness"
+cf["B13"] = "The 9,000/day scenario has only 10,000 requests/day headroom under the assumed 10 calls/episode."
+cf.merge_cells("B13:G13")
+for column, width in {"A": 34, "B": 20, "C": 27, "D": 24, "E": 23, "F": 25, "G": 31}.items():
+    cf.column_dimensions[column].width = width
+cf.freeze_panes = "B5"
 
 wb.save(OUTPUT)
 print(OUTPUT)
