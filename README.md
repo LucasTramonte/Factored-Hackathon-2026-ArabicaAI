@@ -64,3 +64,7 @@ Docker reuses cached build layers on later runs. For a smaller first S3 check, f
 - [Marketing/Product evidence](data_foundation/reports/README.md) and [offline report hub](data_foundation/reports/index.html): reviewed aggregates, limits and reproducible source. The [customer-backward brief](Docs/Marketing-Product-PRFAQ.md) frames the proposed test.
 
 The dataset is synthetic. Descriptive counts from it should not be presented as measured bank outcomes or causal effects.
+
+## Roberto evaluation branch
+
+The current transcript reconciliation is documented in [Silver transcript verification](Docs/intake/silver-transcript-verification.md), with a network-free readout in `notebooks/07_silver_transcript_verification.ipynb`. Earlier notebooks/reports remain dated historical evidence; their presence does not restore the retired CSV production pipeline.
