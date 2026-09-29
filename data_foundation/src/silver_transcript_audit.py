@@ -72,7 +72,7 @@ def audit(db, quality, previous, sample, output):
     with tempfile.TemporaryDirectory(dir=output) as scratch, duckdb.connect(str(db), read_only=True) as con:
         con.execute("SET memory_limit='3GB'")
         con.execute('SET threads=2')
-        con.execute('SET temp_directory=?', [str(db.parent/'duckdb_tmp')])
+        con.execute('SET temp_directory=?', [str(Path(scratch)/'duckdb_tmp')])
         prior_csv = Path(scratch)/'previous.csv'
         predictions = export_previous(previous, prior_csv)
         con.execute('CREATE TEMP TABLE previous AS SELECT * FROM read_csv(?,all_varchar=true)', [str(prior_csv)])
@@ -101,11 +101,11 @@ def audit(db, quality, previous, sample, output):
         for table, key, fields in [
             ('call_transcripts','transcript_id',('interaction_id','customer_id','full_text','customer_text','agent_text','detected_language','detected_intents','main_topics')),
             ('call_center_interactions','interaction_id',('customer_id','contact_reason','reason_category'))]:
+            changed = ', '.join(f'count(*) FILTER(WHERE b.{f} IS DISTINCT FROM s.{f}) AS "{f}"' for f in fields)
+            row = records(con, f'''SELECT count(*) AS "matched", {changed}
+                FROM bronze.{table} b JOIN silver.fact_{table} s USING({key})''')[0]
             for field in fields:
-                row = records(con, f'''SELECT count(*) AS "matched",
-                    count(*) FILTER(WHERE b.{field} IS DISTINCT FROM s.{field}) changed
-                    FROM bronze.{table} b JOIN silver.fact_{table} s USING({key})''')[0]
-                result['bronze_silver_changes'].append(dict(table=table, field=field, **row))
+                result['bronze_silver_changes'].append(dict(table=table, field=field, matched=row['matched'], changed=row[field]))
         result['transcript_flags'] = records(con, """SELECT count(*) interactions,
             count(*) FILTER(WHERE i.has_transcript IS TRUE) flagged,
             count(*) FILTER(WHERE i.has_transcript IS TRUE AND t.transcript_id IS NULL) flagged_but_missing,

@@ -36,7 +36,7 @@ Imported on 2026-09-26 from the four challenge PDFs supplied by the user. Origin
 
 ## Discrepancies to resolve before implementation
 
-1. The existing `Docs/LATAM_BANK_DATA_DICTIONARY.md` omits the detailed dimension schemas present on PDF pp. 3–6. Consult the original PDF for these fields; existing Markdown is a convenience transcription, not a complete replacement.
+1. The existing `Docs/LATAM_BANK_DATA_DICTIONARY.md` omits the detailed dimension schemas present on PDF pp. 3–6. The Markdown dictionary remains the schema authority for the supplied dataset; the PDF is supplementary evidence for those fields. Report the gap rather than importing PDF-only detail as a dataset constraint.
 2. The PDF customer_status domain is Active/Inactive/Suspended/Closed (p. 3), while current Python contracts use Blocked instead of Suspended. Confirm actual data and report the discrepancy before changing contracts.
 3. The PDF interaction channel list excludes Web (p. 8); the Python contract includes it. Verify actual headers/values before deciding whether this is drift or an intentional extension.
 4. Runtime contracts cover only selected columns, required fields and relationships. They are executable baseline checks, not the complete PDF schema. The YAML registry is not loaded at runtime.

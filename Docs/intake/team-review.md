@@ -13,7 +13,7 @@ This package asks the team to accept or revise the [customer and measurement con
 | Completion | One explicitly confirmed, owned transaction plus source evidence, original statement, case ID and human-review request. Singleton retrieval alone is not confirmation. | Pending |
 | Missing evidence | Missing merchant can be disclosed as unavailable; missing core transaction evidence prevents completion. Failed retrieval requires technical handoff. | Pending |
 | Allowed action | Human review only, even if the user requests a refund, card block or fraud determination. No other customer's data may be returned. | Pending |
-| Primary KPI | Safe complete intake episodes / all in-scope attempted episodes, including abandonment and technical failure. Decision-point accuracy is a component measure. | Pending |
+| Primary KPI | Safe accepted intake (contract v0.2): eligible episodes with an owned transaction, verified evidence, current confirmation, approved draft, durable receipt and assessed safety / all eligible episodes started, including failures, abandonment, withdrawal and pending. Decision-point accuracy is a component measure. | Pending |
 | Evaluation acceptance | Independently reviewed ES/PT labels, frozen versions, safety failures examined individually and a separately authored unseen set before claims of generalization. | Pending |
 
 Lucas can review scope and evaluation decisions; Andrés can review language and intent labels; Roberto can incorporate adjudicated definitions. Confirm these roles with the team.

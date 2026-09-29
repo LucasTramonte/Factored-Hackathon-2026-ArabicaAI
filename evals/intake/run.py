@@ -19,6 +19,8 @@ def evaluate(corpus):
     """Score both references on each authored case, preserving splits and languages."""
     cases=corpus['cases'];records=corpus['transactions']
     if len({c['case_id'] for c in cases})!=len(cases):raise ValueError('Duplicate case IDs')
+    bad=[c['case_id'] for c in cases if c['split'] not in ('development','evaluation') or c['language'] not in ('es','pt')]
+    if bad:raise ValueError(f'Unsupported split/language in cases: {bad}')
     families={s:{c['family'] for c in cases if c['split']==s} for s in ('development','evaluation')}
     if families['development'] & families['evaluation']:raise ValueError('Scenario family split leakage')
     predictions=[]
@@ -55,7 +57,7 @@ def main():
     args=p.parse_args();source=Path(__file__).with_name('cases.json');blob=source.read_bytes()
     result=evaluate(json.loads(blob))
     result['provenance']=dict(executed_utc=datetime.now(timezone.utc).isoformat(),python=platform.python_version(),corpus_sha256=hashlib.sha256(blob).hexdigest(),code_sha256=hashlib.sha256(Path(__file__).with_name('baseline.py').read_bytes()+Path(__file__).read_bytes()).hexdigest(),gold_status='Authored; pending team review',latency_scope='One local call per case; descriptive microbenchmark only')
-    args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+    args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
     print(json.dumps([r for r in result['summary'] if r['language']=='all'],indent=2))
 
 if __name__=='__main__':main()

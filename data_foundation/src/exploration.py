@@ -31,8 +31,14 @@ def discover_files(data_root, contract):
 def partition_date_from_path(path):
     """Read historical year/month/day partitions without reviving the CSV scanner."""
     parts = dict(re.findall(r'(year|month|day)=(\d+)', str(path)))
-    return ('{year}-{month:02d}-{day:02d}'.format(year=parts['year'], month=int(parts['month']),
-            day=int(parts['day'])) if {'year', 'month', 'day'} <= parts.keys() else None)
+    if not parts:
+        return None
+    if not {'year', 'month', 'day'} <= parts.keys():
+        raise ValueError(f'Incomplete partition path: {path}')
+    try:
+        return datetime(int(parts['year']), int(parts['month']), int(parts['day'])).date().isoformat()
+    except ValueError as exc:
+        raise ValueError(f'Invalid partition date in path: {path}') from exc
 
 
 
@@ -239,7 +245,8 @@ customer enrichment uses unique dimension keys and preserves fact grain.
             f'SELECT count(*) AS eligible, count({date_field}) AS dated, min({date_field}) AS first_event, '
             f'max({date_field}) AS last_event, min(process_date) AS first_process, '
             f'max(process_date) AS last_process, sum(CASE WHEN substr({date_field},1,10)<process_date THEN 1 ELSE 0 END) AS later_process, '
-            f'sum(CASE WHEN substr({date_field},1,10)>process_date THEN 1 ELSE 0 END) AS event_after_process '
+            f'sum(CASE WHEN substr({date_field},1,10)>process_date THEN 1 ELSE 0 END) AS event_after_process, '
+            f'sum(CASE WHEN {date_field} IS NULL OR process_date IS NULL THEN 1 ELSE 0 END) AS not_comparable '
             f'FROM eligible_{table}')]
         for dimension in ['all', *dimensions, 'month']:
             expressions = {

@@ -7,7 +7,8 @@ The next [team review package](../../Docs/intake/team-review.md) includes `revie
 From the repository root:
 
 ```sh
-make test compile PYTHON=.venv/bin/python
+make test-evaluation compile PYTHON=.venv/bin/python
+.venv/bin/python -m compileall -q evals
 .venv/bin/python -m evals.intake.run
 # Optional, requires the completed exploration cache; opens it read-only:
 .venv/bin/python -m evals.intake.source_smoke

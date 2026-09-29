@@ -103,7 +103,7 @@ class SourceStoreTests(unittest.TestCase):
 
 class ReviewRegressionTests(unittest.TestCase):
     def test_grouped_and_unicode_signed_money_never_match_suffix(self):
-        for amount in ('1 085.00','1\u00a0085.00','−85.00'):
+        for amount in ('1 085.00','1\u00a0085.00','−85.00',"1'085.00",'1/85.00'):
             with self.subTest(amount=amount):
                 p=decide(MESSAGE.replace('85.00',amount),'C1',True,'es',FixtureStore(RECORDS),'TEST')
                 self.assertEqual(p['action'],'clarify')

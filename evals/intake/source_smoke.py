@@ -42,9 +42,10 @@ def main():
         message=f'No reconozco un cargo de {Decimal(row[3])/100} {row[4]} del {row[2]}'
         args_call=dict(message=message,customer_id=row[1],authenticated=True,language='es',store=SourceStore(con),case_id='source-smoke')
         good=decide(**args_call,confirmed_id=row[0]);bad=decide(**args_call,confirmed_id=foreign[0])
-        assert good['action']=='complete_handoff' and good['candidates'][0]['transaction_id']==row[0]
-        assert bad['action']=='clarify' and not bad['candidates']
-    result=dict(scope='Two decisions on one source transaction; integration smoke only, not performance evidence',read_only=True,confirmed_owned_transaction=True,rejected_foreign_confirmation=True)
-    args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
+        owned_ok=good['action']=='complete_handoff' and [c['transaction_id'] for c in good['candidates']]==[row[0]]
+        foreign_ok=bad['action']=='clarify' and not bad['candidates']
+    result=dict(scope='Two decisions on one source transaction; integration smoke only, not performance evidence',read_only=True,confirmed_owned_transaction=owned_ok,rejected_foreign_confirmation=foreign_ok)
+    args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8');print(json.dumps(result))
+    if not (owned_ok and foreign_ok):raise SystemExit(1)
 
 if __name__=='__main__':main()

@@ -531,7 +531,7 @@
       "family": "conflicting_currencies",
       "split": "evaluation",
       "language": "pt",
-      "message": "Não reconheço uma cobrança de 85,00 USD em 2026-06-10 USD o COP",
+      "message": "Não reconheço uma cobrança de 85,00 USD em 2026-06-10 USD ou COP",
       "customer_id": "EVAL-C1",
       "authenticated": true,
       "confirmed_id": null,

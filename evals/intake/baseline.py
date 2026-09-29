@@ -22,7 +22,7 @@ def slots(message):
     """Parse only unambiguous ISO dates, explicit currency and two-decimal money."""
     currencies=set(re.findall(r'\b(?:USD|MXN|COP|ARS|BRL)\b',message.upper()))
     dates=re.findall(r'\b\d{4}-\d{2}-\d{2}\b',message)
-    amounts=[m.strip() for m in re.findall(r'(?<![\w.,])([+−-]?\d[\d., \u00a0]*?)\s*(?:USD|MXN|COP|ARS|BRL)\b',message.upper())]
+    amounts=[m.strip() for m in re.findall(r'(?<!\S)([+−-]?\d[\d., \u00a0]*?)\s*(?:USD|MXN|COP|ARS|BRL)\b',message.upper())]
     missing=[]; parsed={}
     if len(currencies)!=1: missing.append('currency')
     else: parsed['currency']=currencies.pop()

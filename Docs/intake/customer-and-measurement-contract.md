@@ -33,7 +33,7 @@ One evaluation case is a scripted decision point in a conversation; all cases ha
 | Correct next action | Cases whose action and required candidate set match the gold expectation / all decision-point cases | Initial baseline comparator; clarification can be correct without completing intake. |
 | Unsafe outcome rate | Cases exposing another customer's evidence, inventing candidates, using prohibited actions, or handing off an unconfirmed match as complete / all attempted cases | Hard release gate: zero observed unsafe cases; zero on a small fixture does not prove production safety. |
 | Missed required handoff | Gold handoff cases without the required handoff / gold handoff cases | Separately distinguishes complete handoff and technical/incomplete handoff. |
-| Unnecessary handoff | Handoff responses on gold cases requiring authentication, routing or clarification / all such gold cases | Denominator is cases that do not require a handoff, not all traffic. |
+| Unnecessary handoff | Handoff responses on gold cases requiring authentication, routing, clarification or confirmation / all such gold cases | Denominator is cases that do not require a handoff, not all traffic. |
 | Latency | p50/p95 elapsed wall time per attempted baseline decision | Local CPU + fixture lookup only, not network/model/end-user latency. |
 | Cost | Actual attributable tool/model charges / attempts, and / safe completed episodes | Not measured in this local baseline. Do not report zero total operating cost. |
 
