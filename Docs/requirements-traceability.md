@@ -2,7 +2,7 @@
 
 Roberto, updated 29 September 2026. This maps the 23 requirements in the team hub's section 3, "Initial Requirements," to merged evidence, open PRs, and remaining gaps. A merged PR is evidence for the capability it actually implements, not for a broader bank production claim.
 
-Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ missing owner or decision. PR #12 and #13 merged into the old #8 branch, not `main`; their path to `main` is open PR #16. PR #15 is stacked on open PR #17.
+Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ missing owner or decision. PR #12 and #13 reached `main` through merged PR #16. PR #15 is stacked on open PR #17; #18 is the evaluation follow-up.
 
 ## Functional requirements
 
@@ -15,7 +15,7 @@ Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ mi
 | F5 | System completes eligible service workflows | 🟡 | #17 accepts an unrecognized-charge report for human review. It does not resolve a dispute or perform a safe automated resolution. | Lucas |
 | F6 | System requests confirmation before sensitive actions | 🟡 | #17 requires explicit customer confirmation before case insertion; #8 evaluates the confirmation step. | Lucas, Roberto |
 | F7 | System escalates cases to a human agent | 🟡 | #17 stores accepted cases and lists them in the agent view. #9 defines scenario-specific handoffs; technical/incomplete outcomes remain planned. | Lucas, Roberto |
-| F8 | Users receive confirmation after completed actions | 🟡 | #17 returns a durable case reference only after insert and readback. #16 defines the corresponding event contract. | Lucas, Roberto |
+| F8 | Users receive confirmation after completed actions | 🟡 | #17 returns a durable case reference only after insert and readback. #16 merged the corresponding event contract. | Lucas, Roberto |
 
 ## Non-functional requirements
 
@@ -24,7 +24,7 @@ Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ mi
 | N1 | Response time target defined | ⚪ | #17/ADR-004 records measured Worker/D1 latency, but no accepted p50/p95 target. Set a target from a repeatable run. | Team decision |
 | N2 | Authentication and authorization implemented | 🟡 | #17 enforces a team gate, expiring sessions, actor roles, and own-transaction checks. Its simulated customer selection is explicitly not bank authentication. | Lucas |
 | N3 | Customer data protected | 🟡 | Main has read-only S3 pipeline rules; #17 gates the demo and scopes D1 reads; #15 excludes risk, balance, contact, and identity fields from the card. Retention remains open. | Lucas, Roberto |
-| N4 | System is traceable/auditable | 🟡 | Main has pipeline quality and #8 evaluation provenance. #17 records Gold seed provenance; #16 adds the episode event contract and scorer. Runtime event emission is pending. | Roberto, Lucas |
+| N4 | System is traceable/auditable | 🟡 | Main has pipeline quality and #8 evaluation provenance. #17 records Gold seed provenance; #16 merged the episode event contract and scorer. Runtime event emission is pending. | Roberto, Lucas |
 | N5 | System supports expected workload | 🟡 | #17/ADR-004 models bounded traffic scenarios and D1 limits. The bank's production traffic is undisclosed, so these are capacity scenarios rather than forecasts. | Lucas |
 | N6 | Monitoring and error handling implemented | 🟡 | #17 has health, fail-closed API errors, Worker observability, and a D1 budget test. Application error counters and #16 episode events are not emitted yet. | Lucas, Roberto |
 | N7 | Cost per interaction measured | 🔵 | #17/ADR-004 estimates infrastructure and an AI envelope. #16 leaves `operating_cost` null until actual usage and a price table exist. | Lucas, Roberto |
@@ -33,11 +33,11 @@ Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ mi
 
 | # | Requirement | Status | Evidence and remaining scope | Owner |
 |---|---|---|---|---|
-| S1 | Transaction and action logging | 🟡 | #16 defines event fields and episode ordering; #17 has durable case rows. Runtime event emission is pending. | Roberto |
-| S2 | Audit trail | 🟡 | #17 has case receipts and Gold provenance; #16 adds event references and scoring. No end-to-end runtime event log yet. | Lucas, Roberto |
+| S1 | Transaction and action logging | 🔵 | #16 merged the event contract; #18 adds explicit sequence order. #17 has durable case rows. Runtime event emission is pending. | Roberto |
+| S2 | Audit trail | 🟡 | #17 has case receipts and Gold provenance; #16 merged event references and scoring. No end-to-end runtime event log yet. | Lucas, Roberto |
 | S3 | Tool permissions enforced outside the LLM | 🟡 | #8 evaluation and #17 D1 routes derive customer identity from the session and enforce ownership outside model text. Agent tools are not implemented. | Lucas, Roberto |
-| S4 | Prompt-injection handling | 🟡 | #16 carries the held-out safety split and unsafe-action scorer. A live agent has not yet been tested against it. | Roberto |
-| S5 | Unauthorized-access handling | 🟡 | #17 tests forged/expired sessions, actor isolation, and foreign transactions; #16 adds adversarial cases. | Lucas, Roberto |
+| S4 | Prompt-injection handling | 🔵 | #16 merged the safety split and unsafe-action scorer. A live agent has not yet been tested against it. | Roberto |
+| S5 | Unauthorized-access handling | 🟡 | #17 tests forged/expired sessions, actor isolation, and foreign transactions; #16 merged adversarial cases. | Lucas, Roberto |
 | S6 | Tool failure fallback | 🔵 | #8 harness models technical handoff; #11 specifies fail-closed runtime behavior. The live service has no agent tool calls yet. | Roberto |
 | S7 | Human escalation | 🟡 | #17 accepts reports into an agent queue. #9 scenarios define further handoff types; assignment and resolution history remain planned. | Lucas, Roberto |
 | S8 | Data retention defined | ⚪ | #17/ADR-004 documents Workers Logs retention, but case, session, event, and demo-reset retention still need one explicit policy. | Team decision |
@@ -59,6 +59,7 @@ Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ mi
 | #9 (open) | Personalization profile and ES/PT scenarios; reviewer fixes pushed |
 | #10 | Fraud-data readiness and label limitations on `main` |
 | #11 (open) | Smaller Worker/D1 agent V1 spec; load-time card and atomic dedupe |
-| #12, #13 → #16 (open, approved) | Held-out/safety splits, event contract, episode KPI scorer; not on `main` yet |
+| #12, #13 → #16 (merged) | Safety and authored scenario splits, event contract, episode KPI scorer on `main` |
+| #18 (open) | Explicit event sequence, pending safety/usage, and `v1_authored` split name |
 | #15 (open, stacked on #17) | Minimal card built by Gold and read from D1 at session start |
 | #17 (open) | Worker/D1 intake demo, Gold slice, session and case flows, capacity and cost |
