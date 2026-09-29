@@ -38,7 +38,7 @@ This export reads only the fixed allowlisted customer and at most 20 transaction
 
 ## Prepare the remote resource
 
-These are **one-time account actions**. They have not been run for this repository.
+These are **one-time account actions**. The team pilot has a Worker and D1 database with migrations and the fictitious seed applied; other accounts must repeat setup with their own D1 ID. Verify runtime secrets and the live flow before sharing the URL.
 
 1. In Cloudflare **Workers & Pages**, use the Worker named `factored-hackathon-2026-arabicaai`; keep any existing Pages project unchanged. Create a D1 database named `arabica-intake-demo` under **D1 SQL Database**. Copy its non-secret database UUID into `cloudflare/wrangler.jsonc` in place of the all-zero placeholder. The Worker name in Cloudflare must match the config `name`.
 2. Configure Cloudflare **Access** on the production `*.workers.dev` Worker URL with an allowlist of team email addresses. Protect previews too, or disable them until you have a separate preview database. A preview deployment otherwise uses the configured binding and can write to the same D1 database.

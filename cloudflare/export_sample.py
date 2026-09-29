@@ -9,7 +9,7 @@ from pathlib import Path
 import psycopg
 from psycopg.rows import dict_row
 
-from demo_db.migrate import DEFAULT_DSN
+from demo_pg.db.migrate import DEFAULT_DSN
 
 CUSTOMER_ID = "CLI-U53R5AZVLET0"
 BUSINESS_DATE = date(2026, 2, 26)
