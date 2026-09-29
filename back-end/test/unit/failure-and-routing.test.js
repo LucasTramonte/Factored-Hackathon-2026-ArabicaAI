@@ -88,10 +88,10 @@ test('HTML documents require the gate before assets are served', async () => {
 });
 
 test('database metrics are exposed only when explicitly enabled', () => {
-  const store = { metrics: () => ({ queries: 2, rowsRead: 5, rowsWritten: 1 }) };
+  const store = { metrics: () => ({ queries: 2, rowsRead: 5, rowsWritten: 1, roundTrips: 1 }) };
   assert.equal(withMetrics(new Response('{}'), env, store).headers.get('X-D1-Metrics'), null);
   const shown = withMetrics(new Response('{}'), { ...env, DEMO_EXPOSE_DB_METRICS: '1' }, store);
-  assert.equal(shown.headers.get('X-D1-Metrics'), 'queries=2;rows_read=5;rows_written=1');
+  assert.equal(shown.headers.get('X-D1-Metrics'), 'queries=2;rows_read=5;rows_written=1;round_trips=1');
 });
 
 test('the body limit stops reading a stream without Content-Length', async () => {

@@ -2,30 +2,36 @@
  * Every SQL statement the service runs. Route handlers never build SQL, so this is the only module
  * to replace if the store moves (for example to PostgreSQL through Hyperdrive).
  *
- * Each call uses ``.all()`` or ``.run()`` so D1's ``meta`` is available. ``metrics()`` reports
- * queries, rows read and rows written for the current request; the budget tests use it.
+ * Each call uses ``.all()``, ``.run()`` or ``.batch()`` so D1's ``meta`` is available. ``metrics()`` reports
+ * queries, rows read, rows written and round trips for the current request; the budget tests use it.
+ * A batch is one round trip and one atomic transaction.
  */
 export function createStore(db) {
-  const totals = { queries: 0, rowsRead: 0, rowsWritten: 0 };
+  const totals = { queries: 0, rowsRead: 0, rowsWritten: 0, roundTrips: 0 };
   const track = result => {
     totals.queries += 1;
     totals.rowsRead += result?.meta?.rows_read ?? 0;
     totals.rowsWritten += result?.meta?.rows_written ?? 0;
     return result;
   };
-  const all = async (sql, ...params) => track(await db.prepare(sql).bind(...params).all()).results;
+  const all = async (sql, ...params) => { totals.roundTrips += 1; return track(await db.prepare(sql).bind(...params).all()).results; };
   const first = async (sql, ...params) => (await all(sql, ...params))[0] ?? null;
-  const run = async (sql, ...params) => track(await db.prepare(sql).bind(...params).run());
+  const batch = async statements => {
+    totals.roundTrips += 1;
+    return (await db.batch(statements.map(([sql, ...params]) => db.prepare(sql).bind(...params)))).map(track);
+  };
 
   return {
     metrics: () => ({ ...totals }),
     ping: () => all('SELECT 1 AS ok'),
     customerExists: async customerId => Boolean(await first('SELECT 1 AS ok FROM customers WHERE customer_id=?', customerId)),
 
-    deleteExpiredSessions: now => run('DELETE FROM sessions WHERE expires_at<=?', now),
-    deleteSession: hash => run('DELETE FROM sessions WHERE token_hash=?', hash),
-    insertSession: (hash, actor, customerId, expiresAt) =>
-      run('INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)', hash, actor, customerId, expiresAt),
+    /** In one atomic batch: purge expired sessions, revoke the presented token, insert the new one. */
+    rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt }) => batch([
+      ['DELETE FROM sessions WHERE expires_at<=?', now],
+      ...(oldHash ? [['DELETE FROM sessions WHERE token_hash=?', oldHash]] : []),
+      ['INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)', newHash, actor, customerId, expiresAt]
+    ]),
     findSession: (hash, actor, now) =>
       first('SELECT customer_id FROM sessions WHERE token_hash=? AND actor=? AND expires_at>?', hash, actor, now),
 

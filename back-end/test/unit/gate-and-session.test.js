@@ -52,3 +52,22 @@ test('cookie parsing ignores junk and keeps the first value of a name', () => {
   assert.equal(parsed.c, 'x=y');
   assert.equal(parsed.junk, undefined);
 });
+
+test('starting a session is one atomic store call that revokes the old token and purges expired ones', async () => {
+  const { startSession, tokenHash: hash } = await import('../../src/auth/session.js');
+  const calls = [];
+  const store = { rotateSession: async args => { calls.push(args); } };
+  const old = 'b'.repeat(64);
+  const request = new Request('https://d.example/demo/session', { headers: { Cookie: `demo_session=${old}` } });
+  const cookie = await startSession(request, store, 'customer', 'demo-ana');
+  assert.equal(calls.length, 1);
+  const [call] = calls;
+  assert.equal(call.oldHash, await hash(old));
+  assert.equal(call.actor, 'customer');
+  assert.equal(call.customerId, 'demo-ana');
+  assert.ok(call.expiresAt > call.now && call.expiresAt - call.now === 3600_000);
+  assert.equal(call.newHash, await hash(cookie.split(';')[0].split('=')[1]));
+  const fresh = await startSession(new Request('https://d.example/demo/session'), store, 'agent');
+  assert.equal(calls[1].oldHash, null);
+  assert.ok(fresh.startsWith('demo_agent_session='));
+});

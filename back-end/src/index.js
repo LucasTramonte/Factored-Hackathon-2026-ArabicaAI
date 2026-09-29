@@ -9,9 +9,9 @@ import { createStore } from './store/d1.js';
 /** Attach per-request D1 counters, only where ``DEMO_EXPOSE_DB_METRICS`` is ``"1"`` (local tests). */
 export function withMetrics(response, env, store) {
   if (env.DEMO_EXPOSE_DB_METRICS !== '1') return response;
-  const { queries, rowsRead, rowsWritten } = store.metrics();
+  const { queries, rowsRead, rowsWritten, roundTrips } = store.metrics();
   const headers = new Headers(response.headers);
-  headers.set('X-D1-Metrics', `queries=${queries};rows_read=${rowsRead};rows_written=${rowsWritten}`);
+  headers.set('X-D1-Metrics', `queries=${queries};rows_read=${rowsRead};rows_written=${rowsWritten};round_trips=${roundTrips}`);
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 

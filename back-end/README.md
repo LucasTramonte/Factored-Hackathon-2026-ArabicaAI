@@ -21,7 +21,7 @@ The service does not decide fraud, issue refunds or authenticate bank customers.
 | `src/auth/session.js` | Random 256-bit tokens. Only their SHA-256 is stored, and customer and agent sessions are kept separate. |
 | `src/modules/customer/` | Login, own charges, and case creation with validation. |
 | `src/modules/agent/` | Agent session and the read-only case view. |
-| `src/store/d1.js` | Every SQL statement. This is the only module to replace if the store changes. |
+| `src/store/d1.js` | Every SQL statement. This is the only module to replace if the store changes. Multi-statement writes run as one atomic `db.batch()`. |
 | `src/config/identities.json` | Allowlisted demo identities, shared with the Gold slice. |
 | `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. |
 | `seeds/seed_fictitious.sql` | Fictitious identities and charges. Rerunning it is a no-op, and drift makes it fail. |
@@ -57,6 +57,8 @@ The Worker `factored-hackathon-2026-arabicaai` deploys through Cloudflare Worker
 - **Watch paths:** `back-end/**`, `front-end/**`
 
 Preview builds share the production D1 binding. Keep them disabled until a separate preview database exists.
+
+Smart Placement is on (`placement.mode = "smart"`), so the Worker runs next to D1 instead of next to the visitor. Each D1 query from São Paulo took about 150 ms before this change (ADR-004).
 
 Runtime secrets `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` live only in the Worker's settings, never in the repository or build logs. Without them, every API route returns 503. Cloudflare Access with an email allowlist or one-time PIN protects the whole hostname, static files included. `scripts/predeploy.mjs` refuses to deploy a placeholder D1 ID.
 

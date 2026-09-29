@@ -147,7 +147,17 @@ Rows written include D1's index writes. A case takes about **367 bytes** with a 
     The customer path (login, list, case) adds up to about 1.4 s of server time.
   - **Static bundles:** they no longer reach the Worker. The episode made 7 Worker requests, as modelled.
   - **Functional checks:** Access and the Basic gate held, the customer saw only their own charges, a case got a reference, and the agent view showed it. All requests succeeded and there were no errors.
-  - **Next change:** Smart Placement (`placement.mode = "smart"`) to run the Worker next to D1, and one `db.batch()` for the three login writes. Re-measure after the change.
+  - **Change made after this measurement:**
+    - **Smart Placement** (`placement.mode = "smart"` in `wrangler.jsonc`, checked by `test/unit/config.test.js`) runs the Worker next to D1.
+    - **Login writes in one batch:** purging expired sessions, revoking the old token and inserting the new one run as one atomic `db.batch()`, so login drops to 2 round trips. The budget test now caps round trips per request (login 2, list 2, create 4, agent 1–2).
+
+    Re-measure with a new export after deploy.
+
+    Caveats:
+    - Cloudflare needs some traffic before it moves the Worker.
+    - The gated HTML document now makes one trip near D1 (about 130 ms from Brazil), while bundles are still served at the edge.
+    - If D1 read replicas are adopted later, revisit placement, because reads could then be served nearer the user.
+    - No effect expected on the data-integration or AI phases: more queries per request make proximity to D1 worth more, a model call from North America fits the same placement, and a batch maps to a transaction if the store moves to PostgreSQL.
 - **Observability limits:**
   - Workers Logs Free allows 200,000 events per day. After that, 1% head sampling applies for the rest of the day. One episode produced about 29 events, so full-fidelity logs cover about 6,900 episodes per day, which is below the 10,000-episode capacity. `head_sampling_rate` can be lowered if that matters.
   - Logs are retained for 3 days on Free.

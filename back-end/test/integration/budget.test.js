@@ -7,20 +7,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { client } from '../support/client.js';
 
-// Ceilings per request: [queries, rows_read, rows_written]. D1 Free allows 50 queries per invocation.
+// Ceilings per request: [queries, rows_read, rows_written, round_trips]. D1 Free allows 50 queries per invocation;
+// round trips drive latency (about 150 ms each when the Worker runs far from D1).
 const CEILING = {
-  login: [4, 8, 6],
-  list: [2, 25, 0],
-  create: [4, 12, 6],
-  agentLogin: [3, 6, 6],
-  agentList: [2, 250, 0]
+  login: [4, 8, 6, 2],
+  list: [2, 25, 0, 2],
+  create: [4, 12, 6, 4],
+  agentLogin: [3, 6, 6, 1],
+  agentList: [2, 250, 0, 2]
 };
 
 function within(name, m) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);
-  const [q, r, w] = CEILING[name];
-  assert.ok(m.queries <= q && m.rows_read <= r && m.rows_written <= w,
-    `${name} exceeded budget: ${JSON.stringify(m)} > queries ${q}, rows_read ${r}, rows_written ${w}`);
+  const [q, r, w, t] = CEILING[name];
+  assert.ok(m.queries <= q && m.rows_read <= r && m.rows_written <= w && m.round_trips <= t,
+    `${name} exceeded budget: ${JSON.stringify(m)} > queries ${q}, rows_read ${r}, rows_written ${w}, round_trips ${t}`);
   return m;
 }
 

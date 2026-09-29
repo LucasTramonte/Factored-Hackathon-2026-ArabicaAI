@@ -27,13 +27,15 @@ export async function readSession(request, store, actor) {
   return store.findSession(await tokenHash(token), actor, Date.now());
 }
 
-/** Create a session and return its Set-Cookie value; the presented token for this actor is revoked. */
+/**
+ * Create a session and return its Set-Cookie value. The presented token for this actor is revoked
+ * and expired sessions are purged in the same atomic store call (one D1 round trip).
+ */
 export async function startSession(request, store, actor, customerId = null) {
   const now = Date.now();
-  await store.deleteExpiredSessions(now);
   const previous = readCookies(request)[COOKIE[actor]];
-  if (previous && TOKEN.test(previous)) await store.deleteSession(await tokenHash(previous));
   const token = newToken();
-  await store.insertSession(await tokenHash(token), actor, customerId, now + SESSION_MS);
+  await store.rotateSession({ now, oldHash: previous && TOKEN.test(previous) ? await tokenHash(previous) : null,
+    newHash: await tokenHash(token), actor, customerId, expiresAt: now + SESSION_MS });
   return cookieHeader(COOKIE[actor], token, request, SESSION_MS / 1000);
 }
