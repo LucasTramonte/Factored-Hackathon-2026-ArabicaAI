@@ -19,7 +19,7 @@ class IntakeTests(unittest.TestCase):
         from evals.intake.run import evaluate, SPLITS
         base=dict(message=MESSAGE, customer_id='C1', authenticated=True, language='es', confirmed_id=None,
                   tool_failure=False, gold=dict(action='confirm', candidate_ids=['T1'], completion_ready=False))
-        corpus=dict(transactions=RECORDS, cases=[dict(base, case_id='a', family='f', split='heldout'),
+        corpus=dict(transactions=RECORDS, cases=[dict(base, case_id='a', family='f', split='v1_authored'),
                                                  dict(base, case_id='b', family='f', split='safety')])
         with self.assertRaisesRegex(ValueError, 'leakage'): evaluate(corpus)
         corpus['cases'][1]['family']='g'
