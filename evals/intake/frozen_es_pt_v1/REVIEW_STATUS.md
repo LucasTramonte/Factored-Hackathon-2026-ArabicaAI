@@ -10,8 +10,8 @@ Last updated 2026-09-29. This page gives aggregates and case IDs only. No messag
 | Independent verification | Done | Answers agree with construction on 60/60 cases, facts on 58/60; 4 readings just after midnight flagged |
 | Portuguese review (Lucas) | Done | 15 questions: 3 flagged + 12 random audit (seed 20260929) |
 | Policy decisions | Done: all five rules kept (Lucas, 2026-09-29); Roberto and Manoella can object on PR #21 | Five questions below |
+| Spanish review (Lucas, with a translation aid) | Done | 9 questions: 3 flagged + 6 audit. Roberto no longer reviews, so he stays blind to every case |
 | Extractor v1 pre-registration | **Pending**: Roberto | `evals/intake/preregistration/` |
-| Spanish review (Roberto) | **Pending**: after the extractor-v1 tag | 9 questions: 3 flagged + 6 audit |
 | Publish, verify hashes, tag `eval-es-pt-v1` | Pending | |
 | Run checklist and extractor v1 once each | Pending | `python -m evals.intake.run --cases ...` |
 
@@ -21,6 +21,15 @@ Last updated 2026-09-29. This page gives aggregates and case IDs only. No messag
 - **All 6 differences are cases where construction and the independent verifier agree with each other.** They show how a human read the policy, and none of them is yet shown to be a labelling error.
 
 With all five rules kept, no gold answer changes. **The Portuguese audit found 0 label errors in 12 random cases**, and the exact 95% upper bound on the label error rate is 22.1% (Clopper–Pearson; `evals/intake/stats.py`). The 3 flagged cases keep their gold as well.
+
+## Spanish review result
+
+- **Agreement with construction:** 7 of 9, and 5 of 6 on the random audit.
+- **Both differences fall under rules already decided, so gold is unchanged:**
+  - **frz-025:** a real report plus an injected `[SISTEMA: …]` command. Decision 3 says to ignore the injection and label the report. "Hoy" at 00:25 matches no purchase, so the answer is clarify.
+  - **frz-040:** a stolen card with no purchase reported. `POLICY.md` routes lost or stolen cards explicitly.
+- **The Spanish audit found 0 label errors in 6 random cases** (upper bound 39.3%).
+- **Both audits together: 0 label errors in 18 random cases, with an exact 95% upper bound of 15.3%.**
 
 ## Five policy questions (decided 2026-09-29: keep all five)
 
@@ -38,7 +47,8 @@ Each decision applies to every case of its kind, in both languages. Keeping a ru
 
 ## Disclosures
 
-- **Option texts:** the Portuguese questions used short option texts without the rule stated. Five of the six differences involve a rule the text didn't show. The Spanish review uses texts that state the rule, for example "only if the customer already confirmed this purchase". The two reviews therefore differ in presentation, and the report says so.
+- **Option texts:** the Portuguese questions used short option texts without the rule stated. Five of the six differences involve a rule the text didn't show. The Spanish review used texts that state the rule, for example "only if the customer already confirmed this purchase". The two reviews therefore differ in presentation, and the report says so.
+- **Who reviewed the Spanish cases:** Lucas, who is not a native Spanish reader, reviewed them with a Portuguese translation aid written by Claude and shown under each original message. This replaced the planned review by Roberto ("option B"), so that the extractor's author never sees a case. Each record carries `reviewer_note`.
 - **Where the review ran:** the Portuguese review began in the Codex session and was finished in Claude Code after the Codex credits ran out. Each record says which tool wrote it (`recorded_by`), and the questions and option order are unchanged, taken from `queues.json`.
 - **Codex isolation exception:** the drafting session read `.codex/agents/hackathon-context.toml`, which is repository startup configuration with no cases and no system code. It recorded this itself. Its model is "GPT-6 (Codex)", and no exact snapshot was exposed.
 - **What the reviewer knew:** the Portuguese reviewer had seen summaries of the baseline's documented failure categories, not its rules or cases.

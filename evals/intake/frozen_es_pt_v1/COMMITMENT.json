@@ -26,11 +26,14 @@
     "reviews/lucas.jsonl": {
       "sha256": "af7812c34dbcc3292d870f5115d41b8b69415300319eb8f191709a0f6fb847f6",
       "bytes": 7830
+    },
+    "reviews/lucas_es.jsonl": {
+      "sha256": "d46ead0576d97ce7e38c3de46bc7fad6fb76bd21077e68242dd912f28582d6d6",
+      "bytes": 6666
     }
   },
   "not_committed_yet": [
-    "reviews/roberto.jsonl (after the Spanish review)",
-    "review_state.json and session_record.json (mutable working state)",
-    "reviews/roberto_message.txt (contains case text; sent privately)"
+    "review_state.json, review_state_es.json and session_record.json (mutable working state)",
+    "reviews/roberto_message.txt (unused after option B; contains case text)"
   ]
 }

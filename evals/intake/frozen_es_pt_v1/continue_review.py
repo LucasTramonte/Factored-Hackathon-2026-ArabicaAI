@@ -16,6 +16,7 @@ qualifiers; REVIEW_STATUS.md records that difference.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -28,8 +29,12 @@ COUNTRY = {"Colombia": "Colômbia", "Mexico": "México", "México": "México", "
            "USA": "EUA", "Spain": "Espanha", "Brazil": "Brasil"}
 
 
+STATE_FILE = HERE / os.environ.get("REVIEW_STATE", "review_state.json")
+
+
 def load_state() -> dict:
-    return json.loads((HERE / "review_state.json").read_text(encoding="utf-8"))
+    """Review position; REVIEW_STATE selects another queue's state file (e.g. review_state_es.json)."""
+    return json.loads(STATE_FILE.read_text(encoding="utf-8"))
 
 
 def short(tid: str) -> str:
@@ -72,7 +77,7 @@ def render(state: dict) -> str:
     queue = json.loads((HERE / "queues.json").read_text(encoding="utf-8"))[state["language"]]
     i = state["current_index"]
     if i >= len(queue):
-        return "Fila em português concluída."
+        return "Fila concluída."
     entry = queue[i]
     case = next(json.loads(l) for l in (HERE / "verifier_input.jsonl").open(encoding="utf-8")
                 if json.loads(l)["case_id"] == entry["case_id"])
@@ -81,7 +86,8 @@ def render(state: dict) -> str:
               "consulta funcionando" if case["lookup"] == "ok" else "consulta FORA DO AR"]
     if case["confirmed_id"]:
         status.append(f"o cliente já confirmou a compra {short(case['confirmed_id'])}")
-    lines = [f"Caso {i + 1} de {len(queue)} · sessão em português",
+    session = {"pt": "português", "es": "espanhol"}[state["language"]]
+    lines = [f"Caso {i + 1} de {len(queue)} ({entry['queue']}) · sessão em {session}",
              f"Conversa em {when:%d/%m/%Y %H:%M} · " + " · ".join(status), "Compras do cliente:"]
     for p in sorted(case["purchases"], key=lambda p: p["transaction_id"]):
         t = datetime.fromisoformat(p["transaction_date"])
@@ -103,12 +109,13 @@ def answer(state: dict, raw: str, comment: str) -> str:
     record = {"timestamp": datetime.now(timezone.utc).isoformat(), "case_id": entry["case_id"], "queue": entry["queue"],
               "options_shown": entry["options"], "raw_answer": raw, "chosen_code": chosen["action"],
               "candidate_ids": chosen["candidate_ids"], "comment": comment,
-              "recorded_by": "continue_review.py (Claude Code), after the Codex session ran out of credits"}
+              "recorded_by": "continue_review.py (Claude Code), after the Codex session ran out of credits",
+              **state.get("record_extra", {})}
     with (HERE / "reviews" / f"{state['reviewer']}.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
     state["current_index"] += 1
     state["pending_case_id"] = queue[state["current_index"]]["case_id"] if state["current_index"] < len(queue) else None
-    (HERE / "review_state.json").write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    STATE_FILE.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     return f"Registrado: caso {state['current_index']} → opção {raw}."
 
 
