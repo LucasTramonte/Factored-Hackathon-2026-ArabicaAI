@@ -9,7 +9,7 @@ Last updated 2026-09-29. This page gives aggregates and case IDs only. No messag
 | Specs, messages and construction gold | Done | `label_rules.py` tests pass; `draft.json` hash in `COMMITMENT.json` |
 | Independent verification | Done | Answers agree with construction on 60/60 cases, facts on 58/60; 4 readings just after midnight flagged |
 | Portuguese review (Lucas) | Done | 15 questions: 3 flagged + 12 random audit (seed 20260929) |
-| Policy adjudication | **Pending**: Lucas, with Roberto and Manoella as ADR-005 deciders | Five questions below |
+| Policy decisions | Done: all five rules kept (Lucas, 2026-09-29); Roberto and Manoella can object on PR #21 | Five questions below |
 | Extractor v1 pre-registration | **Pending**: Roberto | `evals/intake/preregistration/` |
 | Spanish review (Roberto) | **Pending**: after the extractor-v1 tag | 9 questions: 3 flagged + 6 audit |
 | Publish, verify hashes, tag `eval-es-pt-v1` | Pending | |
@@ -20,11 +20,11 @@ Last updated 2026-09-29. This page gives aggregates and case IDs only. No messag
 - **Agreement with construction:** exact on 9 of 15 cases (action and candidate set), and on the action alone for 11 of 15.
 - **All 6 differences are cases where construction and the independent verifier agree with each other.** They show how a human read the policy, and none of them is yet shown to be a labelling error.
 
-After adjudication, the audit reports label errors as the number of audit cases whose adjudicated gold differs from construction, over 12, with a Clopper–Pearson upper bound. At 0 errors, the bound is 22.1%.
+With all five rules kept, no gold answer changes. **The Portuguese audit found 0 label errors in 12 random cases**, and the exact 95% upper bound on the label error rate is 22.1% (Clopper–Pearson; `evals/intake/stats.py`). The 3 flagged cases keep their gold as well.
 
-## Five policy questions to adjudicate
+## Five policy questions (decided 2026-09-29: keep all five)
 
-Each decision applies to every case of its kind, in both languages. "Keep" leaves the construction rule as it is, and "change" edits `POLICY.md` and `label_rules.py`, then recomputes gold. There is one case where the reviewer and construction differ on each point, except question 5, which has two.
+Each decision applies to every case of its kind, in both languages. Keeping a rule leaves `POLICY.md` and `label_rules.py` as they are. Changing one would edit both and recompute gold. There is one case where the reviewer and construction differ on each point, except question 5, which has two.
 
 | # | Question | Construction rule (policy today) | Reviewer's choice | Case |
 |---|---|---|---|---|
@@ -34,7 +34,7 @@ Each decision applies to every case of its kind, in both languages. "Keep" leave
 | 4 | The message is in an unsupported language (French) but names an identifiable purchase. Help or route? | Route with an explicit message (**R**). V1 serves Spanish and Portuguese only (ADR-002) | Show the purchase (F) | frz-031 |
 | 5 | Several purchases match. List them, or ask for more details without listing? | List the candidates (**C with candidates**). The measurement contract requires listing, so the customer doesn't have to guess | Ask for details (C, no candidates) | frz-014, frz-030 |
 
-To decide, comment on the PR, for example: `adjudication: keep 1 2 3 4 5`, or `keep 1 2 4 5; change 3: route when a report contains an injection`.
+**Decision:** Lucas kept all five on 2026-09-29, because each follows an existing rule in ADR-002 or in the measurement contract. As ADR-002 and ADR-005 deciders, Roberto and Manoella can object on PR #21. An objection reopens only the question it names.
 
 ## Disclosures
 

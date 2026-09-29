@@ -5,7 +5,7 @@ This is the blind, held-out set on which the checklist baseline and the learned 
 **Status (2026-09-29):**
 - Built and verified.
 - Portuguese human review done.
-- Adjudication of five policy questions is pending.
+- Five policy questions raised by the review were decided (all five rules kept).
 - Spanish review is pending: it waits for extractor v1 to be pre-registered.
 - The case files are withheld until then. See [what's committed](#whats-committed-and-whats-withheld) and [REVIEW_STATUS.md](REVIEW_STATUS.md).
 
@@ -15,7 +15,7 @@ This is the blind, held-out set on which the checklist baseline and the learned 
 2. **Gold by construction.** [`label_rules.py`](label_rules.py) applies the written [policy](POLICY.md) to the spec and the fixture. It never reads the message text. [`test_label_rules.py`](test_label_rules.py) pins its behaviour on a separate fixture.
 3. **Independent verification.** A model from another family (Claude, in a fresh context that could read only `POLICY.md` and `verifier_input.jsonl`) re-derived the facts and the answer from each message. It agreed with construction on all 60 answers and on the facts of 58, and flagged 4 readings just after midnight.
 4. **Human review, only where it counts.** Reviewers answer multiple-choice questions, never codes, on every verifier disagreement plus a seeded random audit (12 PT, 6 ES). They never see which option is the construction or verifier answer. Answers are appended to `reviews/<reviewer>.jsonl` as they're given.
-5. **Adjudication.** Where a reviewer differs from construction, the difference is settled as a policy decision that then applies to every similar case. The audit then reports errors over n with an exact Clopper–Pearson bound (`evals/intake/stats.py`).
+5. **Policy decisions.** Where a reviewer differs from construction, we decide which reading of the policy is right, and that decision applies to every similar case. The audit then reports errors over n with an exact Clopper–Pearson bound (`evals/intake/stats.py`).
 
 The method follows the outline-then-paraphrase pattern with validation from Shah et al. (2018) and Rastogi et al. (2020). ES/PT siblings serve as invariance tests in the sense of CheckList (Ribeiro et al., 2020), and the holdout is used once (Dwork et al., 2015).
 

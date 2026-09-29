@@ -28,7 +28,7 @@ So leakage can happen in two places: dataset statistics that reach design decisi
    - Each case starts as a structured spec (intent and stated facts), and the message is written from the spec. A tested rules script applies the written policy to the spec and the fixture, which gives the gold answer. This follows the outline-then-paraphrase pattern of Shah et al. (2018) and Rastogi et al. (2020).
    - An independent verifier from a different model family re-derives facts and answers from the message alone, in a fresh context. It reads only the messages and the policy.
    - Humans answer multiple-choice questions on every verifier disagreement plus a seeded random audit sample. They see plain-language options with the rule stated, never codes or model answers.
-   - Disagreements are adjudicated in writing, as policy decisions that apply to every similar case. The audit reports errors over n with an exact Clopper–Pearson upper bound.
+   - Disagreements are resolved in writing as policy decisions, and each decision applies to every similar case. The audit reports errors over n with an exact Clopper–Pearson upper bound.
    - Labels follow the policy given the facts, including the session time `as_of`, not what a baseline can currently parse.
    - Until the extractor is frozen, the case files stay off the repository. A SHA-256 commitment of each file is committed (`evals/intake/frozen_es_pt_v1/COMMITMENT.json`), and the files must match it when they are published.
 4. **Tuning boundaries:**
@@ -66,4 +66,4 @@ So leakage can happen in two places: dataset statistics that reach design decisi
 
 - Register and queries: [`DATA_QUALITY.md`](../../DATA_QUALITY.md) and `data_profiles/findings/`. Run with `make findings`.
 - The disclosure in the register records the one full-period profiling that happened before this protocol.
-- The method, tooling and review status are in [`evals/intake/frozen_es_pt_v1/`](../../evals/intake/frozen_es_pt_v1/README.md). The case files are published, checked against `COMMITMENT.json` and tagged `eval-es-pt-v1` in a later PR, after the extractor is pre-registered and the Spanish review and adjudication are done. The manifest records the drafting model, the files the drafting session read, the reviewers, the audit error bounds and the assumptions (45-day lookback, fixture density).
+- The method, tooling and review status are in [`evals/intake/frozen_es_pt_v1/`](../../evals/intake/frozen_es_pt_v1/README.md). The case files are published, checked against `COMMITMENT.json` and tagged `eval-es-pt-v1` in a later PR, after the extractor is pre-registered and the Spanish review and the policy decisions are done. The manifest records the drafting model, the files the drafting session read, the reviewers, the audit error bounds and the assumptions (45-day lookback, fixture density).
