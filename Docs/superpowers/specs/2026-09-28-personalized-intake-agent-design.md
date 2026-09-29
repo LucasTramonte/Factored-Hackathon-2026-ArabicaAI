@@ -16,6 +16,12 @@ system prompt = fixed rules (identical for every customer)
 
 This follows the team's V1 (Notion 27/09) and the intake contract in `Docs/intake/customer-and-measurement-contract.md`.
 
+## 1a. Prerequisites and scope of this plan
+
+- PR #8 (`feat/suspicious-charge-evaluation`: contract, 42 cases, checklist baseline, `baseline.score()`) and PR #10 (`data_profiles/fraud_readiness_findings.md`) must be merged into `main` first. Step 0 of the plan is that merge; every "Have" below assumes it.
+- Andres's PR #9 (33 reviewed ES/PT cases) is used when merged; it is not a blocker.
+- This spec covers **Roberto's slice**: agent service, context card, case store, guardrails, event log, evaluation runner, and the thin HTML pages needed to demonstrate them. Frontend decision: plain HTML + JS served by FastAPI, no build step. Angular (Lucas's proposal) can replace the pages later against the same API; that is a separate plan with its own owner. Deployment is also separate.
+
 ## 2. User story
 
 As Valentina, a Basic-segment customer in Colombia logged into the bank's web app, I want to say in my own words that I do not recognize a charge and be helped by an assistant that already knows who I am, what I hold, and how I speak, so that I confirm the right transaction once, get an accepted case reference, and know what happens next.
@@ -29,7 +35,7 @@ As Valentina, a Basic-segment customer in Colombia logged into the bank's web ap
 | 5 Retrieval | AI + code | The AI extracts amount, date, currency, merchant. Code searches only this customer's transactions. |
 | 6 Clarify | AI | 0 matches: ask again. N matches: list them, ask which. 1 match: ask to confirm. Never pick by ordering. |
 | 7 Approve | customer | Confirms the transaction and their statement. |
-| 8 Accept | code | Case row is committed. Only then is a reference minted. Retries reuse the existing case. |
+| 8 Accept | code | Case row is committed. Only then is a reference minted. Retries reuse the existing case (section 6a). |
 | 9 Next steps | AI + code | Reference, what happens next, and channel. Handoff package is stored for the agent. |
 
 Out of scope, routed with an explicit message: recognized billing disputes, account inquiries, unsupported languages, and anything not an unrecognized charge.
@@ -45,19 +51,19 @@ Style is a *default* set by the card, then adapted to how the customer actually 
 
 ## 4. Context card
 
-Built by one deterministic query over Silver, cached for the session, shown in the UI's "why did it say that" panel.
+Built by one deterministic query over Silver at session start, shown in the UI's "why did it say that" panel.
 
 | Field | Source | Used for |
 |---|---|---|
 | first name | `dim_customers` | greeting |
 | country → variant, currency, date format | `dim_customers.country` | speaking and parsing amounts and dates |
 | detected_accent, fallback country | `dim_customers` | language variant (accent is blank for ~30% of customers) |
-| age_band (18–29, 30–44, 45–59, 60+) | `dim_customers` | style defaults only |
-| segment | `dim_customers` | tone only |
+| age_band (18–29, 30–44, 45–59, 60+) | derived from `dim_customers.date_of_birth` at session time | style defaults only |
+| segment | `dim_customers` | tone only; never eligibility or priority (contract: inclusion is not by customer value) |
 | products held (type, last 4 digits) | `dim_products` where `customer_id` matches | naming the right product |
-| open complaints | `fact_complaints` | avoid duplicate cases |
-| last contact reason and date | `fact_call_center_interactions` | continuity |
-| preferred channel | `fact_digital_events` | where the reply goes |
+| open complaints (status Open, In Process, Escalated) | `fact_complaints` | avoid duplicate cases |
+| last contact reason and date | most recent row in `fact_call_center_interactions` | continuity |
+| usual channel | most frequent `fact_digital_events.channel` in the last 90 days; fallback "web" | where the reply goes |
 
 **Excluded by design:** income, credit score, `fraud_score`, `is_fraud`, marketing consent, and any risk signal. See `data_profiles/fraud_readiness_findings.md` and Andres's personalization profile.
 
@@ -70,10 +76,10 @@ Ordered by rubric weight. "Have" refers to work already on `main` or in open PRs
 | 1 | Customer chat (web, es/pt) | Functioning AI system; ES/PT demos | — | one page: login → chat → reference |
 | 2 | Login and session | Controlled automation; expired-session case | — | choose a demo customer; session with expiry |
 | 3 | Agent service | Functioning AI; controlled automation | checklist baseline logic; KPI contract | FastAPI: card + LLM + 3 tools (`search_transactions`, `get_open_cases`, `create_case`) |
-| 4 | Case store and reference | Verified actions | — | table; reference after commit; idempotent by (customer, transaction, statement hash) |
+| 4 | Case store and reference | Verified actions | — | table; two case kinds (section 6a); reference after commit; idempotent |
 | 5 | Human agent console | Handoff with request, facts, actions, evidence, open questions | handoff contract | one page listing cases with the package |
 | 6 | Guardrails outside the model | Controlled automation; failure handling | designed in contract | session-scoped queries; fraud fields stripped from tool output; out-of-scope refusal; tool inputs validated; fail closed to handoff |
-| 7 | Evaluation runner and results page | Measured quality; baseline | 42 + 33 authored ES/PT cases; checklist baseline; KPI definitions | run checklist and agent on the same cases; report safe accepted intake, unsafe, missed and unnecessary handoff, p50/p95, cost, by language |
+| 7 | Evaluation runner and results page | Measured quality; baseline | 42 + 33 authored ES/PT cases; checklist baseline; KPI definitions | two layers, never mixed (section 8): decision-point scoring with the existing `baseline.score()`, and episode-level runs for safe accepted intake |
 | 8 | Event log | Lineage; latency and cost | event names in contract | append-only; case_id, model version, tool calls, timestamps |
 | 9 | "Why did it say that" panel | Explainability | same data | show the card and tool results behind each reply |
 | 10 | Limitations page | Required by the brief | written already | no PT transcripts; 546 templated texts; no complaint→transaction key; `fraud_score` tie |
@@ -98,6 +104,18 @@ browser ── session ──▶ agent service ──▶ context card (DuckDB, r
 
 Deterministic: session, card, tool execution, case commit, reference, logging, permission checks. AI: greeting, extraction, clarification wording, next-steps wording. Human: the decision on the case.
 
+**Who decides scope.** Every agent turn returns a structured object, not only prose: `{intent, action, slots, candidate_ids, confirmed_id, reply_text}`. The LLM proposes `intent` and `action`; code checks them against the allowed actions for the current state and executes tools itself. An `unsupported` intent is an AI judgement gated by code; those episodes are logged and excluded from the intake denominator per the contract.
+
+## 6a. Cases, references and idempotency
+
+| Kind | When | Reference | In console |
+|---|---|---|---|
+| `accepted_intake` | customer confirmed exactly one owned transaction and approved the statement | `CS-YYYY-NNNN`, minted after commit | yes, status `accepted` |
+| `technical_handoff` | tool failure, or no confirmed match after two clarifications, with the customer still present | `CS-YYYY-NNNN`, minted after commit; the customer needs a number to follow up | yes, status `incomplete`, missing evidence listed |
+| no case | expired session, unauthenticated, out-of-scope, or customer abandoned before approval | none | no; event log only |
+
+Idempotency key: `sha256(customer_id, session_id, kind, transaction_id or "")`. A retry with the same key returns the existing case and reference; nothing is duplicated.
+
 ## 7. Error handling
 
 | Situation | Behaviour |
@@ -111,12 +129,13 @@ Deterministic: session, card, tool execution, case commit, reference, logging, p
 
 ## 8. Testing and evaluation
 
-- Unit tests for card builder, slot parsing, transaction scoping, idempotent case creation.
-- Same authored ES/PT case set for checklist and agent (Roberto's 42, Andres's 33 once merged, ~10 red-team). Andres's set is the closest thing to independently authored cases; the rest is regression material.
-- Report per the contract: counts and denominators by language; zero unsafe as a gate; p50/p95 and cost per attempt. No target set before the first run.
+- Unit tests for card builder, slot parsing, transaction scoping, idempotent case creation, and the action gate.
+- **Layer 1, decision points.** Each existing case is one turn with a known state. The agent's structured object (`action`, `candidate_ids`, `confirmed_id`) is scored by the existing `baseline.score()` against the same gold, so checklist and agent share one scorer. Reports: correct next action, unsafe, missed and unnecessary handoff, by language.
+- **Layer 2, episodes.** Scripted multi-turn conversations (Andres's 33 scenarios once merged, plus ~10 red-team scripts) run end to end against the live service with a fixed fault schedule. Each episode counts once. Reports: safe accepted intake / all eligible starts, unsafe, duplicates, handoff completeness, p50/p95, cost per attempt. Layer 1 rates are never combined with layer 2 rates.
+- Andres's set is the closest thing to independently authored cases; Roberto's 42 are regression material. No target set before the first run.
 
 ## 9. Open decisions for the team
 
-1. Stack: Lucas proposed Angular + FastAPI + PostgreSQL. A single-page chat and console could ship faster with plain HTML or a minimal React page; the backend stays FastAPI either way.
+1. Case store: SQLite for the local demo unless Lucas's PostgreSQL is already running; the table is the same.
 2. LLM: Claude via API, one model, version pinned in every event.
-3. Owner: Roberto proposes to own the agent service, evaluation runner and guardrails; UI and deployment need a named owner.
+3. Owners: Roberto takes the slice in 1a. Angular replacement of the HTML pages and deployment need named owners.
