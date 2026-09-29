@@ -1,8 +1,9 @@
-# ADR-0001: Prioritize a read-only inquiry workflow for evaluation
+# ADR-001 — Prioritize a read-only inquiry workflow for evaluation
 
 - **Status:** Proposed — team selection remains open
 - **Date:** 2026-09-26
-- **Decision owners:** ArabicaAI team
+- **Deciders:** ArabicaAI team
+- **Related:** [ADR-002](ADR-002-v1-workflow-unrecognized-charge-intake.md) proposes the V1 scope the team has been building since 2026-09-27
 
 ## Context and evidence
 

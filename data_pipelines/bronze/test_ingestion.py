@@ -284,3 +284,35 @@ def test_restart_restores_backup_when_live_directory_is_missing(con, tmp_path):
     assert live.exists()
     assert not backup.exists()
     assert con.execute("SELECT amount FROM bronze.transactions").fetchone()[0] == "100"
+
+
+def test_scoped_fact_load_uses_only_selected_day_and_rejects_mixed_refresh(con, tmp_path):
+    from datetime import date
+    base = tmp_path / "source"
+    _write_csv(base / "transactions/year=2026/month=02/day=26/t.csv", "transaction_id,amount\nT1,10\n")
+    _write_csv(base / "transactions/year=2026/month=02/day=27/t.csv", "transaction_id,amount\nT2,20\n")
+    selected = date(2026, 2, 26)
+    result = ingest_fact(con, str(base), "transactions", partition_date=selected)
+    assert result.rows == 1
+    assert con.execute("SELECT transaction_id FROM bronze.transactions").fetchall() == [("T1",)]
+    assert ingest_fact(con, str(base), "transactions", partition_date=selected).partitions_added == 0
+    with pytest.raises(ValueError, match="isolated one-day"):
+        ingest_fact(con, str(base), "transactions", partition_date=date(2026, 2, 27))
+    with pytest.raises(ValueError, match="discard"):
+        ingest_fact(con, str(base), "transactions", partition_date=date(2026, 2, 27), full_refresh=True)
+
+
+def test_scoped_load_never_replaces_a_parquet_history_it_does_not_own(con, tmp_path):
+    """A fresh DuckDB pointed at a DATA_DIR that already holds other days must refuse, not overwrite."""
+    from datetime import date
+    base = tmp_path / "source"
+    for day, tx in (("25", "T0"), ("26", "T1"), ("27", "T2")):
+        _write_csv(base / f"transactions/year=2026/month=02/day={day}/t.csv", f"transaction_id,amount\n{tx},10\n")
+    assert ingest_fact(con, str(base), "transactions").partitions_added == 3
+    live = tmp_path / "data/bronze/transactions"
+    before = sorted(p.relative_to(live).as_posix() for p in live.rglob("*.parquet"))
+    fresh = duckdb.connect(":memory:")
+    fresh.execute("CREATE SCHEMA bronze")
+    with pytest.raises(ValueError, match="isolated DATA_DIR"):
+        ingest_fact(fresh, str(base), "transactions", partition_date=date(2026, 2, 26))
+    assert sorted(p.relative_to(live).as_posix() for p in live.rglob("*.parquet")) == before

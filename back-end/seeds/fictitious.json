@@ -1,0 +1,8 @@
+{
+  "description": "Visibly fictitious charges for the demo identities marked 'fictitious' in back-end/src/config/identities.json. Regenerate seed_fictitious.sql with: python -m data_pipelines.gold.fictitious_seed",
+  "transactions": [
+    { "transaction_id": "demo-tx-001", "customer_id": "demo-ana", "occurred_at": "2026-09-25T14:00:00+00:00", "merchant_name": "Mercado Demo", "amount": "125.50", "currency": "BRL" },
+    { "transaction_id": "demo-tx-002", "customer_id": "demo-ana", "occurred_at": "2026-09-26T15:00:00+00:00", "merchant_name": "Loja Demo", "amount": "89.90", "currency": "BRL" },
+    { "transaction_id": "demo-tx-003", "customer_id": "demo-bruno", "occurred_at": "2026-09-26T16:00:00+00:00", "merchant_name": "Cafe Demo", "amount": "32.00", "currency": "BRL" }
+  ]
+}
