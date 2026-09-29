@@ -127,3 +127,9 @@ demo-sample-load:
 
 demo-load-docker-build:
 	docker build -f demo_pg/loader.Dockerfile -t arabica-intake-load:local .
+
+intake-sample-slice:
+	$(PYTHON) -m data_pipelines.gold.run_intake_slice --db "$(DEMO_DATA_DIR)/latam_bank.duckdb" \
+	--quality-report "$(DEMO_DATA_DIR)/quality_runs/$(DEMO_QUALITY_RUN)/quality_results.json" \
+	--business-date $(DEMO_DATE) \
+	--seed-out "$(DEMO_DATA_DIR)/intake_slice_seed.sql" --manifest-out "$(DEMO_DATA_DIR)/intake_slice_manifest.json"
