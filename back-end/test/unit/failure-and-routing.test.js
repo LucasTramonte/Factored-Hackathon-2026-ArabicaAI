@@ -76,6 +76,17 @@ test('known paths answer 405 with Allow after the gate, unknown API paths 404', 
   assert.equal(anonymous.headers.get('Allow'), null);
 });
 
+test('HTML documents require the gate before assets are served', async () => {
+  const served = [];
+  const assetsEnv = { ...env, ASSETS: { fetch: async r => { served.push(new URL(r.url).pathname); return new Response('<app-root>'); } } };
+  const store = await fakeStore();
+  for (const path of ['/', '/index.html', '/agent']) {
+    assert.equal((await route(new Request('https://d.example' + path), assetsEnv, store)).status, 401);
+    assert.equal((await route(new Request('https://d.example' + path, { headers: { Authorization: auth } }), assetsEnv, store)).status, 200);
+  }
+  assert.deepEqual(served, ['/', '/index.html', '/agent']);
+});
+
 test('database metrics are exposed only when explicitly enabled', () => {
   const store = { metrics: () => ({ queries: 2, rowsRead: 5, rowsWritten: 1 }) };
   assert.equal(withMetrics(new Response('{}'), env, store).headers.get('X-D1-Metrics'), null);

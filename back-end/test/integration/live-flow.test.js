@@ -2,12 +2,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assertContract } from '../support/contract.js';
-import { base, client } from '../support/client.js';
+import { auth, base, client } from '../support/client.js';
 
 test('page is static; the API needs the gate; customers are isolated; replay and handoff work', async () => {
-  const page = await fetch(base + '/');
-  assert.equal(page.status, 200, 'static assets are served without the API gate (Cloudflare Access covers them)');
-  assert.match(await page.text(), /<app-root|ArabicaDemoUi/);
+  for (const path of ['/', '/index.html', '/agent']) {
+    assert.equal((await fetch(base + path)).status, 401, `${path} document needs the team gate`);
+    const page = await fetch(base + path, { headers: { Authorization: auth } });
+    assert.equal(page.status, 200, path);
+    assert.match(await page.text(), /<app-root/);
+  }
+  assert.equal((await fetch(base + '/favicon.ico')).status, 200, 'static files are served without the Worker');
   assert.equal((await client({ authorization: null }).call('/transactions')).status, 401);
 
   const ana = client();

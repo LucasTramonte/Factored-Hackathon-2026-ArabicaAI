@@ -16,6 +16,8 @@ export const API_ROUTES = {
   '/agent/cases': { GET: listAgentCases }
 };
 export const API_PREFIXES = ['/demo/', '/agent/', '/transactions/', '/cases/'];
+/** HTML documents go through the gate so the browser asks for the team credential once; hashed bundles do not. */
+export const DOCUMENT_PATHS = new Set(['/', '/index.html', '/agent']);
 
 /** Dispatch one request; ``store`` is the per-request D1 store. */
 export async function route(request, env, store) {
@@ -35,5 +37,9 @@ export async function route(request, env, store) {
     return handler(request, env, store);
   }
   if (request.method !== 'GET' && request.method !== 'HEAD') return fail(405, 'Method not allowed', { Allow: 'GET, HEAD' });
+  if (DOCUMENT_PATHS.has(pathname)) {
+    const denied = checkAccessGate(request, env);
+    if (denied) return denied;
+  }
   return env.ASSETS.fetch(request);
 }

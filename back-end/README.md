@@ -15,7 +15,7 @@ The service does not decide fraud, issue refunds or authenticate bank customers.
 | Path | Responsibility |
 |---|---|
 | `src/index.js` | Entry point. It turns any unexpected error into a generic 503. It adds D1 counters only when `DEMO_EXPOSE_DB_METRICS=1`, which is set in local tests only. |
-| `src/router.js` | Exact route table. The access gate runs before method checks. Other methods on API paths get 405, unknown API paths get 404. |
+| `src/router.js` | Exact route table. The access gate runs before method checks and also covers the HTML documents (`/`, `/index.html`, `/agent`). Other methods on API paths get 405, unknown API paths get 404. Hashed bundles are served without the Worker. |
 | `src/http.js` | JSON responses, cookies, and body parsing capped at 16 KB. |
 | `src/auth/access-gate.js` | Basic gate for API routes, second to Cloudflare Access. It fails closed when not configured. |
 | `src/auth/session.js` | Random 256-bit tokens. Only their SHA-256 is stored, and customer and agent sessions are kept separate. |
@@ -72,7 +72,7 @@ Record the date and the results of each check in ADR-004's implementation notes:
 4. A confirmed case returns a reference, and a retry returns the same one.
 5. The agent view shows the case.
 6. The case is still there after a new deploy.
-7. Static files load without adding Worker requests in Workers analytics.
+7. A page load adds one Worker request (the document); bundles don't add any.
 8. `GET /healthz` returns `{"status":"ok"}`.
 
 ## Limits
