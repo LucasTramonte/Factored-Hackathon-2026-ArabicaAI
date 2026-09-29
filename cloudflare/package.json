@@ -1,0 +1,15 @@
+{
+  "name": "arabica-intake-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/run-local.mjs",
+    "dev": "wrangler dev",
+    "deploy": "node predeploy.mjs && wrangler deploy",
+    "prepare-assets": "node prepare-assets.mjs"
+  },
+  "engines": { "node": ">=22" },
+  "devDependencies": {
+    "wrangler": "4.143.0"
+  }
+}

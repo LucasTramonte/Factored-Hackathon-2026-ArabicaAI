@@ -4,7 +4,7 @@ This repository supports the Factored Hackathon 2026 with a synthetic LATAM bank
 
 ## Intake demo
 
-The separate [charge-intake demo](Docs/Plans/intake-demo.md) has an English Angular interface, FastAPI, PostgreSQL migrations, and a one-day S3 → Bronze → Silver → quality → PostgreSQL load. Start there for `make demo-*` commands. The demo takes a bounded sample; `make pipeline` below is the full analytical run. The shared-link deployment is prepared but has not been published.
+The separate [charge-intake demo](Docs/Plans/intake-demo.md) has an English Angular interface, FastAPI, PostgreSQL migrations, and a one-day S3 → Bronze → Silver → quality → PostgreSQL load. Start there for `make demo-*` commands. The demo takes a bounded sample; `make pipeline` below is the full analytical run. The shared-link deployment is prepared but has not been published. An isolated [Cloudflare Worker + D1 variant](cloudflare/README.md) is also available for a potentially free, always-reachable team preview after account setup and limit testing.
 
 ## Start here
 
