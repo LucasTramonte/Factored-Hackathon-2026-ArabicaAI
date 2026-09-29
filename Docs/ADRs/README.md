@@ -11,6 +11,7 @@ Technical and product-scope decisions for the ArabicaAI hackathon solution. Each
 | [003](ADR-003-intake-single-runtime-worker-d1.md) | Intake runtime: one online API on Cloudflare Workers + D1, Python for batch | Proposed (2026-09-29) |
 | [004](ADR-004-intake-capacity-and-cost.md) | Intake capacity and cost for the evaluation window | Proposed (2026-09-29) |
 | [005](ADR-005-evaluation-data-protocol.md) | Evaluation data protocol: design and holdout windows, and a blind frozen set | Proposed (2026-09-29) |
+| [006](ADR-006-learned-extractor-workers-ai.md) | Learned component: a fact extractor on Workers AI, smallest model first | Proposed (2026-09-29) |
 
 ## Format
 

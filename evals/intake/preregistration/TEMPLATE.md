@@ -3,20 +3,20 @@
 - **Author:**
 - **Registered (UTC):**
 - **Git tag / commit:** `<system>-v<N>` / `<sha>`
-- **Statement:** I have not seen any case, message, fixture, review record or result of `frozen_es_pt_v1`. I tuned only on the `development` split of `evals/intake/cases.json`.
+- **Statement:** The author (a person or an isolated agent) has not seen any case, message, fixture, review record or result of `frozen_es_pt_v1`, and tuned only on the `development` split of `evals/intake/cases.json`. If an agent built it, its instructions are committed verbatim next to this file.
 
 ## System
 
 | Field | Value |
 |---|---|
 | Role | e.g. field extractor feeding the deterministic intake policy |
-| Model provider and id | e.g. `@cf/openai/gpt-oss-20b`, or `anthropic.claude-haiku-4-5` on Bedrock |
+| Model provider and id | e.g. `@cf/openai/gpt-oss-20b` (ADR-006 rung 1) |
 | Model version or snapshot | exact id, or "not exposed" |
 | Prompt file and SHA-256 | path in this commit / hash |
 | Parameters | temperature, max output tokens, seed, stop sequences |
 | Tools the model may call | none, or the list |
-| Inputs it receives | message, session_language, as_of, the customer's approved purchases (same as the checklist gets, plus as_of) |
-| Output schema | e.g. `{intent, stated_facts, ...}` mapped to `{action, candidate_ids}` by `<file>` |
+| Inputs it receives | message, session_language, as_of and the closed merchant/category vocabulary. The customer's purchases stay with the deterministic matcher (ADR-006, decision 1) |
+| Output schema | `{intent, stated_facts, invalid, demand, injection}` (the spec schema in `POLICY.md`), mapped to `{action, candidate_ids}` by the written policy |
 | Abstention and thresholds | e.g. "confidence < 0.6 → clarify", chosen on `development` only |
 | Retries and timeouts | e.g. 1 retry, 10 s timeout, technical handoff on failure |
 | Data handling | where the messages are sent, retention, whether that provider is approved for this data |
