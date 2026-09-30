@@ -64,6 +64,22 @@ class PolicyAdapterTests(unittest.TestCase):
         self.assertEqual(p['action'], 'technical_handoff')
         self.assertEqual(p['requested_action'], 'human_review')
 
+    def test_service_failures_become_a_technical_handoff(self):
+        def down(*args):
+            raise ConnectionError('Workers AI HTTP 503')
+        p, meta = FactExtractorSystem('x', down)(CASE, RECORDS, CUSTOMERS)
+        self.assertEqual((p['action'], p['candidates'], p['requested_action']), ('technical_handoff', [], 'human_review'))
+        self.assertIn('unavailable', meta['error'])
+
+    def test_usage_of_failed_calls_is_kept_in_the_record(self):
+        def costly(*args):
+            exc = ValueError('invalid model output after 2 attempts')
+            exc.usage = dict(input_tokens=400, output_tokens=60)
+            raise exc
+        p, meta = FactExtractorSystem('x', costly)(CASE, RECORDS, CUSTOMERS)
+        self.assertEqual(p['action'], 'clarify')
+        self.assertEqual(meta['usage'], dict(input_tokens=400, output_tokens=60))
+
     def test_the_model_never_receives_transactions(self):
         seen = {}
 
@@ -89,6 +105,21 @@ class PolicyAdapterTests(unittest.TestCase):
         p, meta = FactExtractorSystem('x', extractor_returning(bad, []))(CASE, RECORDS, CUSTOMERS)
         self.assertEqual((p['action'], p['candidates']), ('clarify', []))
         self.assertIn('invalid', meta['error'])
+
+    def test_malformed_nested_facts_are_rejected_before_the_policy_sees_them(self):
+        bad_facts = [dict(date='2026-06-10'), dict(amount='45300'), dict(amount=dict(value=45300, approx=False)),
+                     dict(amount=dict(value='45300.00')), dict(card='credito'), dict(card=dict(type=1)),
+                     dict(merchant=['Uber']), dict(abroad='yes'), dict(date=dict(expression=7))]
+        for facts in bad_facts:
+            with self.subTest(facts=facts), self.assertRaises(ValueError):
+                validate_extraction(dict(FACTS, stated_facts=facts))
+        # A string date from a model must clarify, not crash the run.
+        bad = dict(FACTS, stated_facts=dict(merchant='Uber', date='2026-06-10'))
+        p, meta = FactExtractorSystem('x', extractor_returning(bad, []))(CASE, RECORDS, CUSTOMERS)
+        self.assertEqual(p['action'], 'clarify')
+        validate_extraction(dict(FACTS, stated_facts=dict(merchant='Uber', abroad=True, country='USA',
+                            date=dict(expression='ayer', **{'from': '2026-03-31', 'to': '2026-03-31'}),
+                            card=dict(type='Tarjeta Crédito', last4='4821'))))
 
     def test_schema_validation_is_strict(self):
         validate_extraction(FACTS)
@@ -123,6 +154,22 @@ class RunnerIntegrationTests(unittest.TestCase):
         rows = {s['repetition']: s['correct'] for s in result['summary']
                 if s['baseline'] == 's' and s['split'] == 'frozen_es_pt_v1' and s['language'] == 'all'}
         self.assertEqual(rows, {1: 1, 2: 0, 3: 1, 'majority': 1})
+
+    def test_unavailable_usage_is_reported_as_unknown_not_as_free(self):
+        def unmeasured(*args):
+            return dict(extracted=FACTS, usage=dict(input_tokens=0, output_tokens=0, usage_unavailable_calls=1))
+
+        def silent(*args):
+            return dict(extracted=FACTS, usage={})
+        for extract, calls in ((unmeasured, 2), (silent, 0)):
+            result = evaluate(self.corpus(), systems={'s': FactExtractorSystem('s', extract)}, repetitions=2)
+            rows = {s['repetition']: s for s in result['summary']
+                    if s['baseline'] == 's' and s['split'] == 'frozen_es_pt_v1' and s['language'] == 'all'}
+            with self.subTest(extract.__name__):
+                self.assertEqual(rows['majority']['usage_unavailable_calls'], calls)
+                self.assertEqual(rows[1]['usage_unavailable_calls'], calls // 2)
+                if extract is silent:  # no usage at all is unknown, never a measured zero
+                    self.assertIsNone(rows['majority']['input_tokens'])
 
     def test_split_filter_scores_only_that_split(self):
         corpus = json.loads((Path(__file__).with_name('cases.json')).read_text(encoding='utf-8'))

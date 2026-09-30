@@ -13,7 +13,10 @@ def _date_bounds(fact, as_of):
     if not fact:
         return None
     expression = _norm(fact.get('expression', ''))
-    day = datetime.fromisoformat(as_of).date()
+    relative = ('hoy', 'hoje', 'today', 'ayer', 'ontem', 'yesterday', 'el viernes pasado', 'sexta passada',
+                'la semana pasada', 'semana passada')
+    # Only a relative expression needs the session time; an absolute date stands on its own.
+    day = datetime.fromisoformat(as_of).date() if expression in relative else None
     if expression in ('hoy', 'hoje', 'today'):
         start = end = day
     elif expression in ('ayer', 'ontem', 'yesterday'):
