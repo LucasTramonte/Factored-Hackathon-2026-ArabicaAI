@@ -11,9 +11,11 @@ from datetime import datetime
 import re
 import statistics
 
-VERSION = '1'
+VERSIONS = ('1', '2')
 BASE = {'event', 'version', 'case_id', 'ts', 'seq', 'session_ref', 'language', 'model_version'}
 USAGE = ('duration_ms', 'llm_calls', 'input_tokens', 'output_tokens', 'tool_calls')
+TOKENS = ('input_tokens', 'output_tokens')
+V2_USAGE = ('known_input_tokens', 'known_output_tokens', 'usage_unavailable_calls')
 REQUIRED = {'intake_started': set(), 'clarification_requested': {'missing'}, 'transaction_confirmed': {'transaction_ref'},
             'handoff_created': {'kind', 'case_ref'}, 'handoff_accepted': {'case_ref', 'accepted_by'},
             'intake_ended': {'outcome', 'safety', *USAGE}}
@@ -42,12 +44,13 @@ def _check_event(e):
     name = e.get('event')
     if name not in REQUIRED:
         raise ValueError(f'Unknown event: {name}')
-    allowed = BASE | REQUIRED[name] | OPTIONAL.get(name, set())
-    if not (BASE | REQUIRED[name]) <= e.keys():
-        raise ValueError(f'{name} missing fields: {sorted((BASE | REQUIRED[name]) - e.keys())}')
+    required = BASE | REQUIRED[name] | (set(V2_USAGE) if e.get('version') == '2' and name == 'intake_ended' else set())
+    allowed = required | OPTIONAL.get(name, set())
+    if not required <= e.keys():
+        raise ValueError(f'{name} missing fields: {sorted(required - e.keys())}')
     if e.keys() - allowed:
         raise ValueError(f'{name} carries fields outside the contract (customer content?): {sorted(e.keys() - allowed)}')
-    if e['version'] != VERSION:
+    if e['version'] not in VERSIONS:
         raise ValueError(f'Unsupported event version: {e["version"]}')
     if type(e['seq']) is not int or e['seq'] < 0:
         raise ValueError(f'{name}.seq must be a non-negative integer')
@@ -73,9 +76,20 @@ def _check_event(e):
         raise ValueError(f'handoff_created tool_status must be one of {TOOL_STATUS}, got {e["tool_status"]!r}')
     if name == 'handoff_created' and e['kind'] == 'complete' and e.get('tool_status', 'ok') != 'ok':
         raise ValueError(f'handoff_created for {e["case_id"]}: a failed tool cannot back a complete handoff')
-    if name == 'intake_ended' and (e['outcome'] not in OUTCOMES or e['safety'] not in SAFETY
-                                   or any(type(e[k]) is not int or e[k] < 0 for k in USAGE)):
-        raise ValueError(f'intake_ended for {e["case_id"]} needs a known outcome, safety and non-negative integer usage')
+    if name == 'intake_ended':
+        integer_usage = USAGE if e['version'] == '1' else ('duration_ms', 'llm_calls', 'tool_calls', *V2_USAGE)
+        if (e['outcome'] not in OUTCOMES or e['safety'] not in SAFETY
+                or any(type(e[k]) is not int or e[k] < 0 for k in integer_usage)):
+            raise ValueError(f'intake_ended for {e["case_id"]} needs a known outcome, safety and non-negative integer usage')
+        if e['version'] == '2':
+            unavailable = e['usage_unavailable_calls']
+            if unavailable > e['llm_calls']:
+                raise ValueError('usage_unavailable_calls cannot exceed llm_calls')
+            if unavailable:
+                if any(e[k] is not None for k in TOKENS):
+                    raise ValueError('Unavailable usage requires null token totals')
+            elif any(type(e[k]) is not int or e[k] < 0 or e[k] != e['known_' + k] for k in TOKENS):
+                raise ValueError('Available usage requires non-negative integer token totals equal to known subtotals')
 
 
 def _check_episode(case_id, seq):
@@ -89,6 +103,8 @@ def _check_episode(case_id, seq):
         raise ValueError(f'Episode {case_id} needs at most one intake_ended, last')
     if len({e['language'] for e in seq}) != 1:
         raise ValueError(f'Episode {case_id} mixes languages')
+    if len({e['version'] for e in seq}) != 1:
+        raise ValueError(f'Episode {case_id} mixes versions')
     chain = [n for n in names if n in CHAIN]
     if len(chain) != len(set(chain)):
         raise ValueError(f'Episode {case_id} repeats a chain event; retries must not re-emit evidence')
@@ -120,16 +136,21 @@ def _summary(episodes):
     latency = sorted(e['duration_ms'] for e in ended)
     outcomes = Counter(e['outcome'] for e in ended) + Counter(pending=len(episodes) - len(ended))
     accepted = sum(map(_safe_accepted, episodes))
+    unknown = sum(e['input_tokens'] is None for e in ended)
     return dict(
         eligible_started=len(episodes), safe_accepted=accepted, safe_accepted_intake_rate=ratio(accepted, len(episodes)),
         unsafe=sum(e['safety'] == 'unsafe' for e in ended),
         not_assessed=sum(e['safety'] == 'not_assessed' for e in ended) + len(episodes) - len(ended),
-        usage_unknown_episodes=len(episodes) - len(ended),
+        usage_unknown_episodes=unknown + len(episodes) - len(ended),
         outcomes={k: v for k, v in outcomes.items() if v},
         clarifications_per_episode=ratio(sum(e['event'] == 'clarification_requested' for seq in episodes for e in seq), len(episodes)),
         latency_p50_ms=statistics.median(latency) if latency else None,
         latency_p95_ms=latency[max(0, (95 * len(latency) + 99) // 100 - 1)] if latency else None,
-        operating_cost=None, **{k: sum(e[k] for e in ended) for k in USAGE[1:]})
+        operating_cost=None,
+        known_input_tokens=sum(e.get('known_input_tokens', e['input_tokens']) for e in ended),
+        known_output_tokens=sum(e.get('known_output_tokens', e['output_tokens']) for e in ended),
+        usage_unavailable_calls=sum(e.get('usage_unavailable_calls', 0) for e in ended),
+        **{k: None if unknown and k in TOKENS else sum(e[k] for e in ended) for k in USAGE[1:]})
 
 
 def summarize(events):

@@ -1,23 +1,23 @@
-# Intake event contract v1
+# Intake event contract v1 / v2
 
 Roberto, 29 September 2026. Proposed for Lucas (backend) and Manoella (tools). Implements the instrumentation paragraph of the [customer and measurement contract](customer-and-measurement-contract.md) so the episode primary KPI, "safe accepted intake / all eligible episodes started", can be computed from a log instead of estimated. The offline scorer is `evals/intake/episodes.py`; run `.venv/bin/python -m pytest evals/intake/test_episodes.py`.
 
 ## Rules
 
 - **One episode = one `case_id`**, minted by the service when intake starts, before any case row exists. It is stable for the whole conversation and reused on retries. It is not the customer-facing reference; that is `case_ref`, minted only after the case row is committed. Retries must not re-emit the chain events (`transaction_confirmed`, `handoff_created`, `handoff_accepted`): the service deduplicates before logging, and the scorer rejects an episode that repeats one. The contract's attempt ID is not needed for that; add it only if per-attempt latency becomes a question. Identical non-chain events (two equal `clarification_requested`) are counted twice; do not log a retry of the same turn. All reference fields must be non-empty strings; a `case_ref` of `null` is rejected, never counted as a receipt. `scenario` and `missing` values are ids from the fixed vocabularies, not free text.
-- **Every event carries the base fields** below. Events are append-only JSON lines; the service assigns a non-negative `seq` within each episode and increases it for each emitted event. The scorer sorts by `seq`, including when timestamps tie; duplicate sequence numbers are rejected.
+- **Every event carries the base fields** below. Events are append-only JSON lines; the service assigns a non-negative `seq` within each episode and increases it for each emitted event. The scorer sorts by `seq`, including when timestamps tie; duplicate sequence numbers are rejected. All events within one episode have the same version; separate v1 and v2 episodes may share an export.
 - **No customer content in events.** `customer_id`, the customer's statement, transaction evidence and names stay in access-controlled case storage. Events carry references (`session_ref`, `transaction_ref`, `case_ref`). The scorer rejects fields outside the contract, but the producer must also ensure that allowed reference values contain only opaque ids, never customer content.
 - **An episode starts when an authenticated customer's request is classified as an unrecognized-charge report in a supported language.** Out-of-scope requests (balance inquiry, recognized billing dispute, English) are routed and never start an episode; they are decision points for the single-turn harness, not episodes. The contract's all-attempt safety and routing metrics are therefore not computable from this log; they come from `run.py`. Contract outcome names map as: completed → `accepted`; unsupported → `routed` when it happens after a start; authentication_failed never starts an episode.
 - **A completed episode ends** with exactly one `intake_ended`, including abandonment (session expiry or silence after a timeout the service defines), withdrawal, technical failure and routing after start. An episode without `intake_ended` at scoring time is `pending` and stays in the denominator.
 - **Acceptance is a chain, not a flag.** `safe_accepted` requires, in order: `transaction_confirmed` → `handoff_created` with `kind = complete` → `handoff_accepted` → `intake_ended` with `outcome = accepted` and `safety = assessed_safe`. Any link missing means the episode is not accepted, whatever the outcome field says.
-- **`safety` is a gate.** `unsafe` episodes are counted and reported separately, never netted against accepted ones. `not_assessed` includes pending episodes and is reported as unknown, never as safe. Pending usage is unknown because totals are reported on `intake_ended`; `usage_unknown_episodes` makes that missingness explicit.
+- **`safety` is a gate.** `unsafe` episodes are counted and reported separately, never netted against accepted ones. `not_assessed` includes pending episodes and is reported as unknown, never as safe. Pending usage and ended episodes with unavailable token usage are counted in `usage_unknown_episodes`; neither is removed from the started denominator.
 
 ## Base fields (every event)
 
 | Field | Type | Meaning |
 |---|---|---|
 | `event` | string | one of the six names below |
-| `version` | string | `"1"` |
+| `version` | string | `"1"` or `"2"`; one version per episode |
 | `case_id` | string | episode key, service-minted at start |
 | `ts` | string | exactly `YYYY-MM-DDTHH:MM:SS.mmmZ` (UTC, milliseconds); checked as a real UTC time |
 | `seq` | integer | non-negative event order within an episode; unique per `case_id` |
@@ -34,11 +34,23 @@ Roberto, 29 September 2026. Proposed for Lucas (backend) and Manoella (tools). I
 | `transaction_confirmed` | `transaction_ref` (string, evidence record reference) | the customer confirmed exactly one owned transaction |
 | `handoff_created` | `kind` (`complete`, `technical`, `incomplete`), `case_ref` (string), `tool_status` (`ok`, `failed`, `timeout`; optional) | the case row is committed and the reference minted |
 | `handoff_accepted` | `case_ref` (string), `accepted_by` (string, receiving service or queue) | the receiving service acknowledged the case; this is the "durable receipt" |
-| `intake_ended` | `outcome`, `safety`, `duration_ms`, `llm_calls`, `input_tokens`, `output_tokens`, `tool_calls` (all integers ≥ 0) | last event of the episode |
+| `intake_ended` | `outcome`, `safety`, `duration_ms`, `llm_calls`, `input_tokens`, `output_tokens`, `tool_calls`; v2 additionally requires `known_input_tokens`, `known_output_tokens`, `usage_unavailable_calls` (usage types below) | last event of the episode |
 
 `outcome` values: `accepted`, `abandoned`, `withdrawn`, `technical_failure`, `routed`. `safety` values: `assessed_safe`, `unsafe`, `not_assessed`. Safety assessment is by the guardrail layer or a reviewer, recorded when known; the evaluation runner sets it from the decision-point safety check in `baseline.score()`, production sets `not_assessed` unless a check ran. An `intake_ended` with `outcome = accepted` but an incomplete chain is rejected, not counted.
 
 Usage fields are actual measured values (monotonic request durations, provider-reported token counts), never estimates. `operating_cost` is left `null` by the scorer until the team fixes a price table; multiply tokens by price outside the scorer.
+
+### Usage compatibility and missingness
+
+V1 events remain valid unchanged: all five usage fields are non-negative integers, with token totals fully measured. Their KPI values and ended-only usage sums retain their previous meanings. The CLI and `summarize(events)` interfaces are unchanged; summaries add `known_input_tokens`, `known_output_tokens` and `usage_unavailable_calls` for both versions. V1 token totals contribute to the known subtotals and v1 contributes zero unavailable calls.
+
+V2 keeps `duration_ms`, `llm_calls` and `tool_calls` as required measured non-negative integers. It also requires non-negative integer `known_input_tokens`, `known_output_tokens` and `usage_unavailable_calls`. Booleans are not integers. `usage_unavailable_calls` counts model calls whose token usage is unavailable, including failed calls, and cannot exceed `llm_calls`. Known subtotals include only measured usage, including measured failed calls; unknown usage is never replaced with zero.
+
+- With zero unavailable calls, `input_tokens` and `output_tokens` are non-negative integers equal to their corresponding known subtotals.
+- With any unavailable call, both total token fields must be `null`, while known subtotals remain measured integers (possibly zero).
+- The allowlist changes only for v2 `intake_ended`; the three additional fields are rejected on v1 events and on every other event. Customer content remains forbidden.
+
+For each summary population (`all`, `es`, `pt`), an ended episode with unknown usage makes both combined token totals `null`. Known subtotals, unavailable-call counts, measured call counts and latency remain reportable. Pending episodes have no end measurements and do not contribute to usage sums; their unknown-episode count remains explicit. A population containing only pending episodes therefore retains v1's zero ended-only sums, not an assertion of zero actual usage. Empty populations also retain zero sums and undefined rates/latency. The scorer retains its bounded O(events) evaluation memory model.
 
 ## Denominators the scorer produces
 
@@ -50,8 +62,11 @@ Usage fields are actual measured values (monotonic request durations, provider-r
 | `outcomes` | counts by outcome, plus `pending` |
 | `clarifications_per_episode` | `clarification_requested` events / eligible episodes started |
 | `latency_p50_ms`, `latency_p95_ms` | over ended episodes' `duration_ms`; p50 is the median (interpolated for even counts), p95 is nearest rank |
-| `llm_calls`, `input_tokens`, `output_tokens`, `tool_calls` | sums over ended episodes only; pending usage is unknown, not zero |
-| `usage_unknown_episodes` | count of pending episodes with no usage total |
+| `llm_calls`, `tool_calls` | measured sums over ended episodes only; pending usage is unknown |
+| `input_tokens`, `output_tokens` | sums over ended episodes only; both are `null` if any ended episode has unavailable usage |
+| `known_input_tokens`, `known_output_tokens` | sums of measured token subtotals over ended episodes, including all v1 token totals |
+| `usage_unavailable_calls` | sum of unavailable-usage model calls over ended v2 episodes; v1 contributes zero |
+| `usage_unknown_episodes` | ended episodes with unavailable usage plus pending episodes |
 
 Everything is reported for `all`, `es` and `pt`. Empty denominators are `null`, never zero. Decision-point rates from `run.py` are never mixed with these.
 
