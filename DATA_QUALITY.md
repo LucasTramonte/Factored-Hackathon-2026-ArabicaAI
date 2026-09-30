@@ -2,7 +2,7 @@
 
 This is the team's single list of what we learned about the supplied LATAM Bank dataset that changes, limits or supports a decision. The automated gate in [`data_pipelines/quality/`](data_pipelines/quality/README.md) checks every build for readiness (tables, row counts, keys, domains, links). This register records what those checks and targeted queries *mean*: the evidence, the impact on metrics and on the intake service, and how each finding is handled.
 
-Every number here comes from a query in [`data_profiles/findings/queries/`](data_profiles/findings/queries/) run by `make findings` on the full Silver build (quality run `20260929T113804Z`, ready, 0 errors) on 2026-09-29. Results are aggregates only. The dataset is synthetic (dataset summary, p. 5), so "unrealistic" below means unlike a real bank, not wrong in the file.
+Every number here comes from a query in [`data_profiles/findings/queries/`](data_profiles/findings/queries/) run by `make findings` on the full Silver build (quality run `20260929T113804Z`, ready, 0 errors) on 2026-09-29. DF-016 to DF-018 were added on 2026-09-30 from the same build (findings run `20260930T033230Z`). Results are aggregates only. The dataset is synthetic (dataset summary, p. 5), so "unrealistic" below means unlike a real bank, not wrong in the file.
 
 ## How to read it
 
@@ -39,6 +39,9 @@ Every number here comes from a query in [`data_profiles/findings/queries/`](data
 | [DF-013](#df-013-a-third-of-credit-card-holding-buyers-hold-multiple-credit-cards) | A third of credit-card-holding buyers hold multiple credit cards | design | Medium | Accepted limitation | Lucas |
 | [DF-014](#df-014-purchases-fall-outside-the-cards-validity-dates) | Purchases fall outside the card's validity dates | design | Medium | Open | Manoella |
 | [DF-015](#df-015-bronze-profile-findings-re-checked-in-silver) | Bronze-profile findings re-checked in Silver | full | Low | Mixed | Manoella |
+| [DF-016](#df-016-branch-reference-columns-do-not-resolve) | Branch reference columns do not resolve | full | Medium | Handled at metric level | Manoella |
+| [DF-017](#df-017-a-few-business-codes-are-shared-by-two-entities) | A few business codes are shared by two entities | full | Low | Accepted limitation | Manoella |
+| [DF-018](#df-018-categorical-values-are-in-spanish-where-the-dictionary-lists-english) | Categorical values are in Spanish where the dictionary lists English | full | Low | Handled at metric level | Manoella |
 
 ## Findings
 
@@ -54,7 +57,7 @@ Every number here comes from a query in [`data_profiles/findings/queries/`](data
 - **Evidence:** every one of the 44,570 complaints with an `affected_product_id` points to a product owned by a different customer. The other 22,525 have no product. Transactions are clean: 4,425,008 of 4,425,008 product links match their owner.
 - **Impact:** a complaint can't be tied to a card, account or product type. Any join from complaints to products silently mixes customers.
 - **Handling:** suppressed at metric level, as recorded in the [quality parity record](data_pipelines/quality/PARITY.md), which also lists the same pattern for digital events (1,094,226 of 1,094,242). The quality gate reports it as `product_owner_mismatch` on every build.
-- **Next step:** confirm in Bronze whether the source or a transformation causes it.
+- **Cause (confirmed in Bronze):** the source fills `affected_product_id` and `digital_events.product_id` with a product drawn at random from the whole product table. The product-type mix of cited products matches the full table within a point, digital events match their owner 16 times in 1,094,242 (chance level), and 8,351 of the 44,570 cited products (18.7%) were opened after the complaint was filed. It is a generation artefact, not a pipeline bug. See the [follow-up report](data_profiles/data_deep_dive/reports/complaints_product_owner_mismatch_followup.md).
 
 ### DF-003 Claimed amounts are not linked to transactions
 
@@ -129,6 +132,7 @@ Every number here comes from a query in [`data_profiles/findings/queries/`](data
 
 - **Evidence:** in the design window, 21.6% of approved purchases are dated before their card's `opening_date` and 27.1% after its `expiration_date`, at the same rates for credit and debit. All are on products whose current status is `Active`.
 - **Impact:** opening and expiration dates can't validate or filter transactions, and product dates in the snapshot don't describe the product's history.
+- **Corroborated:** over all 4,425,008 transactions (not just design-window purchases), 18.7% are dated before their product's `opening_date`, by 1 to 1,094 days (median 321). See the [quality warnings follow-up](data_profiles/data_deep_dive/reports/quality_report_warnings_followup.md).
 - **Handling:** no filter uses card validity.
 - **Next step:** check whether Bronze snapshots carry different dates per month.
 
@@ -139,11 +143,29 @@ The [bronze profile findings](data_profiles/bronze_data_profile/bronze_profile_f
 | Bronze finding | Silver result | Status |
 |---|---|---|
 | `México` / `Mexico` spelling split | 6 values: Argentina, Brazil, Colombia, México, Spain, USA | Handled in Silver |
-| `contact_reason` duplicates `reason_category` | Identical in all 686,296 interactions | Open: keep one |
+| `contact_reason` duplicates `reason_category` | Identical in all 686,296 interactions (confirmed row by row in the [call-center deep dive](data_profiles/data_deep_dive/reports/call_center_interactions_table_report.md)) | Open: keep one |
 | Future-dated `customers.last_updated` | 9,316 customers after 2026-06-18, up to 2027-06-15 | Open |
 | `amount_usd` 57% null | 35 null; 99,442 of 4,425,008 (2.25%) estimated from FX and flagged | Handled in Silver; keep the flag |
 | `origin_interaction_id` 100% null | Column dropped | Handled in Silver (see DF-003) |
 | Literal `nan` in campaign subjects | None left | Handled in Silver |
+
+### DF-016 Branch reference columns do not resolve
+
+- **Evidence:** `dim_customers.registration_branch_id` is populated for all 150,000 customers with 150,000 distinct values, and only 5 of them are real branches. `dim_service_agents.assigned_branch_id` is populated for 833 of 1,200 agents (833 distinct values), and 2 are real branches. The orphan values have the same shape as real branch IDs (`SUC-XXXXXXXX`). Every other branch or agent reference resolves.
+- **Impact:** neither column is a usable foreign key. A branch-level metric joined on them would drop or misattribute almost every row.
+- **Handling:** no metric joins on these columns. The quality gate reports both as `foreign_key_orphans` on every build, and the [Silver README](data_pipelines/silver/README.md) and the Silver schema diagram mark them.
+
+### DF-017 A few business codes are shared by two entities
+
+- **Evidence:** 6 `product_number` values in 400,000 products and 13 `employee_code` values in 1,200 agents each belong to exactly two different IDs. No code is used three times.
+- **Impact:** these codes can't be used as lookup keys without the ID. At this scale they look like random collisions in generation.
+- **Handling:** joins use `product_id` and `agent_id`. Both codes are in the quality gate's `unique_fields`, so the gate reports the collisions on every build.
+
+### DF-018 Categorical values are in Spanish where the dictionary lists English
+
+- **Evidence:** `product_type`, `document_type` (`Pasaporte`, no `CURP`), `geographic_zone` (only `Urbana`), `reason_category` and `detected_sentiment` hold Spanish values, while the dictionary lists English labels. `comment_sentiment` in satisfaction surveys is in English.
+- **Impact:** a domain check or filter written from the dictionary would reject every row, or silently match none.
+- **Handling:** the quality gate's domains for `reason_category` and `detected_sentiment` use the observed values; `product_type`, `document_type` and `geographic_zone` are not gated. Code that filters these columns uses the source spelling, e.g. `Tarjeta Crédito`, `Queja`.
 
 ## Disclosure
 

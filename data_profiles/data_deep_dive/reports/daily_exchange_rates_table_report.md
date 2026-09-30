@@ -8,9 +8,11 @@ Findings from `06_deep_dive_daily_exchange_rates.ipynb`, run against the real pr
 
 This isn't a pipeline defect -- Silver's row count matches Bronze's distinct-key count exactly, so the pipeline is faithfully carrying through whatever is in Bronze. It's the data dictionary's stated row count that's stale or wrong. Worth flagging back to whoever maintains the dictionary/dataset-generation docs; nothing to fix in code, since `contracts.py` doesn't hardcode the dictionary's row count anywhere.
 
-## Code fix candidate -- currency domain, confirmed clean
+## Currency domain, confirmed clean
 
-**`source_currency`/`target_currency` only ever take the 4 declared values (MXN, COP, ARS, USD), in every one of the 12 valid ordered pairs, with zero same-to-same rows.** Not currently gated in `contracts.py`. Same "free to add, already clean" reasoning as the domain additions on `marketing_campaigns`/`service_agents`/`branches`. Want me to add it?
+**`source_currency`/`target_currency` only ever take the 4 declared values (MXN, COP, ARS, USD), in every one of the 12 valid ordered pairs, with zero same-to-same rows.** Same "free to add, already clean" reasoning as the domain additions on `marketing_campaigns`/`service_agents`/`branches`.
+
+**Contract change applied** (`contracts.py`): both columns are gated on `{MXN, COP, ARS, USD}`.
 
 ## Other findings (no action)
 
@@ -27,6 +29,6 @@ This isn't a pipeline defect -- Silver's row count matches Bronze's distinct-key
 - Date window: zero rows before or after the declared 2023-06-17 to 2026-06-17 window -- the *first* table so far with perfect window containment on both edges.
 - **`silver.v_fx_latest_to_usd` reproduces exactly by hand** -- the view's logic (latest rate per source currency, restricted to `target_currency = 'USD'`) matches a from-scratch reconstruction row for row. All 3 non-USD currencies (ARS, COP, MXN) have a path to USD; no silent gaps for anything downstream (like `products`) that joins against it.
 
-## Next
+## Status
 
-One code-fix candidate above (currency domain) -- let me know if you want it applied, then `transactions` (7/13).
+The currency domain is applied in `contracts.py`.

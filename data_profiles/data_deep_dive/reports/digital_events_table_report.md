@@ -4,7 +4,7 @@ Findings from `11_deep_dive_digital_events.ipynb`, run against the real producti
 
 ## Headline finding -- the dictionary is wrong by 56%, but `table_specs.py`'s own comment had the real number exactly right
 
-Section 2 resolved the conflict flagged going in: the dictionary declares 10,000,000 rows; `table_specs.py`'s comment above `digital_events_spec` says "15.6M rows." **The real Bronze count is 15,620,994 -- `table_specs.py`'s comment is correct, and the dictionary is off by 5,620,994 rows (56% more data than declared).** This is the largest dictionary-count miss found in any table so far (previous misses topped out around 25-30% off, e.g. `transactions` at 5.0M declared vs. 4.4M real). Worth flagging that whoever wrote the `table_specs.py` comment had clearly already looked at the real data -- that comment is a more trustworthy source than the dictionary for this table specifically.
+Section 2 resolved the conflict flagged going in: the dictionary declares 10,000,000 rows; `table_specs.py`'s comment above `digital_events_spec` says "15.6M rows." **The real Bronze count is 15,620,994 -- `table_specs.py`'s comment is correct, and the dictionary is off by 5,620,994 rows (56% more data than declared).** In relative terms this is second only to `daily_exchange_rates` (3,000 declared vs. 13,164 real, +339%); `transactions` is about 11.5% off. Worth flagging that whoever wrote the `table_specs.py` comment had clearly already looked at the real data -- that comment is a more trustworthy source than the dictionary for this table specifically.
 
 ## Second finding -- the `process_date` rollback mechanism is now fully and cleanly confirmed
 
@@ -31,7 +31,7 @@ This is a textbook clean cutoff: every event generated between midnight and 6am 
 | `channel` | Android App, iOS App, Desktop Web, Mobile Web | Exact match |
 | `platform` | Android, iOS, Windows, Linux, MacOS (+ 5.00% NULL, expected -- nullable) | Exact match |
 
-Want me to add `is_mobile` to `required` and all four domains?
+**Contract change applied** (`contracts.py`): `is_mobile` is required, and `channel`, `event_category`, `event_type` and `platform` are gated domains.
 
 ## Other findings (no action)
 
@@ -58,8 +58,6 @@ Want me to add `is_mobile` to `required` and all four domains?
 - `event_value`/`duration_seconds`: no negatives, ranges 10.01-4,999.98 and 5.0-300.0.
 - **Window check**: zero rows before the declared window start.
 
-## Next
+## Status
 
-Two code-fix candidates above (`is_mobile` required + 4 domains) -- let me know if you want them applied.
-
-This was the last of the largest fact tables. Two left: `complaints` (12/13) and `campaign_sends` (13/13). Ready to build the `complaints` notebook whenever you want to move on -- I already have its dictionary schema and `table_specs.py` spec in hand, including the known `origin_interaction_id` drop and the `claimed_amount`/`compensation_granted` non-USD-conversion, both worth verifying directly rather than assuming.
+The contract changes above are applied in `contracts.py`.

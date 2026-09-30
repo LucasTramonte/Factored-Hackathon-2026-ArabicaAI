@@ -20,7 +20,7 @@ Findings from `08_deep_dive_call_center_interactions.ipynb`, run against the rea
 
 `channel` was already gated in `contracts.py` with 6 values including an extra `Web` beyond the dictionary's declared 5 -- **re-verified as still fully accurate**, no fix needed there.
 
-Want me to add `has_recording` to `required` and all three domains (using the real Spanish values for `reason_category`/`detected_sentiment`)?
+**Contract change applied** (`contracts.py`): `has_recording` is required, and `interaction_type`, `reason_category` and `detected_sentiment` are gated domains with the real Spanish values.
 
 ## Other findings (no action)
 
@@ -46,6 +46,6 @@ Want me to add `has_recording` to `required` and all three domains (using the re
 - `sentiment_score`: exactly within the declared -1 to 1 range, zero out-of-range values.
 - `mentioned_products`: 39.97% populated, consistent comma-separated `PRD-XXXXXXXXXXXX` format throughout the sample.
 
-## Next
+## Status
 
-Two code-fix candidates above (`has_recording` required + 3 domains) -- let me know if you want them applied, then `call_transcripts` (9/13).
+The contract changes above are applied in `contracts.py`.
