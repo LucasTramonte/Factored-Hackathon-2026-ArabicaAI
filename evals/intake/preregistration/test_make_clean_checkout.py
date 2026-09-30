@@ -60,7 +60,7 @@ class SnapshotTests(unittest.TestCase):
         self.src = Path(self.tmp.name) / 'src'
         self.src.mkdir()
         git(self.src, 'init', '-q')
-        (self.src / 'status.md').write_text('frz-025 SECRET-MESSAGE-TEXT gold clarify\n')
+        (self.src / 'status.md').write_text('FAKE-CASE SECRET-MESSAGE-TEXT gold clarify\n')
         (self.src / 'code.py').write_text('x = 1\n')
         git(self.src, 'add', '.')
         git(self.src, 'commit', '-qm', 'leaky status page')
