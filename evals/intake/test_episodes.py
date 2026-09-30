@@ -1,5 +1,10 @@
 """Episode KPI scorer regressions: denominators, safety gate, allowlist and event-order validation."""
 import unittest
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 from evals.intake.episodes import summarize
 
 
@@ -116,6 +121,68 @@ class EpisodeTests(unittest.TestCase):
     def test_seq_orders_events_with_the_same_millisecond_timestamp(self):
         tied = [dict(e, ts='2026-09-29T10:00:00.000Z') for e in ACCEPTED]
         self.assertEqual(summarize(list(reversed(tied)))['all']['safe_accepted'], 1)
+
+
+class EpisodeCliTests(unittest.TestCase):
+    def run_cli(self, content):
+        """Exercise the module entry point with a real temporary export."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'events.jsonl'
+            path.write_text(content, encoding='utf-8')
+            return subprocess.run([sys.executable, '-m', 'evals.intake.episodes', str(path)],
+                                  capture_output=True, text=True)
+
+    def test_cli_reports_accepted_and_pending_episodes(self):
+        result = self.run_cli(''.join(json.dumps(e) + '\n' for e in ACCEPTED + PENDING))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout, 'CLI did not produce its JSON summary')
+        summary = json.loads(result.stdout)
+        self.assertEqual(summary['all']['eligible_started'], 2)
+        self.assertEqual(summary['all']['safe_accepted'], 1)
+        self.assertEqual(summary['all']['safe_accepted_intake_rate'], 0.5)
+        self.assertEqual(summary['pt']['usage_unknown_episodes'], 1)
+        self.assertIsNone(summary['pt']['latency_p95_ms'])
+        self.assertEqual(result.stderr, '')
+
+    def test_cli_rejects_bad_input_without_echoing_content_or_partial_results(self):
+        valid = json.dumps(ACCEPTED[0]) + '\n'
+        for bad in ['[' * 1200 + '"PRIVATE-CONTENT"' + ']' * 1200,
+                    '{"customer_name": "PRIVATE-CONTENT"', '"PRIVATE-CONTENT"',
+                    '["PRIVATE-CONTENT"]', '{"event": "PRIVATE-CONTENT"}',
+                    json.dumps(dict(ACCEPTED[1], missing=['PRIVATE-CONTENT'])),
+                    json.dumps(dict(ACCEPTED[1], event={'private': 'PRIVATE-CONTENT'}))]:
+            with self.subTest(bad=bad):
+                result = self.run_cli(valid + bad + '\n')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, '')
+                self.assertIn('line 2', result.stderr)
+                self.assertNotIn('PRIVATE-CONTENT', result.stderr)
+                self.assertNotIn('Traceback', result.stderr)
+
+    def test_cli_invalid_sequence_produces_no_partial_summary(self):
+        events = [ACCEPTED[0], dict(ACCEPTED[1], seq=0)]
+        result = self.run_cli(''.join(json.dumps(e) + '\n' for e in events))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, '')
+        self.assertIn('Invalid episode log', result.stderr)
+        self.assertNotIn('Traceback', result.stderr)
+
+    def test_cli_empty_input_retains_undefined_rates(self):
+        result = self.run_cli('')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout, 'CLI did not produce its JSON summary')
+        summary = json.loads(result.stdout)
+        self.assertEqual(summary['all']['eligible_started'], 0)
+        self.assertIsNone(summary['all']['safe_accepted_intake_rate'])
+
+    def test_cli_missing_input_fails_without_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run([sys.executable, '-m', 'evals.intake.episodes',
+                                     str(Path(directory) / 'missing.jsonl')], capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, '')
+        self.assertNotIn('Traceback', result.stderr)
+        self.assertTrue(result.stderr)
 
 
 if __name__ == '__main__':

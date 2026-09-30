@@ -39,3 +39,23 @@ The decision-point completion-ready proxy is not the episode-level primary KPI. 
 3. Independent review found grouped/Unicode-signed money suffix matching, malformed source handling, and safety-scoring omissions. Added failing regression examples, fixed boundaries, and reran the suite. Corrected independence language in the contract/report.
 4. Next iteration requires human-reviewed intent cases and a fresh unseen ES/PT set, followed by multi-turn episode evaluation. No learned extractor or impact claim is included in this initial delivery.
 5. Added the V1-authored regression (Andrés's phrases) and safety splits without touching the rules. Checklist: 15/25 V1-authored, 20/22 safety, 0 unsafe; ES/PT paired cases score identically. Misses are documented rule limits (no currency code, non-ISO dates, phrases outside the list, no merchant search, per-session-language phrase lists), kept as targets for the agent, not for rule tuning.
+
+
+## Episode export CLI
+
+From the repository root, score a bounded UTF-8 JSONL export from the Worker:
+
+```bash
+python -m evals.intake.episodes data_foundation/runs/intake-events.jsonl > data_foundation/runs/intake-summary.json
+```
+
+The input must follow `Docs/intake/intake-events.md`: one event object per line,
+opaque references only, no customer content. The command writes JSON aggregates for
+`all`, `es` and `pt` to stdout. Invalid JSON/event fields produce a line-numbered
+error on stderr; invalid episode sequences/receipts reject the whole log. Errors
+exit nonzero without echoing event content or emitting a partial summary.
+An empty file produces zero counts and undefined (`null`) rates/latency. Pending
+episodes remain in the denominator with unknown safety/usage. This measures safe
+accepted intake, not automated resolution. Costs remain `null` until independently
+measured. Memory is O(events), for bounded evaluation exports, not full-bank logs.
+No new dependencies or scorer changes are needed.
