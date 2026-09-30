@@ -2,6 +2,8 @@
 
 ## Start here
 
+> **Update, 2026-09-30:** Task 5 has since been completed and verified locally. See the [Task 5 completion note](2026-09-30-task-5-completion.md). Its independent review is still pending. The rest of this document is the checkpoint handoff as written.
+
 The user requested that the current work be saved, committed and pushed so another agent can continue and finish it. **This is a checkpoint, not a finished or merge-ready implementation.** Tasks 1–4 are complete and independently reviewed. Task 5 is partial and unreviewed; its latest full suite has two failures. Task 6 is gated by missing external artifacts.
 
 - Repository: https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI

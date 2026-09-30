@@ -1,4 +1,4 @@
-> Historical capture before controller checkpoint commits. References to uncommitted files, old HEAD and old branch describe the capture time. These changes are now saved in `ba7d062` on `codex/intake-backend-completion`. See the companion handoff for current state.
+> Historical capture before controller checkpoint commits. References to uncommitted files, old HEAD and old branch describe the capture time. These changes are now saved in `ba7d062` on `codex/intake-backend-completion`. See the companion handoff for current state. Task 5 was later completed on top of this checkpoint; see the [Task 5 completion note](2026-09-30-task-5-completion.md).
 
 # Task 5 partial recovery report
 

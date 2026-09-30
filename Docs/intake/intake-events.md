@@ -81,8 +81,48 @@ Everything is reported for `all`, `es` and `pt`. Empty denominators are `null`, 
 {"event":"intake_ended","version":"1","case_id":"ep-7f3a","ts":"2026-09-29T14:00:50.000Z","session_ref":"sess-91","language":"es","model_version":"claude-fable-5-1@prompt-v1","outcome":"accepted","safety":"assessed_safe","duration_ms":50000,"llm_calls":4,"input_tokens":2310,"output_tokens":412,"tool_calls":2,"seq":5}
 ```
 
+## Worker producer `guided-0.1` (implemented 2026-09-30)
+
+The Worker's explicit guided flow (`POST /intake/start`, `/intake/confirm`, `/intake/handoff`; `back-end/README.md`) emits v2 events only, with `model_version = guided-0.1`. It stores each event in D1 `intake_events` in the same atomic batch as the state change it records, and assigns `seq` from 0. What it emits:
+
+- **Start:** one `intake_started` when an authenticated customer starts an explicit ES/PT unrecognized-charge report. The report type is chosen by the customer, not classified from free text. A replayed start emits nothing.
+- **Complete:** `transaction_confirmed` → `handoff_created` (`kind = complete`, `tool_status = ok`) → `handoff_accepted` (`accepted_by = case_service`) → `intake_ended` (`accepted`). All four are appended only after the confirmed case and handoff have been read back, and only with a live session of the same customer. The D1 case store is the receiving service, so `handoff_accepted` is that read-back, not a person's action.
+- **Incomplete / technical:** `handoff_created` (`incomplete` + `ok`, or `technical` + `failed`) → `intake_ended` (`routed` or `technical_failure`). No `handoff_accepted` is emitted, so these can never count as safe accepted intake. A later report starts a new episode.
+- **Abandoned:** one `intake_ended` (`abandoned`) from the idle-closure script (below).
+- **Safety:** always `not_assessed`. Production safety is not assessed by this service, and `safe_accepted` is therefore 0 on real traffic.
+- **References:** `case_id` is the server-minted episode UUID. `session_ref` is a random UUID minted per episode, not the session token, its hash or the customer id. `transaction_ref` is the handoff reservation UUID, an opaque evidence-record reference, never the source transaction id. `case_ref` is the customer-facing protocol: the confirmed case id for complete handoffs, otherwise the handoff id.
+- **Usage:** `llm_calls = 0`, `usage_unavailable_calls = 0`, and token totals equal the known subtotals (0), because the guided flow calls no model. Unknown usage can only come from a future model producer, and then follows the v2 rules above: null totals, measured known subtotals and a count of unavailable calls, never an invented zero. Pending episodes stay in `usage_unknown_episodes`.
+
+### Timing
+
+- **`duration_ms`** is server wall-clock time from the persisted start (`created_at`) to the invocation that writes the terminal acknowledgment. It includes customer think time, renewal and pending retries. A backward clock step is clamped to 0. It is not a monotonic clock across invocations, so it is not per-request latency.
+- **Abandoned episodes** end at their deadline: `ts` is min(last activity + 10 minutes, bound session expiry) and `duration_ms` is measured to that deadline, not to when the sweep ran.
+- **Per-operation elapsed time** (monotonic, within one request) accumulates in the restricted `intake_handoffs.usage_json.operation_duration_ms`. It isn't exported. It excludes the final acknowledgment round trip, which starts after it is measured.
+
+### Tool-call ledger
+
+`tool_calls` counts business-tool work: start storage (1), the owned-transaction lookup, the handoff persistence, the receipt read-back and the finalization. Failed attempts count while the episode is open or its reservation is pending. Session reads, idempotency checks, housekeeping, export and replays after the episode ended are not tool calls. D1 measures them separately ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)). If an operation and the write that records its usage both fail, the attempt can't be reconstructed, so `tool_calls` can undercount during a storage outage.
+
+### Idle abandonment
+
+An episode still in `selection_required` is abandoned 10 minutes after its last activity or when its bound session expires, whichever comes first (open question 1 below, as implemented). `back-end/scripts/close-idle-intakes.mjs` records it: nothing schedules it, and it closes at most 100 episodes per atomic page at one cutoff. A `handoff_pending` episode (its reservation committed but its read-back or acknowledgment not confirmed) is never abandoned and never acknowledged by housekeeping. Only the same customer's live session can finish it, and until then it stays pending in the denominator.
+
+### Export: cutoff, pages and allowlist
+
+`back-end/scripts/export-intake-events.mjs` writes every episode, pending ones included, to one JSONL file under the ignored `data/intake-events/`, then scores it with `python -m evals.intake.episodes` before publishing it.
+
+- **Pages and cursor:** keyset pages of at most 100 episodes ordered by episode id. Each page is a single D1 statement, so every episode's event group is complete and consistent as of its page. The run fails, keeping the previous artifact, rather than publish a partial population. A run is bounded to 100 pages (10,000 episodes). One page holds at most 100 episodes × 101 events × 4,096 characters in memory, and the scorer then makes one O(events) pass over the file.
+- **Cutoff:** the output's `cutoff` is when the run started. Pages are read one after another, so the export is not a snapshot across pages. An episode that starts or ends during a run appears in the state its page saw, and one that starts with an id below the cursor appears in the next run. For a fixed denominator, close idle episodes first and export after traffic stops, stating the cutoff with the figures.
+- **Allowlist:** for each event, only that event's contract fields; version `2`; `model_version = guided-0.1`; `accepted_by = case_service`; `case_id`, `session_ref`, `transaction_ref` and `case_ref` must be lowercase UUIDs. Anything else fails the run instead of being cleaned. Customer ids, names, statements, source transaction ids, evidence and model output never reach the file. The scorer then rechecks every field, sequence and usage rule.
+
+### Retention
+
+Episodes, turns, events, handoffs and cases stay through 2026-10-31 ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)). Expired sessions are still purged at every login. After the window, the team takes a final export, then runs `back-end/scripts/reset-demo-activity.sql`, which deletes in foreign-key order.
+
 ## Open questions for Lucas and Manoella
 
-1. Abandonment timeout: how long without a customer message before the service emits `intake_ended` with `abandoned`? Proposal: 10 minutes, or session expiry, whichever comes first.
-2. Where `handoff_accepted` comes from in the demo: if the case store is the receiving service, the service emits it on commit; if a queue or agent console acknowledges, it emits it then. The KPI needs one of the two, agreed and written down.
-3. Whether `session_ref` should be a hash of the session id or a separate opaque token. Either is fine for the scorer; it must not be reversible to `customer_id` from the analytics export.
+1. Abandonment timeout: how long without a customer message before the service emits `intake_ended` with `abandoned`? Proposal: 10 minutes, or session expiry, whichever comes first. *As implemented on 2026-09-30:* this proposal (see Idle abandonment above).
+2. Where `handoff_accepted` comes from in the demo: if the case store is the receiving service, the service emits it on commit; if a queue or agent console acknowledges, it emits it then. The KPI needs one of the two, agreed and written down. *As implemented:* the D1 case store is the receiving service, and the event follows the read-back after commit.
+3. Whether `session_ref` should be a hash of the session id or a separate opaque token. Either is fine for the scorer; it must not be reversible to `customer_id` from the analytics export. *As implemented:* a separate random UUID per episode.
+
+These record what the Worker does; they are not a recorded team decision.

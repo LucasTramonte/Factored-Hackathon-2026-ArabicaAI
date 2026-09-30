@@ -1,6 +1,6 @@
 # Worker intake completion, handoffs and gated AI integration
 
-Status: approved by Roberto; fresh agent review completed and three findings resolved. Implementation has not started.
+Status: approved by Roberto; fresh agent review completed and three findings resolved. Implementation (2026-09-30): backend plan Tasks 1–5 are implemented on the branch and verified locally (Worker unit and local-D1 suites, episode scorer tests; [Task 5 completion note](../../Handoffs/2026-09-30-task-5-completion.md)). The independent Task 5 review is pending, Task 6 (online extraction transport) is gated on its external artifacts, and the frontend is deferred. Nothing has been applied remotely or deployed.
 Author: Roberto, with Codex. Local date: 2026-09-29.
 Baseline: main `dbeebaf`, after the ordered merges #27, #28 and #26.
 
