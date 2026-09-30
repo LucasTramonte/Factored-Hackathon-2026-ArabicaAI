@@ -80,12 +80,16 @@ def quantile_interval(values, q: float = 0.95, conf: float = 0.95) -> tuple[floa
         raise ValueError("values must be real numbers")
     data.sort()
     n, tail = len(data), (1 - conf) / 2
-    # Binomial probabilities in log space: exact enough, O(n), and no float overflow for large n.
-    base = lgamma(n + 1)
-    cdf, total = [], 0.0
-    for i in range(n + 1):
-        total += exp(base - lgamma(i + 1) - lgamma(n - i + 1) + i * log(q) + (n - i) * log(1 - q))
-        cdf.append(min(total, 1.0))  # cdf[i] = P(B <= i)
+    cdf, total = [], 0.0  # cdf[i] = P(B <= i)
+    if n <= 1000:  # exact terms, so a tail that lands on alpha/2 keeps its bound
+        for i in range(n + 1):
+            total += comb(n, i) * q ** i * (1 - q) ** (n - i)
+            cdf.append(total)
+    else:  # log space: O(n) and no float overflow; exact ties are vanishingly rare at this size
+        base = lgamma(n + 1)
+        for i in range(n + 1):
+            total += exp(base - lgamma(i + 1) - lgamma(n - i + 1) + i * log(q) + (n - i) * log(1 - q))
+            cdf.append(min(total, 1.0))
     lows = [j for j in range(1, n + 1) if cdf[j - 1] <= tail]
     highs = [k for k in range(1, n + 1) if cdf[k - 1] >= 1 - tail]
     return (data[lows[-1] - 1] if lows else None, data[highs[0] - 1] if highs else None)

@@ -82,6 +82,10 @@ class QuantileIntervalTests(unittest.TestCase):
             with self.subTest(values=values, q=q, conf=conf), self.assertRaises((ValueError, TypeError)):
                 quantile_interval(values, q, conf)
 
+    def test_exact_tail_boundaries_keep_their_bound(self):
+        # P(B <= 0) = 0.25 equals alpha/2 exactly: rounding must not drop the upper bound.
+        self.assertEqual(quantile_interval([0, 1], 0.5, 0.5), (0, 1))
+
     def test_large_samples_are_fast_and_do_not_overflow(self):
         import time
         started = time.perf_counter()
