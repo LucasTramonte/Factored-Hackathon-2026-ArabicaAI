@@ -1,6 +1,6 @@
 # ADR-001 — Prioritize a read-only inquiry workflow for evaluation
 
-- **Status:** Proposed — team selection remains open
+- **Status:** Superseded by [ADR-002](ADR-002-v1-workflow-unrecognized-charge-intake.md) for the V1 choice (2026-09-29). Kept as the comparison record; the table of official workflows was added on 2026-09-30
 - **Date:** 2026-09-26
 - **Deciders:** ArabicaAI team
 - **Related:** [ADR-002](ADR-002-v1-workflow-unrecognized-charge-intake.md) proposes the V1 scope the team has been building since 2026-09-27
@@ -20,6 +20,19 @@ The hackathon asks for one focused banking service workflow with a normal resolu
 | Complaint monetary fields | Only 4,090/12,297 (33.3%) `Cargo no reconocido` cases have `claimed_amount`; 909/12,297 (7.4%) have `compensation_granted`; 8,221/12,297 (66.9%) lack currency. These fields do not establish fraud losses or reimbursements for labeled transactions. |
 
 The independent scan used transaction, interaction, and complaint event dates spanning 2023-06-17 to 2026-06-18. It streamed projected CSV columns, retained the small customer dimension, and used disk-backed primary-key tracking. No blank or duplicate primary IDs were found in the five reviewed tables (`customers`, `call_center_interactions`, `call_transcripts`, `complaints`, `transactions`). Each fact retained its own analytical grain; no fact-to-fact customer join was made. Counts are observations of a synthetic dataset, not real-bank rates.
+
+## The four official workflows, compared
+
+The brief lists four example workflows (problem statement, p. 1; kickoff, p. 10) and scores depth rather than breadth, so one had to be chosen. Demand below is the share of the 686,296 call-center interactions by `reason_category`, measured on the full Silver build on 2026-09-30. The labels are broad and none is a narrow intent.
+
+| Official workflow | Evidence | Can a deterministic boundary make it safe? | Can it be evaluated on held-out cases? | Outcome |
+|---|---|---|---|---|
+| **Transaction-dispute intake** | `Queja` is 17.05% of contacts (117,021). `Cargo no reconocido` is the largest complaint subcategory (12,297 of 67,095), though only just: `Cobro indebido` has 12,194 | Yes: find the customer's own charge, confirm it, store the case, hand off. Nothing moves money | Yes, with an authored blind frozen ES/PT set (ADR-005), because complaint text is templated (DF-001) | **Chosen for V1 (ADR-002)** |
+| Account or payment inquiries | `Transaccional` is the largest label, at 34.98% (240,056) | Yes, read-only | Only with authored intents, because inquiry intents aren't labelled in the data | **Kept as the normal-resolution path**: a bounded recent-transactions view, measured separately |
+| Card-service support | `Producto` is 21.98% (150,863), but it mixes every product type | The typical actions (block, replace) change the account, and the brief authorizes no live action. A mock tool could show them, but no outcome label exists | No labelled card-service outcomes | Rejected for V1 |
+| Credit-product information and eligibility | `Comercial` is 8.0% (54,879) | The brief requires separating risk estimates from eligibility policy (p. 2). No eligibility policy was supplied, so it would have to be invented, and credit score and income are excluded on risk and fairness grounds | No eligibility labels | Rejected: the policy would be ours, not the bank's |
+
+Fraud triage, which the original proposal below also compared, is not an official workflow. It stays rejected for the reasons in ADR-002.
 
 ## Proposed decision
 
