@@ -181,7 +181,7 @@ The per-call figures use the measured 2,106 input and 266 output tokens. The env
 | Claude Haiku 4.5 ($1 / $5 per M) | $0.0034 | $0.022 | $16.70 | about 7× |
 | Claude Sonnet 5 ($2 / $10 per M) | $0.0069 | $0.044 | $33.30 | about 14× |
 
-At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency is the open question, not cost.** The development p95 of 3.25 s trips ADR-006's 3 s trigger. The response (the next rung or a recorded exception) has to be decided before pre-registration, and it is still open.
+At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and the free allocation are the open questions, not cost.** The development p95 trips ADR-006's 3 s trigger, and the qualification rule and its response are fixed in ADR-006's pre-freeze amendments. On the free allocation the account served fewer than about 280 extraction calls in one UTC day before answering `HTTP 429` (2026-09-30). That bounds any live AI use on Free at a few hundred calls a day. The frozen run (about 180 calls) must start right after a reset, or use Workers Paid ($5 a month plus about $0.011 per 1,000 neurons over the allocation).
 
 ### 7. Operating the evaluation window
 
