@@ -89,6 +89,26 @@ class SnapshotTests(unittest.TestCase):
         export_snapshot(self.src, 'HEAD', dest)
         self.assertFalse((dest / 'evals/intake/frozen_es_pt_v1/draft.json').exists())
 
+    def test_hostile_global_git_config_neither_breaks_nor_leaves_a_half_built_snapshot(self):
+        import os
+        cfg = Path(self.tmp.name) / 'gitconfig'
+        hooks = Path(self.tmp.name) / 'hooks'
+        hooks.mkdir()
+        (hooks / 'pre-commit').write_text('#!/bin/sh\nexit 1\n')
+        (hooks / 'pre-commit').chmod(0o755)
+        cfg.write_text(f'[commit]\n\tgpgsign = true\n[gpg]\n\tprogram = false\n[core]\n\thooksPath = {hooks}\n')
+        old = os.environ.get('GIT_CONFIG_GLOBAL')
+        os.environ['GIT_CONFIG_GLOBAL'] = str(cfg)
+        try:
+            dest = Path(self.tmp.name) / 'blind'
+            export_snapshot(self.src, 'HEAD', dest)
+            self.assertEqual(git(dest, 'rev-list', '--all', '--count').strip(), '1')
+        finally:
+            if old is None:
+                os.environ.pop('GIT_CONFIG_GLOBAL')
+            else:
+                os.environ['GIT_CONFIG_GLOBAL'] = old
+
     def test_an_existing_destination_is_refused(self):
         dest = Path(self.tmp.name) / 'blind'
         dest.mkdir()

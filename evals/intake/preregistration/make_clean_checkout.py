@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import shutil
 import subprocess
 import tarfile
 from pathlib import Path
@@ -51,16 +52,26 @@ def export_snapshot(repo: Path, ref: str, dest: Path) -> str:
                             capture_output=True, text=True, env=env).stdout.strip()
     archive = subprocess.run(["git", "-C", str(repo), "archive", "--format=tar", source], check=True,
                              capture_output=True, env=env).stdout
+    created = not dest.exists()
     dest.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-        tar.extractall(dest, filter="data")
-    identity = ["-c", "user.name=blind-snapshot", "-c", "user.email=blind-snapshot@localhost"]
-    for args in (["init", "-q"], ["add", "-A"], [*identity, "commit", "-qm", f"Blind snapshot of {source}"]):
-        subprocess.run(["git", "-C", str(dest), *args], check=True, capture_output=True, env=env)
-    count = subprocess.run(["git", "-C", str(dest), "rev-list", "--all", "--count"], check=True,
-                           capture_output=True, text=True, env=env).stdout.strip()
-    if count != "1":
-        raise SystemExit(f"Not history-free: {count} commits reachable in {dest}")
+    # The snapshot repository ignores global and system git config: signing, hooks or templates there
+    # must neither break it nor run inside it.
+    local = {**env, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
+    settings = ["-c", "user.name=blind-snapshot", "-c", "user.email=blind-snapshot@localhost",
+                "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"]
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            tar.extractall(dest, filter="data")
+        for args in (["init", "-q"], ["add", "-A"], ["commit", "-qm", f"Blind snapshot of {source}"]):
+            subprocess.run(["git", *settings, "-C", str(dest), *args], check=True, capture_output=True, env=local)
+        count = subprocess.run(["git", "-C", str(dest), "rev-list", "--all", "--count"], check=True,
+                               capture_output=True, text=True, env=local).stdout.strip()
+        if count != "1":
+            raise SystemExit(f"Not history-free: {count} commits reachable in {dest}")
+    except BaseException:
+        if created:  # never leave a half-built checkout that the next run would refuse
+            shutil.rmtree(dest, ignore_errors=True)
+        raise
     return source
 
 
