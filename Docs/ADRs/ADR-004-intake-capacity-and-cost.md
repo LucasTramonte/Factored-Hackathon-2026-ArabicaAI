@@ -50,9 +50,9 @@ From `back-end/test/integration/budget.test.js` against local D1, which reads D1
 | Unit | Worker requests | D1 queries | D1 rows read | D1 rows written | Source |
 |---|---|---|---|---|---|
 | Page load (gated HTML document + identity list) | 2 | 0 | 0 | 0 | code |
-| Customer: login + list + create case | 3 | 9 | 10 | 7 | measured |
+| Customer: login + list + create case | 3 | 10 | 10 | 7 | measured |
 | Agent refresh (session + 50-case page) | 2 | 4 | ≤155 | 3 | 155 is the full-page upper bound |
-| **Episode (one of each)** | **7** | **13** | **165** | **10** | |
+| **Episode (one of each)** | **7** | **14** | **165** | **10** | |
 
 Rows written include index writes. A case takes about 367 bytes with a typical statement and 4.3 KB at the 2,000-character maximum. In production, Worker CPU was 0–4 ms per request (implementation notes).
 
@@ -73,7 +73,7 @@ Other measured inputs used below:
 | Online store | SQLite (D1) | RDS PostgreSQL, Aurora, DynamoDB | 318 reads and 42 writes per complete guided episode at the CI ceilings; the serving slice is about 0.3 GB | D1 in the prototype, PostgreSQL in the AWS target | A database over 5 GB (ADR-003's exit trigger; Paid caps at 10 GB), write p95 over 200 ms, cross-customer online queries, or a row-level security requirement |
 | API | Cloudflare Worker | API Gateway + Lambda, ECS Fargate | 9 requests per complete guided episode, CPU 0–4 ms (legacy flow, measured in production) | Worker in the prototype, Lambda in the AWS target | Section 4 |
 | AI extraction | Workers AI gpt-oss-20b ($0.0005 per call, measured) | Bedrock, SageMaker endpoint | 18/18 on development with the corrected labels (16/18 before; ADR-006 amendment 3), p95 3.25 s | Workers AI for development and the frozen evaluation only. The live service calls it after the frozen run, behind a switch that falls back to the deterministic flow (ADR-006, decision 6). The same model runs on Bedrock in the AWS target | The extractor fails the frozen test on quality → the next ADR-006 rung |
-| Observability | Workers logs and analytics | CloudWatch, X-Ray | About 29 log events per episode | Workers logs now, CloudWatch in the target | Moving the runtime |
+| Observability | Workers logs and analytics | CloudWatch, X-Ray | About 29 log events per legacy episode (guided not measured) | Workers logs now, CloudWatch in the target | Moving the runtime |
 
 The pattern is deliberate. Processing stays open source (DuckDB, SQLite, the same model family), and the managed cloud services are the ones a bank needs for availability, private networking and audit. Moving the online store is not free, though: section 3 lists what a migration costs in engineering work.
 
@@ -214,7 +214,7 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
 - **Retention and shutdown (one date for every document: after 2026-10-20):**
   - **Until 2026-10-15:** nothing is deleted by age before judging ends, so judges see the cases in the recorded demo. Before each recorded demo, the team may reset demo activity only. Expired sessions are purged on every login.
   - **After 2026-10-20:** demo activity is exported for the record, then deleted from the remote D1, and the Worker is taken down.
-  - **Deletes follow foreign-key order.** Guided handoffs reference cases (`intake_handoffs.complete_case_id`), and D1 enforces foreign keys, so the old `DELETE FROM cases; DELETE FROM sessions;` recipe fails since migration 0004. Resets and the final delete use `back-end/scripts/reset-demo-activity.sql`: it deletes intake events, turns, handoffs and episodes, then cases, then sessions, and a unit test runs it against the migrations. Customers, transactions, context cards and provenance stay until the seed version is replaced. Nothing here has been run remotely.
+  - **Deletes follow foreign-key order.** Guided handoffs reference cases (`intake_handoffs.complete_case_id`), and D1 enforces foreign keys, so the old `DELETE FROM cases; DELETE FROM sessions;` recipe fails since migration 0004. Resets and the final delete use `back-end/scripts/reset-demo-activity.sql`: it deletes intake events, turns, handoffs and episodes, then cases, then sessions, and a unit test runs it against the migrations. D1 Time Travel keeps 7 days on Free, so a mistaken reset can be recovered within that period. Customers, transactions, context cards and provenance stay until the seed version is replaced. Nothing here has been run remotely.
   - **Export limit:** the final export is all-or-nothing and bounded at 100 pages × 100 = 10,000 episodes. That is below S3 volume over the window (818 × 22 ≈ 18,000 episodes), which would need segmented exports. They aren't implemented, and this is recorded as a limitation.
   - **Data handling:** no real customer data is ever loaded.
 - **AWS:** nothing in the prototype runs on AWS.
@@ -250,7 +250,7 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
 - **One ADR per cost decision.** It would scatter sizing across records. Rejected: this record stays the single source, and `Docs/Costs/` holds only its evidence.
 - **Size the AWS target for the whole database online.** The workflow reads only the serving slice (about 0.3 GB), and the full history belongs in the lake. Rejected: it would have meant a db.t4g.medium and 50 GB for no measured need.
 - **CloudFront flat-rate Pro plan.** It costs $15 against about $9.87 for pay-as-you-go plus WAF, and its advantage (no overage) is already covered. Kept as the option if traffic becomes unpredictable.
-- **Buy Workers Paid now.** Modelled use is under 9% of Free even at S3. Rejected, unless the full serving slice is loaded (section 2).
+- **Buy Workers Paid now.** The guided flow uses about 34% of the Free write quota at S3 (section 2). Rejected, unless the full serving slice is loaded or traffic reaches S4 (section 2).
 
 ## Implementation notes
 
@@ -286,7 +286,7 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
   - **Static bundles:** they don't reach the Worker, so an episode is 7 Worker requests, as modelled.
   - **After batching the login writes** (deploy `aa0c804`): customer login went from 514 to 418 ms and agent login from 302 to 161 ms.
   - **Smart Placement** is enabled. No location is claimed until the `cf-placement` header shows `remote-…`.
-- **Guided intake flow, measured 2026-09-30 (backend Task 5, final schema).** No remote D1, deploy or model call was used.
+- **Guided intake flow, measured 2026-09-30 (final schema).** No remote D1, deploy or model call was used.
 
   > **Dated note (final fix wave, 2026-09-30).** Migration 0004 was edited before merge; it has never been applied remotely. It no longer creates `intake_episodes_updated` or `intake_handoffs_queue`. Migration 0005's idle and queue indexes replaced them and no query used them, so they cost writes for nothing. 0004 now adds CHECK constraints: `intake_episodes.state` must be one of the six states the code writes, `intake_handoffs.destination` must be `case_service`, and `priority` must be `normal`.
   >
@@ -325,7 +325,7 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
   - **Complete** (login, list, start, confirm): 4 requests, 30 / 69 / 36 / 15, ceiling 30 / 72 / 36 / 15 (was 30 / 66 / 41 / 15).
   - **Incomplete** (login, list, start, handoff): 4 requests, 26 / 53 / 28 / 14, ceiling 26 / 56 / 28 / 14 (was 26 / 50 / 33 / 14).
   - **Abandoned:** login and start, 14 rows written, plus 3 when the idle sweep closes it.
-  - **With one agent look, for capacity:** a complete episode also carries the page load (2 Worker requests, no D1) and one agent look (session, queue and detail: 3 requests, 1 + 203 + 12 rows read, 3 rows written). That is **9 Worker requests, 285 rows read and 39 rows written** measured, or 318 read and 42 written at the CI ceilings (was 282 / 44 measured and 318 / 47 at the ceilings). The one-look-per-handoff agent behaviour is an assumption, as in the legacy model.
+  - **With one agent look, for capacity:** a complete episode also carries the page load (2 Worker requests, no D1) and one agent look (session, queue and detail: 3 requests, 1 + 203 + 12 rows read, 3 rows written). That is **9 Worker requests, 285 rows read and 39 rows written** measured, or 318 read and 42 written at the CI ceilings (the agent login ceiling allows 6 writes, against 3 measured) (was 282 / 44 measured and 318 / 47 at the ceilings). The one-look-per-handoff agent behaviour is an assumption, as in the legacy model.
 
   *Housekeeping and export* (store calls, CI-enforced).
   - **Idle page:** an atomic page closing 100 episodes costs 2 queries, 1,100 rows read, 300 rows written and 1 round trip (11 read and 3 written per closed episode); ceiling 2 / 1,210 / 300 / 1.
@@ -359,10 +359,10 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
   - Retries, replays, renewals, queue refreshes beyond one per handoff, and operator runs add to these costs.
   - Production safety is `not_assessed`.
   - Outcome counts depend on sweep discipline. The idle deadline is applied only by the manual sweep, so an episode is abandoned only if a sweep runs before the customer returns. The procedure is to sweep immediately before each export, at the same cutoff. Enforcing the deadline online would change the reviewed same-owner resume behaviour and needs a team decision.
-  - **Legacy case list:** `GET /agent/cases` lists every guided complete case row. That includes one whose reservation is still `handoff_pending` after a lost read-back, where the customer got 503 and no reference, and a same-owner retry completes it. `/agent/intakes` is the authoritative guided queue. Pending reservations stay in the KPI denominator as pending until retried. The legacy query is unchanged on purpose, per the plan's global constraints.
+  - **Legacy case list:** `GET /agent/cases` also lists guided complete cases whose reservation is still `handoff_pending`; `/agent/intakes` is the authoritative guided queue. Details in [`intake-events.md`](../intake/intake-events.md#legacy-case-list).
   - The workbook (`INTAKE_COST_ESTIMATE.xlsx`) still models the legacy `/cases` flow. It was not regenerated for the guided flow.
 - **Observability limits:**
-  - Workers Logs Free allows 200,000 events a day, about 6,900 episodes at 29 events each; head sampling applies after that.
+  - Workers Logs Free allows 200,000 events a day, about 6,900 legacy episodes at 29 events each; head sampling applies after that. Log events per guided episode are not measured.
   - Logs are kept 3 days.
   - `Authorization` and `Cookie` are redacted.
   - The client IP is logged, so exported logs stay in the ignored `data/observability/`. On the AWS target, logs keep a truncated IP (/24) or drop it (section 3).

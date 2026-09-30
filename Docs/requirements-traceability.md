@@ -33,8 +33,8 @@ Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ mi
 
 | # | Requirement | Status | Evidence and remaining scope | Owner |
 |---|---|---|---|---|
-| S1 | Transaction and action logging | 🔵 | #16 merged the event contract; #18 adds explicit sequence order. #17 has durable case rows. Runtime event emission is pending. | Roberto |
-| S2 | Audit trail | 🟡 | #17 has case receipts and Gold provenance; #16 merged event references and scoring. No end-to-end runtime event log yet. | Lucas, Roberto |
+| S1 | Transaction and action logging | 🔵 | #16 merged the event contract; #18 adds explicit sequence order. #17 has durable case rows. The guided backend (#31) writes v2 events to D1 `intake_events` in the same batch as each state change, with a validated export; the legacy `/cases` flow emits none. | Roberto |
+| S2 | Audit trail | 🟡 | #17 has case receipts and Gold provenance; #16 merged event references and scoring. No event log for the legacy `/cases` flow; guided episodes keep a per-episode service history (#31). | Lucas, Roberto |
 | S3 | Tool permissions enforced outside the LLM | 🟡 | #8 evaluation and #17 D1 routes derive customer identity from the session and enforce ownership outside model text. Agent tools are not implemented. | Lucas, Roberto |
 | S4 | Prompt-injection handling | 🔵 | #16 merged the safety split and unsafe-action scorer. A live agent has not yet been tested against it. | Roberto |
 | S5 | Unauthorized-access handling | 🟡 | #17 tests forged/expired sessions, actor isolation, and foreign transactions; #16 merged adversarial cases. | Lucas, Roberto |
