@@ -50,6 +50,9 @@ INSERT INTO silver.dim_branches VALUES ('B1','Urbana'), ('B2','Urbana');
 CREATE TABLE silver.dim_service_agents(agent_id VARCHAR, employee_code VARCHAR, assigned_branch_id VARCHAR);
 INSERT INTO silver.dim_service_agents VALUES ('A1','E1','B2'), ('A2','E2',NULL), ('A3','E2','SUC-ORPHAN');
 CREATE TABLE silver.fact_satisfaction_surveys(comment_sentiment VARCHAR);
+CREATE SCHEMA bronze;
+CREATE TABLE bronze.transactions(transaction_country VARCHAR);
+INSERT INTO bronze.transactions VALUES ('Mexico'), ('USA'), ('USA'), ('Spain');
 INSERT INTO silver.fact_satisfaction_surveys VALUES ('Positive'), (NULL);
 """
 
@@ -129,3 +132,11 @@ def test_reference_and_code_checks_count_orphans_and_shared_codes(tmp_path):
                               ["dim_service_agents.assigned_branch_id", 3, 2, 2, 1, 1]]
     # code, codes, codes with several ids, rows: N1 is shared by P1 and P2, E2 by A2 and A3
     assert rows["DF-017"] == [["dim_products.product_number", 1, 1, 2], ["dim_service_agents.employee_code", 2, 1, 3]]
+
+
+def test_country_spelling_is_reported_per_layer(tmp_path):
+    db = make_db(tmp_path / "f.duckdb", with_holdout=False)
+    rows = rf.run(db, only=("DF-019",))["results"][0]["rows"]
+    # layer, stored country, rows: Bronze keeps the raw spellings, Silver the canonical ones.
+    assert rows == [["bronze", "USA", 2], ["bronze", "Mexico", 1], ["bronze", "Spain", 1],
+                    ["silver", "Colombia", 1], ["silver", "México", 1], ["silver", "USA", 1]]
