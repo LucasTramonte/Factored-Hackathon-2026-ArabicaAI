@@ -35,7 +35,7 @@ Constraints for this decision:
 
 ## Limitations of each choice
 
-These limitations are accepted for the 2026-09-29 → 2026-10-31 window. Each row names what we lose, how much it matters now, what we do about it and when to revisit.
+These limitations are accepted for the 2026-09-29 → 2026-10-20 window (first set to 2026-10-31; ADR-004 moved the shutdown). Each row names what we lose, how much it matters now, what we do about it and when to revisit.
 
 | Choice | Limitation | Impact in the window | Mitigation | Revisit when |
 |---|---|---|---|---|
@@ -64,7 +64,7 @@ Prices were checked on 2026-09-29 (sources below). Free tiers cover a 15–32-da
 
 | Option | Cost for the window | Why not now | Reopen if |
 |---|---|---|---|
-| O2. FastAPI + SQLAlchemy + Alembic + SQLite on one EC2 t4g.micro, with Litestream backup to S3 and CloudFront TLS | About $10/month from Free-plan credits (indicative: instance and disk; public IPv4 $0.005/h from the VPC page); no charge possible | 1.5–2.5 days to rewrite the API and build the infrastructure before the deadline, and a single machine to patch and back up. Rejected for the window. | We need a Python API. **This is the preferred exit**, because SQLite keeps D1's semantics and PostgreSQL is a configuration change plus a migration. |
+| O2. FastAPI + SQLAlchemy + Alembic + SQLite on one EC2 t4g.micro, with Litestream backup to S3 and CloudFront TLS | About $10/month from Free-plan credits (indicative: instance and disk; public IPv4 $0.005/h from the VPC page); no charge possible | 1.5–2.5 days to rewrite the API and build the infrastructure before the deadline, and a single machine to patch and back up. Rejected for the window. | We need a Python API. **This is the preferred exit**, because SQLite keeps D1's semantics, and once the API is on SQLAlchemy, PostgreSQL is a configuration change plus a migration. Porting today's D1 store is itself a rewrite; ADR-004 section 3 lists what it involves. |
 | O3. As O2, with PostgreSQL in a container on the same machine | About $10–12/month in credits | Adds database operations with no benefit at this volume. Rejected. | We need PostgreSQL-only features on a single node. |
 | O4. FastAPI on Lambda + RDS PostgreSQL + Alembic | About $15/month without a NAT gateway, about $50/month with one ($0.045/h NAT from the VPC page; RDS indicative), in credits; confirm in the AWS Pricing Calculator (ADR-004) | VPC and outbound-network setup, 1–3 s cold starts, 2–3 days of work. Rejected for the window. | Real volume or availability targets exist. **This is the documented scale path**, estimated in ADR-004. |
 | O5. FastAPI with DuckDB as the online store | — | DuckDB is an analytical engine with a single writer process, not a transactional store. It stays offline. Rejected. | Never, for transactional writes. |

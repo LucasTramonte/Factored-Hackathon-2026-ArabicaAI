@@ -83,16 +83,16 @@ Capacity is sized on the **guided flow** (`/intake/start` → `/intake/confirm`)
 
 - **Per complete episode, with one agent look:** 9 Worker requests, 318 rows read and **42 rows written** at the CI ceilings (285 and 39 measured).
 - **Daily bound:** rows written binds, so the daily quotas allow **about 2,380 complete episodes a day** (2,564 on measured values). The legacy flow wrote 10 rows and allowed 10,000.
-- **Storage per complete episode:** about 5.0 KB with a typical statement, 12.5 KB at 2,000 ASCII characters, and 21.3 KB at the 4-byte worst case.
+- **Storage per complete episode:** about 5.0 KB with a typical statement, 12.5 KB at 2,000 ASCII characters, and 21.3 KB at the 4-byte worst case. The CI bounds are 5.5, 13.8 and 23.4 KB, and the table below uses them.
 
-| Scenario | Rows written/day (share of Free) | Storage after 32 days (typical / 2,000 ASCII / 4-byte max) | Verdict |
+| Scenario | Rows written/day (share of Free) | Storage over the window, 22 days to 2026-10-20 (typical / 2,000 ASCII / 4-byte max) | Verdict |
 |---|---|---|---|
-| S1 | 714 (0.7%) | 3.0 / 7.5 / 12.7 MB | Free |
-| S2 | 6,090 (6.1%) | 26 / 64 / 109 MB | Free |
-| S3 | 34,356 (34%) | 144 / 361 / 613 MB | Free on daily quotas; at the 4-byte maximum storage passes the 400 MB split trigger and the 500 MB cap |
-| S4 | 343,560 (344%) | 1.4 / 3.6 / 6.1 GB | **Writes exceed the Free quota on day one: Workers Paid first** |
+| S1 | 714 (0.7%) | 2.1 / 5.2 / 8.8 MB | Free |
+| S2 | 6,090 (6.1%) | 18 / 44 / 75 MB | Free |
+| S3 | 34,356 (34%) | 99 / 248 / 421 MB | Free on daily quotas; at the 4-byte maximum storage passes the 400 MB split trigger, but stays under the 500 MB cap |
+| S4 | 343,560 (344%) | 1.0 / 2.5 / 4.2 GB | **Writes exceed the Free quota on day one: Workers Paid first** |
 
-Storage is cumulative, and it binds before the daily quotas at long statements. Loading the full serving slice (about 0.3 GB) leaves about 200 MB for episodes: about 40 days at S3 with typical statements, and under the window at 2,000-character statements. So the slice load and S3-level traffic together are a Workers Paid decision, and so is S4.
+Storage is cumulative, and it binds before the daily quotas at long statements. Loading the full serving slice (about 0.3 GB) leaves about 200 MB before the cap and 100 MB before the 400 MB split trigger. At S3 with typical statements that is about 44 days to the cap but about 22 days to the trigger, which is inside the window. At 2,000-character statements the cap is reached in about 18 days. So the slice load plus S3-level traffic is a Workers Paid decision, and so is S4.
 
 **Cost of the prototype:** $0 on Free, and $5 a month on Workers Paid, which covers every scenario. **Cost per attempted case** is $0 on Free and $5 ÷ episodes per month on Paid ($0.0098 at S1). **Cost per successful automated resolution** is `not defined` for intake, because V1 always ends in a handoff (ADR-002). It will be reported for the proposed recent-transactions path once that path is decided and measured.
 
@@ -222,7 +222,7 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
 - **+** One place answers where each layer runs, what it costs and what would change it. Every figure is a measurement, a list price, or an assumption named as such.
 - **+** The prototype costs $0, and the production target costs $86 a month. Both are explained by requirements, not by volume.
 - **+** The batch pipeline (DuckDB) carries over to the AWS target unchanged.
-- **−** The online store does not. Moving to PostgreSQL means rewriting `back-end/src/store/d1.js`, which relies on D1 batch atomicity, SQLite JSON functions (`json_set`, `json_patch`, `json_group_array`), `MIN(a,b)` in an expression index and `strftime`/`printf`. It also means porting the Wrangler migrations and the budget tests that read D1's row counters. The model also needs re-registration (section 3).
+- **−** The online store does not. Moving to PostgreSQL means rewriting `back-end/src/store/d1.js`, which relies on D1 batch atomicity today. Once the guided backend lands (PR #31), it also relies on SQLite JSON functions (`json_set`, `json_patch`, `json_group_array`), `MIN(a,b)` in an expression index and `strftime`/`printf`. It also means porting the Wrangler migrations and the budget tests that read D1's row counters. The model also needs re-registration (section 3).
 - **−** Sizing rests on a synthetic sample with a flat hourly profile. Real peaks and volume could be very different.
 - **−** Several inputs are assumptions:
   - the 3× peak factor and the 1.1 retry allowance;

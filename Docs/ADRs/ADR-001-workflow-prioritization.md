@@ -36,7 +36,7 @@ Fraud triage, which the original proposal below also compared, is not an officia
 
 ## Proposed decision (2026-09-26, not adopted as written)
 
-> **The accepted V1 scope is in [ADR-002](ADR-002-v1-workflow-unrecognized-charge-intake.md):** unrecognized-charge intake with human handoff is the V1 workflow. The read-only inquiry proposed below is kept as a separately measured normal-resolution path outside V1, not as the primary path. This section records the original proposal.
+> **The accepted V1 scope is in [ADR-002](ADR-002-v1-workflow-unrecognized-charge-intake.md):** unrecognized-charge intake with human handoff is the V1 workflow. The read-only inquiry proposed below is now proposed as a separately measured normal-resolution path outside V1 (a draft decision), not as the primary path. This section records the original proposal.
 
 Use a **narrow, authenticated, read-only transaction/account inquiry** as the primary automated-resolution path. Demonstrate **complaint or suspicious-charge intake with human handoff** as the safety and escalation path. Investigate fraud prevention separately, after confirming label availability, feature timing, and false-positive cost. No automated blocking, refund, or fraud determination follows from these counts.
 

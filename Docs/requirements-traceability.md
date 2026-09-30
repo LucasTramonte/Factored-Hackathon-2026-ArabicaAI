@@ -40,7 +40,7 @@ Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ mi
 | S5 | Unauthorized-access handling | 🟡 | #17 tests forged/expired sessions, actor isolation, and foreign transactions; #16 merged adversarial cases. | Lucas, Roberto |
 | S6 | Tool failure fallback | 🔵 | #8 harness models technical handoff; #11 specifies fail-closed runtime behavior. The live service has no agent tool calls yet. | Roberto |
 | S7 | Human escalation | 🟡 | #17 accepts reports into an agent queue. #9 scenarios define further handoff types; assignment and resolution history remain planned. | Lucas, Roberto |
-| S8 | Data retention defined | 🟡 | ADR-004 (in #19) keeps cases and sessions until 2026-10-31 with no age-based deletion, allows a cases-and-sessions reset before a recorded demo, and purges expired sessions at login. Event retention and a scripted, guarded reset remain. | Lucas, team acceptance |
+| S8 | Data retention defined | 🟡 | ADR-004 keeps demo activity with no age-based deletion until judging ends, allows a reset of demo activity before a recorded demo, purges expired sessions at login, and shuts everything down after 2026-10-20. Deletes follow foreign-key order (`back-end/scripts/reset-demo-activity.sql` once #31 lands). Event retention and a scripted, guarded reset remain. | Lucas, team acceptance |
 
 ## Decisions still needed
 
