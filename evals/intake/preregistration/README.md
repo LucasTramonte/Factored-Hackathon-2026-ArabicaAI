@@ -20,4 +20,4 @@ The checklist baseline needs no registration. Its decision code (`decide()` in `
   - the tag points to that commit.
 
   Later commits that only add files, such as publishing the test set, don't invalidate a registration. `git` runs with repository-location variables (`GIT_DIR`, `GIT_WORK_TREE`, …) removed, so the checks can't be pointed at another repository.
-- `make_clean_checkout.py` creates a worktree and proves that no withheld frozen file is present or tracked. [`extractor-v1-builder-instructions.md`](extractor-v1-builder-instructions.md) holds the verbatim instructions for the blind builder.
+- `make_clean_checkout.py` creates a history-free snapshot (one commit, no shared history, so earlier versions of tracked files can't be read) and proves that no withheld frozen file is present or tracked. [`extractor-v1-builder-instructions.md`](extractor-v1-builder-instructions.md) holds the verbatim instructions for the blind builder.

@@ -1,16 +1,23 @@
 """Create a checkout in which the withheld frozen files physically do not exist, for a blind builder.
 
-The withheld files are untracked, so a fresh ``git worktree`` never contains them. This script
-creates one and then proves it: every path in ``COMMITMENT.json`` (and every other known withheld
-path) must be absent, and none may be tracked by git. It refuses to hand over a checkout otherwise.
+The withheld files are untracked, so an export of a commit never contains them. The checkout is a
+history-free snapshot: ``git archive`` of the chosen commit, extracted into a new directory with a
+fresh one-commit repository. A ``git worktree`` would share the source's history, and earlier commits
+of tracked files could then be read. The script proves the result: every path in ``COMMITMENT.json``
+(and every other known withheld path) must be absent and untracked, and only one commit may be
+reachable. It refuses to hand over a checkout otherwise.
 
 Usage:  python -m evals.intake.preregistration.make_clean_checkout --dest ../arabica-blind-build [--ref HEAD]
+        (the destination must not exist or must be empty)
 """
 from __future__ import annotations
 
 import argparse
+import io
 import json
+import shutil
 import subprocess
+import tarfile
 from pathlib import Path
 
 from evals.intake.preregistration.prereg import clean_git_env
@@ -36,6 +43,38 @@ def assert_blind(checkout: Path, paths: list[Path]) -> None:
         raise SystemExit(f"Not blind: present={present} tracked={tracked}")
 
 
+def export_snapshot(repo: Path, ref: str, dest: Path) -> str:
+    """Write ``ref``'s tracked files to a new ``dest`` as a one-commit repository; return the source commit."""
+    if dest.exists() and any(dest.iterdir()):
+        raise SystemExit(f"Refusing to write into a non-empty directory: {dest}")
+    env = clean_git_env()
+    source = subprocess.run(["git", "-C", str(repo), "rev-parse", f"{ref}^{{commit}}"], check=True,
+                            capture_output=True, text=True, env=env).stdout.strip()
+    archive = subprocess.run(["git", "-C", str(repo), "archive", "--format=tar", source], check=True,
+                             capture_output=True, env=env).stdout
+    created = not dest.exists()
+    dest.mkdir(parents=True, exist_ok=True)
+    # The snapshot repository ignores global and system git config: signing, hooks or templates there
+    # must neither break it nor run inside it.
+    local = {**env, "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
+    settings = ["-c", "user.name=blind-snapshot", "-c", "user.email=blind-snapshot@localhost",
+                "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null"]
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            tar.extractall(dest, filter="data")
+        for args in (["init", "-q"], ["add", "-A"], ["commit", "-qm", f"Blind snapshot of {source}"]):
+            subprocess.run(["git", *settings, "-C", str(dest), *args], check=True, capture_output=True, env=local)
+        count = subprocess.run(["git", "-C", str(dest), "rev-list", "--all", "--count"], check=True,
+                               capture_output=True, text=True, env=local).stdout.strip()
+        if count != "1":
+            raise SystemExit(f"Not history-free: {count} commits reachable in {dest}")
+    except BaseException:
+        if created:  # never leave a half-built checkout that the next run would refuse
+            shutil.rmtree(dest, ignore_errors=True)
+        raise
+    return source
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--dest", type=Path, required=True)
@@ -44,10 +83,10 @@ def main() -> None:
     repo = Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], check=True, capture_output=True, text=True,
                                env=clean_git_env()).stdout.strip())
     paths = withheld_paths(repo)
-    subprocess.run(["git", "-C", str(repo), "worktree", "add", "--detach", str(args.dest.resolve()), args.ref], check=True,
-                   env=clean_git_env())
+    source = export_snapshot(repo, args.ref, args.dest.resolve())
     assert_blind(args.dest.resolve(), paths)
-    print(f"Blind checkout ready at {args.dest.resolve()} ({len(paths)} withheld paths verified absent).")
+    print(f"Blind snapshot of {source[:7]} ready at {args.dest.resolve()} "
+          f"({len(paths)} withheld paths verified absent, 1 commit reachable).")
     print("Give the builder only this checkout and evals/intake/preregistration/extractor-v1-builder-instructions.md.")
 
 

@@ -75,3 +75,37 @@ Made by Lucas's Claude session, which has seen frozen cases, so the ADR-006 limi
 - Missing or invalid provider usage, and any attempt that fails in transport (timeout, reset, cut body), adds 0 tokens and counts in `usage_unavailable_calls`. The runner reports that count, and a majority row with no usage stays unknown instead of 0.
 
 None of these paths occurred in iteration 4: 48/48 calls returned usage and no failure envelope. The iteration-4 numbers above are unchanged.
+
+## Development relabel (2026-09-30)
+
+The two `missing_currency` development cases ("85" on 2026-06-10, no currency) were relabelled from clarify to **confirm `EVAL-A1`**. Applying `POLICY.md` to the stated facts through `policy_prediction` gives exactly one owned purchase that day (85.00 USD), and a currency is only required when the other facts fit more than one purchase. The old gold followed the checklist's own requirement for a currency, not the written policy. The frozen gold was built with the policy, so it already agrees.
+
+| Development split | Before | After |
+|---|---|---|
+| Extractor v1, iteration 4 (majority) | 16/18 | 18/18 |
+| Checklist | 18/18 | 16/18 |
+| Always-handoff reference | 4/18 | 4/18 |
+| Unsafe outcomes, any system | 0 | 0 |
+
+The extractor's 18/18 is inferred from iteration 4's recorded facts, which were the facts above in every repetition; the raw outputs aren't in the repository. The latency run below agrees: 82 of the 83 calls that returned were correct. The original 16/18 stays in the iterations table above as it was recorded. The relabel needs Manoella's approval as the unexposed reviewer (ADR-006 decision 5), given in the PR that carries it.
+
+## Latency protocol measurement, attempt 1 (2026-09-30, 19:30–19:35 UTC): invalid for the decision
+
+Run under ADR-006 amendment 1: 10 repetitions of the 18 development cases, 160 model-calling executions, no prompt or parameter change, using `python -m evals.intake.run --system extractor-v1=intake_agent.extractor.workers_ai:extract --repetitions 10 --split development`. The raw results stay in the ignored `data_foundation/runs/latency-2026-09-30/`.
+
+**It can't decide the latency trigger.** After 83 calls, all 77 remaining calls got `HTTP 429` within about 120 ms each. The account's free daily Workers AI allocation was exhausted: this run plus the 193 calls of the four morning iterations fell on the same UTC day. The rule counts wall time per execution, and it assumes the model answered. Counting refusals would pull the p95 down, so this run is recorded and not used. The refused calls were reported as `usage_unavailable_calls`, not as zero tokens, as designed.
+
+The 83 calls that returned are a descriptive sample only:
+
+| Measure | Value |
+|---|---|
+| p50 | 3,382 ms |
+| p95 (95% order-statistic interval) | 5,548 ms (4,821–6,559) |
+| Share over 3 s | 65% |
+| Output tokens per call (mean) | 298 |
+| Correct, unsafe | 82/83, 0 |
+
+This is slower than iteration 4 (p50 2.3 s), possibly because the service slows near the quota. The attempt that counts is repeated right after the next UTC reset (00:00 UTC), in a quiet window. If it fails, amendment 2 applies: a lower `reasoning` level, built by the isolated builder.
+
+**Capacity finding:** on the free allocation the account served fewer than about 280 extraction calls in one UTC day. The frozen run needs about 180 model calls (3 repetitions of the model-calling cases), so it must start right after a reset, or run on Workers Paid.
+

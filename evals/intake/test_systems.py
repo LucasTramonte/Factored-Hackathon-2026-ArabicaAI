@@ -153,7 +153,7 @@ class RunnerIntegrationTests(unittest.TestCase):
         result = evaluate(self.corpus(), systems={'s': FactExtractorSystem('s', flaky)}, repetitions=3)
         rows = {s['repetition']: s['correct'] for s in result['summary']
                 if s['baseline'] == 's' and s['split'] == 'frozen_es_pt_v1' and s['language'] == 'all'}
-        self.assertEqual(rows, {1: 1, 2: 0, 3: 1, 'majority': 1})
+        self.assertEqual(rows, {1: 1, 2: 0, 3: 1, 'majority': 1, 'all': 2})  # 'all' pools the 3 executions
 
     def test_unavailable_usage_is_reported_as_unknown_not_as_free(self):
         def unmeasured(*args):
@@ -171,6 +171,21 @@ class RunnerIntegrationTests(unittest.TestCase):
                 if extract is silent:  # no usage at all is unknown, never a measured zero
                     self.assertIsNone(rows['majority']['input_tokens'])
 
+    def test_summaries_report_the_p95_interval_the_latency_rule_uses(self):
+        def extract(*args):
+            return dict(extracted=FACTS, usage=dict(input_tokens=1, output_tokens=1))
+        for repetitions, has_upper in ((3, False), (80, True)):
+            result = evaluate(self.corpus(), systems={'s': FactExtractorSystem('s', extract)}, repetitions=repetitions)
+            row = next(s for s in result['summary'] if s['baseline'] == 's' and s['split'] == 'frozen_es_pt_v1'
+                       and s['language'] == 'all' and s['repetition'] == 1)
+            pooled = next(s for s in result['summary'] if s['baseline'] == 's' and s['split'] == 'frozen_es_pt_v1'
+                          and s['language'] == 'all' and s['repetition'] == 'all')
+            with self.subTest(repetitions=repetitions):
+                self.assertEqual(len(row['latency_p95_interval_ms']), 2)
+                # The rule pools every execution, so the pooled row carries the deciding interval.
+                self.assertEqual(pooled['cases'], repetitions)
+                self.assertEqual(pooled['latency_p95_interval_ms'][1] is not None, has_upper)
+
     def test_split_filter_scores_only_that_split(self):
         corpus = json.loads((Path(__file__).with_name('cases.json')).read_text(encoding='utf-8'))
         result = evaluate(corpus, only_split='development')
@@ -181,12 +196,32 @@ class RunnerIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Unsupported split/language'):
             validate(dict(self.corpus(), cases=[dict(CASE, split='holdout')]))
 
+    def test_development_gold_follows_the_written_policy_on_the_stated_facts(self):
+        # "85 on 2026-06-10" with no currency: POLICY.md needs no currency when the other facts fit one purchase.
+        corpus = json.loads((Path(__file__).with_name('cases.json')).read_text(encoding='utf-8'))
+        customers = customers_from(corpus)
+        facts = validate_extraction(dict(intent='report', invalid=None, demand=None, injection=False, stated_facts=dict(
+            amount=dict(value='85.00', approx=False), date=dict(expression='2026-06-10', **{'from': '2026-06-10'}, to='2026-06-10'))))
+        dev = [c for c in corpus['cases'] if c['family'] == 'missing_currency' and c['split'] == 'development']
+        self.assertEqual(len(dev), 2)
+        for case in dev:
+            policy = policy_prediction(case, facts, corpus['transactions'], customers, 'policy')
+            with self.subTest(case=case['case_id']):
+                self.assertEqual((case['gold']['action'], case['gold']['candidate_ids']),
+                                 (policy['action'], [c['transaction_id'] for c in policy['candidates']]))
+
     def test_checklist_scores_on_cases_json_are_unchanged_by_the_plugin(self):
         result = evaluate(json.loads((Path(__file__).with_name('cases.json')).read_text(encoding='utf-8')))
         vec = [(c['case_id'], c['baseline'], c['safe'], c['correct'], c['safe_complete'], c['missed_handoff'],
                 c['unnecessary_handoff'], c['prediction']['action']) for c in result['cases']]
+        # Re-pinned 2026-09-30 when the two development missing_currency cases were relabelled to follow
+        # POLICY.md (clarify -> confirm EVAL-A1): exactly those 2 of 178 rows changed, checklist correct
+        # True -> False, safety unchanged. The previous pin was 8b6a39f903dc9d02b5b01ed7f71515caf3df524db1d6df250fc07d15f5e9887d.
         self.assertEqual(hashlib.sha256(json.dumps(vec).encode()).hexdigest(),
-                         '8b6a39f903dc9d02b5b01ed7f71515caf3df524db1d6df250fc07d15f5e9887d')
+                         '6b0a916eb4da9dc6f16c9a0201efde0d1b68faf8325933285cd6d1f723701677')
+        dev = next(s for s in result['summary'] if s['split'] == 'development' and s['language'] == 'all'
+                   and s['baseline'] == 'checklist')
+        self.assertEqual((dev['correct'], dev['cases'], dev['unsafe']), (16, 18, 0))
 
 
 class RunnerCliTests(unittest.TestCase):

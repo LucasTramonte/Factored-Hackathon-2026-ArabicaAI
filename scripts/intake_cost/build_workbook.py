@@ -25,7 +25,7 @@ INPUTS = [
     ("s2", "S2 volume: p95 daily 'Queja' interactions", 145, "episodes/day", "Silver fact_call_center_interactions, daily p95", "observed synthetic"),
     ("s3", "S3 volume: p95 daily call-center interactions (all reasons)", 818, "episodes/day", "Silver fact_call_center_interactions, daily p95 (max 894)", "observed synthetic"),
     ("s4", "S4 volume: 10x S3 stress", 8180, "episodes/day", "Stress test only; production volume is not disclosed", "assumption"),
-    ("window_days", "Evaluation window", 32, "days", "2026-09-29 to 2026-10-31", "fact"),
+    ("window_days", "Evaluation window", 22, "days", "2026-09-29 to 2026-10-20 (shutdown after 2026-10-20, ADR-004)", "fact"),
     ("month_days", "Days per modeled month", 30, "days", "Comparable 30-day month", "assumption"),
     ("peak", "Busiest-hour factor over the daily average", 3, "x", "Synthetic hourly profile is flat (~4.2%/hour); 3x is a stress assumption", "assumption"),
     ("doc_req", "Worker requests per page load (gated HTML document + identity list)", 2, "requests/episode", "run_worker_first covers /, /index.html, /agent; GET /demo/identities touches no D1", "code-derived"),
@@ -211,8 +211,8 @@ def build() -> Workbook:
     readme.title = "Read me"
     title(readme, "ArabicaAI | Intake capacity and cost (ADR-004)", 2)
     notes = [
-        ("Decision", "Run the intake service on Cloudflare Workers + D1 Free through 2026-10-31. Move to Workers Paid ($5/month) if any daily Free limit stays above 70% for 3 days."),
-        ("Window", "2026-09-29 to 2026-10-31. Finalists are announced on 2026-10-15."),
+        ("Decision", "Run the intake service on Cloudflare Workers + D1 Free through 2026-10-20. Move to Workers Paid ($5/month) if any daily Free limit stays above 70% for 3 days. This workbook models the legacy /cases flow; the guided flow's capacity (about 2,380 episodes a day) is in ADR-004 section 2."),
+        ("Window", "2026-09-29 to 2026-10-20. Finalists are announced on 2026-10-15; everything online is shut down after 2026-10-20."),
         ("Demand", "Observed synthetic sample only: interactions p50 664, p95 818, max 894 per day. Production volume is not disclosed, so S1-S4 are sizing scenarios, not forecasts."),
         ("Measured", "D1 queries, rows and stored bytes come from local tests (back-end/test/integration/budget.test.js; SQLite with the Worker migrations). Worker CPU was observed once in production (one episode, 0-4 ms per request, against the 10 ms Free limit). That was not a load test, so the model keeps 5 ms as a conservative planning value."),
         ("Editing", "Change the yellow cells on Inputs. Every other sheet recalculates."),
@@ -246,8 +246,8 @@ def build() -> Workbook:
           "A customer episode plus one agent refresh per case. Utilization above the trigger means Workers Paid.")
     header(cf, 4, ("Scenario", "Episodes/day", "Worker requests/day", "% of 100k requests", "D1 rows read/day", "% of 5M reads",
                    "D1 rows written/day", "% of 100k writes", "Highest utilization", "Within daily Free limits?",
-                   "Cases stored by 2026-10-31 (MB, typical)", "Peak D1 writes/s", "Upgrade policy (> trigger)?",
-                   "Share of 500 MB by 2026-10-31 (2,000-char cases)"))
+                   "Cases stored by 2026-10-20 (MB, typical)", "Peak D1 writes/s", "Upgrade policy (> trigger)?",
+                   "Share of 500 MB by 2026-10-20 (2,000-char cases)"))
     for i, s in enumerate(SCENARIOS):
         row = 5 + i
         cells = [s.upper(), f"={r[s]}", f"=B{row}*{per_req}", f"=C{row}/{r['cf_req_day']}", f"=B{row}*{per_read}",

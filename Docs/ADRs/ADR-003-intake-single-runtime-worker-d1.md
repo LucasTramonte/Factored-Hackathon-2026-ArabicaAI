@@ -15,8 +15,8 @@ Session handling, customer scoping, idempotent case creation, reference-after-co
 
 Constraints for this decision:
 
-- **Window.** Submissions close on 2026-10-05, finalists are announced on 2026-10-15 and awards follow on 2026-10-16 (kickoff deck, p. 6). The service has to run from 2026-09-29 until 2026-10-31, so the deployed link keeps working through judging.
-- **Budget.** No hosting spend. Lucas's AWS account is on the Free plan: $100 in credits, available until 2027-03-22, and no card on file, so it can't be charged. We keep those credits for estimating a later scale path, not for running the demo.
+- **Window.** Submissions close on 2026-10-05, finalists are announced on 2026-10-15 and awards follow on 2026-10-16 (kickoff deck, p. 6). The service has to run from 2026-09-29 until 2026-10-31, so the deployed link keeps working through judging. ADR-004 (revised 2026-09-30) shortens this: everything online is shut down after 2026-10-20.
+- **Budget.** No hosting spend. Lucas's AWS account is on the Free plan: $100 in credits at the time of this record ($199.79 on 2026-09-30), available until 2027-03-22, and no card on file, so it can't be charged. We keep those credits for estimating a later scale path, not for running the demo.
 - **MVP.** Deterministic, no model calls ([ADR-002](ADR-002-v1-workflow-unrecognized-charge-intake.md)).
 - **Volume.** The online store holds very little: a handful of customers, at most 20 transactions each, and dozens of cases. The heavy data (millions of rows) stays offline in DuckDB.
 - **Brief requirements.** The brief asks for scalability reasoning, explicit latency and cost trade-offs, capacity limits, monitoring, access control and data retention.
@@ -35,7 +35,7 @@ Constraints for this decision:
 
 ## Limitations of each choice
 
-These limitations are accepted for the 2026-09-29 → 2026-10-31 window. Each row names what we lose, how much it matters now, what we do about it and when to revisit.
+These limitations are accepted for the 2026-09-29 → 2026-10-20 window (first set to 2026-10-31; ADR-004 moved the shutdown). Each row names what we lose, how much it matters now, what we do about it and when to revisit.
 
 | Choice | Limitation | Impact in the window | Mitigation | Revisit when |
 |---|---|---|---|---|
@@ -64,7 +64,7 @@ Prices were checked on 2026-09-29 (sources below). Free tiers cover a 15–32-da
 
 | Option | Cost for the window | Why not now | Reopen if |
 |---|---|---|---|
-| O2. FastAPI + SQLAlchemy + Alembic + SQLite on one EC2 t4g.micro, with Litestream backup to S3 and CloudFront TLS | About $10/month from Free-plan credits (indicative: instance and disk; public IPv4 $0.005/h from the VPC page); no charge possible | 1.5–2.5 days to rewrite the API and build the infrastructure before the deadline, and a single machine to patch and back up. Rejected for the window. | We need a Python API. **This is the preferred exit**, because SQLite keeps D1's semantics and PostgreSQL is a configuration change plus a migration. |
+| O2. FastAPI + SQLAlchemy + Alembic + SQLite on one EC2 t4g.micro, with Litestream backup to S3 and CloudFront TLS | About $10/month from Free-plan credits (indicative: instance and disk; public IPv4 $0.005/h from the VPC page); no charge possible | 1.5–2.5 days to rewrite the API and build the infrastructure before the deadline, and a single machine to patch and back up. Rejected for the window. | We need a Python API. **This is the preferred exit**, because SQLite keeps D1's semantics, and once the API is on SQLAlchemy, PostgreSQL is a configuration change plus a migration. Porting today's D1 store is itself a rewrite; ADR-004 section 3 lists what it involves. |
 | O3. As O2, with PostgreSQL in a container on the same machine | About $10–12/month in credits | Adds database operations with no benefit at this volume. Rejected. | We need PostgreSQL-only features on a single node. |
 | O4. FastAPI on Lambda + RDS PostgreSQL + Alembic | About $15/month without a NAT gateway, about $50/month with one ($0.045/h NAT from the VPC page; RDS indicative), in credits; confirm in the AWS Pricing Calculator (ADR-004) | VPC and outbound-network setup, 1–3 s cold starts, 2–3 days of work. Rejected for the window. | Real volume or availability targets exist. **This is the documented scale path**, estimated in ADR-004. |
 | O5. FastAPI with DuckDB as the online store | — | DuckDB is an analytical engine with a single writer process, not a transactional store. It stays offline. Rejected. | Never, for transactional writes. |

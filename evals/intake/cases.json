@@ -183,8 +183,10 @@
       "confirmed_id": null,
       "tool_failure": false,
       "gold": {
-        "action": "clarify",
-        "candidate_ids": [],
+        "action": "confirm",
+        "candidate_ids": [
+          "EVAL-A1"
+        ],
         "completion_ready": false
       }
     },
@@ -199,8 +201,10 @@
       "confirmed_id": null,
       "tool_failure": false,
       "gold": {
-        "action": "clarify",
-        "candidate_ids": [],
+        "action": "confirm",
+        "candidate_ids": [
+          "EVAL-A1"
+        ],
         "completion_ready": false
       }
     },

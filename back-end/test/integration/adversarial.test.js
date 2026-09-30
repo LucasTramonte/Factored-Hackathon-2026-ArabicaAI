@@ -7,7 +7,9 @@ import assert from 'node:assert/strict';
 import { assertContract } from '../support/contract.js';
 import { auth, base, client } from '../support/client.js';
 
-const API = { '/demo/identities': 'GET', '/demo/session': 'POST', '/transactions': 'GET', '/cases': 'POST', '/demo/agent-session': 'POST', '/agent/cases': 'GET' };
+const API = { '/demo/identities': 'GET', '/demo/session': 'POST', '/transactions': 'GET', '/cases': 'POST', '/intake/start': 'POST',
+  '/intake/confirm': 'POST', '/intake/handoff': 'POST', '/demo/agent-session': 'POST', '/agent/cases': 'GET', '/agent/intakes': 'GET',
+  '/agent/intake-detail': 'GET' };
 const wrong = 'Basic ' + Buffer.from('local-reviewer:wrong').toString('base64');
 const uuid = () => crypto.randomUUID();
 
@@ -37,7 +39,8 @@ test('with the credential, wrong methods get 405 and unknown API paths get JSON 
     assert.equal(res.status, 405, `${method} ${path}`);
     assert.equal(res.headers.get('Allow'), allowed);
   }
-  for (const path of ['/cases/', '/cases/x', '/agent/', '/agent/cases/extra', '/demo/other', '/transactions/1']) {
+  for (const path of ['/cases/', '/cases/x', '/agent/', '/agent/cases/extra', '/demo/other', '/transactions/1', '/intake', '/intake/',
+    '/intake/confirm/extra', '/agent/intakes/extra', '/agent/intake-detail/x']) {
     const res = await fetch(base + path, { headers: { Authorization: auth } });
     assert.equal(res.status, 404, path);
     assertContract('error', await res.json());
@@ -144,4 +147,90 @@ test('concurrent submissions with one key create exactly one case', async () => 
   assert.deepEqual(results.map(r => r.status).sort(), [200, 200, 200, 200, 200, 200, 200, 200, 200, 201]);
   assert.equal(new Set(results.map(r => r.body.protocol)).size, 1);
   for (const r of results) assertContract('caseReceipt', r.body);
+});
+
+const guidedStart = (c, language = 'es') => c.call('/intake/start', { language, mode: 'guided', report_type: 'unrecognized_charge',
+  customer_statement: language === 'es' ? 'No reconozco este cargo.' : 'Não reconheço esta cobrança.', idempotency_key: uuid() });
+
+test('path tricks on the guided routes never reach a handler without the gate or return evidence', async () => {
+  const ana = await loggedIn();
+  const episode = (await guidedStart(ana)).body.episode_id;
+  const confirm = JSON.stringify({ episode_id: episode, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: uuid() });
+  for (const path of ['//intake/confirm', '/INTAKE/confirm', '/intake/confirm?x=1', '/intake/../intake/confirm', '/./intake/confirm',
+    '/intake/confirm%2F', '/intake//confirm', '/intake/handoff?kind=incomplete']) {
+    const res = await fetch(base + path, { method: 'POST', headers: { Cookie: ana.cookie, 'Content-Type': 'application/json' }, body: confirm });
+    assert.notEqual(res.status, 201, path);
+    assert.doesNotMatch(await res.text(), /"protocol"/, path);
+  }
+  const agent = client(); await agent.call('/demo/agent-session', {});
+  for (const path of ['//agent/intake-detail?protocol=' + episode, '/AGENT/intakes', '/agent/../agent/intakes', '/agent/intakes%2F']) {
+    // Paths outside the API namespaces may get the static app shell; none may return intake data without the gate.
+    const res = await fetch(base + path, { headers: { Cookie: agent.cookie } });
+    assert.doesNotMatch(await res.text(), /customer_statement|"items"|No reconozco/, path);
+  }
+  assert.equal((await ana.call('/intake/confirm', JSON.parse(confirm))).status, 201, 'the real route still works with the gate');
+});
+
+test('isolation on guided routes: foreign and missing episodes or transactions look identical', async () => {
+  const ana = await loggedIn(); const bruno = await loggedIn('demo-bruno');
+  const anaEpisode = (await guidedStart(ana)).body.episode_id;
+  const brunoEpisode = (await guidedStart(bruno, 'pt')).body.episode_id;
+  const confirm = (episode_id, transaction_id) => ({ episode_id, transaction_id, customer_confirmed: true, idempotency_key: uuid() });
+  const handoff = episode_id => ({ episode_id, kind: 'incomplete', idempotency_key: uuid() });
+  for (const [route, foreign, missing] of [
+    ['/intake/confirm', confirm(anaEpisode, 'demo-tx-003'), confirm(uuid(), 'demo-tx-003')],
+    ['/intake/handoff', handoff(anaEpisode), handoff(uuid())],
+    ['/intake/confirm', confirm(brunoEpisode, 'demo-tx-001'), confirm(brunoEpisode, 'demo-tx-999')]]) {
+    const a = await bruno.call(route, foreign), b = await bruno.call(route, missing);
+    assert.equal(a.status, 404, route); assert.equal(b.status, 404, route);
+    assert.equal(a.text, b.text, `${route}: foreign and missing bodies are identical`);
+    assertContract('error', a.body);
+  }
+  assert.equal((await ana.call('/intake/handoff', handoff(anaEpisode))).status, 201, "ana's episode was never touched");
+});
+
+test('concurrent identical incomplete handoffs create one reservation and one receipt', async () => {
+  const ana = await loggedIn();
+  const episode = (await guidedStart(ana)).body.episode_id;
+  const body = { episode_id: episode, kind: 'incomplete', idempotency_key: uuid() };
+  const results = await Promise.all(Array.from({ length: 10 }, () => fetch(base + '/intake/handoff', {
+    method: 'POST', headers: { Authorization: auth, Cookie: ana.cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body) }).then(async r => ({ status: r.status, body: await r.json() }))));
+  assert.deepEqual(results.map(r => r.status).sort(), [200, 200, 200, 200, 200, 200, 200, 200, 200, 201]);
+  assert.equal(new Set(results.map(r => r.body.protocol)).size, 1);
+  for (const r of results) assertContract('intakeReceipt', r.body);
+  const agent = client(); await agent.call('/demo/agent-session', {});
+  const detail = await agent.call('/agent/intake-detail?protocol=' + results[0].body.protocol);
+  assert.deepEqual(detail.body.history.map(e => e.event), ['intake_started', 'handoff_created', 'intake_ended'], 'one chain');
+});
+
+test('divergent concurrent confirmations and handoff on one episode leave exactly one reservation and chain', async () => {
+  const ana = await loggedIn();
+  const agent = client(); await agent.call('/demo/agent-session', {});
+  for (let trial = 0; trial < 3; trial++) {
+    const episode = (await guidedStart(ana)).body.episode_id;
+    const bodies = [['/intake/confirm', { episode_id: episode, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: uuid() }],
+      ['/intake/confirm', { episode_id: episode, transaction_id: 'demo-tx-002', customer_confirmed: true, idempotency_key: uuid() }],
+      ['/intake/handoff', { episode_id: episode, kind: 'incomplete', idempotency_key: uuid() }]];
+    const results = await Promise.all([...bodies, ...bodies].map(([path, body]) => fetch(base + path, {
+      method: 'POST', headers: { Authorization: auth, Cookie: ana.cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body) }).then(async r => ({ path, body, status: r.status, json: await r.json() }))));
+    const won = results.filter(r => r.status === 201);
+    assert.equal(won.length, 1, `trial ${trial}: ${results.map(r => r.status)}`);
+    assert.ok(results.every(r => [200, 201, 409].includes(r.status)), results.map(r => r.status).join());
+    const winner = won[0];
+    for (const r of results) {
+      if (r.status === 200) { assert.equal(r.body, winner.body, 'only the identical duplicate replays'); assert.equal(r.json.protocol, winner.json.protocol); }
+      if (r.status === 409) assert.notEqual(r.body, winner.body);
+    }
+    assert.equal(results.filter(r => r.status === 200).length, 1);
+    const detail = await agent.call('/agent/intake-detail?protocol=' + winner.json.protocol);
+    assert.equal(detail.status, 200);
+    assert.equal(detail.body.history.filter(e => e.event === 'intake_ended').length, 1, 'one end event');
+    assert.equal(detail.body.history.filter(e => e.event === 'handoff_created').length, 1, 'one reservation');
+    for (const [path, body] of bodies) {
+      const again = await ana.call(path, body);
+      assert.equal(again.status, body === winner.body ? 200 : 409, 'retries agree with the outcome');
+    }
+  }
 });

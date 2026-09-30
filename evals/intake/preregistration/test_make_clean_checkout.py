@@ -4,7 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from evals.intake.preregistration.make_clean_checkout import assert_blind, withheld_paths
+from evals.intake.preregistration.make_clean_checkout import assert_blind, export_snapshot, withheld_paths
+from evals.intake.preregistration.prereg import clean_git_env
 
 
 class BlindCheckoutTests(unittest.TestCase):
@@ -46,6 +47,77 @@ class BlindCheckoutTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 assert_blind(repo, [secret])
 
+
+def git(repo, *args):
+    # Same isolation as the code under test: inherited GIT_DIR or GIT_WORK_TREE must not redirect the fixture.
+    return subprocess.run(['git', '-C', str(repo), '-c', 'user.email=t@example.com', '-c', 'user.name=T', *args],
+                          check=True, capture_output=True, text=True, env=clean_git_env()).stdout
+
+
+class SnapshotTests(unittest.TestCase):
+    """The blind checkout is a history-free snapshot: nothing earlier than the chosen commit is reachable."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.src = Path(self.tmp.name) / 'src'
+        self.src.mkdir()
+        git(self.src, 'init', '-q')
+        (self.src / 'status.md').write_text('FAKE-CASE SECRET-MESSAGE-TEXT gold clarify\n')
+        (self.src / 'code.py').write_text('x = 1\n')
+        git(self.src, 'add', '.')
+        git(self.src, 'commit', '-qm', 'leaky status page')
+        (self.src / 'status.md').write_text('rules only\n')
+        git(self.src, 'commit', '-qam', 'redact')
+        secret = self.src / 'evals/intake/frozen_es_pt_v1/draft.json'
+        secret.parent.mkdir(parents=True)
+        secret.write_text('{"withheld": true}')  # untracked, like the real withheld files
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_earlier_commits_are_unreachable_from_the_snapshot(self):
+        dest = Path(self.tmp.name) / 'blind'
+        export_snapshot(self.src, 'HEAD', dest)
+        self.assertEqual(git(dest, 'rev-list', '--all', '--count').strip(), '1')
+        everything = git(dest, 'log', '--all', '-p') + git(dest, 'reflog', '--all')
+        self.assertNotIn('SECRET-MESSAGE-TEXT', everything)
+        self.assertEqual((dest / 'status.md').read_text(), 'rules only\n')
+        self.assertEqual(git(dest, 'remote').strip(), '')
+        self.assertFalse((dest / '.git' / 'objects' / 'info' / 'alternates').exists())
+        self.assertFalse((dest / '.git' / 'commondir').exists())  # not a worktree of the source
+
+    def test_untracked_withheld_files_never_reach_the_snapshot(self):
+        dest = Path(self.tmp.name) / 'blind'
+        export_snapshot(self.src, 'HEAD', dest)
+        self.assertFalse((dest / 'evals/intake/frozen_es_pt_v1/draft.json').exists())
+
+    def test_hostile_global_git_config_neither_breaks_nor_leaves_a_half_built_snapshot(self):
+        import os
+        cfg = Path(self.tmp.name) / 'gitconfig'
+        hooks = Path(self.tmp.name) / 'hooks'
+        hooks.mkdir()
+        (hooks / 'pre-commit').write_text('#!/bin/sh\nexit 1\n')
+        (hooks / 'pre-commit').chmod(0o755)
+        cfg.write_text(f'[commit]\n\tgpgsign = true\n[gpg]\n\tprogram = false\n[core]\n\thooksPath = {hooks}\n')
+        old = os.environ.get('GIT_CONFIG_GLOBAL')
+        os.environ['GIT_CONFIG_GLOBAL'] = str(cfg)
+        try:
+            dest = Path(self.tmp.name) / 'blind'
+            export_snapshot(self.src, 'HEAD', dest)
+            self.assertEqual(git(dest, 'rev-list', '--all', '--count').strip(), '1')
+        finally:
+            if old is None:
+                os.environ.pop('GIT_CONFIG_GLOBAL')
+            else:
+                os.environ['GIT_CONFIG_GLOBAL'] = old
+
+    def test_an_existing_destination_is_refused(self):
+        dest = Path(self.tmp.name) / 'blind'
+        dest.mkdir()
+        (dest / 'keep.txt').write_text('mine')
+        with self.assertRaises(SystemExit):
+            export_snapshot(self.src, 'HEAD', dest)
+        self.assertEqual((dest / 'keep.txt').read_text(), 'mine')
 
 if __name__ == '__main__':
     unittest.main()
