@@ -4,7 +4,13 @@ A customer reports a card charge they don't recognize, confirms which of their o
 
 The data is a synthetic LATAM banking dataset. Descriptive counts from it are not measured bank outcomes.
 
-**Evaluators: start with the [reading guide](Docs/README.md).** It maps each point of the brief to the document that answers it. Cost, sizing and where each layer runs are all in [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md), including the [AWS production-target estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e).
+**Evaluators: start with the [reading guide](Docs/README.md).** It maps each point of the brief to the document that answers it. The three deliverables beyond the working service are:
+
+| Deliverable | Document |
+|---|---|
+| **Evaluation:** how the model is compared with a baseline, the test sets we built ourselves, how data leakage is prevented, and every option we considered | [`EVALUATION.md`](EVALUATION.md) |
+| **Data quality:** every finding that changes or limits a decision, each with its query | [`DATA_QUALITY.md`](DATA_QUALITY.md) |
+| **Capacity and cost:** where each layer runs and why, the Cloudflare limits, and a priced AWS production target ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)) | [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) |
 
 ## How it fits together
 
@@ -23,7 +29,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 | Gold intake slice | `data_pipelines/gold` | Bounded, quality-gated sample → versioned D1 seed with provenance |
 | Intake API | `back-end/` | One online runtime: sessions, customer-scoped retrieval, idempotent cases, reference after commit, agent view |
 | Web client | `front-end/` | Customer and agent views; API contracts in `front-end/contracts/` |
-| Evaluation | `evals/intake` | ES/PT decision-point cases, checklist baseline, episode KPI scorer |
+| Evaluation | `evals/intake`, [`EVALUATION.md`](EVALUATION.md) | Team-built ES/PT test sets, checklist baseline, learned-component harness, episode KPI scorer |
 | Data quality register | [`DATA_QUALITY.md`](DATA_QUALITY.md), `data_profiles/findings/` | Every dataset finding that changes or limits a decision, with its query, impact and handling |
 | Decisions | `Docs/ADRs/` | Scope, runtime, capacity, cost and cloud placement, each with its limitations and exit triggers |
 
