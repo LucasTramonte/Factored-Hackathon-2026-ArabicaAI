@@ -71,6 +71,15 @@ class PolicyAdapterTests(unittest.TestCase):
         self.assertEqual((p['action'], p['candidates'], p['requested_action']), ('technical_handoff', [], 'human_review'))
         self.assertIn('unavailable', meta['error'])
 
+    def test_usage_of_failed_calls_is_kept_in_the_record(self):
+        def costly(*args):
+            exc = ValueError('invalid model output after 2 attempts')
+            exc.usage = dict(input_tokens=400, output_tokens=60)
+            raise exc
+        p, meta = FactExtractorSystem('x', costly)(CASE, RECORDS, CUSTOMERS)
+        self.assertEqual(p['action'], 'clarify')
+        self.assertEqual(meta['usage'], dict(input_tokens=400, output_tokens=60))
+
     def test_the_model_never_receives_transactions(self):
         seen = {}
 

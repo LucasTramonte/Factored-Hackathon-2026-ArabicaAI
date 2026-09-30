@@ -10,10 +10,12 @@ Invariants:
 - The message text is never printed, logged or put in an exception message.
 - Temperature 0; a 10 s overall deadline raises ``TimeoutError``; one retry on invalid JSON or
   schema-invalid output, then ``ValueError``.
-- A service or network failure (HTTP 429/5xx, connection reset, truncated body) raises
-  ``ConnectionError``, which the harness turns into a technical handoff. Rejected credentials
-  (HTTP 401/403) raise ``CredentialsError`` and stop the run, so a configuration error is never
-  counted as handoffs.
+- A service or network failure (HTTP 429/5xx, connection reset, truncated or non-JSON body) raises
+  ``ConnectionError``, which the harness turns into a technical handoff. Any other HTTP 4xx is a
+  configuration problem: 401/403 raise ``CredentialsError`` and the rest ``ConfigurationError``, and
+  both stop the run, so a configuration error is never counted as handoffs.
+- Every exception raised by ``extract`` carries ``usage`` (tokens of the attempts that returned),
+  so failed cases still count in token and cost totals.
 """
 from __future__ import annotations
 
@@ -39,8 +41,12 @@ ATTEMPTS = 2  # the first call plus one retry
 _URL = "https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/" + MODEL
 
 
-class CredentialsError(RuntimeError):
-    """Raised when the Workers AI credentials are not configured in the environment."""
+class ConfigurationError(RuntimeError):
+    """A problem on our side (bad request, wrong model path): it stops the run instead of being scored."""
+
+
+class CredentialsError(ConfigurationError):
+    """Raised when the Workers AI credentials are missing or rejected."""
 
 
 def _credentials() -> tuple[str, str]:
@@ -70,7 +76,9 @@ def _post(url: str, token: str, body: dict, timeout: float) -> dict:
         # Status only: the error body is not echoed, so nothing from the request can leak into logs.
         if exc.code in (401, 403):
             raise CredentialsError(f"Workers AI rejected the credentials (HTTP {exc.code})") from None
-        raise ConnectionError(f"Workers AI HTTP {exc.code}") from None
+        if exc.code == 429 or exc.code >= 500:
+            raise ConnectionError(f"Workers AI HTTP {exc.code}") from None
+        raise ConfigurationError(f"Workers AI HTTP {exc.code}: check the model path and request") from None
     except (socket.timeout, TimeoutError) as exc:
         raise TimeoutError(f"Workers AI call exceeded {TIMEOUT_S:.0f} s") from exc
     except urllib.error.URLError as exc:
@@ -82,7 +90,8 @@ def _post(url: str, token: str, body: dict, timeout: float) -> dict:
     try:
         return json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
-        raise ValueError("response is not JSON") from None
+        # A gateway page or a cut body is a service failure, not the model's output.
+        raise ConnectionError("Workers AI returned a non-JSON body") from None
 
 
 def _within(deadline: float, fn, *args):
@@ -168,17 +177,23 @@ def extract(message: str, session_language, as_of, vocabulary: dict) -> dict:
     url = _URL.format(account=account)
     body = build_body(message, session_language, as_of, vocabulary)
     deadline = time.monotonic() + TIMEOUT_S
-    input_tokens = output_tokens = 0
+    usage = {"input_tokens": 0, "output_tokens": 0}
     for attempt in range(ATTEMPTS):
-        payload = _within(deadline, _post, url, token, body)
+        try:
+            payload = _within(deadline, _post, url, token, body)
+        except Exception as exc:
+            exc.usage = dict(usage)  # tokens of earlier attempts still count
+            raise
         i, o = _usage(payload)
-        input_tokens += i
-        output_tokens += o
+        usage["input_tokens"] += i
+        usage["output_tokens"] += o
         try:
             extracted = parse(_content(payload))
-        except ValueError:
+        except (ValueError, TypeError):  # schema validation raises TypeError for wrongly typed fields
             if attempt + 1 == ATTEMPTS:
-                raise ValueError(f"invalid model output after {ATTEMPTS} attempts") from None
+                exc = ValueError(f"invalid model output after {ATTEMPTS} attempts")
+                exc.usage = dict(usage)
+                raise exc from None
             continue
-        return {"extracted": extracted, "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens}}
+        return {"extracted": extracted, "usage": usage}
     raise ValueError("unreachable")  # pragma: no cover

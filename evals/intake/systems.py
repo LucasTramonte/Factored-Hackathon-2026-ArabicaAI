@@ -120,9 +120,9 @@ class FactExtractorSystem:
             # Inside the guard: a malformed fact value (e.g. an amount without "approx") must clarify, not crash.
             prediction = policy_prediction(case, extracted, records, customers, self.name)
         except TimeoutError as exc:
-            return _prediction(case, "technical_handoff", [], self.name), {"usage": {}, "extracted": None, "error": f"timeout: {exc}"}
+            return _prediction(case, "technical_handoff", [], self.name), {"usage": getattr(exc, "usage", {}), "extracted": None, "error": f"timeout: {exc}"}
         except ConnectionError as exc:
-            return _prediction(case, "technical_handoff", [], self.name), {"usage": {}, "extracted": None, "error": f"service unavailable: {exc}"}
+            return _prediction(case, "technical_handoff", [], self.name), {"usage": getattr(exc, "usage", {}), "extracted": None, "error": f"service unavailable: {exc}"}
         except (ValueError, KeyError, TypeError) as exc:
-            return _prediction(case, "clarify", [], self.name), {"usage": {}, "extracted": None, "error": f"invalid output: {exc}"}
+            return _prediction(case, "clarify", [], self.name), {"usage": getattr(exc, "usage", {}), "extracted": None, "error": f"invalid output: {exc}"}
         return prediction, {"usage": out.get("usage", {}), "extracted": extracted, "error": None}

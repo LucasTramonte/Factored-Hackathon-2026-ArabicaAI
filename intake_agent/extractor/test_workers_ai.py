@@ -106,6 +106,29 @@ class ExtractTests(unittest.TestCase):
                 self.run_with(err)
             self.assertEqual(str(ctx.exception), f"Workers AI HTTP {code}")
 
+    def test_other_client_errors_are_configuration_errors_that_stop_the_run(self):
+        for code in (400, 404, 413):
+            err = urllib.error.HTTPError("u", code, "bad", {}, io.BytesIO(b""))
+            with self.subTest(code=code), self.assertRaises(workers_ai.ConfigurationError):
+                self.run_with(err)
+
+    def test_a_non_json_body_is_a_service_failure(self):
+        with mock.patch.dict(os.environ, ENV, clear=True), mock.patch.object(
+                workers_ai.urllib.request, "urlopen", side_effect=lambda r, timeout: FakeResponse(b"<html>502</html>")):
+            with self.assertRaises(ConnectionError):
+                workers_ai.extract(MESSAGE, "es", None, VOCABULARY)
+
+    def test_wrongly_typed_fields_get_the_single_retry(self):
+        bad = dict(GOOD, intent=["report"])
+        out, calls = self.run_with(json.dumps(bad), json.dumps(GOOD))
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(out["extracted"]["intent"], "report")
+
+    def test_failed_calls_still_report_the_tokens_they_used(self):
+        with self.assertRaises(ValueError) as ctx:
+            self.run_with("not json", "still not json")
+        self.assertEqual(ctx.exception.usage, {"input_tokens": 200, "output_tokens": 40})
+
     def test_rejected_credentials_stop_the_run_loudly(self):
         for code in (401, 403):
             err = urllib.error.HTTPError("u", code, "no", {}, io.BytesIO(b""))
