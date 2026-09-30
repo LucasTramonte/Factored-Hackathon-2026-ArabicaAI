@@ -92,7 +92,14 @@ Capacity is sized on the **guided flow** (`/intake/start` → `/intake/confirm`)
 | S3 | 34,356 (34%) | 99 / 248 / 421 MB | Free on daily quotas; at the 4-byte maximum storage passes the 400 MB split trigger, but stays under the 500 MB cap |
 | S4 | 343,560 (344%) | 1.0 / 2.5 / 4.2 GB | **Writes exceed the Free quota on day one: Workers Paid first** |
 
-Storage is cumulative, and it binds before the daily quotas at long statements. Loading the full serving slice (about 0.3 GB) leaves about 200 MB before the cap and 100 MB before the 400 MB split trigger. At S3 with typical statements that is about 44 days to the cap, but the trigger arrives at about the end of the window (22.2 days). At 2,000-character statements the cap is reached in about 18 days. So the slice load plus S3-level traffic is a Workers Paid decision, and so is S4.
+Storage is cumulative, and it binds before the daily quotas at long statements. The table starts from an empty store. At S3 the daily growth is about 4.5 MB (typical), 11.3 MB (2,000 ASCII) or 19.1 MB (4-byte maximum).
+
+| S3 storage baseline | 400 MB split trigger reached after | 500 MB cap reached after |
+|---|---|---|
+| Empty store (the table above) | about 89 / 35 / 21 days | about 111 / 44 / 26 days |
+| Full serving slice loaded first (about 0.3 GB, so 100 MB to the trigger and 200 MB to the cap) | about 22 / 9 / 5 days | about 44 / 18 / 10 days |
+
+So the slice load plus S3-level traffic is a Workers Paid decision, and so is S4.
 
 **Cost of the prototype:** $0 on Free, and $5 a month on Workers Paid, which covers every scenario. **Cost per attempted case** is $0 on Free and $5 ÷ episodes per month on Paid ($0.0098 at S1). **Cost per successful automated resolution** is `not defined` for intake, because V1 always ends in a handoff (ADR-002). It will be reported for the proposed recent-transactions path once that path is decided and measured.
 
