@@ -37,3 +37,4 @@ back-end/.dev.vars*
 
 # Files of Hackathon
 /files/
+.ipynb_checkpoints/

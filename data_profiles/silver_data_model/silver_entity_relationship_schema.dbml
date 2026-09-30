@@ -1,0 +1,393 @@
+// LATAM Bank -- Silver layer ERD
+// Generated from data_pipelines/silver/table_specs.py, cross-checked against
+// data_pipelines/quality/contracts.py and LATAM_Bank_Complete_Data_Dictionary.pdf's
+// "Foreign Key Relationships" section (the authoritative source-system FK list).
+// Paste this whole file into https://dbdiagram.io/d -> New Diagram -> replace the editor contents.
+//
+// Notes on scope:
+//   - Columns/types reflect table_specs.py's ColumnSpec transforms (string -> varchar, etc.)
+//   - Every relationship (Ref) below is a real, declared FK -- either checked by the quality
+//     gate (quality/contracts.py) or declared in the official data dictionary but not yet wired
+//     into the quality gate (marked "[dictionary only]" in the Ref list at the bottom).
+//   - Three FKs are known to be heavily orphaned in real production data (confirmed via
+//     validate_silver.py / the quality gate): registration_branch_id (~100% orphaned),
+//     assigned_branch_id (~69% orphaned). They're drawn with a note rather than removed, since
+//     the relationship is declared in the schema even though it doesn't resolve cleanly today.
+//   - complaints.origin_interaction_id is NOT included -- the data dictionary declares it as an
+//     FK to call_center_interactions.interaction_id, but the column itself is dropped in Silver
+//     (100% null / 0 distinct in Bronze, see table_specs.py's complaints_spec docstring), so
+//     there's no column left to draw the relationship from.
+
+Table dim_customers {
+  customer_id varchar [pk]
+  document_number varchar
+  document_type varchar
+  first_name varchar
+  last_name varchar
+  date_of_birth date
+  gender varchar
+  email varchar
+  mobile_phone varchar
+  landline_phone varchar
+  address varchar
+  city varchar
+  state varchar
+  country varchar
+  postal_code varchar
+  detected_accent varchar
+  segment varchar
+  credit_score double
+  estimated_monthly_income double
+  occupation varchar
+  marital_status varchar
+  education_level varchar
+  registration_date timestamp
+  registration_branch_id varchar [note: 'FK to dim_branches.branch_id -- ~100% orphaned in real data, unresolved as of 2026-09']
+  customer_status varchar
+  last_updated timestamp
+  accepts_marketing boolean
+
+  Note: 'Dimension. 150,000 rows in production.'
+}
+
+Table dim_branches {
+  branch_id varchar [pk]
+  branch_code varchar
+  branch_name varchar
+  branch_type varchar
+  address varchar
+  city varchar
+  state varchar
+  country varchar
+  postal_code varchar
+  geographic_zone varchar
+  phone varchar
+  email varchar
+  opening_time time
+  closing_time time
+  has_atms boolean
+  atm_count integer
+  has_teller_windows boolean
+  teller_window_count integer
+  latitude double
+  longitude double
+  branch_opening_date date
+  branch_status varchar
+
+  Note: 'Dimension. 350 rows in production.'
+}
+
+Table dim_products {
+  product_id varchar [pk]
+  customer_id varchar
+  product_type varchar
+  product_number varchar
+  currency varchar
+  current_balance double
+  current_balance_usd double [note: 'Converted via latest available FX rate; USD rows pass through at rate 1']
+  credit_limit double
+  credit_limit_usd double [note: 'Converted via latest available FX rate; USD rows pass through at rate 1']
+  interest_rate double
+  opening_date date
+  expiration_date date
+  opening_branch_id varchar [note: 'FK per LATAM_Bank_Complete_Data_Dictionary.pdf -- not checked by quality/contracts.py']
+  product_status varchar
+  opening_channel varchar
+  has_linked_app boolean
+  days_past_due double
+  last_transaction_date timestamp
+  last_updated timestamp
+
+  Note: 'Dimension. 400,000 rows in production.'
+}
+
+Table dim_service_agents {
+  agent_id varchar [pk]
+  employee_code varchar
+  first_name varchar
+  last_name varchar
+  email varchar
+  phone varchar
+  native_accent varchar
+  country_of_origin varchar
+  assigned_branch_id varchar [note: 'FK to dim_branches.branch_id -- ~69% orphaned in real data, unresolved as of 2026-09']
+  agent_type varchar
+  experience_level varchar
+  languages varchar [note: 'Comma-separated list, e.g. "español, inglés"']
+  specialty varchar
+  hire_date date
+  avg_csat double
+  total_monthly_interactions integer
+  agent_status varchar
+  work_shift varchar
+
+  Note: 'Dimension. 1,200 rows in production.'
+}
+
+Table dim_marketing_campaigns {
+  campaign_id varchar [pk]
+  campaign_name varchar
+  description varchar
+  campaign_type varchar
+  campaign_objective varchar
+  promoted_product varchar
+  target_segment varchar
+  target_country varchar
+  start_date date
+  end_date date
+  budget double
+  campaign_status varchar
+  expected_conversion_rate double
+
+  Note: 'Dimension. 200 rows in production -- the campaign catalog.'
+}
+
+Table dim_fx_rates {
+  rate_date date
+  source_currency varchar
+  target_currency varchar
+  exchange_rate double
+  buy_rate double
+  sell_rate double
+  rate_source varchar
+
+  indexes {
+    (rate_date, source_currency, target_currency) [pk]
+  }
+
+  Note: 'Dimension. 13,164 rows. Companion view silver.v_fx_latest_to_usd (not modeled here) gives the latest rate per currency for snapshot tables like dim_products.'
+}
+
+Table fact_transactions {
+  transaction_id varchar [pk]
+  transaction_date timestamp
+  process_date date
+  product_id varchar
+  customer_id varchar
+  transaction_type varchar
+  transaction_category varchar
+  amount double
+  currency varchar
+  amount_usd double [note: 'COALESCE(source amount_usd, computed via exact-date FX); USD rows pass through raw']
+  amount_usd_is_estimated boolean [note: 'true when amount_usd was Silver-derived, not sourced from Bronze']
+  channel varchar
+  branch_id varchar [note: 'FK per LATAM_Bank_Complete_Data_Dictionary.pdf -- not checked by quality/contracts.py']
+  merchant_name varchar
+  merchant_category varchar
+  transaction_country varchar
+  transaction_city varchar
+  transaction_status varchar
+  response_code varchar
+  is_fraud boolean
+  fraud_score double
+  latitude double
+  longitude double
+
+  Note: 'Fact. 4,425,008 rows in production.'
+}
+
+Table fact_campaign_sends {
+  send_id varchar [pk]
+  send_date timestamp
+  process_date date
+  campaign_id varchar
+  customer_id varchar
+  send_channel varchar
+  template_used varchar
+  subject varchar [note: 'strip_templated_nan() fix applied -- literal "nan" text nulled out']
+  send_status varchar
+  was_delivered boolean
+  was_opened boolean
+  open_date timestamp
+  was_clicked boolean
+  click_date timestamp
+  click_count integer
+  had_conversion boolean
+  conversion_date timestamp
+  conversion_value double
+  open_device varchar
+  open_country varchar
+  failure_reason varchar
+  send_cost double
+
+  Note: 'Fact. 1,746,801 rows in production.'
+}
+
+Table fact_call_center_interactions {
+  interaction_id varchar [pk]
+  interaction_date timestamp
+  process_date date
+  customer_id varchar
+  agent_id varchar
+  interaction_type varchar
+  channel varchar
+  contact_reason varchar [note: 'Row-level identical to reason_category in real data (confirmed 0 mismatches / 686,296 rows)']
+  reason_category varchar [note: 'Row-level identical to contact_reason in real data (confirmed 0 mismatches / 686,296 rows)']
+  duration_seconds double
+  wait_time_seconds double
+  was_resolved boolean
+  requires_followup boolean
+  detected_sentiment varchar
+  sentiment_score double
+  customer_detected_accent varchar
+  agent_used_accent varchar
+  was_escalated boolean
+  mentioned_products varchar [note: 'Comma-separated product-id list']
+  has_transcript boolean
+  has_recording boolean
+
+  Note: 'Fact. 686,296 rows in production.'
+}
+
+Table fact_call_transcripts {
+  transcript_id varchar [pk]
+  interaction_id varchar
+  process_date date
+  customer_id varchar
+  agent_id varchar
+  full_text varchar [note: 'May contain unrendered template placeholders, e.g. "{monto}" -- not fabricated/fixed']
+  customer_text varchar
+  agent_text varchar
+  detected_language varchar
+  detected_accent varchar
+  accent_confidence double
+  detected_keywords varchar
+  mentioned_entities varchar [note: 'JSON-shaped string, kept as VARCHAR']
+  detected_intents varchar
+  main_topics varchar
+  transcription_model varchar
+  audio_quality varchar
+  duration_seconds double
+
+  Note: 'Fact. 171,321 rows in production.'
+}
+
+Table fact_satisfaction_surveys {
+  survey_id varchar [pk]
+  survey_date timestamp
+  process_date date
+  interaction_id varchar
+  customer_id varchar
+  agent_id varchar
+  survey_type varchar
+  send_channel varchar
+  main_score integer [note: '1-7 scale spanning CSAT/NPS/CES -- see survey_type for which']
+  nps_category varchar
+  question_1_text varchar
+  question_1_response double
+  question_2_text varchar
+  question_2_response double
+  question_3_text varchar
+  question_3_response double
+  open_comments varchar
+  comment_sentiment varchar
+  response_time_hours double
+  campaign_response_rate double
+
+  Note: 'Fact. 212,759 rows in production.'
+}
+
+Table fact_complaints {
+  complaint_id varchar [pk]
+  creation_date timestamp
+  process_date date
+  customer_id varchar
+  case_type varchar
+  category varchar
+  subcategory varchar
+  reception_channel varchar
+  affected_product_id varchar
+  related_branch_id varchar [note: 'FK per LATAM_Bank_Complete_Data_Dictionary.pdf -- not checked by quality/contracts.py']
+  description varchar
+  claimed_amount double
+  currency varchar
+  priority varchar
+  status varchar
+  assigned_agent_id varchar [note: 'FK per LATAM_Bank_Complete_Data_Dictionary.pdf -- not checked by quality/contracts.py']
+  assignment_date timestamp
+  first_response_date timestamp
+  resolution_date timestamp
+  closing_date timestamp
+  sla_breached boolean
+  resolution_days double
+  resolution varchar
+  compensation_granted double
+  resolution_satisfaction double
+  is_repeat_complainer boolean
+
+  Note: 'Fact. 67,095 rows in production. origin_interaction_id dropped -- 100% null / 0 distinct in Bronze. The data dictionary declares complaints.origin_interaction_id -> call_center_interactions.interaction_id as an FK, but that column does not exist in this Silver table, so that relationship is not drawn here.'
+}
+
+Table fact_digital_events {
+  event_id varchar [pk]
+  event_date timestamp
+  process_date date
+  customer_id varchar
+  session_id varchar
+  event_type varchar
+  event_category varchar
+  channel varchar
+  platform varchar
+  browser varchar
+  app_version varchar
+  page_url varchar
+  page_title varchar
+  action varchar
+  element_id varchar
+  product_id varchar
+  event_value double
+  duration_seconds double
+  ip_address varchar
+  ip_country varchar
+  ip_city varchar
+  is_mobile boolean
+  referrer varchar
+  utm_source varchar
+  utm_medium varchar
+  utm_campaign varchar
+
+  Note: 'Fact. 15,620,994 rows in production -- the largest table in the dataset.'
+}
+
+// --------------------------------------------------------------------------------------
+// Relationships -- union of (a) the FKs declared in data_pipelines/quality/contracts.py (the
+// edges the quality gate actually checks orphan rates against) and (b) the full FK list in
+// LATAM_Bank_Complete_Data_Dictionary.pdf's "Foreign Key Relationships" section. ">" means
+// many-to-one (child > parent). Edges added ONLY from the data dictionary (i.e. not currently
+// checked by the quality gate) are marked "[dictionary only]" below.
+//
+// Not drawn: complaints.origin_interaction_id -> call_center_interactions.interaction_id -- the
+// data dictionary declares it, but that column is dropped in Silver (see fact_complaints' Note).
+// --------------------------------------------------------------------------------------
+
+Ref: dim_customers.registration_branch_id > dim_branches.branch_id
+Ref: dim_service_agents.assigned_branch_id > dim_branches.branch_id
+Ref: dim_products.opening_branch_id > dim_branches.branch_id // [dictionary only]
+
+Ref: dim_products.customer_id > dim_customers.customer_id
+
+Ref: fact_transactions.customer_id > dim_customers.customer_id
+Ref: fact_transactions.product_id > dim_products.product_id
+Ref: fact_transactions.branch_id > dim_branches.branch_id // [dictionary only]
+
+Ref: fact_campaign_sends.campaign_id > dim_marketing_campaigns.campaign_id
+Ref: fact_campaign_sends.customer_id > dim_customers.customer_id
+
+Ref: fact_call_center_interactions.customer_id > dim_customers.customer_id
+Ref: fact_call_center_interactions.agent_id > dim_service_agents.agent_id
+
+Ref: fact_call_transcripts.interaction_id > fact_call_center_interactions.interaction_id
+Ref: fact_call_transcripts.customer_id > dim_customers.customer_id
+Ref: fact_call_transcripts.agent_id > dim_service_agents.agent_id
+
+Ref: fact_satisfaction_surveys.interaction_id > fact_call_center_interactions.interaction_id
+Ref: fact_satisfaction_surveys.customer_id > dim_customers.customer_id
+Ref: fact_satisfaction_surveys.agent_id > dim_service_agents.agent_id
+
+Ref: fact_complaints.customer_id > dim_customers.customer_id
+Ref: fact_complaints.affected_product_id > dim_products.product_id
+Ref: fact_complaints.related_branch_id > dim_branches.branch_id // [dictionary only]
+Ref: fact_complaints.assigned_agent_id > dim_service_agents.agent_id // [dictionary only]
+
+Ref: fact_digital_events.customer_id > dim_customers.customer_id
+Ref: fact_digital_events.product_id > dim_products.product_id

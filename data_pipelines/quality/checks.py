@@ -106,6 +106,17 @@ def check_table(con, contract: TableContract, selected: set[str] | None = None) 
         clauses = ", ".join("?" for _ in allowed)
         invalid = _scalar(con, f"SELECT COUNT(*) FROM {b} b WHERE {_nonblank('b',field)} IS NOT NULL AND {_nonblank('b',field)} NOT IN ({clauses})", sorted(allowed))
         results.append(metric("domain_violations", name, invalid, raw, "warning" if invalid else "info", field))
+    for field in contract.unique_fields:
+        if field not in bronze_cols:
+            results.append(metric("unique_field_schema_missing", name, 1, raw, "error", field))
+            continue
+        value = _nonblank('b', field)
+        excess = _scalar(con, f"""
+            SELECT COALESCE(SUM(n - 1), 0) FROM (
+                SELECT COUNT(*) n FROM {b} b WHERE {value} IS NOT NULL GROUP BY {value} HAVING COUNT(*) > 1
+            )
+        """)
+        results.append(metric("unique_field_violations", name, excess, raw, "warning" if excess else "info", field))
     if contract.partition_field:
         # Source path describes processing partition. The business event timestamp is checked separately.
         if "_source_file" not in bronze_cols:
