@@ -14,7 +14,7 @@ Last updated 2026-09-30. This page gives aggregates and case IDs only. No messag
 | Harness for learned systems | Done | `run.py --system/--repetitions/--split/--preregistration`, `systems.py`, `prereg.py`; checklist scores pinned unchanged |
 | Publication rehearsal (local) | Done | Hashes verified, 60 cases valid for the runner, manifest drafted; nothing scored |
 | Blind builder setup | Done | `make_clean_checkout.py` (14 withheld paths verified absent) and verbatim `extractor-v1-builder-instructions.md` |
-| Roberto's native Spanish review | Done (2026-09-30) | The same 9 questions, answered by Roberto himself. `reviews/roberto.jsonl` hash in `COMMITMENT.json`. He is now exposed, so he doesn't build the extractor and reviews its code for non-behavioural aspects only (ADR-006, decision 5) |
+| Roberto's native Spanish review | Done (2026-09-30), not blind | The same 9 questions, answered by Roberto himself after seeing AI suggestions, on a shortened presentation. `reviews/roberto.jsonl` hash in `COMMITMENT.json`. He is now exposed, so he doesn't build the extractor and reviews its code for non-behavioural aspects only (ADR-006, decision 5) |
 | Extractor v1 build and pre-registration | **Pending**: isolated agent, then Roberto's code review and the `extractor-v1` tag | ADR-006 |
 | Publish, verify hashes, tag `eval-es-pt-v1` | Pending | |
 | Run checklist and extractor v1 once each | Pending | `python -m evals.intake.run --cases ...` |
@@ -39,7 +39,7 @@ With all five rules kept, no gold answer changes. **The Portuguese audit found 0
 
 ## Roberto's native Spanish review
 
-Roberto answered the same 9 Spanish questions himself, as a native reader, on 2026-09-30. He saw the same option texts as Lucas and neither gold nor the other answers. The record is `reviews/roberto.jsonl`, and its SHA-256 is in `COMMITMENT.json`.
+Roberto answered the same 9 Spanish questions himself, as a native reader, on 2026-09-30. He saw neither gold nor Lucas's answers. By his own account (PR #26 review), he answered **after seeing AI-generated suggestions** for these questions and on a **shortened presentation**, not the full packet Lucas saw. So this is not a blind audit, and its answers are not nine independent observations. The record is `reviews/roberto.jsonl`, and its SHA-256 is in `COMMITMENT.json`.
 
 | | Flagged (3) | Audit (6) | All (9) |
 |---|---|---|---|
@@ -52,7 +52,7 @@ All six differences from construction fall under rules that `POLICY.md` already 
 
 None of these is shown to be a labelling error, so the audit count stays at 0 label errors in 18 random cases. Roberto's audit answers cover the same 6 Spanish cases Lucas audited, so they add no new cases to that bound.
 
-Roberto differed from the policy on 6 of 9 questions and Lucas on 2 of 9, although the Spanish option texts stated the rule. So at least one native reader does not find these rules obvious, even when they are spelled out. The evaluation still scores systems against the written policy, and the published report will give each reviewer's agreement.
+Roberto differed from the policy on 6 of 9 questions and Lucas on 2 of 9. Because the presentations differed and Roberto had seen AI suggestions, this gap can't be attributed to the rules alone. It is still a warning that the rules may not be obvious to a native reader. The evaluation still scores systems against the written policy, and the published report will give each reviewer's agreement.
 
 This record supersedes the delegated, AI-assisted record proposed in PR #24. The answers here are Roberto's own.
 
