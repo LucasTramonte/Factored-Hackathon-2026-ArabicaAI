@@ -42,6 +42,6 @@
   ],
   "amended_utc": "2026-09-30",
   "amendments": [
-    "2026-09-30: added reviews/roberto.jsonl (Roberto's native Spanish review). No earlier entry changed."
+    "2026-09-30: added reviews/roberto.jsonl (Roberto's native Spanish review) and updated the roberto_message.txt note under not_committed_yet. No existing file hash changed."
   ]
 }

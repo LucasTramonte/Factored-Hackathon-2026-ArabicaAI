@@ -48,17 +48,11 @@ Roberto answered the same 9 Spanish questions himself, as a native reader, on 20
 
 Cohen's kappa on the action is 0.21 against construction and −0.06 against Lucas. Two readers of the same packet agreed with each other less often than either agreed with construction.
 
-All six differences from construction fall under a rule that `POLICY.md` already states, so no gold changes:
-
-- two register a case before the customer has confirmed the purchase (policy question 1 below);
-- one shows a purchase for confirmation although the lookup is down, where the policy asks for a technical handoff (policy question 2);
-- one registers after the session expired, where the policy asks the customer to sign in again;
-- one registers a purchase the customer named with an identifier that isn't theirs, where the policy asks for clarification;
-- one shows a purchase for confirmation when the report lacks a detail needed to pick it, where the policy asks for clarification.
+All six differences from construction fall under rules that `POLICY.md` already states, so no gold changes. Two fall under policy question 1 below. The other four fall under the sign-in, technical-handoff and clarification rules. Case details stay out of this page, as in the section above.
 
 None of these is shown to be a labelling error, so the audit count stays at 0 label errors in 18 random cases. Roberto's audit answers cover the same 6 Spanish cases Lucas audited, so they add no new cases to that bound.
 
-What this does show is that the rules are not self-evident from the message and the options alone. Two careful readers disagreed with the policy on two thirds of these questions. The evaluation scores systems against the written policy, and the report will say that human readers without the policy text disagree with it this often.
+Roberto differed from the policy on 6 of 9 questions and Lucas on 2 of 9, although the Spanish option texts stated the rule. So at least one native reader does not find these rules obvious, even when they are spelled out. The evaluation still scores systems against the written policy, and the published report will give each reviewer's agreement.
 
 This record supersedes the delegated, AI-assisted record proposed in PR #24. The answers here are Roberto's own.
 
