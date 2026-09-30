@@ -8,8 +8,17 @@ Description: >-
 
 Metadata:
   Purpose: design-only
+  Stacks: >-
+    Two stacks. edge-us-east-1.yaml holds the WAF web ACL, because a CloudFront-scoped web ACL can
+    only be created in us-east-1. This stack (us-east-2) takes its ARN as a parameter.
   Workflow: transaction-dispute intake (ADR-002)
   Sizing: ADR-004 section 3 (S2 in-scope episodes, S3 front-door contacts)
+
+Parameters:
+  EdgeWebAclArn:
+    Type: String
+    AllowedPattern: "arn:aws:wafv2:us-east-1:[0-9]{12}:global/webacl/.+"
+    Description: ARN of the CloudFront-scoped web ACL from edge-us-east-1.yaml
 
 Resources:
   # ---------- Security: one customer-managed key for the database, the lake and the logs ----------
@@ -26,11 +35,14 @@ Resources:
             Principal: { AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root" }
             Action: "kms:*"
             Resource: "*"
-          - Sid: CloudWatchLogs
+          - Sid: CloudWatchLogsForThisAccountOnly
             Effect: Allow
             Principal: { Service: !Sub "logs.${AWS::Region}.amazonaws.com" }
             Action: [kms:Encrypt, kms:Decrypt, kms:ReEncrypt*, kms:GenerateDataKey*, kms:Describe*]
             Resource: "*"
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
 
   # ---------- 1-Edge: CloudFront + WAF in front of the static app and the API ----------
   SiteBucket:
@@ -70,43 +82,20 @@ Resources:
         SigningBehavior: always
         SigningProtocol: sigv4
 
-  EdgeFirewall:
-    Type: AWS::WAFv2::WebACL
+  SiteRouting:
+    Type: AWS::CloudFront::Function
     Properties:
-      Scope: CLOUDFRONT
-      DefaultAction: { Allow: {} }
-      VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: intake-edge }
-      Rules:
-        - Name: aws-core-rule-set
-          Priority: 0
-          OverrideAction: { None: {} }
-          Statement: { ManagedRuleGroupStatement: { VendorName: AWS, Name: AWSManagedRulesCommonRuleSet } }
-          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: core }
-        - Name: aws-known-bad-inputs
-          Priority: 1
-          OverrideAction: { None: {} }
-          Statement: { ManagedRuleGroupStatement: { VendorName: AWS, Name: AWSManagedRulesKnownBadInputsRuleSet } }
-          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: bad-inputs }
-        - Name: aws-ip-reputation
-          Priority: 2
-          OverrideAction: { None: {} }
-          Statement: { ManagedRuleGroupStatement: { VendorName: AWS, Name: AWSManagedRulesAmazonIpReputationList } }
-          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: ip-reputation }
-        - Name: api-rate-limit
-          Priority: 3
-          Action: { Block: {} }
-          Statement:
-            RateBasedStatement:
-              Limit: 100
-              EvaluationWindowSec: 300
-              AggregateKeyType: IP
-              ScopeDownStatement:
-                ByteMatchStatement:
-                  FieldToMatch: { UriPath: {} }
-                  PositionalConstraint: STARTS_WITH
-                  SearchString: /api/
-                  TextTransformations: [{ Priority: 0, Type: NONE }]
-          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: api-rate }
+      Name: intake-spa-routing
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Serve index.html for Angular routes; applied to the site behaviour only, never to /api/*
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          if (request.uri.indexOf('.') === -1) { request.uri = '/index.html'; }
+          return request;
+        }
 
   Edge:
     Type: AWS::CloudFront::Distribution
@@ -115,7 +104,7 @@ Resources:
         Enabled: true
         Comment: Angular app and API on one domain; about 275,000 HTTPS requests a month at the S3 base
         DefaultRootObject: index.html
-        WebACLId: !GetAtt EdgeFirewall.Arn
+        WebACLId: !Ref EdgeWebAclArn
         PriceClass: PriceClass_All
         Origins:
           - Id: site
@@ -125,10 +114,18 @@ Resources:
           - Id: api
             DomainName: !Sub "${Api}.execute-api.${AWS::Region}.amazonaws.com"
             CustomOriginConfig: { OriginProtocolPolicy: https-only, OriginSSLProtocols: [TLSv1.2] }
+            # HTTP APIs can't carry a WAF, so the API only answers requests that came through CloudFront
+            # (and so through the WAF): CloudFront adds this header and the handler rejects any request without it.
+            OriginCustomHeaders:
+              - HeaderName: X-Origin-Verify
+                HeaderValue: !Sub "{{resolve:secretsmanager:${OriginVerifySecret}:SecretString:value}}"
         DefaultCacheBehavior:
           TargetOriginId: site
           ViewerProtocolPolicy: redirect-to-https
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # AWS managed CachingOptimized
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt SiteRouting.FunctionMetadata.FunctionARN
         CacheBehaviors:
           - PathPattern: /api/*
             TargetOriginId: api
@@ -138,6 +135,17 @@ Resources:
             OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac  # AllViewerExceptHostHeader
 
   # ---------- 2-API: HTTP API + Lambda (arm64, 512 MB), in the VPC ----------
+  OriginVerifySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Shared value CloudFront sends to the API origin; requests without it are rejected ($0.40 a month)
+      KmsKeyId: !Ref DataKey
+      GenerateSecretString:
+        SecretStringTemplate: "{}"
+        GenerateStringKey: value
+        PasswordLength: 48
+        ExcludePunctuation: true
+
   Api:
     Type: AWS::ApiGatewayV2::Api
     Properties:
@@ -223,6 +231,8 @@ Resources:
           DB_HOST: !GetAtt Database.Endpoint.Address
           DB_USER: intake_app
           MODEL_ID: openai.gpt-oss-20b-1:0
+          # Resolved at deploy time, so the handler needs no Secrets Manager endpoint in the VPC.
+          ORIGIN_VERIFY: !Sub "{{resolve:secretsmanager:${OriginVerifySecret}:SecretString:value}}"
       Code:
         ZipFile: "exports.handler = async () => ({ statusCode: 501, body: 'design only' });"
 
@@ -409,6 +419,10 @@ Resources:
               - Effect: Allow
                 Action: [kms:Decrypt, kms:GenerateDataKey]
                 Resource: !GetAtt DataKey.Arn
+              - Sid: LoadServingSliceWithIamAuth
+                Effect: Allow
+                Action: rds-db:connect
+                Resource: !Sub "arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${Database.DbiResourceId}/intake_loader"
 
   BatchTask:
     Type: AWS::ECS::TaskDefinition
@@ -427,6 +441,8 @@ Resources:
           Environment:
             - { Name: DUCKDB_MEMORY_LIMIT, Value: 3GB }
             - { Name: LAKE_BUCKET, Value: !Ref LakeBucket }
+            - { Name: DB_HOST, Value: !GetAtt Database.Endpoint.Address }
+            - { Name: DB_USER, Value: intake_loader }
           LogConfiguration:
             LogDriver: awslogs
             Options:
