@@ -22,7 +22,9 @@ export const API_ROUTES = {
   '/agent/intakes': { GET: listAgentIntakes },
   '/agent/intake-detail': { GET: getAgentIntakeDetail }
 };
-export const API_PREFIXES = ['/demo/', '/agent/', '/transactions/', '/cases/', '/intake'];
+export const API_PREFIXES = ['/demo/', '/agent/', '/transactions/', '/cases/', '/intake/'];
+/** Bare API namespace paths that have no handler but must still answer JSON 404 behind the gate. */
+export const API_NAMESPACES = new Set(['/intake']);
 /** HTML documents go through the gate so the browser asks for the team credential once; hashed bundles do not. */
 export const DOCUMENT_PATHS = new Set(['/', '/index.html', '/agent']);
 
@@ -35,7 +37,7 @@ export async function route(request, env, store) {
     return json({ status: 'ok' });
   }
   const methods = API_ROUTES[pathname];
-  if (methods || API_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
+  if (methods || API_NAMESPACES.has(pathname) || API_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
     const denied = checkAccessGate(request, env);
     if (denied) return denied;
     if (!methods) return fail(404, 'Not found');

@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { execFileSync } from 'node:child_process';
 import { quietThirdPartyDiagnostics, withIntakeStore } from './intake-store.mjs';
+import { scorerPython } from './scorer-python.mjs';
 
 const ROOT = resolve(import.meta.dirname, '../..');
 export const MAX_EXPORT_PAGES = 100;
@@ -67,7 +68,7 @@ async function checkedDestination(output, dataDir, repository) {
  */
 export async function exportIntakeEvents(store, { limit = 100, maxPages = MAX_EXPORT_PAGES,
   output = resolve(ROOT, 'data/intake-events/events.jsonl'), dataDir = resolve(ROOT, 'data'), repository = ROOT,
-  python = process.env.INTAKE_PYTHON ?? resolve(ROOT, '.venv/bin/python') } = {}) {
+  python = scorerPython() } = {}) {
   let temporary;
   let file;
   try {

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { client, base, auth } from '../support/client.js';
 import { assertContract } from '../support/contract.js';
+import { scorerPython } from '../../scripts/scorer-python.mjs';
 
 const startBody = (language = 'es') => ({ language, mode: 'guided', report_type: 'unrecognized_charge',
   customer_statement: language === 'es' ? 'No reconozco este cargo.' : 'Não reconheço esta cobrança.',
@@ -138,7 +139,7 @@ test('idle_close_and_export_keep_pending_and_unknown_visible on local D1',async 
   assert.deepEqual(names(open.body.episode_id),['intake_started'],'an open episode stays pending in the denominator');
   assert.deepEqual(names(expired.episode_id),['intake_started','intake_ended']);assert.equal(end(expired.episode_id).outcome,'abandoned');
   // Reconcile the published artifact with the scorer CLI directly: every exported episode is an eligible start.
-  const python=process.env.INTAKE_PYTHON??resolve(root,'.venv/bin/python');
+  const python=scorerPython();
   const scored=JSON.parse(execFileSync(python,['-m','evals.intake.episodes',output],{cwd:root,encoding:'utf8'}));
   assert.deepEqual(scored,result.summary);
   const pending=[...byEpisode.values()].filter(seq=>seq.at(-1).event!=='intake_ended').length;
@@ -162,7 +163,7 @@ test('export CLI on the shared local D1 never relays scorer output or partial ar
   assert.deepEqual(await readdir(dir),['scorer.sh'],'no temporary or partial artifact remains');
   // The same database exports when the options are valid, so the failures below come from option validation.
   const cli=(script,args)=>spawnSync(process.execPath,[resolve(root,'back-end/scripts',script),'--config',resolve(process.cwd(),'wrangler.jsonc'),...args],{encoding:'utf8',timeout:120000});
-  const python=process.env.INTAKE_PYTHON??resolve(root,'.venv/bin/python');const output=resolve(dir,'events.jsonl');
+  const python=scorerPython();const output=resolve(dir,'events.jsonl');
   const ok=cli('export-intake-events.mjs',['--output',output,'--python',python,'--max-pages','100']);
   assert.equal(ok.status,0,ok.stderr);const exported=JSON.parse(ok.stdout);assert.equal(exported.complete,true);assert.ok(exported.started_at);assert.equal('cutoff' in exported,false);
   for(const args of [['--max-pages','0'],['--max-pages','101'],['--limit','0'],['--limit','1.5']]){

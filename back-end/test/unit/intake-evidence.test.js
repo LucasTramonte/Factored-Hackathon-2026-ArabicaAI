@@ -9,9 +9,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createStore } from '../../src/store/d1.js';
 import { tokenHash } from '../../src/auth/session.js';
+import { scorerPython } from '../../scripts/scorer-python.mjs';
 
 const root = resolve(import.meta.dirname, '../../..');
-const python = process.env.INTAKE_PYTHON ?? resolve(root, '.venv/bin/python');
+const python = scorerPython();
 const cli = name => resolve(root, 'back-end/scripts', name);
 async function setup(t) {
   const db = new DatabaseSync(':memory:'); t.after(() => db.close()); db.exec('PRAGMA foreign_keys=ON');
@@ -199,8 +200,40 @@ test('idle closure updates only its selected page even when prior end rows exist
   const episodes = [await start(now-700000,now+1),await start(now-700000,now+1)];
   // A recovered/corrupt preexisting end must not let the UPDATE exceed the requested page.
   for (const e of episodes) db.prepare('INSERT INTO intake_events VALUES(?,?,?)').run(e.episode_id,1,JSON.stringify({outcome:'abandoned'}));
-  assert.equal((await store.closeIdleIntakes({now,limit:1})).length,1);
+  const closed = await store.closeIdleIntakes({now,limit:1});
+  assert.equal(closed.length,1);
   assert.equal(db.prepare("SELECT count(*) n FROM intake_episodes WHERE state='selection_required'").get().n,1);
+  const ends = id => db.prepare("SELECT count(*) n FROM intake_events WHERE episode_id=? AND json_extract(event_json,'$.event')='intake_ended'").get(id).n;
+  assert.equal(ends(closed[0].episode_id),1,'exactly one end event');
+});
+
+test('an open episode that already holds an end event never gets a second one', async t => {
+  const {db,store,start} = await setup(t);
+  const now = Date.parse('2026-09-30T12:00:00.000Z');
+  const e = await start(now - 700000, now + 3600000);
+  // Corrupt or recovered state: a valid abandoned end already at seq 1 while the episode is still open.
+  const end = {event:'intake_ended',version:'2',case_id:e.episode_id,ts:new Date(now - 100000).toISOString(),seq:1,session_ref:e.session_ref,language:'es',
+    model_version:'guided-0.1',outcome:'abandoned',safety:'not_assessed',duration_ms:600000,llm_calls:0,input_tokens:0,output_tokens:0,known_input_tokens:0,
+    known_output_tokens:0,usage_unavailable_calls:0,tool_calls:1};
+  db.prepare('INSERT INTO intake_events VALUES(?,?,?)').run(e.episode_id,1,JSON.stringify(end));
+  assert.equal((await store.closeIdleIntakes({now,limit:100})).length,1,'the existing abandoned end closes the state');
+  assert.equal(db.prepare("SELECT count(*) n FROM intake_events WHERE episode_id=? AND json_extract(event_json,'$.event')='intake_ended'").get(e.episode_id).n,1);
+  assert.equal((await store.findIntake('ana',e.episode_id)).state,'abandoned');
+  // A different existing end (not abandoned) blocks both the insert and the state change, and stays visible as due work.
+  const other = await start(now - 700000, now + 3600000);
+  db.prepare('INSERT INTO intake_events VALUES(?,?,?)').run(other.episode_id,1,JSON.stringify({...end,case_id:other.episode_id,session_ref:other.session_ref,outcome:'routed'}));
+  assert.equal((await store.closeIdleIntakes({now,limit:100})).length,0);
+  assert.equal(db.prepare("SELECT count(*) n FROM intake_events WHERE episode_id=? AND json_extract(event_json,'$.event')='intake_ended'").get(other.episode_id).n,1);
+  assert.equal(await store.hasDueIdleIntakes({now}),true);
+});
+
+test('the scorer interpreter is INTAKE_PYTHON, else the repository .venv when present, else python3', async t => {
+  const scratch = await mkdtemp(join(tmpdir(),'intake-python-')); t.after(()=>rm(scratch,{recursive:true,force:true}));
+  assert.equal(scorerPython({INTAKE_PYTHON:'/opt/python'},scratch),'/opt/python');
+  assert.equal(scorerPython({},scratch),'python3');
+  assert.equal(scorerPython({INTAKE_PYTHON:''},scratch),'python3');
+  await mkdir(join(scratch,'.venv','bin'),{recursive:true}); await writeFile(join(scratch,'.venv','bin','python'),'');
+  assert.equal(scorerPython({},scratch),join(scratch,'.venv','bin','python'));
 });
 
 test('housekeeping sweeps at one cutoff, one bounded atomic page at a time, and reports remaining work', async t => {

@@ -186,17 +186,22 @@ export function createStore(db) {
     closeIdleIntakes: async ({ now, limit = 100, maxNow = Date.now() + IDLE_CUTOFF_SKEW_MS }) => {
       if (!Number.isSafeInteger(now) || now < 0 || !(now <= maxNow) || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid closure bounds');
       const page = IDLE_CANDIDATES + ' ORDER BY ' + IDLE_DUE + ',e.episode_id LIMIT ?';
-      // MAX alone in the subquery keeps SQLite's min/max index lookup (one row); COALESCE outside it.
-      const next = 'COALESCE((SELECT MAX(v.seq) FROM intake_events v WHERE v.episode_id=e.episode_id),-1)+1';
+      // One index lookup per episode finds its latest event (sequence and name). The derived table has a LIMIT and
+      // the outer query a WHERE, so SQLite cannot flatten it and evaluates that lookup once per row. An episode
+      // whose latest event already ends it (a corrupt state) gets no second end event.
+      const latest = "(SELECT json_object('seq',v.seq,'event',json_extract(v.event_json,'$.event')) FROM intake_events v "
+        + 'WHERE v.episode_id=e.episode_id ORDER BY v.seq DESC LIMIT 1)';
+      const next = "json_extract(d.latest,'$.seq')+1";
       const results = await batch([
-        ['INSERT INTO intake_events(episode_id,seq,event_json) SELECT e.episode_id,' + next + ',json_patch(json_object('
-          + "'event','intake_ended','version','2','case_id',e.episode_id,"
-          + "'ts',strftime('%Y-%m-%dT%H:%M:%S'," + IDLE_DUE + "/1000,'unixepoch')||printf('.%03dZ'," + IDLE_DUE + "%1000),"
-          + "'seq'," + next + ",'session_ref',e.session_ref,'language',e.language,'model_version','guided-0.1'),"
-          + "json_object('outcome','abandoned','safety','not_assessed','duration_ms',MAX(0," + IDLE_DUE + "-e.created_at),"
+        ['INSERT INTO intake_events(episode_id,seq,event_json) SELECT d.episode_id,' + next + ',json_patch(json_object('
+          + "'event','intake_ended','version','2','case_id',d.episode_id,"
+          + "'ts',strftime('%Y-%m-%dT%H:%M:%S',d.due_at/1000,'unixepoch')||printf('.%03dZ',d.due_at%1000),"
+          + "'seq'," + next + ",'session_ref',d.session_ref,'language',d.language,'model_version','guided-0.1'),"
+          + "json_object('outcome','abandoned','safety','not_assessed','duration_ms',MAX(0,d.due_at-d.created_at),"
           + "'llm_calls',0,'input_tokens',0,'output_tokens',0,'known_input_tokens',0,'known_output_tokens',0,"
-          + "'usage_unavailable_calls',0,'tool_calls',json_extract(e.usage_json,'$.tool_calls'))) "
-          + page + ' ON CONFLICT(episode_id,seq) DO NOTHING', now, limit],
+          + "'usage_unavailable_calls',0,'tool_calls',json_extract(d.usage_json,'$.tool_calls'))) "
+          + 'FROM (SELECT e.episode_id,e.session_ref,e.language,e.created_at,e.usage_json,' + IDLE_DUE + ' AS due_at,' + latest + ' AS latest '
+          + page + ") d WHERE json_extract(d.latest,'$.event') IS NOT 'intake_ended' ON CONFLICT(episode_id,seq) DO NOTHING", now, limit],
         ["UPDATE intake_episodes SET state='abandoned',updated_at=? WHERE episode_id IN (SELECT e.episode_id " + page + ') '
           + 'AND EXISTS(SELECT 1 FROM (SELECT v.event_json FROM intake_events v WHERE v.episode_id=intake_episodes.episode_id '
           + "ORDER BY v.seq DESC LIMIT 1) latest WHERE json_extract(latest.event_json,'$.event')='intake_ended' "

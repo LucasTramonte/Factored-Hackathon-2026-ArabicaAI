@@ -1,6 +1,7 @@
 /** Agent routes: a separate simulated session and a read-only view of accepted cases. */
 import { fail, json } from '../../http.js';
 import { readSession, startSession } from '../../auth/session.js';
+import { UUID } from '../intake/validation.js';
 
 const PAGE = 50;
 
@@ -30,7 +31,7 @@ export async function getAgentIntakeDetail(request, env, store) {
   if (!await readSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');
   const params = new URL(request.url).searchParams;
   const protocol = params.get('protocol');
-  if ([...params.keys()].join() !== 'protocol' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(protocol ?? '')) {
+  if ([...params.keys()].join() !== 'protocol' || !UUID.test(protocol ?? '')) {
     return fail(422, 'Provide exactly one valid protocol');
   }
   const row = await store.findIntakeHandoff(protocol);

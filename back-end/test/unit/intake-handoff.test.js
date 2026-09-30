@@ -135,3 +135,34 @@ test('late session revocation or expiry preserves pending reservation until same
   assert.equal((await route(post('/intake/confirm',{...confirm(terminal),idempotency_key:key}),env,revokedReplay)).status,401);
   assert.deepEqual(events(db),saved,'terminal replay never changes the chain');
 });
+
+test('a refused reservation answers from a fresh read and records the attempt', async t => {
+  const {db,store,start}=await setup(t);
+  const usage = id => JSON.parse(db.prepare('SELECT usage_json FROM intake_episodes WHERE episode_id=?').get(id).usage_json).tool_calls;
+  // Session expires in SQL between the live check and the reservation.
+  let episode=await start();
+  const expiring={...store,persistIntakeHandoff:async args=>{db.exec("UPDATE sessions SET expires_at=1 WHERE actor='customer'");return store.persistIntakeHandoff(args);}};
+  let res=await route(post('/intake/handoff',{episode_id:episode,kind:'incomplete',idempotency_key:crypto.randomUUID()}),env,expiring);
+  assert.equal(res.status,401);assert.match((await res.json()).detail,/Session expired/);assert.equal(usage(episode),2,'start plus the refused persistence');
+  assert.equal(db.prepare('SELECT count(*) n FROM intake_handoffs').get().n,0);
+  db.prepare('UPDATE sessions SET expires_at=?').run(Date.now()+3600000);
+  // A sweep closes the episode between the route's state check and the reservation.
+  episode=await start(); db.prepare('UPDATE intake_episodes SET updated_at=updated_at-700000 WHERE episode_id=?').run(episode);
+  const racing={...store,findOwnedTransaction:async(...a)=>{const tx=await store.findOwnedTransaction(...a);await store.closeIdleIntakes({now:Date.now(),limit:100});return tx;}};
+  const body=confirm(episode);
+  res=await route(post('/intake/confirm',body),env,racing);
+  assert.equal(res.status,409);assert.equal((await res.json()).detail,'Episode is no longer open');
+  assert.equal((await route(post('/intake/confirm',body),env,store)).status,409,'the same-key retry agrees');
+  // The owned transaction vanishes between the lookup and the reservation: acceptance stays unknown.
+  episode=await start();
+  const vanishing={...store,findOwnedTransaction:async(...a)=>{const tx=await store.findOwnedTransaction(...a);db.prepare('DELETE FROM transactions WHERE transaction_id=?').run('tx-ana');return tx;}};
+  res=await route(post('/intake/confirm',confirm(episode)),env,vanishing);
+  assert.equal(res.status,503);assert.equal((await res.json()).protocol,undefined);assert.equal(usage(episode),3,'start plus lookup and refused persistence');
+  assert.equal(db.prepare('SELECT count(*) n FROM cases').get().n,0);
+  // A failing re-read never promises a receipt either.
+  episode=await start(); let refused=false;
+  const blind={...store,persistIntakeHandoff:async()=>{refused=true;return {handoff:null,replayed:false};},
+    findIntake:async(...a)=>{if(refused)throw new Error('down');return store.findIntake(...a);}};
+  res=await route(post('/intake/handoff',{episode_id:episode,kind:'incomplete',idempotency_key:crypto.randomUUID()}),env,blind);
+  assert.equal(res.status,503);assert.equal((await res.json()).protocol,undefined);
+});

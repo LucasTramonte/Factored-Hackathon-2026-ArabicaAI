@@ -1,5 +1,6 @@
 /** Explicit guided-start validation; no free-text classification or client-supplied identity. */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** RFC 4122 UUID (versions 1-8), the shape of every client key, episode id and protocol. */
+export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const KEYS = 'customer_statement,idempotency_key,language,mode,report_type';
 const invalid = detail => ({ error: { status: 422, detail } });
 

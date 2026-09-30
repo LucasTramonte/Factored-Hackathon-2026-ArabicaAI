@@ -68,7 +68,7 @@ async function finishIntake(request, store, complete) {
       questions: kind === 'complete' ? [] : ['matching_transaction', 'customer_confirmation'],
       usage: { tool_calls: 0, operation_duration_ms: 0 }, now: Date.now() });
     if (result.conflict) return fail(409, 'Episode already submitted with different content or key');
-    if (!result.handoff) return fail(503, 'Acceptance not confirmed; retry with the same idempotency key');
+    if (!result.handoff) return await unreserved(request, store, { customerId, episodeId, toolCalls, started });
     toolCalls++;
     const receipt = await store.readIntakeReceipt(customerId, episodeId, { sessionHash, now: Date.now() });
     if (!receipt) throw new Error('Receipt not read back');
@@ -85,4 +85,20 @@ async function finishIntake(request, store, complete) {
     try { await store.recordIntakeAttempt({ customerId, episodeId, toolCalls, operationDuration: Math.floor(performance.now() - started) }); } catch { /* Persistence may also be unavailable; never promise a receipt. */ }
     return fail(503, 'Acceptance not confirmed; retry with the same idempotency key');
   }
+}
+
+/**
+ * The reservation's SQL checks refused to reserve (session expired in SQL, a sweep closed the episode, or the owned
+ * transaction vanished). Record the attempt's usage while the episode is open, then answer from a fresh read:
+ * no live same-owner session -> 401; episode closed without a reservation -> 409; otherwise acceptance stays unknown.
+ */
+async function unreserved(request, store, { customerId, episodeId, toolCalls, started }) {
+  try { await store.recordIntakeAttempt({ customerId, episodeId, toolCalls, operationDuration: Math.floor(performance.now() - started) }); } catch { /* best effort */ }
+  try {
+    const live = await readSession(request, store, 'customer');
+    if (!live || live.customer_id !== customerId) return fail(401, 'Session expired; renew the same customer session and retry with the same idempotency key');
+    const [episode, reservation] = [await store.findIntake(customerId, episodeId), await store.findOwnedIntakeHandoff(customerId, episodeId)];
+    if (episode && episode.state !== 'selection_required' && !reservation) return fail(409, 'Episode is no longer open');
+  } catch { /* Storage may be unavailable; never promise a receipt. */ }
+  return fail(503, 'Acceptance not confirmed; retry with the same idempotency key');
 }
