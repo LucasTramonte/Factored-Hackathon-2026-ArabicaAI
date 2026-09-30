@@ -48,7 +48,7 @@ Roberto answered the same 9 Spanish questions himself, as a native reader, on 20
 
 Cohen's kappa on the action is 0.21 against construction and −0.06 against Lucas. Two readers of the same packet agreed with each other less often than either agreed with construction.
 
-All six differences from construction fall under rules that `POLICY.md` already states, so no gold changes. Two fall under policy question 1 below. The other four fall under the sign-in, technical-handoff and clarification rules. Case details stay out of this page, as in the section above.
+All six differences from construction fall under rules that `POLICY.md` already states, so no gold changes. Two fall under the rule of policy question 1 below. The other four fall under the sign-in, technical-handoff and clarification rules. Case details stay out of this page, as in the section above.
 
 None of these is shown to be a labelling error, so the audit count stays at 0 label errors in 18 random cases. Roberto's audit answers cover the same 6 Spanish cases Lucas audited, so they add no new cases to that bound.
 
@@ -58,9 +58,9 @@ This record supersedes the delegated, AI-assisted record proposed in PR #24. The
 
 ## Five policy questions (decided 2026-09-29: keep all five)
 
-Each decision applies to every case of its kind, in both languages. Keeping a rule leaves `POLICY.md` and `label_rules.py` as they are. Changing one would edit both and recompute gold. There is one case where the reviewer and construction differ on each point, except question 5, which has two.
+Each decision applies to every case of its kind, in both languages. Keeping a rule leaves `POLICY.md` and `label_rules.py` as they are. Changing one would edit both and recompute gold. The table comes from Lucas's Portuguese review: it lists the case where Lucas and construction differ on each point, and question 5 has two. Roberto's Spanish differences are counted in the section above and are not listed here.
 
-| # | Question | Construction rule (policy today) | Reviewer's choice | Case |
+| # | Question | Construction rule (policy today) | Lucas's choice (Portuguese review) | Case |
 |---|---|---|---|---|
 | 1 | One purchase matches the report, but the customer hasn't confirmed it yet. Register the case or ask first? | Show it and ask (**F**). A case is registered only after confirmation | Register (H) | frz-024 |
 | 2 | The customer confirmed earlier, but the lookup is down now. Register or technical handoff? | Technical handoff (**T**). The evidence can't be re-read, and the contract says a tool failure means a technical handoff with missing evidence | Register (H) | frz-038 |
