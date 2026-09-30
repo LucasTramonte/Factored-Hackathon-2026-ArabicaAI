@@ -100,3 +100,38 @@ test('a consumed start key cannot become a handoff key',async t=>{
   assert.equal((await route(post('/intake/confirm',{...confirm(episode),idempotency_key:key}),env,store)).status,409);
   assert.equal(db.prepare('SELECT count(*) n FROM cases').get().n,0);
 });
+
+test('failed pre-insert persistence keeps owned episode attempt usage and elapsed time',async t=>{
+  const {db,store,start}=await setup(t);const episode=await start();const body=confirm(episode);
+  const failed={...store,persistIntakeHandoff:async()=>{await new Promise(done=>setTimeout(done,12));throw new Error('write failed before insert');}};
+  const rejected=await route(post('/intake/confirm',body),env,failed);assert.equal(rejected.status,503);assert.equal((await rejected.json()).protocol,undefined);
+  assert.equal(db.prepare('SELECT count(*) n FROM intake_handoffs').get().n,0);
+  const usage=JSON.parse((await store.findIntake('ana',episode)).usage_json);assert.equal(usage.tool_calls,3,'initial start plus failed lookup/persist');assert.ok(usage.operation_duration_ms>=10);
+  const recovered=await route(post('/intake/confirm',body),env,store);assert.equal(recovered.status,201);
+  assert.equal(events(db).at(-1).tool_calls,7);
+  const handoffUsage=JSON.parse(db.prepare('SELECT usage_json FROM intake_handoffs').get().usage_json);assert.ok(handoffUsage.operation_duration_ms>=usage.operation_duration_ms);
+});
+
+test('late session revocation or expiry preserves pending reservation until same-owner renewal',async t=>{
+  const {db,store,start}=await setup(t);
+  for(const pending of [false,true])for(const expiry of [false,true]){
+    db.prepare('INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)').run(await tokenHash(token),'customer','ana',Date.now()+3600000);
+    const episode=await start();const body=confirm(episode);
+    if(pending)assert.equal((await route(post('/intake/confirm',body),env,{...store,readIntakeReceipt:async()=>{throw new Error('readback down');}})).status,503);
+    const revoked={...store,readIntakeReceipt:async(...args)=>{const receipt=await store.readIntakeReceipt(...args);db.exec(expiry?'UPDATE sessions SET expires_at=1':'DELETE FROM sessions');return receipt;}};
+    const res=await route(post('/intake/confirm',body),env,revoked);assert.equal(res.status,401);assert.equal((await res.json()).protocol,undefined);
+    assert.equal((await store.findIntake('ana',episode)).state,'handoff_pending');
+    assert.deepEqual(events(db).filter(e=>e.case_id===episode).map(e=>e.event),['intake_started']);
+    const reserved=db.prepare('SELECT handoff_id FROM intake_handoffs WHERE episode_id=?').get(episode).handoff_id;
+    db.prepare('INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)').run(await tokenHash(token),'customer','ana',Date.now()+3600000);
+    const recovered=await route(post('/intake/confirm',body),env,store);assert.equal(recovered.status,200);assert.equal((await recovered.json()).replayed,true);
+    assert.equal(db.prepare('SELECT handoff_id FROM intake_handoffs WHERE episode_id=?').get(episode).handoff_id,reserved);
+    assert.equal(events(db).filter(e=>e.case_id===episode&&e.event==='intake_ended').length,1);
+  }
+  const terminal=db.prepare('SELECT episode_id FROM intake_handoffs LIMIT 1').get().episode_id;
+  const key=db.prepare('SELECT turn_key FROM intake_handoffs WHERE episode_id=?').get(terminal).turn_key;
+  const saved=events(db);
+  const revokedReplay={...store,readIntakeReceipt:async(...args)=>{const receipt=await store.readIntakeReceipt(...args);db.exec('DELETE FROM sessions');return receipt;}};
+  assert.equal((await route(post('/intake/confirm',{...confirm(terminal),idempotency_key:key}),env,revokedReplay)).status,401);
+  assert.deepEqual(events(db),saved,'terminal replay never changes the chain');
+});

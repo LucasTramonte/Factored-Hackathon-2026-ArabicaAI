@@ -34,3 +34,13 @@ test('handoff endpoints gate methods paths roles expiry and malformed bodies',as
 test('complete handoff measures its own D1 work preserving legacy ceilings',async()=>{
  const ana=await customer();const episode_id=await start(ana);const r=await ana.call('/intake/confirm',{episode_id,transaction_id:'demo-tx-001',customer_confirmed:true,idempotency_key:crypto.randomUUID()});assert.equal(r.status,201);assertContract('intakeReceipt',r.body);assert.ok(r.metrics);console.log('D1_INTAKE_CONFIRM '+JSON.stringify(r.metrics));
 });
+
+test('terminal receipt replay still requires live same-owner authority after session rotation',async()=>{
+ const ana=await customer();const episode_id=await start(ana);const body={episode_id,transaction_id:'demo-tx-001',customer_confirmed:true,idempotency_key:crypto.randomUUID()};
+ const original=await ana.call('/intake/confirm',body);assert.equal(original.status,201);assertContract('intakeReceipt',original.body);
+ const revoked=client();revoked.cookie=ana.cookie;
+ assert.equal((await ana.call('/demo/session',{customer_id:'demo-ana'})).status,200);
+ const denied=await revoked.call('/intake/confirm',body);assert.equal(denied.status,401);assert.equal(denied.body.protocol,undefined);
+ const replay=await ana.call('/intake/confirm',body);assert.equal(replay.status,200);assert.deepEqual(replay.body,{...original.body,replayed:true});
+ const bruno=await customer('demo-bruno');const foreign=await bruno.call('/intake/confirm',body);assert.equal(foreign.status,404);assert.equal(foreign.body.protocol,undefined);
+});

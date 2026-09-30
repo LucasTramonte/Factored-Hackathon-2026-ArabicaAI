@@ -57,10 +57,11 @@ async function finishIntake(request, store, complete) {
   }
   const live = await readSession(request, store, 'customer');
   if (!live || live.customer_id !== customerId) return fail(401, 'Start a demo session first');
+  const sessionHash = await tokenHash(readCookies(request).demo_session);
   try {
     toolCalls++;
     const result = await store.persistIntakeHandoff({ customerId, episodeId, turnKey, payloadHash,
-      sessionHash: await tokenHash(readCookies(request).demo_session),
+      sessionHash,
       completeCase: kind === 'complete' ? evidence : null, kind,
       evidence: { transaction: evidence, tool_status: kind === 'technical' ? 'failed' : 'ok' },
       actions: kind === 'complete' ? ['owned_transaction_retrieved', 'customer_confirmation_recorded'] : kind === 'technical' ? ['transaction_lookup_failed'] : [],
@@ -69,10 +70,14 @@ async function finishIntake(request, store, complete) {
     if (result.conflict) return fail(409, 'Episode already submitted with different content or key');
     if (!result.handoff) return fail(503, 'Acceptance not confirmed; retry with the same idempotency key');
     toolCalls++;
-    const receipt = await store.readIntakeReceipt(customerId, episodeId);
+    const receipt = await store.readIntakeReceipt(customerId, episodeId, { sessionHash, now: Date.now() });
     if (!receipt) throw new Error('Receipt not read back');
     toolCalls++;
-    await store.finishIntakeHandoff({ customerId, episode, receipt, now: Date.now(), operationDuration: Math.floor(performance.now() - started), toolCalls });
+    const acknowledged = await store.finishIntakeHandoff({ customerId, episode, receipt, sessionHash, now: Date.now(), operationDuration: Math.floor(performance.now() - started), toolCalls });
+    if (!acknowledged) {
+      await store.recordIntakeAttempt({ customerId, episodeId, toolCalls, operationDuration: Math.floor(performance.now() - started) });
+      return fail(401, 'Session expired; renew the same customer session and retry with the same idempotency key');
+    }
     return json({ episode_id: episodeId, protocol: receipt.complete_case_id ?? receipt.handoff_id,
       kind: receipt.kind, accepted_at: receipt.accepted_at, replayed: result.replayed,
       next_step_code: 'await_human_review' }, result.replayed ? 200 : 201);

@@ -93,7 +93,7 @@ export function createStore(db) {
         ]] : []),
         ['INSERT INTO intake_handoffs(handoff_id,episode_id,complete_case_id,turn_key,payload_hash,kind,tool_status,'
           + 'evidence_json,actions_json,questions_json,destination,priority,accepted_at,usage_json) '
-          + "SELECT ?,e.episode_id,?,?,?,?,?,?,?,?,?,?,?,json_set(?,'$.tool_calls',json_extract(e.usage_json,'$.tool_calls')) FROM intake_episodes e WHERE " + eligible
+          + "SELECT ?,e.episode_id,?,?,?,?,?,?,?,?,?,?,?,json_set(?,'$.tool_calls',json_extract(e.usage_json,'$.tool_calls'),'$.operation_duration_ms',COALESCE(json_extract(e.usage_json,'$.operation_duration_ms'),0)) FROM intake_episodes e WHERE " + eligible
           + (kind === 'complete' ? ' AND EXISTS(SELECT 1 FROM cases WHERE case_id=?)' : ''),
           handoffId,caseId,turnKey,payloadHash,kind,kind === 'technical' ? 'failed' : 'ok',
           JSON.stringify(evidence),JSON.stringify(actions),JSON.stringify(questions),'case_service','normal',new Date(now).toISOString(),JSON.stringify(usage),
@@ -110,19 +110,26 @@ export function createStore(db) {
       return { handoff, replayed: handoff?.handoff_id !== handoffId };
     },
     /** A complete receipt requires reading back the confirmed owned case, never just the reservation. */
-    readIntakeReceipt: (customerId, episodeId) => first(
+    readIntakeReceipt: (customerId, episodeId, { sessionHash, now }) => first(
       'SELECT h.*,(SELECT COALESCE(MAX(seq),0)+1 FROM intake_events WHERE episode_id=e.episode_id) AS next_seq FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
       + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
-      + "WHERE e.customer_id=? AND e.episode_id=? AND (h.kind<>'complete' OR c.case_id IS NOT NULL)",customerId,episodeId),
-    /** Preserve actual failed-attempt usage while acceptance remains pending; terminal metrics never change on replay. */
+      + "WHERE e.customer_id=? AND e.episode_id=? AND (h.kind<>'complete' OR c.case_id IS NOT NULL) "
+      + "AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=e.customer_id AND expires_at>?)",customerId,episodeId,sessionHash,now),
+    /** Preserve failed-attempt usage on open episodes or pending reservations; terminal metrics never change on replay. */
     recordIntakeAttempt: ({ customerId, episodeId, toolCalls, operationDuration }) => batch([
+      ["UPDATE intake_episodes SET usage_json=json_set(usage_json,'$.tool_calls',json_extract(usage_json,'$.tool_calls')+?,"
+        + "'$.operation_duration_ms',COALESCE(json_extract(usage_json,'$.operation_duration_ms'),0)+?) "
+        + "WHERE customer_id=? AND episode_id=? AND state='selection_required' AND NOT EXISTS(SELECT 1 FROM intake_handoffs WHERE episode_id=intake_episodes.episode_id)",
+        toolCalls,operationDuration,customerId,episodeId],
       ["UPDATE intake_handoffs SET usage_json=json_set(usage_json,'$.tool_calls',json_extract(usage_json,'$.tool_calls')+?,"
         + "'$.operation_duration_ms',json_extract(usage_json,'$.operation_duration_ms')+?) WHERE episode_id=? "
         + "AND EXISTS(SELECT 1 FROM intake_episodes WHERE episode_id=? AND customer_id=? AND state='handoff_pending')",
         toolCalls,operationDuration,episodeId,episodeId,customerId]
     ]),
-    /** After read-back, atomically append one terminal chain and freeze state; concurrent acknowledgments are no-ops. */
-    finishIntakeHandoff: async ({ customerId, episode, receipt, now, operationDuration, toolCalls }) => {
+    /** After read-back, require live authority to atomically append one terminal chain and freeze state; concurrent acknowledgments are no-ops. */
+    finishIntakeHandoff: async ({ customerId, episode, receipt, sessionHash, now, operationDuration, toolCalls }) => {
+      const authority = " AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=? AND expires_at>?)";
+      const authorityParams = [sessionHash, customerId, now];
       const base = { version: '2', case_id: episode.episode_id, ts: new Date(now).toISOString(),
         session_ref: episode.session_ref,language: episode.language,model_version:'guided-0.1' };
       const reference = receipt.complete_case_id ?? receipt.handoff_id;
@@ -135,23 +142,27 @@ export function createStore(db) {
           duration_ms:Math.max(0,now-episode.created_at),llm_calls:0,input_tokens:0,output_tokens:0,known_input_tokens:0,known_output_tokens:0,usage_unavailable_calls:0,
           tool_calls:0 }
       ];
-      await batch([
+      const results = await batch([
         ["UPDATE intake_handoffs SET usage_json=json_set(usage_json,'$.tool_calls',json_extract(usage_json,'$.tool_calls')+?,"
           + "'$.operation_duration_ms',json_extract(usage_json,'$.operation_duration_ms')+?) WHERE handoff_id=? "
-          + "AND EXISTS(SELECT 1 FROM intake_episodes WHERE episode_id=? AND customer_id=? AND state='handoff_pending')",
-          toolCalls,operationDuration,receipt.handoff_id,episode.episode_id,customerId],
+          + "AND EXISTS(SELECT 1 FROM intake_episodes WHERE episode_id=? AND customer_id=? AND state='handoff_pending')" + authority,
+          toolCalls,operationDuration,receipt.handoff_id,episode.episode_id,customerId,...authorityParams],
         ...extras.map((extra,index) => [
           'INSERT INTO intake_events(episode_id,seq,event_json) SELECT e.episode_id,?,'
           + (extra.event === 'intake_ended' ? "json_set(?,'$.tool_calls',(SELECT json_extract(usage_json,'$.tool_calls') FROM intake_handoffs WHERE episode_id=e.episode_id))" : '?')
           + ' FROM intake_episodes e '
           + "WHERE e.customer_id=? AND e.episode_id=? AND e.state='handoff_pending' "
           + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=e.episode_id) '
-          + 'ON CONFLICT(episode_id,seq) DO NOTHING', receipt.next_seq+index,JSON.stringify({...base,seq:receipt.next_seq+index,...extra}),customerId,episode.episode_id,receipt.handoff_id
+          + authority + ' ON CONFLICT(episode_id,seq) DO NOTHING', receipt.next_seq+index,JSON.stringify({...base,seq:receipt.next_seq+index,...extra}),customerId,episode.episode_id,receipt.handoff_id,...authorityParams
         ]),
         ['UPDATE intake_episodes SET state=?,updated_at=? WHERE customer_id=? AND episode_id=? '
-          + "AND state='handoff_pending' AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=intake_episodes.episode_id)",
-          complete ? 'complete_handoff' : receipt.kind === 'technical' ? 'technical_handoff' : 'incomplete_handoff',now,customerId,episode.episode_id,receipt.handoff_id]
+          + "AND state='handoff_pending' AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=intake_episodes.episode_id)" + authority,
+          complete ? 'complete_handoff' : receipt.kind === 'technical' ? 'technical_handoff' : 'incomplete_handoff',now,customerId,episode.episode_id,receipt.handoff_id,...authorityParams],
+        ['SELECT 1 AS acknowledged FROM intake_episodes e JOIN intake_handoffs h USING(episode_id) '
+          + "WHERE e.customer_id=? AND e.episode_id=? AND h.handoff_id=? AND e.state IN ('complete_handoff','technical_handoff','incomplete_handoff')" + authority,
+          customerId,episode.episode_id,receipt.handoff_id,...authorityParams]
       ]);
+      return Boolean(results.at(-1).results[0]);
     },
 
     listTransactions: (customerId, limit) => all(
