@@ -165,6 +165,38 @@ export function createStore(db) {
       return Boolean(results.at(-1).results[0]);
     },
 
+    /** Close at most 100 due unreserved starts atomically; unknown handoffs require customer-authorized read-back. */
+    closeIdleIntakes: async ({ now, limit = 100 }) => {
+      if (!Number.isSafeInteger(now) || now < 0 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid closure bounds');
+      const results = await batch([
+        ["INSERT INTO intake_events(episode_id,seq,event_json) SELECT e.episode_id,1,json_patch(json_object("
+          + "'event','intake_ended','version','2','case_id',e.episode_id,'ts',?,'seq',1,'session_ref',e.session_ref,"
+          + "'language',e.language,'model_version','guided-0.1'),json_object('outcome','abandoned','safety','not_assessed',"
+          + "'duration_ms',MAX(0,?-e.created_at),'llm_calls',0,'input_tokens',0,'output_tokens',0,"
+          + "'known_input_tokens',0,'known_output_tokens',0,'usage_unavailable_calls',0,'tool_calls',json_extract(e.usage_json,'$.tool_calls'))) "
+          + "FROM intake_episodes e WHERE state='selection_required' AND MIN(updated_at+600000,expires_at)<=? "
+          + 'AND NOT EXISTS(SELECT 1 FROM intake_handoffs h WHERE h.episode_id=e.episode_id) '
+          + 'ORDER BY MIN(updated_at+600000,expires_at),episode_id LIMIT ? ON CONFLICT(episode_id,seq) DO NOTHING',
+          new Date(now).toISOString(),now,now,limit],
+        ["UPDATE intake_episodes SET state='abandoned',updated_at=? WHERE episode_id IN ("
+          + "SELECT e.episode_id FROM intake_episodes e WHERE state='selection_required' AND MIN(updated_at+600000,expires_at)<=? "
+          + 'AND NOT EXISTS(SELECT 1 FROM intake_handoffs h WHERE h.episode_id=e.episode_id) '
+          + 'ORDER BY MIN(updated_at+600000,expires_at),episode_id LIMIT ?) '
+          + "AND EXISTS(SELECT 1 FROM intake_events v WHERE v.episode_id=intake_episodes.episode_id AND v.seq=1 AND json_extract(v.event_json,'$.outcome')='abandoned') "
+          + 'RETURNING episode_id',now,now,limit]
+      ]);
+      return results.at(-1).results;
+    },
+    /** Keyset pages include pending episodes and complete ordered groups; overflow/oversize fails export rather than truncating. */
+    exportIntakeEvents: ({ afterEpisode = '', limit = 100 } = {}) => {
+      if (typeof afterEpisode !== 'string' || (afterEpisode && !/^[0-9a-f-]{36}$/.test(afterEpisode)) || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid export bounds');
+      return all('WITH page AS (SELECT episode_id FROM intake_episodes WHERE episode_id>? ORDER BY episode_id LIMIT ?) '
+        + 'SELECT p.episode_id,(SELECT json_group_array(json(event_json)) FROM '
+        + '(SELECT CASE WHEN length(event_json)<=4096 THEN event_json ELSE NULL END AS event_json '
+        + 'FROM intake_events v WHERE v.episode_id=p.episode_id ORDER BY seq LIMIT 102)) AS events_json '
+        + 'FROM page p ORDER BY p.episode_id',afterEpisode,limit);
+    },
+
     listTransactions: (customerId, limit) => all(
       'SELECT transaction_id, occurred_at, source_occurred_at, merchant_name, amount, currency FROM transactions '
       + 'WHERE customer_id=? ORDER BY occurred_at DESC, source_occurred_at DESC, transaction_id LIMIT ?', customerId, limit),

@@ -99,3 +99,26 @@ test('U+0000 guided statements return 422 on local D1 and leave their key reusab
   }
   assert.equal((await ana.call('/intake/start', body)).status, 201);
 });
+
+// Native binding bridge shares the harness's local D1; scripts never handle raw D1 CLI responses.
+test('idle_close_and_export_keep_pending_and_unknown_visible on local D1',async t=>{
+  const {withIntakeStore}=await import('../../scripts/intake-store.mjs');
+  const {exportIntakeEvents}=await import('../../scripts/export-intake-events.mjs');
+  const {closeIdleIntakes}=await import('../../scripts/close-idle-intakes.mjs');
+  const {resolve}=await import('node:path');const {mkdir,rm,readFile}=await import('node:fs/promises');
+  const root=resolve(import.meta.dirname,'../../..');const output=resolve(root,'data/intake-events',crypto.randomUUID(),'events.jsonl');await mkdir(resolve(output,'..'),{recursive:true});t.after(()=>rm(resolve(output,'..'),{recursive:true,force:true}));
+  const ana=await customer();const start=await ana.call('/intake/start',startBody());
+  const complete=await ana.call('/intake/confirm',{episode_id:start.body.episode_id,transaction_id:'demo-tx-001',customer_confirmed:true,idempotency_key:crypto.randomUUID()});assert.equal(complete.status,201);
+  const incompleteStart=await ana.call('/intake/start',startBody());assert.equal((await ana.call('/intake/handoff',{episode_id:incompleteStart.body.episode_id,kind:'incomplete',idempotency_key:crypto.randomUUID()})).status,201);
+  await withIntakeStore({config:resolve(process.cwd(),'wrangler.jsonc')},async store=>{
+    const now=Date.now();const expired=(await store.startIntake({customerId:'demo-ana',language:'es',statement:'No reconozco este cargo.',key:crypto.randomUUID(),now:now-600000,expiresAt:now+100000})).episode;
+    const closed=await closeIdleIntakes(store,{now,limit:100});assert.ok(closed.closed>=1);assert.equal((await store.findIntake('demo-ana',expired.episode_id)).state,'abandoned');
+    const repeated=await closeIdleIntakes(store,{now,limit:100});assert.equal(repeated.closed,0);console.log('D1_IDLE_TWO_SWEEPS '+JSON.stringify(store.metrics()));
+  });
+  await withIntakeStore({config:resolve(process.cwd(),'wrangler.jsonc')},async store=>{
+    const result=await exportIntakeEvents(store,{output,python:process.env.INTAKE_PYTHON,limit:100});
+    assert.ok(result.summary.all.eligible_started>=3);assert.ok(result.summary.all.outcomes.accepted>=1);assert.ok(result.summary.all.outcomes.routed>=1);assert.ok(result.summary.all.outcomes.pending>=1);assert.ok(result.summary.all.usage_unknown_episodes>=1);assert.equal(result.summary.all.safe_accepted,0);
+    const text=await readFile(output,'utf8');for(const forbidden of ['"customer_id"','No reconozco','demo-tx-001','"customer_statement"'])assert.ok(!text.includes(forbidden));
+    const m=result.metrics;assert.ok(m.queries===1&&m.roundTrips===1&&m.rowsWritten===0);console.log('D1_EXPORT_PAGE '+JSON.stringify({episodes:result.episodes,...m}));
+  });
+});
