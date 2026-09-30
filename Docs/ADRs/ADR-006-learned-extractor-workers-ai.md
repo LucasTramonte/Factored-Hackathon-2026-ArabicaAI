@@ -36,7 +36,7 @@ The question is which model, doing what, and how we avoid spending more than the
    - p95 latency over 3 s;
    - more than 10% of cases changing answer across the 3 repetitions.
 
-   The floor is absolute on purpose. The checklist gets 18 of 18 there because its rules were written on those cases, so "at least as good as the checklist on development" would compare a learned system against rules fitted to that very split. At 16 of 18, the extractor can miss two cases before we escalate. These triggers never read the frozen set. Each rung is a new pre-registered version, and the frozen set scores it once. Every version run is reported.
+   The floor is absolute on purpose. The checklist got 18 of 18 there (16 of 18 after the relabel in amendment 3) because its rules were written on those cases, so "at least as good as the checklist on development" would compare a learned system against rules fitted to that very split. At 16 of 18, the extractor can miss two cases before we escalate. These triggers never read the frozen set. Each rung is a new pre-registered version, and the frozen set scores it once. Every version run is reported.
 4. **Fail safe:**
    - temperature 0, or the lowest the model allows;
    - a committed prompt with its SHA-256 in the pre-registration;
@@ -50,6 +50,19 @@ The question is which model, doing what, and how we avoid spending more than the
    - Any **behaviour-changing** revision needs the approval of a reviewer who has seen no frozen case (Manoella), and it is re-run by the builder on the `development` split only. That covers the prompt, the parsing, the thresholds or the model. An exposed reviewer's comments may flag a behaviour problem, but may not propose the fix.
    - The pre-registration and the `extractor-v1` tag follow `evals/intake/preregistration/`.
 6. **Live service later.** The Worker calls the same prompt through its AI binding only after the frozen run, in a separate change behind a switch that falls back to the current deterministic flow.
+
+## Pre-freeze amendments (2026-09-30)
+
+These were written before any frozen scoring. Amendments 1 and 2 change how a result is measured and what follows from it, not the result itself. Amendments 3 and 4 change labels and policy, so they need Manoella's approval as the unexposed reviewer (decision 5), given in the PR that carries them.
+
+1. **Latency is measured on enough calls to decide.** Forty-eight calls can't estimate a p95: no distribution-free 95% interval for it exists below 72 values, and at a true p95 of exactly 3 s the old trigger fires 43% of the time. The rule, fixed before the measurement it applies to:
+   - **Sample:** at least 150 model-calling executions on the development split (10 repetitions of the 16 model-calling cases), each counted at its wall time, timeouts included at their full duration.
+   - **Statistic:** the p95 of all executions, with the equal-tailed 95% order-statistic interval from `evals/intake/stats.py:quantile_interval`. Per-case medians are not used, because they hide the tail.
+   - **Pass:** the interval's upper bound is at most 3,000 ms. Otherwise the latency trigger fires.
+   - The iteration-4 figure (3.25 s over 48 calls) stays reported as measured.
+2. **A latency-only failure doesn't climb the model ladder.** A larger model is slower, so it can't fix latency. If only the latency trigger fires, the next version keeps the model and lowers the documented `reasoning` level, which Workers AI now lists for gpt-oss-20b (low/medium/high). The isolated builder makes that change and re-runs it on development, because it changes behaviour (decision 5). The ladder in decision 3 still applies to quality failures.
+3. **Development labels follow the written policy.** The two `missing_currency` cases were relabelled to confirm `EVAL-A1`, because `POLICY.md` needs no currency when the other facts fit one purchase. On development the checklist moves from 18/18 to 16/18, and the always-handoff reference stays at 4/18. The details are in `intake_agent/extractor/DEV_LOG.md`.
+4. **Countries are compared as ISO codes.** The source stores foreign purchase countries in English (DF-019), so the policy now maps Spanish, Portuguese and English names to ISO 3166-1 codes on both sides. Recomputing every committed frozen answer with it changes none of them. Development cases have no purchase country, so an unexposed author adds some before pre-registration.
 
 ## Consequences
 
