@@ -9,7 +9,7 @@
 //   - Every relationship (Ref) below is a real, declared FK -- either checked by the quality
 //     gate (quality/contracts.py) or declared in the official data dictionary but not yet wired
 //     into the quality gate (marked "[dictionary only]" in the Ref list at the bottom).
-//   - Two FKs are known to be heavily orphaned in real production data (confirmed via
+//   - Two FKs are known to be heavily orphaned in the current full Silver build of the synthetic dataset (confirmed via
 //     validate_silver.py / the quality gate): registration_branch_id (~100% orphaned),
 //     assigned_branch_id (~99.8% of populated values orphaned). They're drawn with a note rather than removed, since
 //     the relationship is declared in the schema even though it doesn't resolve cleanly today.
@@ -42,7 +42,7 @@ Table dim_customers {
   marital_status varchar
   education_level varchar
   registration_date timestamp
-  registration_branch_id varchar [note: 'FK to dim_branches.branch_id -- ~100% orphaned in real data, unresolved as of 2026-09']
+  registration_branch_id varchar [note: 'FK to dim_branches.branch_id -- ~100% orphaned in the full Silver build, unresolved as of 2026-09']
   customer_status varchar
   last_updated timestamp
   accepts_marketing boolean
@@ -110,7 +110,7 @@ Table dim_service_agents {
   phone varchar
   native_accent varchar
   country_of_origin varchar
-  assigned_branch_id varchar [note: 'FK to dim_branches.branch_id -- ~99.8% of populated values orphaned in real data, unresolved as of 2026-09']
+  assigned_branch_id varchar [note: 'FK to dim_branches.branch_id -- ~99.8% of populated values orphaned in the full Silver build, unresolved as of 2026-09']
   agent_type varchar
   experience_level varchar
   languages varchar [note: 'Comma-separated list, e.g. "español, inglés"']
@@ -221,8 +221,8 @@ Table fact_call_center_interactions {
   agent_id varchar
   interaction_type varchar
   channel varchar
-  contact_reason varchar [note: 'Row-level identical to reason_category in real data (confirmed 0 mismatches / 686,296 rows)']
-  reason_category varchar [note: 'Row-level identical to contact_reason in real data (confirmed 0 mismatches / 686,296 rows)']
+  contact_reason varchar [note: 'Row-level identical to reason_category in the full Silver build (confirmed 0 mismatches / 686,296 rows)']
+  reason_category varchar [note: 'Row-level identical to contact_reason in the full Silver build (confirmed 0 mismatches / 686,296 rows)']
   duration_seconds double
   wait_time_seconds double
   was_resolved boolean
