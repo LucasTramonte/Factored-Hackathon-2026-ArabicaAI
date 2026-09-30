@@ -1,0 +1,532 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  DESIGN ONLY, NEVER DEPLOYED. AWS production target for the transaction-dispute intake workflow
+  (unrecognized card charges, human handoff), as priced in ADR-004 section 3 and the AWS Pricing
+  Calculator export in Docs/Costs/Intake/. It exists to render the architecture in AWS
+  Infrastructure Composer and to make each sizing choice reviewable. The live prototype runs on
+  Cloudflare Workers + D1 (ADR-003).
+
+Metadata:
+  Purpose: design-only
+  Stacks: >-
+    Two stacks. edge-us-east-1.yaml holds the WAF web ACL, because a CloudFront-scoped web ACL can
+    only be created in us-east-1. This stack (us-east-2) takes its ARN as a parameter.
+  Workflow: transaction-dispute intake (ADR-002)
+  Sizing: ADR-004 section 3 (S2 in-scope episodes, S3 front-door contacts)
+
+Parameters:
+  EdgeWebAclArn:
+    Type: String
+    AllowedPattern: "arn:aws:wafv2:us-east-1:[0-9]{12}:global/webacl/.+"
+    Description: ARN of the CloudFront-scoped web ACL from edge-us-east-1.yaml
+
+Resources:
+  # ---------- Security: one customer-managed key for the database, the lake and the logs ----------
+  DataKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Customer-managed key for RDS, the S3 lake and CloudWatch Logs (policy, rotation, CloudTrail audit)
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AccountAdministration
+            Effect: Allow
+            Principal: { AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root" }
+            Action: "kms:*"
+            Resource: "*"
+          - Sid: CloudWatchLogsForThisAccountOnly
+            Effect: Allow
+            Principal: { Service: !Sub "logs.${AWS::Region}.amazonaws.com" }
+            Action: [kms:Encrypt, kms:Decrypt, kms:ReEncrypt*, kms:GenerateDataKey*, kms:Describe*]
+            Resource: "*"
+            Condition:
+              ArnLike:
+                kms:EncryptionContext:aws:logs:arn: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+
+  # ---------- 1-Edge: CloudFront + WAF in front of the static app and the API ----------
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: CloudFrontOnly
+            Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub "${SiteBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Edge}"
+
+  SiteOriginAccess:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: intake-site-oac
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  SiteRouting:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: intake-spa-routing
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Serve index.html for Angular routes; applied to the site behaviour only, never to /api/*
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          if (request.uri.indexOf('.') === -1) { request.uri = '/index.html'; }
+          return request;
+        }
+
+  Edge:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: Angular app and API on one domain; about 275,000 HTTPS requests a month at the S3 base
+        DefaultRootObject: index.html
+        WebACLId: !Ref EdgeWebAclArn
+        PriceClass: PriceClass_All
+        Origins:
+          - Id: site
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt SiteOriginAccess.Id
+            S3OriginConfig: { OriginAccessIdentity: "" }
+          - Id: api
+            DomainName: !Sub "${Api}.execute-api.${AWS::Region}.amazonaws.com"
+            CustomOriginConfig: { OriginProtocolPolicy: https-only, OriginSSLProtocols: [TLSv1.2] }
+            # HTTP APIs can't carry a WAF, so the API only answers requests that came through CloudFront
+            # (and so through the WAF): CloudFront adds this header and the handler rejects any request without it.
+            OriginCustomHeaders:
+              - HeaderName: X-Origin-Verify
+                HeaderValue: !Sub "{{resolve:secretsmanager:${OriginVerifySecret}:SecretString:value}}"
+        DefaultCacheBehavior:
+          TargetOriginId: site
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # AWS managed CachingOptimized
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt SiteRouting.FunctionMetadata.FunctionARN
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: api
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # AWS managed CachingDisabled
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac  # AllViewerExceptHostHeader
+
+  # ---------- 2-API: HTTP API + Lambda (arm64, 512 MB), in the VPC ----------
+  OriginVerifySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Shared value CloudFront sends to the API origin; requests without it are rejected ($0.40 a month)
+      KmsKeyId: !Ref DataKey
+      GenerateSecretString:
+        SecretStringTemplate: "{}"
+        GenerateStringKey: value
+        PasswordLength: 48
+        ExcludePunctuation: true
+
+  Api:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: intake-api
+      ProtocolType: HTTP
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref Api
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ApiFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  ApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref Api
+      RouteKey: $default
+      Target: !Sub "integrations/${ApiIntegration}"
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref Api
+      StageName: $default
+      AutoDeploy: true
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ApiFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*"
+
+  ApiFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: sts:AssumeRole }]
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: intake-least-privilege
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ExtractorModelOnly
+                Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/openai.gpt-oss-20b-1:0"
+              - Sid: IamDatabaseAuth
+                Effect: Allow
+                Action: rds-db:connect
+                Resource: !Sub "arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${Database.DbiResourceId}/intake_app"
+
+  ApiFunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/intake-api
+      RetentionInDays: 30
+      KmsKeyId: !GetAtt DataKey.Arn
+
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: intake-api
+      Description: Customer and agent routes; about 124,400 invocations a month at the S3 base
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      MemorySize: 512
+      Timeout: 12
+      Handler: index.handler
+      Role: !GetAtt ApiFunctionRole.Arn
+      LoggingConfig: { LogGroup: !Ref ApiFunctionLogs, LogFormat: JSON }
+      VpcConfig:
+        SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+        SecurityGroupIds: [!Ref ApiFunctionSecurityGroup]
+      Environment:
+        Variables:
+          DB_HOST: !GetAtt Database.Endpoint.Address
+          DB_USER: intake_app
+          MODEL_ID: openai.gpt-oss-20b-1:0
+          # Resolved at deploy time, so the handler needs no Secrets Manager endpoint in the VPC.
+          ORIGIN_VERIFY: !Sub "{{resolve:secretsmanager:${OriginVerifySecret}:SecretString:value}}"
+      Code:
+        ZipFile: "exports.handler = async () => ({ statusCode: 501, body: 'design only' });"
+
+  # ---------- 3-Data: private VPC in 2 AZs, RDS PostgreSQL Multi-AZ, one interface endpoint, no NAT ----------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.40.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.40.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.40.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+
+  BatchSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.40.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  BatchRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+
+  BatchDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref BatchRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  BatchSubnetRoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref BatchSubnet
+      RouteTableId: !Ref BatchRouteTable
+
+  ApiFunctionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Lambda handlers; no inbound
+      VpcId: !Ref Vpc
+
+  BatchSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Daily batch task; no inbound, temporary public IPv4 for image pull and S3
+      VpcId: !Ref Vpc
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: PostgreSQL reachable only from the Lambda handlers and the batch task
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 5432, ToPort: 5432, SourceSecurityGroupId: !Ref ApiFunctionSecurityGroup }
+        - { IpProtocol: tcp, FromPort: 5432, ToPort: 5432, SourceSecurityGroupId: !Ref BatchSecurityGroup }
+
+  EndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Bedrock interface endpoint reachable only from the Lambda handlers
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, SourceSecurityGroupId: !Ref ApiFunctionSecurityGroup }
+
+  BedrockEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.bedrock-runtime"
+      VpcId: !Ref Vpc
+      SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+      SecurityGroupIds: [!Ref EndpointSecurityGroup]
+      PrivateDnsEnabled: true
+
+  DatabaseSubnets:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets in two AZs
+      SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      Engine: postgres
+      DBInstanceClass: db.t4g.small
+      MultiAZ: true
+      StorageType: gp3
+      AllocatedStorage: "20"
+      MaxAllocatedStorage: 50
+      StorageEncrypted: true
+      KmsKeyId: !Ref DataKey
+      EnableIAMDatabaseAuthentication: true
+      BackupRetentionPeriod: 7
+      DeletionProtection: true
+      PubliclyAccessible: false
+      DBSubnetGroupName: !Ref DatabaseSubnets
+      VPCSecurityGroups: [!Ref DatabaseSecurityGroup]
+      MasterUsername: intake_admin
+      # Break-glass admin credential, generated and rotated by RDS in Secrets Manager ($0.40 a month,
+      # not in the calculator estimate). The application itself connects with IAM database authentication.
+      ManageMasterUserPassword: true
+      MasterUserSecret: { KmsKeyId: !Ref DataKey }
+
+  # ---------- 5-Batch: S3 lake + daily DuckDB task on Fargate (arm64, 2 vCPU, 4 GB) ----------
+  LakeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration: { Status: Enabled }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: aws:kms, KMSMasterKeyID: !Ref DataKey }
+            BucketKeyEnabled: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: keep-one-week-of-rebuilds
+            Status: Enabled
+            NoncurrentVersionExpiration: { NoncurrentDays: 7 }
+
+  BatchCluster:
+    Type: AWS::ECS::Cluster
+
+  BatchLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/intake-batch
+      RetentionInDays: 30
+      KmsKeyId: !GetAtt DataKey.Arn
+
+  BatchExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: sts:AssumeRole }]
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  BatchTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: sts:AssumeRole }]
+      Policies:
+        - PolicyName: lake-read-write
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:ListBucket]
+                Resource: [!GetAtt LakeBucket.Arn, !Sub "${LakeBucket.Arn}/*"]
+              - Effect: Allow
+                Action: [kms:Decrypt, kms:GenerateDataKey]
+                Resource: !GetAtt DataKey.Arn
+              - Sid: LoadServingSliceWithIamAuth
+                Effect: Allow
+                Action: rds-db:connect
+                Resource: !Sub "arn:aws:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${Database.DbiResourceId}/intake_loader"
+
+  BatchTask:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: "2048"
+      Memory: "4096"
+      RuntimePlatform: { OperatingSystemFamily: LINUX, CpuArchitecture: ARM64 }
+      ExecutionRoleArn: !GetAtt BatchExecutionRole.Arn
+      TaskRoleArn: !GetAtt BatchTaskRole.Arn
+      ContainerDefinitions:
+        - Name: pipeline
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/intake-pipeline:design-only"
+          Command: [make, pipeline]
+          Environment:
+            - { Name: DUCKDB_MEMORY_LIMIT, Value: 3GB }
+            - { Name: LAKE_BUCKET, Value: !Ref LakeBucket }
+            - { Name: DB_HOST, Value: !GetAtt Database.Endpoint.Address }
+            - { Name: DB_USER, Value: intake_loader }
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref BatchLogs
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: pipeline
+
+  SchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: scheduler.amazonaws.com }, Action: sts:AssumeRole }]
+      Policies:
+        - PolicyName: run-batch-task
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecs:RunTask
+                Resource: !Ref BatchTask
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: [!GetAtt BatchExecutionRole.Arn, !GetAtt BatchTaskRole.Arn]
+
+  DailyBuild:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Description: Bronze to Silver to quality gate to Gold serving slice, once a day (D+1 freshness)
+      ScheduleExpression: cron(0 4 * * ? *)
+      FlexibleTimeWindow: { Mode: "OFF" }
+      Target:
+        Arn: !GetAtt BatchCluster.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        EcsParameters:
+          TaskDefinitionArn: !Ref BatchTask
+          LaunchType: FARGATE
+          NetworkConfiguration:
+            AwsvpcConfiguration:
+              Subnets: [!Ref BatchSubnet]
+              SecurityGroups: [!Ref BatchSecurityGroup]
+              AssignPublicIp: ENABLED
+
+  # ---------- 6-Ops: representative alarms (ADR-004 lists all ten) ----------
+  DatabaseCpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: RDS CPU p95 trigger for db.t4g.medium (ADR-004)
+      Namespace: AWS/RDS
+      MetricName: CPUUtilization
+      Dimensions: [{ Name: DBInstanceIdentifier, Value: !Ref Database }]
+      ExtendedStatistic: p95
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 60
+      ComparisonOperator: GreaterThanThreshold
+
+  ApiErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Lambda errors on the intake API
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{ Name: FunctionName, Value: !Ref ApiFunction }]
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+
+  ApiLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: End-to-end handler p95 over 3 s (the latency budget)
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions: [{ Name: FunctionName, Value: !Ref ApiFunction }]
+      ExtendedStatistic: p95
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 3000
+      ComparisonOperator: GreaterThanThreshold
+
+Outputs:
+  SiteUrl:
+    Description: Where the app would be served
+    Value: !Sub "https://${Edge.DomainName}"

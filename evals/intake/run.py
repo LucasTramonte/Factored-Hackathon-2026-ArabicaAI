@@ -9,7 +9,7 @@ import statistics
 import time
 from datetime import datetime,timezone
 from .baseline import FixtureStore,decide,score,HANDOFFS
-from .stats import wilson
+from .stats import quantile_interval, wilson
 from .systems import FactExtractorSystem, customers_from
 from .preregistration.prereg import check as check_registration
 
@@ -49,6 +49,8 @@ def _summary(split,name,language,repetition,group):
       unnecessary_handoff=sum(r['unnecessary_handoff'] for r in group),not_required_handoff=len(group)-required,
       latency_p50_ms=statistics.median(latency) if latency else None,
       latency_p95_ms=latency[max(0,(95*len(latency)+99)//100-1)] if latency else None,
+      # Equal-tailed 95% order-statistic interval for p95; a side is None when the sample can't support it (ADR-006 amendment 1).
+      latency_p95_interval_ms=list(quantile_interval(latency,0.95,0.95)) if latency else [None,None],
       input_tokens=tokens('input_tokens'),output_tokens=tokens('output_tokens'),
       usage_unavailable_calls=sum(u.get('usage_unavailable_calls',0) for u in usage),
       errors=sum(bool(r.get('error')) for r in group),operating_cost=None,episode_completion_rate=None)
@@ -94,14 +96,16 @@ def evaluate(corpus,systems=None,repetitions=1,only_split=None):
                                  usage={k:sum((r['usage'] or {}).get(k,0) for r in runs) for k in ('input_tokens','output_tokens','usage_unavailable_calls')
                                         if any(k in (r['usage'] or {}) for r in runs)}))
     rows=predictions+majority
-    names=[('handoff',[None]),('checklist',[None])]+[(n,list(range(1,repetitions+1))+['majority']) for n in systems]
+    # 'all' pools every execution of an external system across repetitions: the latency rule decides on it.
+    names=[('handoff',[None]),('checklist',[None])]+[(n,list(range(1,repetitions+1))+['majority','all']) for n in systems]
     summaries=[]
     for split in SPLITS:
       for name,reps in names:
        for rep in reps:
         for language in ('all','es','pt'):
          # Breakdowns follow the session language, so an unsupported-language message still counts in its session's row.
-         group=[r for r in rows if r['split']==split and r['baseline']==name and r['repetition']==rep and (language=='all' or r['session_language']==language)]
+         same=(lambda r:isinstance(r['repetition'],int)) if rep=='all' else (lambda r:r['repetition']==rep)
+         group=[r for r in rows if r['split']==split and r['baseline']==name and same(r) and (language=='all' or r['session_language']==language)]
          summaries.append(_summary(split,name,language,rep,group))
     return dict(summary=summaries,cases=predictions,majority=majority)
 

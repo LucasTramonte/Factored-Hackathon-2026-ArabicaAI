@@ -2,7 +2,7 @@
 
 This is the team's single list of what we learned about the supplied LATAM Bank dataset that changes, limits or supports a decision. The automated gate in [`data_pipelines/quality/`](data_pipelines/quality/README.md) checks every build for readiness (tables, row counts, keys, domains, links). This register records what those checks and targeted queries *mean*: the evidence, the impact on metrics and on the intake service, and how each finding is handled.
 
-Every number here comes from a query in [`data_profiles/findings/queries/`](data_profiles/findings/queries/) run by `make findings` on the full Silver build (quality run `20260929T113804Z`, ready, 0 errors) on 2026-09-29. DF-016 to DF-018 were added on 2026-09-30 from the same build (findings run `20260930T033230Z`). Results are aggregates only. The dataset is synthetic (dataset summary, p. 5), so "unrealistic" below means unlike a real bank, not wrong in the file.
+Every number here comes from a query in [`data_profiles/findings/queries/`](data_profiles/findings/queries/) run by `make findings` on the full Silver build (quality run `20260929T113804Z`, ready, 0 errors) on 2026-09-29. DF-016 to DF-018 were added on 2026-09-30 from the same build (findings run `20260930T033230Z`), and DF-019 later that day (findings run `20260930T192858Z`). Results are aggregates only. The dataset is synthetic (dataset summary, p. 5), so "unrealistic" below means unlike a real bank, not wrong in the file.
 
 ## How to read it
 
@@ -42,6 +42,7 @@ Every number here comes from a query in [`data_profiles/findings/queries/`](data
 | [DF-016](#df-016-branch-reference-columns-do-not-resolve) | Branch reference columns do not resolve | full | Medium | Handled at metric level | Manoella |
 | [DF-017](#df-017-a-few-business-codes-are-shared-by-two-entities) | A few business codes are shared by two entities | full | Low | Accepted limitation | Manoella |
 | [DF-018](#df-018-categorical-values-are-in-spanish-where-the-dictionary-lists-english) | Categorical values are in Spanish where the dictionary lists English | full | Low | Handled at metric level | Manoella |
+| [DF-019](#df-019-foreign-purchase-countries-are-stored-in-english) | Foreign purchase countries are stored in English | full | Medium | Handled in the written policy (pending review) | Manoella |
 
 ## Findings
 
@@ -166,6 +167,12 @@ The [bronze profile findings](data_profiles/bronze_data_profile/bronze_profile_f
 - **Evidence:** `product_type`, `document_type` (`Pasaporte`, no `CURP`), `geographic_zone` (only `Urbana`), `reason_category` and `detected_sentiment` hold Spanish values, while the dictionary lists English labels. `comment_sentiment` in satisfaction surveys is in English.
 - **Impact:** a domain check or filter written from the dictionary would reject every row, or silently match none.
 - **Handling:** the quality gate's domains for `reason_category` and `detected_sentiment` use the observed values; `product_type`, `document_type` and `geographic_zone` are not gated. Code that filters these columns uses the source spelling, e.g. `Tarjeta Crédito`, `Queja`.
+
+### DF-019 Foreign purchase countries are stored in English
+
+- **Evidence:** Bronze and Silver store the three foreign purchase countries in English: `USA` (40,621 rows), `Spain` (40,542) and `Brazil` (40,472). The home countries are in Spanish. Bronze also has 40,515 rows spelled `Mexico`, which Silver canonicalizes to `México` (DF-015). In the design window, purchases in those three foreign countries are 23,110 of 842,103 approved purchases (2.74%, from DF-009).
+- **Impact:** customers name countries in Spanish or Portuguese ("Estados Unidos", "EE.UU.", "EUA", "España", "Brasil"). The written policy compared strings exactly, so a correctly understood "a charge in Brazil I didn't make" never matched its purchase. None of the development fixtures has a purchase country, so the development gate couldn't show this.
+- **Handling:** the policy (`evals/intake/frozen_es_pt_v1/label_rules.py`) compares both sides as ISO 3166-1 codes through a closed ES/PT/EN map, and unknown names never match. Recomputing every committed frozen answer with it changes none. That check runs only locally, where the withheld file exists, and barely exercises the map, since only one frozen situation states a country. Unit tests cover the map itself. It needs the unexposed reviewer's approval (ADR-006, decision 5). Development cases with a purchase country are still missing, and an unexposed author has to write them.
 
 ## Disclosure
 

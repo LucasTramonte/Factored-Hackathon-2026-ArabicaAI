@@ -8,7 +8,7 @@ Baseline: main `dbeebaf`, after the ordered merges #27, #28 and #26.
 
 Implement the backend responsibilities in Lucas’s one-page `2026-09-30-ArabicaAI-intake-brief.pdf`: complete Worker intake workflow and gated online extraction. Roberto explicitly deferred the frontend to his own work tomorrow; this PR proposes no Angular redesign or component changes. The brief is team direction, not an organizer amendment. Its reported development result is 16/18 correct, zero unsafe, 48/48 schema-valid, and 3.25 s all-call p95; this design neither independently verifies those measurements nor turns the latency trigger into a pass.
 
-The official problem statement requires grounded clarification, escalation with context, evaluated learned behavior and a normal resolution demonstration. Unrecognized-charge intake ends in human review. A separate recent-transactions path supplies the read-only automated-resolution demonstration. Source context: `Docs/sources/README.md`, problem statement pp. 3–6, kickoff p. 6, ADR-002 through ADR-006, and `Docs/intake/customer-and-measurement-contract.md`.
+The official problem statement requires grounded clarification, escalation with context, evaluated learned behavior and a normal resolution demonstration. Unrecognized-charge intake ends in human review. A separate recent-transactions path is proposed to supply the read-only automated-resolution demonstration; its decision is still a draft. Source context: `Docs/sources/README.md`, problem statement pp. 3–6, kickoff p. 6, ADR-002 through ADR-006, and `Docs/intake/customer-and-measurement-contract.md`.
 
 Success means an authenticated customer can report a charge in ES/PT, clarify or explicitly confirm an owned candidate, receive a reference only after durable read-back, and see the next step. An agent can inspect complete or incomplete evidence and the service’s actual actions. Failures and unfinished episodes remain visible in measurement.
 
@@ -33,7 +33,7 @@ No Angular templates, styles, components, translations or frontend behavior are 
 
 Use stable response codes for describing, clarification required, multiple candidates, confirmation required, submitting/acceptance unknown, complete handoff, technical/incomplete handoff, and out-of-scope routing. Each response includes its declared evidence coverage and relevant opaque references, without promising refunds, card blocks or fraud verdicts. A pending submission preserves its payload and key; renewed authentication must use the same customer identity.
 
-Accept an explicit ES/PT conversation language and bind it to the episode. Locale hints do not determine identity or silently override the chosen language. Preserve source currency/amount and timezone-free timestamps in API evidence. Expose recent-transactions as a separate read-only resolution path, with coverage and `has_more`; its eventual display remains frontend work.
+Accept an explicit ES/PT conversation language and bind it to the episode. Locale hints do not determine identity or silently override the chosen language. Preserve source currency/amount and timezone-free timestamps in API evidence. If the proposed recent-transactions path is accepted, expose it as a separate read-only resolution path, with coverage and `has_more`; its eventual display remains frontend work.
 
 ## Worker orchestration and contracts
 
@@ -55,7 +55,7 @@ Store original statements and verified evidence only in access-controlled case/h
 
 Agent queue/detail APIs must include incomplete/technical handoffs, so replace inner-join-only assumptions where appropriate without exposing unrelated transactions. API history shows recorded service transitions, not invented agent work. Rendering belongs to the deferred frontend. Keep agent access read-only; status-changing agent endpoints are outside this scope.
 
-All SQL remains in `back-end/src/store/d1.js`. Reserve the next migration number with Lucas: current main ends at 0003. Apply additive migrations to local D1 before any remote action. New indexes enforce owner/turn-key uniqueness and bounded queue queries. Operational rows remain through October 31 under ADR-004; session expiry still applies.
+All SQL remains in `back-end/src/store/d1.js`. Reserve the next migration number with Lucas: current main ends at 0003. Apply additive migrations to local D1 before any remote action. New indexes enforce owner/turn-key uniqueness and bounded queue queries. Operational rows remain until the shutdown after 2026-10-20 under ADR-004 (earlier drafts said October 31); session expiry still applies.
 
 ## AI boundary, deadlines and fallback
 

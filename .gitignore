@@ -19,6 +19,8 @@ Docs/Factored Hackathon - Arabica AI/latam-bank-architecture-en.excalidraw.md
 # Local Bronze/Silver/Gold data — regenerable by re-running ingestion, and too large for git anyway
 *.parquet
 *.csv
+# Reviewed cost evidence (price estimates only, no dataset rows) is versioned; see Docs/Costs/README.md.
+!Docs/Costs/**/*.csv
 # Generated local review artifacts and raw transcript sample
 /reports/2026-09-27/intake-review/
 /tmp/

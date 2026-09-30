@@ -4,6 +4,19 @@ A customer reports a card charge they don't recognize, confirms which of their o
 
 The data is a synthetic LATAM banking dataset. Descriptive counts from it are not measured bank outcomes.
 
+**Evaluators: start with [`SYSTEM_DESIGN.md`](SYSTEM_DESIGN.md).** It tells the whole story in one narrative: the customer and the problem, what we built, how it works, how we know it works, what it costs, and what is missing. The [reading guide](Docs/README.md) then maps each point of the brief to the document that answers it.
+
+![AWS production target: CloudFront and WAF at the edge, HTTP API and Lambda in a two-AZ VPC with RDS PostgreSQL Multi-AZ and a Bedrock endpoint, a daily Fargate batch into an S3 lake](Docs/Costs/aws-target/architecture.png)
+
+*The AWS production target (design only, not deployed; the live prototype runs on Cloudflare). Source: [`Docs/Costs/aws-target/`](Docs/Costs/aws-target/).*
+
+| Deliverable | Document |
+|---|---|
+| **System design:** customer, problem, solution, architecture, results, cost and risks, in one narrative | [`SYSTEM_DESIGN.md`](SYSTEM_DESIGN.md) |
+| **Evaluation:** how the model is compared with a baseline, the test sets we built ourselves, how data leakage is prevented, and every option we considered | [`EVALUATION.md`](EVALUATION.md) |
+| **Data quality:** every finding that changes or limits a decision, each with its query | [`DATA_QUALITY.md`](DATA_QUALITY.md) |
+| **Capacity and cost:** where each layer runs and why, the Cloudflare limits, and a priced AWS production target ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)) | [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) |
+
 ## How it fits together
 
 ```
@@ -21,16 +34,16 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 | Gold intake slice | `data_pipelines/gold` | Bounded, quality-gated sample → versioned D1 seed with provenance |
 | Intake API | `back-end/` | One online runtime: sessions, customer-scoped retrieval, idempotent cases, reference after commit, agent view |
 | Web client | `front-end/` | Customer and agent views; API contracts in `front-end/contracts/` |
-| Evaluation | `evals/intake` | ES/PT decision-point cases, checklist baseline, episode KPI scorer |
+| Evaluation | `evals/intake`, [`EVALUATION.md`](EVALUATION.md) | Team-built ES/PT test sets, checklist baseline, learned-component harness, episode KPI scorer |
 | Data quality register | [`DATA_QUALITY.md`](DATA_QUALITY.md), `data_profiles/findings/` | Every dataset finding that changes or limits a decision, with its query, impact and handling |
-| Decisions | `Docs/ADRs/` | Scope, runtime, capacity and cost, each with its limitations and exit triggers |
+| Decisions | `Docs/ADRs/` | Scope, runtime, capacity, cost and cloud placement, each with its limitations and exit triggers |
 
 **Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/, behind Cloudflare Access (ask the team to be allowlisted) and a Basic gate. Sign-ins are simulated.
 
 **Status (2026-09-29):**
 
 - The deterministic intake flow is deployed and tested. That covers the adversarial gate, session, isolation and idempotency suites and a D1 budget test.
-- It runs on the Free plan, which [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes at 10,000 episodes/day against measured volumes of 17–818 per day.
+- It runs on the Cloudflare Free plan ($0). [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes the guided flow at about 2,380 complete episodes a day, against measured volumes of 17–818 a day. The same record prices a production target on AWS at $86.36 a month and explains each service choice.
 - **Not done yet:** retrieval-outcome states, case kinds, ES/PT interface text, event instrumentation, and any AI. These are covered in the [intake roadmap](Docs/Plans/intake-roadmap.md).
 
 Quick starts:
