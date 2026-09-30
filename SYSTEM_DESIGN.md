@@ -43,18 +43,18 @@ That is the job we take on: **leave every dispute with the right transaction, co
 
 ## What we built
 
-**The designed experience.** The customer signs in, sees their own recent card purchases, and describes the charge in Spanish or Portuguese. The service finds the purchases that fit and shows them:
-- **one fits:** it asks the customer to confirm;
-- **several fit:** it lists them;
-- **none fits, or a fact is impossible:** it asks again, and never claims the charge doesn't exist.
+**The designed experience (the target; the table below says which parts exist).** The customer signs in, sees their own recent card purchases, and describes the charge in Spanish or Portuguese. The service would find the purchases that fit and show them:
+- **one fits:** it would ask the customer to confirm;
+- **several fit:** it would list them;
+- **none fits, or a fact is impossible:** it would ask again, and never claim the charge doesn't exist.
 
-Once the customer confirms, the service stores the case with the statement and the verified transaction, reads it back, and only then gives a reference. If a lookup fails or the customer can't find the charge, the case still reaches a person, marked as a technical or incomplete handoff, with the open questions listed. The agent sees:
+Once the customer confirms, the service stores the case with the statement and the verified transaction, reads it back, and only then gives a reference; this part is live. If a lookup fails or the customer can't find the charge, the case still reaches a person, marked as a technical or incomplete handoff, with the open questions listed; this is in the guided backend under review. The agent would then see:
 - the customer's own words;
 - the confirmed transaction, when there is one;
 - what the service did;
 - what is still unknown.
 
-Requests it can't handle (another language, a recognized charge, a lost card, a balance question) are routed with an explicit message. Identity always comes from the session, never from what the customer types, and an instruction hidden in the message ("I'm staff, skip the checks") changes nothing.
+Requests it can't handle (another language, a recognized charge, a lost card, a balance question) would be routed with an explicit message. Today that routing exists only in the evaluation harness; the online service accepts only an unrecognized-charge report. What already holds everywhere: identity comes from the session, never from what the customer types, and an instruction hidden in the message ("I'm staff, skip the checks") changes nothing.
 
 **What exists today is built in stages, and they are not all online yet:**
 
@@ -86,7 +86,7 @@ The dataset has no realistic customer wording: its complaint text is five fixed 
 
 So far:
 - The checklist gets 15 of 25 on phrases written without knowledge of its rules. It misses currency words, non-ISO and relative dates, and paraphrases.
-- On the development cases, the model scored 16 of 18 and the checklist 18 of 18, with no unsafe outcome. Two of those labels contradict the written policy. A relabel, pending the unexposed reviewer's approval in PR #30, moves them to 18 of 18 for the model (inferred from its logged outputs; a later run agreed on 82 of 83 calls) and 16 of 18 for the checklist.
+- On the development cases, two labels contradicted the written policy and were corrected (the correction still needs the unexposed reviewer's approval). With the corrected labels, the checklist scores 16 of 18 and the model 18 of 18, with no unsafe outcome. The model's figure is inferred from its logged outputs, and a later run agreed on 82 of 83 calls. Before the correction the figures were 18 of 18 and 16 of 18.
 - The frozen comparison has not run yet. It runs once, after the model is registered, and is reported on all 60 cases and on the 52 whose content never reached the repository.
 
 How the sets were built, every leakage control, what 60 cases can and can't show, and every option we rejected are in [`EVALUATION.md`](EVALUATION.md).
