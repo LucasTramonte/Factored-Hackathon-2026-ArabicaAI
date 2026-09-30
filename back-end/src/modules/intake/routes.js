@@ -1,7 +1,7 @@
 /** Guided reports use authenticated ownership and durable start receipts, without model calls. */
-import { readSession } from '../../auth/session.js';
-import { fail, json, readJsonBody } from '../../http.js';
-import { validateStartRequest } from './validation.js';
+import { readSession, tokenHash } from '../../auth/session.js';
+import { fail, json, readJsonBody, readCookies } from '../../http.js';
+import { validateStartRequest, validateHandoffRequest } from './validation.js';
 
 /** POST /intake/start: start or replay an explicit guided report; never return a case protocol. */
 export async function startIntake(request, env, store) {
@@ -22,4 +22,62 @@ export async function startIntake(request, env, store) {
   const { episode, replayed } = result;
   if (!episode) return fail(503, 'Start not confirmed; retry with the same idempotency key');
   return json({ ...JSON.parse(episode.response_json), replayed }, replayed ? 200 : 201);
+}
+
+/** POST /intake/confirm: confirm current owned evidence, then verify the durable receipt. */
+export const confirmIntake = (request, env, store) => finishIntake(request, store, true);
+/** POST /intake/handoff: explicitly request human review without inventing a confirmed transaction. */
+export const handoffIntake = (request, env, store) => finishIntake(request, store, false);
+
+/** Reserve immutable handoff content; a failed write/read keeps the original key and never promises a reference. */
+async function finishIntake(request, store, complete) {
+  const started = performance.now();
+  const current = await readSession(request, store, 'customer');
+  if (!current) return fail(401, 'Start a demo session first');
+  const body = await readJsonBody(request);
+  if (body.error) return body.error;
+  const checked = validateHandoffRequest(body.value, complete);
+  if (checked.error) return fail(checked.error.status, checked.error.detail);
+  const { episodeId, turnKey, transactionId } = checked.value;
+  const customerId = current.customer_id;
+  const episode = await store.findIntake(customerId, episodeId);
+  if (!episode) return fail(404, 'Episode not found for this session');
+  if (turnKey === episode.start_key) return fail(409, 'Key already used with different content');
+  const payloadHash = await tokenHash(JSON.stringify([complete ? 'complete' : 'incomplete', transactionId]));
+  const prior = await store.findIntakeHandoff(customerId, episodeId);
+  if (prior && (prior.turn_key !== turnKey || prior.payload_hash !== payloadHash)) return fail(409, 'Episode already submitted with different content or key');
+  if (!prior && episode.state !== 'selection_required') return fail(409, 'Episode is no longer open');
+  let kind = complete ? 'complete' : 'incomplete';
+  let evidence = null;
+  let toolCalls = 0;
+  if (!prior && complete) {
+    try { toolCalls++; evidence = await store.findOwnedTransaction(customerId, transactionId); }
+    catch { kind = 'technical'; }
+    if (kind === 'complete' && !evidence) return fail(404, 'Transaction not found for this session');
+  }
+  const live = await readSession(request, store, 'customer');
+  if (!live || live.customer_id !== customerId) return fail(401, 'Start a demo session first');
+  try {
+    toolCalls++;
+    const result = await store.persistIntakeHandoff({ customerId, episodeId, turnKey, payloadHash,
+      sessionHash: await tokenHash(readCookies(request).demo_session),
+      completeCase: kind === 'complete' ? evidence : null, kind,
+      evidence: { transaction: evidence, tool_status: kind === 'technical' ? 'failed' : 'ok' },
+      actions: kind === 'complete' ? ['owned_transaction_retrieved', 'customer_confirmation_recorded'] : kind === 'technical' ? ['transaction_lookup_failed'] : [],
+      questions: kind === 'complete' ? [] : ['matching_transaction', 'customer_confirmation'],
+      usage: { tool_calls: 0, operation_duration_ms: 0 }, now: Date.now() });
+    if (result.conflict) return fail(409, 'Episode already submitted with different content or key');
+    if (!result.handoff) return fail(503, 'Acceptance not confirmed; retry with the same idempotency key');
+    toolCalls++;
+    const receipt = await store.readIntakeReceipt(customerId, episodeId);
+    if (!receipt) throw new Error('Receipt not read back');
+    toolCalls++;
+    await store.finishIntakeHandoff({ customerId, episode, receipt, now: Date.now(), operationDuration: Math.floor(performance.now() - started), toolCalls });
+    return json({ episode_id: episodeId, protocol: receipt.complete_case_id ?? receipt.handoff_id,
+      kind: receipt.kind, accepted_at: receipt.accepted_at, replayed: result.replayed,
+      next_step_code: 'await_human_review' }, result.replayed ? 200 : 201);
+  } catch {
+    try { await store.recordIntakeAttempt({ customerId, episodeId, toolCalls, operationDuration: Math.floor(performance.now() - started) }); } catch { /* Persistence may also be unavailable; never promise a receipt. */ }
+    return fail(503, 'Acceptance not confirmed; retry with the same idempotency key');
+  }
 }

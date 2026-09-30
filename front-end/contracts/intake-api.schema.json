@@ -16,6 +16,18 @@
         "replayed": { "type": "boolean" }
       }
     },
+    "intakeReceipt": {
+      "type": "object", "additionalProperties": false,
+      "required": ["episode_id", "protocol", "kind", "accepted_at", "replayed", "next_step_code"],
+      "properties": {
+        "episode_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "protocol": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "kind": { "type": "string", "pattern": "^(complete|technical|incomplete)$" },
+        "accepted_at": { "type": "string", "minLength": 1 },
+        "replayed": { "type": "boolean" },
+        "next_step_code": { "const": "await_human_review" }
+      }
+    },
     "error": {
       "type": "object",
       "additionalProperties": false,

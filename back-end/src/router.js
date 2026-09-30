@@ -6,7 +6,7 @@
 import { checkAccessGate } from './auth/access-gate.js';
 import { fail, json } from './http.js';
 import { createCase, listIdentities, listTransactions, startCustomerSession } from './modules/customer/routes.js';
-import { startIntake } from './modules/intake/routes.js';
+import { startIntake, confirmIntake, handoffIntake } from './modules/intake/routes.js';
 import { listAgentCases, startAgentSession } from './modules/agent/routes.js';
 
 export const API_ROUTES = {
@@ -15,6 +15,8 @@ export const API_ROUTES = {
   '/transactions': { GET: listTransactions },
   '/cases': { POST: createCase },
   '/intake/start': { POST: startIntake },
+  '/intake/confirm': { POST: confirmIntake },
+  '/intake/handoff': { POST: handoffIntake },
   '/demo/agent-session': { POST: startAgentSession },
   '/agent/cases': { GET: listAgentCases }
 };

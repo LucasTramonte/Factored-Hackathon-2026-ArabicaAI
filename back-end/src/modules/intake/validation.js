@@ -21,3 +21,12 @@ export function validateStartRequest(body) {
   if (typeof body.idempotency_key !== 'string' || !UUID.test(body.idempotency_key)) return invalid('Invalid request key');
   return { value: { language: body.language, statement, key: body.idempotency_key } };
 }
+
+/** Accept only explicit confirmation or incomplete handoff fields; failure evidence stays server-controlled. */
+export function validateHandoffRequest(body, complete) {
+  const keys = complete ? 'customer_confirmed,episode_id,idempotency_key,transaction_id' : 'episode_id,idempotency_key,kind';
+  if (body === null || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).sort().join() !== keys) return invalid('Provide exactly the handoff fields');
+  if (typeof body.episode_id !== 'string' || !UUID.test(body.episode_id) || typeof body.idempotency_key !== 'string' || !UUID.test(body.idempotency_key)) return invalid('Invalid episode or request key');
+  if (complete ? body.customer_confirmed !== true || typeof body.transaction_id !== 'string' || !body.transaction_id || body.transaction_id.length > 100 || !body.transaction_id.isWellFormed() || body.transaction_id.includes('\u0000') : body.kind !== 'incomplete') return invalid('Explicit owned confirmation or incomplete handoff required');
+  return { value: { episodeId: body.episode_id, turnKey: body.idempotency_key, transactionId: complete ? body.transaction_id : null } };
+}
