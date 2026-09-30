@@ -7,7 +7,7 @@
     @case ('intro') {
       <section class="step intro" aria-label="ArabicaAI">
         <div class="intro-words" aria-live="off">
-          <p class="intro-word">Hola</p><p class="intro-word">Olá</p><p class="intro-word">Hello</p>
+          <p class="intro-word" [class.is-current]="lang.lang() === 'es'">Hola</p><p class="intro-word" [class.is-current]="lang.lang() === 'pt'">Olá</p><p class="intro-word" [class.is-current]="lang.lang() === 'en'">Hello</p>
         </div>
         <p class="sr-only">{{ t().tagline }} {{ t().promise }}</p>
         <div class="intro-cta">
@@ -184,6 +184,7 @@
                       </fieldset>
                       <div class="report-actions">
                         <button type="button" class="ar-btn" (click)="submit()" [disabled]="busy() || (!pending() && (!selected || !confirmed || !statement.trim()))">{{ pending() ? t().retry : t().submit }}</button>
+                        @if (pending()) { <button type="button" class="ar-btn ar-btn-secondary" (click)="login()" [disabled]="busy()">{{ t().renew }}</button> }
                         @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
                       </div>
                       @if (pending()) { <div class="ar-panel ar-panel-warn" role="status"><p>{{ t().pending }}</p></div> }

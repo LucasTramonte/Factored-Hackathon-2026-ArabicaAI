@@ -102,6 +102,10 @@ export class LangService {
   readonly t = computed<Strings>(() => STRINGS[this.lang()]);
   readonly all: Lang[] = ['es', 'pt', 'en'];
 
+  constructor() {
+    if (typeof document !== 'undefined') document.documentElement.lang = this.lang();
+  }
+
   set(lang: Lang): void {
     this.lang.set(lang);
     try { localStorage.setItem('arabica.lang', lang); } catch { /* storage may be unavailable */ }

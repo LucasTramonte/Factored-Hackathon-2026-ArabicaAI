@@ -2,6 +2,11 @@ import { TestBed } from '@angular/core/testing';
 import { LangService } from './lang.service';
 
 describe('LangService', () => {
+  it('applies the initial language to the document without calling set()', () => {
+    const service = TestBed.inject(LangService);
+    expect(document.documentElement.lang).toBe(service.lang());
+  });
+
   it('offers the three required languages and switches every string together', () => {
     const lang = TestBed.inject(LangService);
     expect(lang.all).toEqual(['es', 'pt', 'en']);

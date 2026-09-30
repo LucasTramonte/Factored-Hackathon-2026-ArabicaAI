@@ -227,6 +227,14 @@ body { min-height: 100%; }
 .lang-links button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); }
 @keyframes ar-word { 0% { opacity: 0; clip-path: inset(0 100% 0 0); transform: translateY(10px); } 9% { opacity: 1; clip-path: inset(0 0 0 0); transform: none; } 27% { opacity: 1; clip-path: inset(0 0 0 0); transform: none; } 33% { opacity: 0; clip-path: inset(0 0 0 0); transform: translateY(-10px); } 100% { opacity: 0; } }
 
+/* Reduced motion: no travel, no rotation; the intro shows the current language's word and the disc sits at the top from the start */
+@media (prefers-reduced-motion: reduce) {
+  .intro-cta, .intro-foot { opacity: 1; }
+  .intro-word { display: none; } .intro-word.is-current { display: block; opacity: 1; }
+  .disc--boot { transform: translate(calc(50vw - 32px), 36px) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) and (max-width: 720px) { .disc--boot { transform: translate(calc(50vw - 24px), 24px) scale(0.75); } }
+
 /* Login */
 .login { display: flex; }
 .login-form { margin-left: auto; width: 720px; display: flex; flex-direction: column; justify-content: space-between; padding: 40px 64px 48px 40px; }

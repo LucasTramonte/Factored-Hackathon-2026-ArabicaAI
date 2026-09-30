@@ -65,6 +65,23 @@ describe('CustomerPage', () => {
     expect(page.error()).toContain('10');
   });
 
+  it('lets the customer renew the session from the home step after a 401 and then retry with the same key', async () => {
+    await readyToSubmit();
+    service.submitCase.and.returnValues(Promise.reject(new ApiError(401, 'expired')), Promise.resolve(receipt));
+    await page.submit();
+    expect(page.pending()).not.toBeNull();
+    expect(page.step()).toBe('home');
+    page.identity = 'demo-bruno';
+    await page.login();
+    expect(service.signIn.calls.mostRecent().args[0]).toBe('demo-ana');
+    expect(page.step()).toBe('home');
+    expect(page.pending()).not.toBeNull();
+    await page.submit();
+    const [first, second] = service.submitCase.calls.allArgs().map(args => args[0]);
+    expect(second.idempotency_key).toBe(first.idempotency_key);
+    expect(page.receipt()).toEqual(receipt);
+  });
+
   it('freezes the payload and reuses the same key on retry, even if the form changes', async () => {
     await readyToSubmit();
     service.submitCase.and.returnValues(Promise.reject(new ApiError(503, 'unavailable')), Promise.resolve(receipt));
