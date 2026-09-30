@@ -1,25 +1,47 @@
-@if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-<section>
-  <h2>Agent view</h2><p>Separate simulated agent access. Shows the 50 most recent cases.</p>
-  <button (click)="load()" [disabled]="busy()">Sign in as an agent and refresh cases</button>
+<div class="agent-page">
+  <div class="topbar">
+    <a class="ar-lockup" routerLink="/"><app-mark [size]="28" /><span class="ar-wordmark">Arabica<b>AI</b></span></a>
+    <div style="display: flex; align-items: center; gap: 16px">
+      <a routerLink="/" class="ar-small" style="font-weight: 500; color: var(--link)">{{ t().customer }}</a>
+      <app-lang-switch />
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <h1 class="ar-h1">{{ t().agentTitle }}</h1>
+    <p class="ar-lead" style="font-size: 17px; line-height: 26px">{{ t().agentIntro }}</p>
+  </div>
+
+  @if (error()) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
+
+  <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+    <button type="button" class="ar-btn" (click)="load()" [disabled]="busy()">{{ t().agentLoad }}</button>
+    @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
+    <span class="ar-chip ar-chip-warn">{{ t().sandbox }}</span>
+  </div>
+
   @if (loaded()) {
-    @for (item of cases(); track item.protocol) {
-      <article><h3>{{ item.display_name }} · {{ item.amount }} {{ item.currency }}</h3>
-        <p>{{ item.merchant_name }} · {{ item.transaction_id }}</p>
-        <p>{{ item.customer_statement }}</p>
-        <p>Charge date:
-          @if (item.source_occurred_at) {
-            {{ sourceTime(item.source_occurred_at) }} (Source timezone not provided)
-          } @else if (item.occurred_at) {
-            {{ item.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} UTC
-          } @else {
-            Date unavailable
-          }
-        </p>
-        <small>Reference: {{ item.protocol }}<br>
-          Accepted in demo: {{ item.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} UTC</small>
-      </article>
-    } @empty { <p>No cases returned.</p> }
+    <section class="box">
+      <div class="box-head"><h2>{{ t().openCases }}</h2><span class="ar-caption">{{ cases().length }}</span></div>
+      <div class="box-body" style="padding-top: 0">
+        @for (item of cases(); track item.protocol) {
+          <article class="case">
+            <div class="case-head"><h3 class="case-name">{{ item.display_name }}</h3><span class="ar-amount">{{ item.amount }} {{ item.currency }}</span><span class="ar-small">{{ item.merchant_name || t().noMerchant }}</span></div>
+            <span class="ar-chip ar-chip-ok" style="align-self: start">{{ t().accepted }}</span>
+            <p class="case-statement">{{ item.customer_statement }}</p>
+            <div class="case-meta">
+              <span><b>TX</b> {{ item.transaction_id }}</span>
+              <span><b>{{ t().date }}</b>
+                @if (item.source_occurred_at) { {{ sourceTime(item.source_occurred_at) }} ({{ t().tzMissing }}) }
+                @else if (item.occurred_at) { {{ item.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }} }
+                @else { {{ t().dateMissing }} }
+              </span>
+              <span><b>{{ t().reference }}</b> {{ item.protocol }}</span>
+              <span><b>{{ t().acceptedAt }}</b> {{ item.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span>
+            </div>
+          </article>
+        } @empty { <div class="ar-empty" style="margin-top: 12px"><p>{{ t().noCases }}</p></div> }
+      </div>
+    </section>
   }
-</section>
-@if (busy()) { <p role="status">Working…</p> }
+</div>

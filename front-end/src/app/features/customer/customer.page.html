@@ -1,60 +1,218 @@
-@if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-<section>
-  <h2>1. Sign in as a customer</h2>
-  <label>Demo identity
-    <select [(ngModel)]="identity" [disabled]="busy() || identityLocked()">
-      @for (person of identities(); track person.customer_id) {
-        <option [value]="person.customer_id">{{ person.display_name }}</option>
-      }
-    </select>
-  </label>
-  <button (click)="login()" [disabled]="busy()">{{ identityLocked() ? 'Renew same session' : 'Sign in and view charges' }}</button>
-  @if (client()) { <p>Session: {{ client() }}</p> }
-</section>
-@if (client()) {
-  <section>
-    <h2>2. Select and confirm</h2>
-    <fieldset [disabled]="busy() || identityLocked() || !!receipt()">
-      <legend>Charges for this customer</legend>
-      @for (tx of transactions(); track tx.transaction_id) {
-        <label class="transaction">
-          <input type="radio" name="transaction" [value]="tx.transaction_id"
-            [(ngModel)]="selected" (ngModelChange)="confirmed = false">
-          <span><strong>{{ tx.merchant_name }}</strong><br>
-            {{ tx.amount }} {{ tx.currency }} ·
-            @if (tx.source_occurred_at) {
-              {{ sourceTime(tx.source_occurred_at) }} (Source timezone not provided)
-            } @else if (tx.occurred_at) {
-              {{ tx.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} UTC
-            } @else {
-              Date unavailable
-            }
-            <small>{{ tx.transaction_id }}</small>
-          </span>
-        </label>
-      } @empty { <p>No charges loaded. This does not establish that the customer has no charges.</p> }
-      <label>Describe what happened
-        <textarea [(ngModel)]="statement" (ngModelChange)="confirmed = false"
-          rows="3" maxlength="2000" placeholder="I do not recognize this purchase..."></textarea>
-      </label>
-      <label class="check"><input type="checkbox" [(ngModel)]="confirmed">
-        I do not recognize the selected charge and want to submit a review request.</label>
-    </fieldset>
-    @if (!receipt()) {
-      <button (click)="submit()" [disabled]="busy() || (!pending() && (!selected || !confirmed || !statement.trim()))">
-        {{ pending() ? 'Retry the same request' : 'Confirm and submit request' }}
-      </button>
+<div class="stage">
+  <div [class]="discClass()" aria-hidden="true">
+    <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="var(--accent)"></circle><g class="slit"><rect x="29" y="12" width="6" height="40" rx="3" fill="var(--surface)"></rect></g></svg>
+  </div>
+
+  @switch (step()) {
+    @case ('intro') {
+      <section class="step intro" aria-label="ArabicaAI">
+        <div class="intro-words" aria-live="off">
+          <p class="intro-word" [class.is-current]="lang.lang() === 'es'">Hola</p><p class="intro-word" [class.is-current]="lang.lang() === 'pt'">Olá</p><p class="intro-word" [class.is-current]="lang.lang() === 'en'">Hello</p>
+        </div>
+        <p class="sr-only">{{ t().tagline }} {{ t().promise }}</p>
+        <div class="intro-cta">
+          <button type="button" class="ar-btn" (click)="start()">{{ t().start }}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5l7 7-7 7"></path></svg>
+          </button>
+          <div class="lang-links" role="group" aria-label="Idioma">
+            <button type="button" [attr.aria-pressed]="lang.lang() === 'es'" (click)="lang.set('es')">Español</button>
+            <button type="button" [attr.aria-pressed]="lang.lang() === 'pt'" (click)="lang.set('pt')">Português</button>
+            <button type="button" [attr.aria-pressed]="lang.lang() === 'en'" (click)="lang.set('en')">English</button>
+          </div>
+        </div>
+        <p class="intro-foot">ArabicaAI. {{ t().tagline }}</p>
+      </section>
     }
-    @if (pending()) {
-      <p role="status">Acceptance is not confirmed. Keep this tab open and retry; the request details are unchanged.</p>
+
+    @case ('login') {
+      <section class="step login">
+        <div class="login-promise" aria-hidden="true">
+          <p>{{ t().promise1 }}</p><p>{{ t().promise2 }}</p><p>{{ t().promise3 }}</p>
+        </div>
+        <div class="login-form">
+          <div class="topbar">
+            <span class="ar-wordmark">Arabica<b>AI</b></span>
+            <app-lang-switch />
+          </div>
+          <div class="stack">
+            <div style="display: flex; flex-direction: column; gap: 10px">
+              <h1 class="headline">{{ t().whoAreYou }}</h1>
+              <p class="ar-lead" style="font-size: 17px; line-height: 26px">{{ t().chooseIdentity }}</p>
+            </div>
+            @if (error()) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
+            <fieldset class="ar-fieldset" style="border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px" [disabled]="busy() || identityLocked()">
+              <legend class="sr-only">{{ t().chooseIdentity }}</legend>
+              @for (person of identities(); track person.customer_id) {
+                <label class="ar-row" [class.ar-row-selected]="identity === person.customer_id">
+                  <input type="radio" name="identity" [value]="person.customer_id" [(ngModel)]="identity">
+                  <span class="ar-tile" aria-hidden="true">{{ person.display_name.slice(0, 2).toUpperCase() }}</span>
+                  <span class="ar-row-name">{{ person.display_name }}</span>
+                  <span class="ar-row-meta">{{ person.customer_id }}</span>
+                </label>
+              }
+            </fieldset>
+            <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
+              <button type="button" class="ar-btn" (click)="login()" [disabled]="busy() || !identity">
+                {{ identityLocked() ? t().renew : t().continue }}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5l7 7-7 7"></path></svg>
+              </button>
+              @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
+            </div>
+          </div>
+          <p class="ar-small" style="display: flex; align-items: center; gap: 10px"><span class="ar-chip ar-chip-warn">{{ t().sandbox }}</span>{{ t().synthetic }} {{ t().onlyYours }}</p>
+        </div>
+      </section>
     }
-    @if (receipt(); as result) {
-      <div class="success" role="status"><h3>Request accepted in the demo</h3>
-        <p>Reference: <strong>{{ result.protocol }}</strong></p>
-        <p>Next step: an agent reviews this case. No refund has been initiated.</p>
-        @if (result.replayed) { <p>Existing request retrieved; no new case was created.</p> }
+
+    @case ('home') {
+      <div class="step home">
+        <nav class="ar-sidebar" aria-label="Principal">
+          <div style="display: flex; flex-direction: column; gap: 28px">
+            <div style="padding: 0 8px"><span class="ar-lockup"><span class="sidebar-mark-slot"></span><span class="ar-wordmark" style="font-size: 20px">Arabica<b>AI</b></span></span></div>
+            <div class="ar-nav">
+              <a href="#inicio" aria-current="page" [attr.aria-label]="t().home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"></path><path d="M5 10v10h14V10"></path></svg><span class="label">{{ t().home }}</span></a>
+              <a href="#cargos" [attr.aria-label]="t().charges"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path></svg><span class="label">{{ t().charges }}</span></a>
+              <a routerLink="/agent" [attr.aria-label]="t().agentView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M8 9h8"></path><path d="M8 13h8"></path><path d="M8 17h5"></path></svg><span class="label">{{ t().agentView }}</span>@if (receipt()) { <span class="ar-count">1</span> }</a>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 16px">
+            <div class="ar-note"><span class="ar-chip ar-chip-warn">{{ t().sandbox }}</span><span class="ar-small">{{ t().noMoney }}</span></div>
+            <div class="user"><span class="avatar" aria-hidden="true">{{ initials() }}</span><span style="display: flex; flex-direction: column"><span style="font: 500 14px/20px var(--font-sans)">{{ displayName() }}</span><span class="ar-mono" style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">{{ client() }}</span></span></div>
+          </div>
+        </nav>
+
+        <main class="home-main" id="inicio">
+          <div class="topbar">
+            <div style="display: flex; flex-direction: column; gap: 4px">
+              <h1 class="ar-h1" style="font-size: 28px; line-height: 36px">{{ t().hello }}, {{ displayName() }}</h1>
+              <span class="ar-mono" style="color: var(--ink-muted)">{{ transactions().length }} {{ t().loaded }}</span>
+            </div>
+            <app-lang-switch />
+          </div>
+
+          @if (error() && !selected) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
+
+          <div class="home-top">
+            <div class="ar-card">
+              <div class="ar-card-meta"><span>{{ t().demoAccount }}</span><span style="font-family: var(--font-mono)">{{ t().sandbox }}</span></div>
+              <span class="ar-card-number">{{ displayName() }}</span>
+              <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 12px">
+                <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; line-height: 16px; opacity: .85">{{ t().loadedCharges }}</span><span class="ar-amount-lg">{{ transactions().length }}</span></span>
+                <span style="display: flex; flex-direction: column; gap: 2px; text-align: right"><span style="font-size: 12px; line-height: 16px; opacity: .85">{{ t().currencies }}</span><span class="ar-amount">@for (x of totals(); track x.currency) { <span>{{ x.currency }} </span> } @empty { <span>—</span> }</span></span>
+              </div>
+            </div>
+            <section class="agent-panel">
+              <div class="agent-panel-head">
+                <app-mark [size]="40" slit="var(--accent-soft)" />
+                <div style="display: flex; flex-direction: column; gap: 4px"><span class="ar-tile-title">{{ t().yourAgent }}</span><span class="ar-small" style="font-size: 14px; line-height: 20px">{{ t().agentBlurb }}</span></div>
+              </div>
+              <div class="agent-panel-foot">
+                <div class="agent-facts"><span>{{ lang.lang() }}</span><span>{{ client() }}</span><span>{{ transactions().length }} {{ t().count }}</span></div>
+                <a class="ar-btn" style="min-height: 40px; padding: 0 16px; font-size: 14px" href="#cargos">{{ t().report }}</a>
+              </div>
+            </section>
+            <div class="stats">
+              <section class="stat">
+                <span class="ar-caption">{{ t().total }}</span>
+                @for (x of totals(); track x.currency) { <span class="stat-value">{{ x.total }} {{ x.currency }}</span> } @empty { <span class="stat-value">—</span> }
+              </section>
+              <section class="stat">
+                <span class="ar-caption">{{ t().openCases }}</span>
+                @if (receipt(); as r) {
+                  <span style="display: flex; align-items: baseline; gap: 10px"><span class="stat-value">1</span><span class="ar-chip ar-chip-ok">{{ t().accepted }}</span></span>
+                  <span class="ar-caption ar-mono" style="font-size: 12px">{{ r.protocol }}</span>
+                } @else if (pending()) {
+                  <span style="display: flex; align-items: baseline; gap: 10px"><span class="stat-value">1</span><span class="ar-chip ar-chip-warn">{{ t().inReview }}</span></span>
+                } @else {
+                  <span class="stat-value">0</span><span class="ar-caption">{{ t().none }}</span>
+                }
+              </section>
+            </div>
+          </div>
+
+          <div class="home-grid">
+            <section class="box" id="cargos">
+              <div class="box-head"><h2>{{ t().recent }}</h2><span class="ar-caption">{{ transactions().length }} {{ t().count }}</span></div>
+              <div class="box-body">
+                @if (transactions().length) {
+                  <div class="table" role="table">
+                    <span class="th">{{ t().merchant }}</span><span class="th th-date">{{ t().date }}</span><span class="th th-state">{{ t().state }}</span><span class="th right">{{ t().amount }}</span>
+                    @for (tx of transactions(); track tx.transaction_id; let last = $last) {
+                      <span class="td td-merchant" [class.tr-last]="last">
+                        @if (tx.merchant_name) { <span class="ar-tile" aria-hidden="true">{{ merchantInitials(tx) }}</span> } @else { <span class="ar-tile ar-tile-missing" aria-hidden="true"></span> }
+                        <span style="display: flex; flex-direction: column; min-width: 0"><span class="name">{{ tx.merchant_name || t().noMerchant }}</span><span class="ar-mono" style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">{{ tx.transaction_id }}</span></span>
+                      </span>
+                      <span class="td td-date">
+                        @if (tx.source_occurred_at) { {{ sourceTime(tx.source_occurred_at) }} ({{ t().tzMissing }}) }
+                        @else if (tx.occurred_at) { {{ tx.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }} }
+                        @else { {{ t().dateMissing }} }
+                      </span>
+                      <span class="td td-state">
+                        @if ((pending()?.transaction_id ?? receipt()?.transaction_id) === tx.transaction_id) { <span class="ar-chip ar-chip-warn">{{ receipt() ? t().accepted : t().inReview }}</span> }
+                        @else if (selected === tx.transaction_id) { <span class="ar-chip">{{ t().selected }}</span> }
+                        @else { <button type="button" class="link-btn" (click)="select(tx.transaction_id)" [disabled]="!!pending() || !!receipt()">{{ t().notRecognized }}</button> }
+                      </span>
+                      <span class="td td-amount">{{ tx.amount }} {{ tx.currency }}</span>
+                    }
+                  </div>
+                  <span class="ar-caption" style="display: block; margin-top: 12px">{{ t().coverage }}</span>
+                } @else {
+                  <div class="ar-empty"><p>{{ t().empty }}</p><span class="ar-caption">{{ t().emptyCaveat }}</span></div>
+                }
+
+                @if (selectedTx() || pending() || receipt()) {
+                  <div class="report" id="reportar">
+                    <div class="report-head">
+                      <h3 class="ar-panel-title" style="font-size: 16px; line-height: 24px">{{ t().reportTitle }}</h3>
+                      @if (!pending() && !receipt()) { <button type="button" class="link-btn" (click)="cancel()">{{ t().cancel }}</button> }
+                    </div>
+                    @if (selectedTx(); as tx) {
+                      <div class="ar-row ar-row-selected" style="cursor: default">
+                        <span class="ar-tile" aria-hidden="true">{{ tx.merchant_name ? merchantInitials(tx) : '' }}</span>
+                        <span class="ar-row-name">{{ tx.merchant_name || t().noMerchant }}</span>
+                        <span class="ar-amount">{{ tx.amount }} {{ tx.currency }}</span>
+                      </div>
+                    }
+                    @if (error() && selected) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
+                    @if (!receipt()) {
+                      <fieldset class="ar-fieldset" style="border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px" [disabled]="busy() || identityLocked()">
+                        <label class="ar-field">
+                          <span class="ar-field-label">{{ t().describe }}</span>
+                          <textarea class="ar-textarea" [(ngModel)]="statement" name="statement" (ngModelChange)="confirmed = false" rows="3" maxlength="2000" [placeholder]="t().placeholder"></textarea>
+                        </label>
+                        <label class="ar-check"><input type="checkbox" name="confirmed" [(ngModel)]="confirmed"> {{ t().confirm }}</label>
+                      </fieldset>
+                      <div class="report-actions">
+                        <button type="button" class="ar-btn" (click)="submit()" [disabled]="busy() || (!pending() && (!selected || !confirmed || !statement.trim()))">{{ pending() ? t().retry : t().submit }}</button>
+                        @if (pending()) { <button type="button" class="ar-btn ar-btn-secondary" (click)="login()" [disabled]="busy()">{{ t().renew }}</button> }
+                        @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
+                      </div>
+                      @if (pending()) { <div class="ar-panel ar-panel-warn" role="status"><p>{{ t().pending }}</p></div> }
+                    }
+                    @if (receipt(); as result) {
+                      <div class="ar-panel ar-panel-ok" role="status">
+                        <h3 class="ar-panel-title">{{ t().acceptedTitle }}</h3>
+                        <div class="ar-ref"><span class="ar-ref-label">{{ t().reference }}</span><span class="ar-ref-code">{{ result.protocol }}</span></div>
+                        <p>{{ t().nextStep }}</p>
+                        @if (result.replayed) { <p class="ar-small">{{ t().replayed }}</p> }
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            </section>
+
+            <section class="box">
+              <div class="box-head"><h2>{{ t().byCurrency }}</h2></div>
+              <div class="box-body" style="padding-top: 4px; padding-bottom: 8px">
+                @for (x of totals(); track x.currency) {
+                  <div class="cat"><span class="n">{{ x.currency }}</span><span class="a">{{ x.total }} {{ x.currency }}</span></div>
+                } @empty { <p class="ar-caption" style="padding: 10px 0">{{ t().empty }}</p> }
+              </div>
+            </section>
+          </div>
+        </main>
       </div>
     }
-  </section>
-}
-@if (busy()) { <p role="status">Working…</p> }
+  }
+</div>
