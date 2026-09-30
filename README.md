@@ -32,7 +32,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 **Status (2026-09-29):**
 
 - The deterministic intake flow is deployed and tested. That covers the adversarial gate, session, isolation and idempotency suites and a D1 budget test.
-- It runs on the Cloudflare Free plan ($0), which [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes at 10,000 episodes/day against measured volumes of 17–818 per day. The same record prices a production target on AWS at $86.36 a month and explains each service choice.
+- It runs on the Cloudflare Free plan ($0). [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes the guided flow at about 2,380 complete episodes a day, against measured volumes of 17–818 a day. The same record prices a production target on AWS at $86.36 a month and explains each service choice.
 - **Not done yet:** retrieval-outcome states, case kinds, ES/PT interface text, event instrumentation, and any AI. These are covered in the [intake roadmap](Docs/Plans/intake-roadmap.md).
 
 Quick starts:

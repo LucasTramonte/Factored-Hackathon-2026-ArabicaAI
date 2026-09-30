@@ -55,7 +55,7 @@ Store original statements and verified evidence only in access-controlled case/h
 
 Agent queue/detail APIs must include incomplete/technical handoffs, so replace inner-join-only assumptions where appropriate without exposing unrelated transactions. API history shows recorded service transitions, not invented agent work. Rendering belongs to the deferred frontend. Keep agent access read-only; status-changing agent endpoints are outside this scope.
 
-All SQL remains in `back-end/src/store/d1.js`. Reserve the next migration number with Lucas: current main ends at 0003. Apply additive migrations to local D1 before any remote action. New indexes enforce owner/turn-key uniqueness and bounded queue queries. Operational rows remain through October 31 under ADR-004; session expiry still applies.
+All SQL remains in `back-end/src/store/d1.js`. Reserve the next migration number with Lucas: current main ends at 0003. Apply additive migrations to local D1 before any remote action. New indexes enforce owner/turn-key uniqueness and bounded queue queries. Operational rows remain until the shutdown after 2026-10-20 under ADR-004 (earlier drafts said October 31); session expiry still applies.
 
 ## AI boundary, deadlines and fallback
 

@@ -1,6 +1,6 @@
 # Reading guide
 
-**Workflow:** transaction-dispute intake, narrowed to unrecognized card charges with a human handoff ([ADR-002](ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). A read-only recent-transactions view is the normal-resolution path. The data is the supplied synthetic LATAM dataset, so descriptive counts are not measured bank outcomes.
+**Workflow:** transaction-dispute intake, narrowed to unrecognized card charges with a human handoff ([ADR-002](ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). A read-only recent-transactions view is **proposed** as the normal-resolution path; that decision is still a draft. The data is the supplied synthetic LATAM dataset, so descriptive counts are not measured bank outcomes.
 
 The sections follow the six points of "What your solution should demonstrate" in the problem statement ([`sources/`](sources/README.md)).
 

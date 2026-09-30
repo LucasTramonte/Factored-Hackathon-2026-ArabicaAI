@@ -3,7 +3,7 @@
 - **Status:** Proposed (revised 2026-09-30; first version 2026-09-29)
 - **Date:** 2026-09-30
 - **Deciders:** Lucas Tramonte, Manoella R, Roberto Z
-- **Workflow:** transaction-dispute intake, narrowed to unrecognized card charges with human handoff ([ADR-002](ADR-002-v1-workflow-unrecognized-charge-intake.md)). The recent-transactions view is the normal-resolution path and is costed with the same API. Why the other three official workflows were not chosen: [ADR-001](ADR-001-workflow-prioritization.md).
+- **Workflow:** transaction-dispute intake, narrowed to unrecognized card charges with human handoff ([ADR-002](ADR-002-v1-workflow-unrecognized-charge-intake.md)). A read-only recent-transactions view is **proposed** as the normal-resolution path (a draft decision, not yet accepted), and it would be costed with the same API. Why the other three official workflows were not chosen: [ADR-001](ADR-001-workflow-prioritization.md).
 - **Supersedes:** the decision section of the former `Docs/Costs/Intake/INTAKE_COST_REVIEW.md`, and the September drafts `ArabicaAI-Architecture-Capacity-Costs-EN.pdf` and `ArabicaAI-Intake-Scale-Plan-EN.pdf`, which were never committed.
 
 This is the only record for cloud cost, sizing and layer placement. `Docs/Costs/` holds the evidence it cites and nothing else.
@@ -41,7 +41,9 @@ Each scenario answers a different question, so each one binds a different layer:
 
 Because production volume is unknown, costs are also given per unit, so a reader can scale them.
 
-### Measured resources per episode
+### Measured resources per episode (legacy `/cases` flow)
+
+This is the flow the live demo ran on 2026-09-29. The guided flow that replaces it writes about 4× more rows per episode, and its figures are in section 2.
 
 From `back-end/test/integration/budget.test.js` against local D1, which reads D1's own row counters:
 
@@ -68,25 +70,31 @@ Other measured inputs used below:
 | Layer | Open-source or low-cost choice | AWS alternative | What the data says | Decision | Trigger to move |
 |---|---|---|---|---|---|
 | Batch: Bronze → Silver → Gold | Parquet + DuckDB | Glue, EMR, Athena | 2.86 GB builds in about 11 minutes on one machine | DuckDB, wherever it runs | Over ~100 GB, a build over 1 h, or several concurrent jobs |
-| Online store | SQLite (D1) | RDS PostgreSQL, Aurora, DynamoDB | 165 reads and 10 writes per episode; the serving slice is about 0.3 GB | D1 in the prototype, PostgreSQL in the AWS target | A database over 5 GB (ADR-003's exit trigger; Paid caps at 10 GB), write p95 over 200 ms, cross-customer online queries, or a row-level security requirement |
-| API | Cloudflare Worker | API Gateway + Lambda, ECS Fargate | 7 requests per episode, CPU 0–4 ms | Worker in the prototype, Lambda in the AWS target | Section 4 |
+| Online store | SQLite (D1) | RDS PostgreSQL, Aurora, DynamoDB | 318 reads and 42 writes per complete guided episode at the CI ceilings; the serving slice is about 0.3 GB | D1 in the prototype, PostgreSQL in the AWS target | A database over 5 GB (ADR-003's exit trigger; Paid caps at 10 GB), write p95 over 200 ms, cross-customer online queries, or a row-level security requirement |
+| API | Cloudflare Worker | API Gateway + Lambda, ECS Fargate | 9 requests per complete guided episode, CPU 0–4 ms (legacy flow, measured in production) | Worker in the prototype, Lambda in the AWS target | Section 4 |
 | AI extraction | Workers AI gpt-oss-20b ($0.0005 per call, measured) | Bedrock, SageMaker endpoint | 16/18 on development, p95 3.25 s | Workers AI for development and the frozen evaluation only. The live service calls it after the frozen run, behind a switch that falls back to the deterministic flow (ADR-006, decision 6). The same model runs on Bedrock in the AWS target | The extractor fails the frozen test on quality → the next ADR-006 rung |
 | Observability | Workers logs and analytics | CloudWatch, X-Ray | About 29 log events per episode | Workers logs now, CloudWatch in the target | Moving the runtime |
 
-The pattern is deliberate. Processing stays open source (DuckDB, SQLite, the same model), and the managed cloud services are the ones a bank needs for availability, private networking and audit.
+The pattern is deliberate. Processing stays open source (DuckDB, SQLite, the same model family), and the managed cloud services are the ones a bank needs for availability, private networking and audit. Moving the online store is not free, though: section 3 lists what a migration costs in engineering work.
 
 ### 2. The prototype stays on Cloudflare Free for the evaluation window
 
-The daily quotas bound the service at **10,000 episodes a day**, and rows written is the binding quota (100,000 a day ÷ 10 per episode). That is 588× S1, 69× S2 and 12× S3. It is a daily bound, not a window capacity: storage is cumulative. With today's small seed, the 500 MB cap lasts about 136 days at 10,000 typical episodes a day, and about 12 days at maximum statement length. With the full serving slice loaded (about 0.3 GB), about 200 MB remain, which is about 54 days and 5 days. Either way, stored cases use under 1% of the cap at S1 over the whole window.
+Capacity is sized on the **guided flow** (`/intake/start` → `/intake/confirm`), which replaces the legacy one-step `/cases` flow. Its budgets were measured in PR #31's budget suite on local D1, using D1's own counters and `dbstat` for storage.
 
-| Scenario | Worker requests/day | Rows read/day | Rows written/day | Highest use of a daily Free limit | 70% upgrade policy |
-|---|---|---|---|---|---|
-| S1 | 119 | 2,805 | 170 | 0.2% | not triggered |
-| S2 | 1,015 | 23,925 | 1,450 | 1.5% | not triggered |
-| S3 | 5,726 | 134,970 | 8,180 | 8.2% | not triggered |
-| S4 | 57,260 | 1,349,700 | 81,800 | 82% | **triggers Workers Paid if sustained for 3 days** (the policy needs 3 consecutive days above 70%; S4 is a one-day stress case) |
+- **Per complete episode, with one agent look:** 9 Worker requests, 318 rows read and **42 rows written** at the CI ceilings (285 and 39 measured).
+- **Daily bound:** rows written binds, so the daily quotas allow **about 2,380 complete episodes a day** (2,564 on measured values). The legacy flow wrote 10 rows and allowed 10,000.
+- **Storage per complete episode:** about 5.0 KB with a typical statement, 12.5 KB at 2,000 ASCII characters, and 21.3 KB at the 4-byte worst case.
 
-**Cost of the prototype:** $0 on Free, and $5 a month on Workers Paid, which covers every scenario. **Cost per attempted case** is $0 on Free and $5 ÷ episodes per month on Paid ($0.0098 at S1). **Cost per successful automated resolution** is `not defined` for intake, because V1 always ends in a handoff (ADR-002). It is reported for the recent-transactions path once that path is measured.
+| Scenario | Rows written/day (share of Free) | Storage after 32 days (typical / 2,000 ASCII / 4-byte max) | Verdict |
+|---|---|---|---|
+| S1 | 714 (0.7%) | 3.0 / 7.5 / 12.7 MB | Free |
+| S2 | 6,090 (6.1%) | 26 / 64 / 109 MB | Free |
+| S3 | 34,356 (34%) | 144 / 361 / 613 MB | Free on daily quotas; at the 4-byte maximum storage passes the 400 MB split trigger and the 500 MB cap |
+| S4 | 343,560 (344%) | 1.4 / 3.6 / 6.1 GB | **Writes exceed the Free quota on day one: Workers Paid first** |
+
+Storage is cumulative, and it binds before the daily quotas at long statements. Loading the full serving slice (about 0.3 GB) leaves about 200 MB for episodes: about 40 days at S3 with typical statements, and under the window at 2,000-character statements. So the slice load and S3-level traffic together are a Workers Paid decision, and so is S4.
+
+**Cost of the prototype:** $0 on Free, and $5 a month on Workers Paid, which covers every scenario. **Cost per attempted case** is $0 on Free and $5 ÷ episodes per month on Paid ($0.0098 at S1). **Cost per successful automated resolution** is `not defined` for intake, because V1 always ends in a handoff (ADR-002). It will be reported for the proposed recent-transactions path once that path is decided and measured.
 
 Loading every customer's approved purchases (about 1 M rows) into D1 would take more than 20 days of the Free write quota, because index writes count too. If the team loads the full serving slice, it upgrades to Workers Paid for that month ($5). That is cheaper than any other way past the limit.
 
@@ -117,6 +125,11 @@ flowchart LR
 
 The volumes are S3 for the front door (24,880 contacts a month, 124,400 API requests) and S2 for work in scope (4,410 episodes a month).
 
+**Migration work this price doesn't include:**
+- porting the store module and migrations from D1/SQLite to PostgreSQL (section 1, Consequences);
+- re-registering the extractor on Bedrock;
+- handling client IPs in CloudWatch, where logs should keep a truncated address (/24) or drop it, and inherit the 30-day retention.
+
 | Layer | Service | Sizing and its source | $/month | Why this and not the alternative | Trigger |
 |---|---|---|---|---|---|
 | Edge | CloudFront, pay as you go | 2.7 GB and 275,000 HTTPS requests (24,880 × 97 KB build + API), 50% US incl. Mexico, 50% South America | 0.70 | The always-free 1 TB and 10 M requests would make this $0; list price is shown. The flat-rate Pro plan ($15) caps overage, but Shield Standard is included and the WAF rate rule already bounds abuse | Over 10 M requests a month |
@@ -127,7 +140,7 @@ The volumes are S3 for the front door (24,880 contacts a month, 124,400 API requ
 | Data | RDS for PostgreSQL | db.t4g.small Multi-AZ, 20 GB, 7-day backups included | 52.05 | Sized for availability and memory (a working set under 1 GB in 2 GiB), not CPU (about 0.25 API requests a second at 3× the busiest observed hour). Single-AZ (about $26 with storage) could lose accepted cases in an AZ failure. The Multi-AZ DB cluster (about 50% more) buys readable standbys we don't need. Aurora Serverless v2 costs more at its minimum. DynamoDB loses the foreign keys and uniqueness the idempotency tests rely on. RDS Proxy (about $22) solves connection pressure we don't have | CPU p95 over 60% or connections over 80% → db.t4g.medium; Lambda connection errors → RDS Proxy; 2–3 stable months → reserved instance |
 | Data | PrivateLink | 1 interface endpoint (Bedrock) in 2 AZs, 0.05 GB | 14.60 | A NAT gateway costs about $33 plus traffic. RDS IAM authentication signs tokens locally, so no Secrets Manager endpoint is needed. Tracing uses correlation IDs in Lambda logs, so no X-Ray endpoint either ($14.60 more) | More than 3 AWS services called from the VPC → compare against NAT |
 | Data | Public IPv4 | The batch task's address, about 10 h a month, no inbound rules | 0.05 | Private subnets would need 3 more endpoints (about $44) just to pull the image and ship logs | — |
-| AI | Bedrock, gpt-oss-20b, In-Region, On-Demand | 5,400 calls entered (1 a minute for 3 h a day over 30 days), a conservative rounding of 4,851 (4,410 episodes × 1.1); 2,106 in / 266 out tokens | 2.57 | The same model that was registered and evaluated, so moving providers needs no new evaluation, and In-Region keeps processing in us-east-2. That is $0.00048 a call, against $0.0005 on Workers AI. Provisioned throughput bills by the hour for about 160 calls a day. Prompt caching isn't worth the complexity at $2.57 | AI cost over ~$50 a month → prompt caching |
+| AI | Bedrock, gpt-oss-20b, In-Region, On-Demand | 5,400 calls entered (1 a minute for 3 h a day over 30 days), a conservative rounding of 4,851 (4,410 episodes × 1.1); 2,106 in / 266 out tokens | 2.57 | The same model weights as the evaluated one, and In-Region keeps processing in us-east-2. A different serving stack can still change outputs and latency at temperature 0 (quantization, chat template, reasoning defaults), so Bedrock is a **new registered version**: it re-runs the development gate and then the frozen set once, after confirming that structured JSON output behaves the same and re-measuring the latency trigger there. That is $0.00048 a call, against $0.0005 on Workers AI. Provisioned throughput bills by the hour for about 160 calls a day. Prompt caching isn't worth the complexity at $2.57 | AI cost over ~$50 a month → prompt caching |
 | Batch | S3 (lake) | 13 GB: Bronze 1.4 GB plus 8 Silver/Gold rebuilds kept 7 days by lifecycle; 15,000 PUTs, 250,000 GETs | 0.47 | Standard, because the data is read daily; Infrequent Access charges retrieval and a 30-day minimum on data rewritten every day | Incremental builds would cut GETs |
 | Batch | Fargate | 1 task a day, 15 min (11 min 15 s measured, plus margin), 2 vCPU, 4 GB, Arm | 0.60 | The same DuckDB code. Glue at its 2-DPU minimum would be about $6.60 a month and a rewrite to Spark; EMR is for much larger data | Section 1 |
 | Ops | CloudWatch | 10 custom KPI metrics, 1.4 GB of logs (0.4 GB of it WAF), 30-day retention, 10 alarms, 1 dashboard | 4.76 | Vended metrics are free. Synthetic canaries (about $10), Lambda Insights, RUM and Application Signals add cost without a question to answer at this volume | Real users → RUM |
@@ -187,9 +200,10 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
 
 - **Monitoring:** Workers observability logs at 100% sampling. A weekly check covers requests per day, errors, CPU p95, D1 rows read and written, and database size against the triggers above.
 - **Access:** Cloudflare Access in front of the whole hostname, plus the Basic gate on the API and HTML documents. Neither is customer authentication.
-- **Retention and shutdown:**
-  - **Until 2026-10-15:** nothing is deleted by age before judging ends, so judges see the cases in the recorded demo. Before each recorded demo, the team may reset cases and sessions only. Expired sessions are purged on every login.
-  - **After 2026-10-20:** demo cases and sessions are exported for the record and then deleted from the remote D1, and the Worker is taken down.
+- **Retention and shutdown (one date for every document: after 2026-10-20):**
+  - **Until 2026-10-15:** nothing is deleted by age before judging ends, so judges see the cases in the recorded demo. Before each recorded demo, the team may reset demo activity only. Expired sessions are purged on every login.
+  - **After 2026-10-20:** demo activity is exported for the record, then deleted from the remote D1, and the Worker is taken down.
+  - **Deletes follow foreign-key order.** Guided handoffs reference cases (`intake_handoffs.complete_case_id`), so deleting cases first fails. Once the guided tables land (PR #31), resets and the final delete use `back-end/scripts/reset-demo-activity.sql`.
   - **Data handling:** no real customer data is ever loaded.
 - **AWS:** nothing in the prototype runs on AWS.
   - Spend to date is $0.21 (September 2026), from an exploratory RDS db.t4g.micro (`database-1`, created 2026-09-29, private, empty). It is deleted by 2026-10-20 at the latest.
@@ -207,7 +221,8 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
 
 - **+** One place answers where each layer runs, what it costs and what would change it. Every figure is a measurement, a list price, or an assumption named as such.
 - **+** The prototype costs $0, and the production target costs $86 a month. Both are explained by requirements, not by volume.
-- **+** Open-source processing (DuckDB, SQLite, gpt-oss-20b) carries over to the AWS target unchanged, so the evaluation stays valid after a migration.
+- **+** The batch pipeline (DuckDB) carries over to the AWS target unchanged.
+- **−** The online store does not. Moving to PostgreSQL means rewriting `back-end/src/store/d1.js`, which relies on D1 batch atomicity, SQLite JSON functions (`json_set`, `json_patch`, `json_group_array`), `MIN(a,b)` in an expression index and `strftime`/`printf`. It also means porting the Wrangler migrations and the budget tests that read D1's row counters. The model also needs re-registration (section 3).
 - **−** Sizing rests on a synthetic sample with a flat hourly profile. Real peaks and volume could be very different.
 - **−** Several inputs are assumptions:
   - the 3× peak factor and the 1.1 retry allowance;
@@ -240,7 +255,9 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
   - interface endpoint $0.01/h per AZ; public IPv4 $0.005/h;
   - Lambda Arm $0.0000133334/GB-s; API Gateway HTTP $1.00 per million;
   - SageMaker ml.g6.xlarge hosting $1.1267/h.
-- **Budget ceilings in CI** (per request, queries / rows read / rows written): login 4/8/6; list 2/25/0; create 4/12/6; agent login 3/6/6; agent list 2/250/0. Round trips per request are capped too: login 2, list 2, create 4, agent 1–2.
+- **Budget ceilings in CI** (per request, queries / rows read / rows written / round trips), as committed in `back-end/test/integration/budget.test.js`:
+  - legacy flow: login 5/10/6/3, list 2/25/0/2, create 4/12/6/4, agent login 3/6/6/1, agent list 2/250/0/2;
+  - guided flow (PR #31): a complete customer episode 30/72/36/15, and an incomplete one 26/56/28/14.
 - **Measured in production, 2026-09-29** (one manual episode, so a sample rather than a load test):
   - **Placement:** the Worker ran in GRU (São Paulo), and the D1 primary is in ENAM.
   - **CPU and D1:** CPU was 0–4 ms per request. D1 round trips took 136–186 ms (median 148 ms), so latency is dominated by distance to D1, not by compute.
@@ -252,7 +269,7 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
   - Workers Logs Free allows 200,000 events a day, about 6,900 episodes at 29 events each; head sampling applies after that.
   - Logs are kept 3 days.
   - `Authorization` and `Cookie` are redacted.
-  - The client IP is logged, so exported logs stay in the ignored `data/observability/`.
+  - The client IP is logged, so exported logs stay in the ignored `data/observability/`. On the AWS target, logs keep a truncated IP (/24) or drop it (section 3).
 - **Sources:**
   - Cloudflare: [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/), [Zero Trust plans](https://www.cloudflare.com/plans/zero-trust-services/).
   - AWS: [Pricing Calculator](https://docs.aws.amazon.com/pricing-calculator/latest/userguide/what-is-pricing-calculator.html), [Price List API](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/price-changes.html), [CloudFront](https://aws.amazon.com/cloudfront/pricing/), [Lambda](https://aws.amazon.com/lambda/pricing/), [RDS for PostgreSQL](https://aws.amazon.com/rds/postgresql/pricing/), [Bedrock](https://aws.amazon.com/bedrock/pricing/), [VPC](https://aws.amazon.com/vpc/pricing/).
