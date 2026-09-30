@@ -12,7 +12,8 @@ indexed PDFs; it did not expand the extractor's scope.
 
 Initial change: an ES/PT extraction prompt and a stdlib Workers AI REST
 adapter for `@cf/openai/gpt-oss-20b`, temperature 0, `max_tokens=512`, JSON
-object mode, no tools, and a 10-second HTTP timeout per attempt. One retry
+object mode, no tools, and `urlopen(timeout=10)` per attempt. That socket
+timeout was not an elapsed deadline; see the correction below. One retry
 is allowed for invalid output; both observed calls' token counts are summed
 on a successful retry. The existing `validate_extraction` checks model
 output. Missing credentials, API failures, and missing/invalid provider
@@ -126,3 +127,52 @@ cost. Stop and report if any trigger fires; do not switch models.
 Pre-registration is deliberately absent until real development evidence
 exists. There has been no human review, completed registration, tag, frozen
 evaluation, live-service integration, push, or PR creation by this builder.
+
+## 2026-09-30 UTC: nonbehavioral review correction — HTTP attempt deadline
+
+The reviewer reported that `urlopen(timeout=10)` limits individual socket
+operations, allowing a fragmented response body to finish after ten elapsed
+seconds. An independent local-only HTTP test reproduced this before the
+fix: it served a valid body in fragments at 0, 6, and 12 seconds, each wait
+shorter than the socket timeout. The test failed because extraction returned
+success instead of raising `TimeoutError`; the three-check RED run took
+12.027 seconds. Checks refusing an existing process timer and a non-main
+thread also failed before implementation.
+
+The adapter now arms a POSIX `ITIMER_REAL` deadline around each complete
+HTTP open/read attempt. `SIGALRM` raises the existing sanitized timeout
+error, the timer is canceled and the previous handler restored, and a
+monotonic elapsed check rejects late success if a native call deferred the
+Python handler. The monotonic check separately failed before its addition.
+The socket timeout remains as a second bound. Every allowed invalid-output
+retry gets a fresh ten-second deadline; a timeout itself is not retried.
+
+`python3 -m unittest intake_agent.extractor.test_workers_ai -v` then passed
+**14 tests in 10.016 seconds**, including the real local HTTP test. That
+test requires the observed timeout after at least 9.5 seconds and before
+11.5 seconds, ahead of the final body fragment at twelve seconds; it does
+not mock a raised timeout. Tests also cover alarm handler restoration,
+timer cancellation, preserved active timers, thread refusal, and late
+success rejection. The earlier schema, retry, request, credentials, and
+usage checks remain in the run. Parent will run fresh supported-interpreter
+and project-suite checks; no new full-suite pass is claimed here.
+
+This small synchronous CLI implementation requires a POSIX main thread and
+an available process real-time timer. It refuses unsupported threads or
+platforms, or an already active process timer, before sending the HTTP
+request. The application must permit delivery of `SIGALRM` and must not
+concurrently repurpose this process-global timer. Python executes signal
+handlers in its main thread; OS scheduling, blocked signals, or native
+calls that defer Python signal handling can delay the exception. The
+monotonic check prevents a deferred call from being accepted as timely,
+but this is not a universal hard real-time cancellation guarantee. A
+threaded/non-POSIX runtime or native calls needing forcible cancellation
+would require an independently supervised process rather than a silent
+fallback to socket timeouts.
+
+Only `workers_ai.py`, its tests, and this log changed. Prompt, model,
+schema, tuning, and the pre-existing harness findings were untouched. This
+correction made **zero model calls**. Prior credential checks describe
+the earlier environment only; the parent is separately checking authorized
+Wrangler access without providing auth files to this builder. No credentials
+were read, and no registration, tag, push, or PR was created here.

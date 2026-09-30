@@ -4,9 +4,14 @@ import io
 import json
 import os
 from pathlib import Path
+import signal
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
 
 from evals.intake.systems import VOCABULARY, validate_extraction
 
@@ -130,6 +135,107 @@ class WorkersAITests(unittest.TestCase):
         with patch.object(self.adapter, "urlopen", return_value=raw):
             with self.assertRaisesRegex(RuntimeError, "token usage"):
                 self.extract()
+
+    @unittest.skipUnless(hasattr(signal, "setitimer"), "requires POSIX deadline support")
+    def test_slow_local_body_times_out_at_attempt_deadline(self):
+        payload = response(json.dumps(EXTRACTION)).getvalue()
+        stop = threading.Event()
+
+        class SlowBody(BaseHTTPRequestHandler):
+            """Send body fragments faster than the socket timeout allows."""
+
+            def do_POST(self):
+                """Serve a complete valid body over twelve elapsed seconds."""
+                self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                # Each socket wait is six seconds, but the body takes twelve.
+                for chunk in (payload[:1], payload[1:2], payload[2:]):
+                    try:
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+                    except OSError:
+                        break
+                    if stop.wait(6):
+                        break
+
+            def log_message(self, *_args):
+                """Keep local request logs out of test output."""
+                pass
+
+        with HTTPServer(("127.0.0.1", 0), SlowBody) as server:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            local_url = f"http://127.0.0.1:{server.server_port}/"
+
+            def local_transport(request, timeout):
+                return urlopen(local_url, data=request.data, timeout=timeout)
+
+            started = time.monotonic()
+            try:
+                with patch.object(self.adapter, "urlopen", side_effect=local_transport):
+                    with self.assertRaises(TimeoutError):
+                        self.extract()
+                elapsed = time.monotonic() - started
+                self.assertGreaterEqual(elapsed, 9.5)
+                self.assertLess(elapsed, 11.5)
+            finally:
+                stop.set()
+                server.shutdown()
+                thread.join(timeout=2)
+
+    @unittest.skipUnless(hasattr(signal, "setitimer"), "requires POSIX deadline support")
+    def test_completed_attempt_restores_alarm_handler_and_cancels_timer(self):
+        old_handler = signal.getsignal(signal.SIGALRM)
+        handler = lambda *_args: None
+        signal.signal(signal.SIGALRM, handler)
+        try:
+            with patch.object(self.adapter, "urlopen", return_value=response(EXTRACTION)):
+                self.extract()
+            self.assertIs(signal.getsignal(signal.SIGALRM), handler)
+            self.assertEqual(signal.getitimer(signal.ITIMER_REAL), (0.0, 0.0))
+        finally:
+            signal.signal(signal.SIGALRM, old_handler)
+
+    @unittest.skipUnless(hasattr(signal, "setitimer"), "requires POSIX deadline support")
+    def test_deferred_alarm_cannot_return_success_after_deadline(self):
+        # Model a native call that defers Python's signal handler, without waiting.
+        with patch.object(self.adapter.signal, "setitimer"), patch.object(
+                self.adapter.time, "monotonic", side_effect=[0.0, 11.0]), patch.object(
+                self.adapter, "urlopen", return_value=response(EXTRACTION)):
+            with self.assertRaises(TimeoutError):
+                self.extract()
+
+    @unittest.skipUnless(hasattr(signal, "setitimer"), "requires POSIX deadline support")
+    def test_existing_process_timer_is_preserved_and_request_refused(self):
+        signal.setitimer(signal.ITIMER_REAL, 60)
+        try:
+            with patch.object(self.adapter, "urlopen", return_value=response(EXTRACTION)) as http:
+                with self.assertRaisesRegex(RuntimeError, "active process timer"):
+                    self.extract()
+                http.assert_not_called()
+            self.assertGreater(signal.getitimer(signal.ITIMER_REAL)[0], 0)
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+
+    def test_non_main_thread_is_refused_before_http(self):
+        failures = []
+
+        def call_in_thread():
+            try:
+                self.extract()
+            except Exception as error:
+                failures.append(error)
+
+        with patch.object(self.adapter, "urlopen", return_value=response(EXTRACTION)) as http:
+            thread = threading.Thread(target=call_in_thread)
+            thread.start()
+            thread.join(timeout=2)
+            self.assertEqual(len(failures), 1)
+            self.assertIsInstance(failures[0], RuntimeError)
+            self.assertIn("POSIX main thread", str(failures[0]))
+            http.assert_not_called()
 
 
 if __name__ == "__main__":

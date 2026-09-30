@@ -1,18 +1,46 @@
 """Workers AI fact extraction; no transaction access or policy decisions."""
 import json
 import os
+from contextlib import contextmanager
 from pathlib import Path
+import signal
+import threading
+import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from evals.intake.systems import validate_extraction
 
 
+@contextmanager
+def _deadline(seconds):
+    """Interrupt CLI I/O on POSIX; never overwrite another process timer."""
+    if not hasattr(signal, "setitimer") or threading.current_thread() is not threading.main_thread():
+        raise RuntimeError("Workers AI deadline requires a POSIX main thread")
+    if any(signal.getitimer(signal.ITIMER_REAL)):
+        raise RuntimeError("Workers AI deadline cannot replace an active process timer")
+
+    def expired(_signum, _frame):
+        raise TimeoutError("Workers AI request timed out")
+
+    previous = signal.signal(signal.SIGALRM, expired)
+    started = time.monotonic()
+    try:
+        signal.setitimer(signal.ITIMER_REAL, seconds)
+        yield
+        # A native call may defer the Python handler; it must not yield late success.
+        if time.monotonic() - started >= seconds:
+            raise TimeoutError("Workers AI request timed out")
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
 def extract(message, session_language, as_of, vocabulary):
     """Extract stated facts with one invalid-output retry; never log customer text.
 
-    HTTP timeout is 10 seconds per attempt. Usage includes both attempts when
-    retried; absent provider usage is an error rather than a fabricated zero.
+    Each HTTP attempt uses a 10-second POSIX main-thread deadline. Usage
+    includes retries; absent provider usage is an error, never a fake zero.
     """
     credentials = {key: os.environ.get(key) for key in
                    ("CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN")}
@@ -37,8 +65,9 @@ def extract(message, session_language, as_of, vocabulary):
     usage = {"input_tokens": 0, "output_tokens": 0}
     for attempt in range(2):
         try:
-            with urlopen(request, timeout=10) as response:
-                raw = response.read()
+            with _deadline(10):
+                with urlopen(request, timeout=10) as response:
+                    raw = response.read()
         except TimeoutError:
             raise TimeoutError("Workers AI request timed out") from None
         except HTTPError as error:
