@@ -32,6 +32,21 @@ def response(extracted, input_tokens=100, output_tokens=30):
     }}).encode())
 
 
+def choices_response(content, choices=None):
+    """Represent provider I/O with synthetic chat-completion metadata."""
+    return io.BytesIO(json.dumps({"success": True, "errors": [], "messages": [], "result": {
+        "choices": choices if choices is not None else [{"index": 0, "finish_reason": "stop",
+            "logprobs": None, "stop_reason": None, "token_ids": [],
+            "message": {"role": "assistant", "content": content, "refusal": None,
+                "annotations": [], "audio": None, "function_call": None,
+                "tool_calls": None, "reasoning_content": None}}],
+        "created": 0, "id": "synthetic-completion", "kv_transfer_params": None,
+        "model": "@cf/openai/gpt-oss-20b", "object": "chat.completion", "prompt_logprobs": None,
+        "prompt_token_ids": None, "service_tier": None, "system_fingerprint": None,
+        "usage": {"prompt_tokens": 100, "completion_tokens": 30, "total_tokens": 130, "neurons": 1},
+    }}).encode())
+
+
 class WorkersAITests(unittest.TestCase):
     """Exercise the adapter with only the network transport replaced."""
 
@@ -58,6 +73,27 @@ class WorkersAITests(unittest.TestCase):
                 self.assertEqual(actual, {"extracted": EXTRACTION,
                                           "usage": {"input_tokens": 100, "output_tokens": 30}})
                 self.assertEqual(validate_extraction(actual["extracted"]), EXTRACTION)
+
+    def test_openai_choices_envelope_passes_real_extraction_validation(self):
+        with patch.object(self.adapter, "urlopen", side_effect=[
+                choices_response(json.dumps(EXTRACTION)), choices_response(json.dumps(EXTRACTION))]):
+            try:
+                actual = self.extract()
+            except ValueError:
+                self.fail("Valid chat-completion envelope was rejected")
+            self.assertEqual(actual, {"extracted": EXTRACTION,
+                                      "usage": {"input_tokens": 100, "output_tokens": 30}})
+            self.assertEqual(validate_extraction(actual["extracted"]), EXTRACTION)
+
+    def test_empty_choices_are_invalid_output_with_only_one_retry(self):
+        with patch.object(self.adapter, "urlopen", side_effect=[
+                choices_response(None, choices=[]), choices_response(None, choices=[])]) as http:
+            try:
+                with self.assertRaises(ValueError):
+                    self.extract()
+            except IndexError:
+                self.fail("Empty choices escaped the invalid-output boundary")
+            self.assertEqual(http.call_count, 2)
 
     def test_invalid_json_twice_raises_without_echoing_output(self):
         with patch.object(self.adapter, "urlopen", side_effect=[

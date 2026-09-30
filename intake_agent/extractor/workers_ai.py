@@ -88,10 +88,10 @@ def extract(message, session_language, as_of, vocabulary):
                 if type(value) is not int or value < 0:
                     raise RuntimeError("Workers AI response omitted valid token usage")
                 usage[target] += value
-            content = result["response"]
+            content = result["response"] if "response" in result else result["choices"][0]["message"]["content"]
             extracted = json.loads(content) if isinstance(content, str) else content
             validate_extraction(extracted)
-        except (ValueError, KeyError, TypeError, AttributeError):
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError):
             if attempt == 1:
                 raise ValueError("Workers AI returned invalid extraction after two attempts") from None
             continue

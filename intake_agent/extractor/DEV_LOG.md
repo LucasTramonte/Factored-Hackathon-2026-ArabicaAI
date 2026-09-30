@@ -176,3 +176,82 @@ correction made **zero model calls**. Prior credential checks describe
 the earlier environment only; the parent is separately checking authorized
 Wrangler access without providing auth files to this builder. No credentials
 were read, and no registration, tag, push, or PR was created here.
+
+## 2026-09-30 UTC: parent provider probe and envelope compatibility
+
+The parent verified existing authorized Wrangler OAuth `ai:write` access
+and ownership of the project's Cloudflare account, then ran a provider I/O
+probe using an existing development message with the unchanged prompt and
+adapter. It bypassed the evaluation wrapper to inspect provider I/O; it was
+not an authentication/scoring scenario and is not evidence that an
+unauthenticated harness case calls the model. The builder received metadata
+only, and did not read authentication files or make live calls.
+
+The parent reported **two model calls** in that initial probe:
+
+| Provider call | Observed input tokens | Observed output tokens |
+|---|---:|---:|
+| Initial attempt | 1,534 | 267 |
+| Invalid-output retry | 1,534 | 390 |
+| Initial probe total | 3,068 | 657 |
+
+The combined adapter call took **6,487 ms**. Both HTTP API envelopes were
+successful, but their `result` contained `choices`, not `response`; the
+adapter therefore raised `ValueError` after its one retry. This is
+provider-envelope compatibility evidence, not successful extraction,
+three-repetition majority scoring, development tuning, or an ADR trigger
+evaluation. The reported combined time is not a measured per-call p95.
+Using the previously documented price, these two calls have an estimated
+list-price cost of **$0.0008107 USD** before the shared free allocation;
+this is not an observed bill or cost per successful intake. Neuron values
+were not provided to the builder.
+
+A third parent provider-I/O probe used authenticated development input,
+again without scoring the wrapper: **one request, 3,220 ms, 1,534 input /
+275 output / 1,809 total tokens**. Its `choices` was a list; the first
+choice had keys `index`, `message`, `logprobs`, `finish_reason`,
+`stop_reason`, and `token_ids`. The message had keys `role`, `content`,
+`refusal`, `annotations`, `audio`, `function_call`, `tool_calls`, and
+`reasoning_content`. `content` was a string and `finish_reason` was `stop`.
+The parent reported that `validate_extraction(json.loads(content))` passed.
+No message, case, or model-output text was supplied to the builder. Two
+setup attempts failed before calling the API and made zero requests.
+
+Across these parent provider probes, the actual total is **three model
+calls, 4,602 input and 932 output tokens**. Their estimated combined
+list-price cost is **$0.0012000 USD** before the shared free allocation.
+These are observed provider-token counts with a calculated price estimate,
+not a bill, scored majority result, or development trigger assessment.
+
+For the nonbehavioral I/O correction, a synthetic chat-completion envelope
+test was written first and failed because the adapter rejected valid
+`choices[0].message.content`. The parser now reads that field when the
+existing `response` field is absent. The same extraction validator and
+usage accounting still apply. An empty-choices check then failed with an
+uncaught `IndexError`; it now follows the existing one-retry invalid-output
+path and ends in sanitized `ValueError`. No free-form repair or semantic
+normalization was added.
+
+`python3 -m unittest intake_agent.extractor.test_workers_ai -v` passed
+**16 offline tests in 10.018 seconds**, including the real local HTTP
+deadline test. Compilation and whitespace checks also passed. Prompt,
+model, parameters, extraction schema, and shared harness were unchanged.
+No development-majority results or passed triggers are claimed, and
+pre-registration remains absent.
+
+Documentation rechecked on **2026-09-30 UTC**:
+
+- Cloudflare OpenAI compatibility:
+  <https://developers.cloudflare.com/workers-ai/configuration/open-ai-compatibility/>.
+- The model output schema still only declares an object:
+  <https://developers.cloudflare.com/workers-ai/models/gpt-oss-20b/sync-output.json>.
+- The official chat-completion content convention:
+  <https://developers.openai.com/api/docs/guides/conversation-state>.
+
+Cloudflare's compatibility page documents Chat Completions endpoints, but
+does not spell out this model's native `/ai/run` envelope. The native
+envelope compatibility correction is supported by the parent's observed
+field metadata as well as the official chat-completion convention. The
+builder's fixtures contain synthetic content, never captured model text or
+frozen examples. Initial zero-call/missing-credential statements above
+describe the earlier offline work, not the parent's subsequent probes.
