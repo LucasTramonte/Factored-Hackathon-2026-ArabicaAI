@@ -154,8 +154,11 @@ def evaluate(spec, fixture):
         if facts.get('country') and (_country(facts['country']) is None
                                      or _country(facts['country']) != _country(t['transaction_country'])):
             return False
-        if facts.get('abroad') is not None and facts['abroad'] != (_country(t['transaction_country']) != _country(customer['country'])):
-            return False
+        if facts.get('abroad') is not None:
+            where, home = _country(t['transaction_country']), _country(customer['country'])
+            # An unknown country on either side can't confirm "at home" or "abroad", so it never fits.
+            if where is None or home is None or facts['abroad'] != (where != home):
+                return False
         return True
 
     confirmed = spec.get('confirmed_id')

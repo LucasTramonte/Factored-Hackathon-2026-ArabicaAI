@@ -155,10 +155,6 @@ class NoSessionTimeTests(unittest.TestCase):
         self.assertEqual(evaluate(spec(facts, as_of=None), EX)['action'], 'C')
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 def country_fixture():
     """EX plus rows spelled as the source stores them: foreign countries in English, and a Bronze-style 'Mexico'."""
     fx = deepcopy(EX)
@@ -214,6 +210,21 @@ class CountryNormalizationTests(unittest.TestCase):
         self.assertEqual(evaluate(spec({'abroad': True}, customer_id='EX-M'), fx)['candidate_ids'], ['M02'])
         self.assertEqual(evaluate(spec({'abroad': True}), fx)['candidate_ids'], ['T03', 'T05', 'T06'])
 
+    def test_abroad_never_fits_when_either_country_is_unknown(self):
+        fx = country_fixture()
+        fx['customers'].append({'customer_id': 'EX-U', 'country': 'Chile', 'segment': 'Basic',
+                                'cards': [{'product_type': CREDIT, 'last4': '7777', 'currency': 'USD'}]})
+        for tid, country in (('U01', 'Perú'), ('U02', None), ('U03', 'USA')):
+            fx['transactions'].append({'transaction_id': tid, 'customer_id': 'EX-U', 'transaction_date': '2026-03-28 10:00:00',
+                                       'amount': '10.00', 'currency': 'USD', 'merchant_name': 'Uber',
+                                       'merchant_category': 'Transport', 'product_type': CREDIT, 'last4': '7777',
+                                       'transaction_country': country})
+        # The customer's country (Chile) is unmapped, so neither "at home" nor "abroad" can be verified.
+        for abroad in (False, True):
+            with self.subTest(abroad=abroad):
+                result = evaluate(spec({'abroad': abroad}, customer_id='EX-U'), fx)
+                self.assertEqual((result['action'], result['candidate_ids']), ('C', []))
+
 
 DRAFT = __import__('pathlib').Path(__file__).with_name('draft.json')
 
@@ -223,8 +234,13 @@ class GoldInvarianceTests(unittest.TestCase):
     """Normalizing countries must not change a single committed answer. Only counts are reported."""
 
     def test_every_committed_answer_is_unchanged(self):
-        import json
+        import hashlib, json
+        committed = json.loads(DRAFT.with_name('COMMITMENT.json').read_text(encoding='utf-8'))['files']['draft.json']['sha256']
+        self.assertEqual(hashlib.sha256(DRAFT.read_bytes()).hexdigest(), committed, 'draft.json differs from its commitment')
         draft = json.loads(DRAFT.read_text(encoding='utf-8'))
         specs = {s['situation_id']: s for s in draft['specs']}
         changed = sum(evaluate(specs[c['situation_id']], draft['fixture']) != c['construction_gold'] for c in draft['cases'])
         self.assertEqual(changed, 0, f'{changed} of {len(draft["cases"])} committed answers would change')
+
+if __name__ == '__main__':
+    unittest.main()
