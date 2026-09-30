@@ -1,12 +1,16 @@
-/** Export one complete episode page, validate with the existing scorer, then atomically publish under ignored data. */
-import { mkdir, realpath, writeFile, rename, rm } from 'node:fs/promises';
-import { resolve, dirname, relative, isAbsolute } from 'node:path';
+/**
+ * Export every intake episode as strict v2 JSONL, validate it with the existing scorer, then atomically publish
+ * it under the ignored data/intake-events directory. A failed run leaves the previous validated artifact intact.
+ */
+import { mkdir, open, realpath, rename, rm } from 'node:fs/promises';
+import { resolve, dirname, relative, isAbsolute, join, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { execFileSync } from 'node:child_process';
-import { withIntakeStore } from './intake-store.mjs';
+import { quietThirdPartyDiagnostics, withIntakeStore } from './intake-store.mjs';
 
 const ROOT = resolve(import.meta.dirname, '../..');
+export const MAX_EXPORT_PAGES = 100;
 const BASE = ['event','version','case_id','ts','seq','session_ref','language','model_version'];
 const FIELDS = {
   intake_started: ['scenario'], clarification_requested: ['missing'], transaction_confirmed: ['transaction_ref'],
@@ -15,7 +19,7 @@ const FIELDS = {
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** Reject injection instead of silently cleaning; scorer owns value/sequence/usage validation. */
+/** Reject injection instead of silently cleaning; the scorer owns value, sequence and usage validation. */
 function checkedEvent(event, episodeId) {
   const extra = FIELDS[event?.event];
   if (!extra || event.version !== '2' || event.case_id !== episodeId || Object.keys(event).some(k => ![...BASE,...extra].includes(k))) throw new Error('Invalid event');
@@ -24,36 +28,93 @@ function checkedEvent(event, episodeId) {
   return Object.fromEntries([...BASE,...extra].filter(k => k in event).map(k => [k,event[k]]));
 }
 
-/** Bounded at 100 episodes × 101 events × 4096 chars; a failed page leaves the previous validated artifact intact. */
-export async function exportIntakeEvents(store, { afterEpisode = '', limit = 100,
-  output = resolve(ROOT, 'data/intake-events/events.jsonl'), python = process.env.INTAKE_PYTHON ?? resolve(ROOT, '.venv/bin/python') } = {}) {
-  let temporary;
-  try {
-    const base = resolve(ROOT,'data/intake-events');
-    const destination = resolve(output); const path = relative(base,destination);
-    if (!path || path.startsWith('..') || isAbsolute(path) || !path.endsWith('.jsonl')) throw new Error('Invalid destination');
-    await mkdir(dirname(destination),{recursive:true});
-    const actualBase = await realpath(base); const actualParent = await realpath(dirname(destination));
-    const parentPath = relative(actualBase,actualParent); if (parentPath.startsWith('..') || isAbsolute(parentPath)) throw new Error('Invalid destination');
-    const page = await store.exportIntakeEvents({ afterEpisode, limit });
-    const events = page.flatMap(row => {
-      const group = JSON.parse(row.events_json);
-      if (!Array.isArray(group) || !group.length || group.length > 101) throw new Error('Invalid group');
-      return group.map(event => checkedEvent(event,row.episode_id));
-    });
-    temporary = destination + '.' + crypto.randomUUID() + '.tmp';
-    await writeFile(temporary,events.map(event => JSON.stringify(event)+'\n').join(''),{flag:'wx',mode:0o600});
-    const summary = JSON.parse(execFileSync(python,['-m','evals.intake.episodes',temporary],{cwd:ROOT,encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:30000,maxBuffer:100000}));
-    await rename(temporary,destination);temporary=undefined;
-    return { episodes: page.length, after_episode: page.at(-1)?.episode_id ?? afterEpisode,
-      page_full: page.length === limit, summary, metrics: store.metrics() };
-  } catch { throw new Error('Export failed'); }
-  finally { if (temporary) await rm(temporary,{force:true}); }
+const inside = (parent, child) => { const path = relative(parent, child); return !path.startsWith('..') && !isAbsolute(path); };
+
+/**
+ * Resolve an output path that stays in the repository's ignored ``data/intake-events`` after symlinks. ``data``
+ * may itself be a link to local storage outside the repository, but never into another repository path; the
+ * base must stay inside ``data``; nested directories must already exist inside the base (nothing is created
+ * through a link that escapes it).
+ */
+async function checkedDestination(output, dataDir) {
+  const base = resolve(dataDir, 'intake-events');
+  const destination = resolve(output);
+  const path = relative(base, destination);
+  if (!path || path.startsWith('..') || isAbsolute(path) || !path.endsWith('.jsonl')) throw new Error('Invalid destination');
+  await mkdir(dataDir, { recursive: true });
+  const [root, data] = await Promise.all([realpath(ROOT), realpath(dataDir)]);
+  if (inside(root, data) && data !== join(root, 'data')) throw new Error('Invalid destination');
+  await mkdir(base).catch(error => { if (error.code !== 'EEXIST') throw error; });
+  const actualBase = await realpath(base);
+  if (actualBase === data || !inside(data, actualBase)) throw new Error('Invalid destination');
+  const parent = await realpath(dirname(destination));
+  if (!inside(actualBase, parent)) throw new Error('Invalid destination');
+  return join(parent, basename(destination));
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+
+/**
+ * Export all episodes in keyset pages of ``limit`` (<=100) for at most ``maxPages`` pages, then score and publish
+ * one artifact. Memory holds one page (<=100 episodes x 101 events x 4096 chars) plus the scorer's O(events) pass
+ * over the file. Reaching the page bound before the last episode fails the run: a partial population is never
+ * published. Each page is one statement, so every episode group is internally consistent as of its page read.
+ */
+export async function exportIntakeEvents(store, { limit = 100, maxPages = MAX_EXPORT_PAGES,
+  output = resolve(ROOT, 'data/intake-events/events.jsonl'), dataDir = resolve(ROOT, 'data'),
+  python = process.env.INTAKE_PYTHON ?? resolve(ROOT, '.venv/bin/python') } = {}) {
+  let temporary;
+  let file;
   try {
-    const { values } = parseArgs({ options: { remote: {type:'boolean',default:false}, config:{type:'string'}, output:{type:'string'}, python:{type:'string'}, 'after-episode':{type:'string'}, limit:{type:'string'} } });
-    const result = await withIntakeStore(values,store=>exportIntakeEvents(store,{output:values.output,python:values.python,afterEpisode:values['after-episode'],limit:values.limit===undefined?100:Number(values.limit)}));
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(maxPages) || maxPages < 1 || maxPages > MAX_EXPORT_PAGES) throw new Error('Invalid bounds');
+    const cutoff = new Date().toISOString();
+    const destination = await checkedDestination(output, dataDir);
+    temporary = destination + '.' + crypto.randomUUID() + '.tmp';
+    file = await open(temporary, 'wx', 0o600);
+    let cursor = '';
+    let episodes = 0;
+    let pages = 0;
+    for (;;) {
+      if (pages === maxPages) {
+        if ((await store.exportIntakeEvents({ afterEpisode: cursor, limit: 1 })).length) throw new Error('Page bound reached');
+        break;
+      }
+      const page = await store.exportIntakeEvents({ afterEpisode: cursor, limit });
+      pages += 1;
+      const lines = page.flatMap(row => {
+        const group = JSON.parse(row.events_json);
+        if (!Array.isArray(group) || !group.length || group.length > 101) throw new Error('Invalid group');
+        return group.map(event => JSON.stringify(checkedEvent(event, row.episode_id)) + '\n');
+      });
+      await file.write(lines.join(''));
+      episodes += page.length;
+      if (page.length < limit) break;
+      cursor = page.at(-1).episode_id;
+    }
+    await file.close();
+    file = undefined;
+    const summary = JSON.parse(execFileSync(python, ['-m','evals.intake.episodes',temporary], { cwd: ROOT, encoding: 'utf8',
+      stdio: ['ignore','pipe','pipe'], timeout: 30000, maxBuffer: 100000 }));
+    await rename(temporary, destination);
+    temporary = undefined;
+    return { episodes, pages, complete: true, cutoff, summary, metrics: store.metrics() };
+  } catch {
+    throw new Error('Export failed');
+  } finally {
+    await file?.close().catch(() => {});
+    if (temporary) await rm(temporary, { force: true });
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  quietThirdPartyDiagnostics();
+  try {
+    const { values } = parseArgs({ options: { remote: { type: 'boolean', default: false }, config: { type: 'string' },
+      output: { type: 'string' }, python: { type: 'string' }, limit: { type: 'string' }, 'max-pages': { type: 'string' } } });
+    const number = (value, fallback) => value === undefined ? fallback : Number(value);
+    const result = await withIntakeStore(values, store => exportIntakeEvents(store, { output: values.output, python: values.python,
+      limit: number(values.limit, 100), maxPages: number(values['max-pages'], MAX_EXPORT_PAGES) }));
     console.log(JSON.stringify(result));
-  } catch { console.error('Export failed'); process.exitCode=1; }
+  } catch {
+    console.error('Export failed');
+    process.exitCode = 1;
+  }
 }

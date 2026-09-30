@@ -8,6 +8,9 @@
  */
 import { tokenHash } from '../auth/session.js';
 
+/** Export cursors are server-minted episode ids: lowercase RFC 4122 UUIDs, so text order matches the keyset. */
+const EPISODE_CURSOR = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
 export function createStore(db) {
   const totals = { queries: 0, rowsRead: 0, rowsWritten: 0, roundTrips: 0 };
   const track = result => {
@@ -165,31 +168,41 @@ export function createStore(db) {
       return Boolean(results.at(-1).results[0]);
     },
 
-    /** Close at most 100 due unreserved starts atomically; unknown handoffs require customer-authorized read-back. */
+    /**
+     * Close at most ``limit`` (<=100) due unreserved starts atomically. An episode is due at
+     * min(last activity + 10 min, bound session expiry); its end event records that deadline as ``ts`` and
+     * measures ``duration_ms`` to it, so the result does not depend on how often housekeeping runs.
+     * Reserved (``handoff_pending``) episodes are never closed: their acceptance needs customer-authorized read-back.
+     */
     closeIdleIntakes: async ({ now, limit = 100 }) => {
       if (!Number.isSafeInteger(now) || now < 0 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid closure bounds');
+      const due = 'MIN(e.updated_at+600000,e.expires_at)';
+      const page = "FROM intake_episodes e WHERE e.state='selection_required' AND " + due + '<=? '
+        + 'AND NOT EXISTS(SELECT 1 FROM intake_handoffs h WHERE h.episode_id=e.episode_id) '
+        + 'ORDER BY ' + due + ',e.episode_id LIMIT ?';
       const results = await batch([
         ["INSERT INTO intake_events(episode_id,seq,event_json) SELECT e.episode_id,1,json_patch(json_object("
-          + "'event','intake_ended','version','2','case_id',e.episode_id,'ts',?,'seq',1,'session_ref',e.session_ref,"
-          + "'language',e.language,'model_version','guided-0.1'),json_object('outcome','abandoned','safety','not_assessed',"
-          + "'duration_ms',MAX(0,?-e.created_at),'llm_calls',0,'input_tokens',0,'output_tokens',0,"
-          + "'known_input_tokens',0,'known_output_tokens',0,'usage_unavailable_calls',0,'tool_calls',json_extract(e.usage_json,'$.tool_calls'))) "
-          + "FROM intake_episodes e WHERE state='selection_required' AND MIN(updated_at+600000,expires_at)<=? "
-          + 'AND NOT EXISTS(SELECT 1 FROM intake_handoffs h WHERE h.episode_id=e.episode_id) '
-          + 'ORDER BY MIN(updated_at+600000,expires_at),episode_id LIMIT ? ON CONFLICT(episode_id,seq) DO NOTHING',
-          new Date(now).toISOString(),now,now,limit],
-        ["UPDATE intake_episodes SET state='abandoned',updated_at=? WHERE episode_id IN ("
-          + "SELECT e.episode_id FROM intake_episodes e WHERE state='selection_required' AND MIN(updated_at+600000,expires_at)<=? "
-          + 'AND NOT EXISTS(SELECT 1 FROM intake_handoffs h WHERE h.episode_id=e.episode_id) '
-          + 'ORDER BY MIN(updated_at+600000,expires_at),episode_id LIMIT ?) '
+          + "'event','intake_ended','version','2','case_id',e.episode_id,"
+          + "'ts',strftime('%Y-%m-%dT%H:%M:%S'," + due + "/1000,'unixepoch')||printf('.%03dZ'," + due + "%1000),"
+          + "'seq',1,'session_ref',e.session_ref,'language',e.language,'model_version','guided-0.1'),"
+          + "json_object('outcome','abandoned','safety','not_assessed','duration_ms',MAX(0," + due + "-e.created_at),"
+          + "'llm_calls',0,'input_tokens',0,'output_tokens',0,'known_input_tokens',0,'known_output_tokens',0,"
+          + "'usage_unavailable_calls',0,'tool_calls',json_extract(e.usage_json,'$.tool_calls'))) "
+          + page + ' ON CONFLICT(episode_id,seq) DO NOTHING', now, limit],
+        ["UPDATE intake_episodes SET state='abandoned',updated_at=? WHERE episode_id IN (SELECT e.episode_id " + page + ') '
           + "AND EXISTS(SELECT 1 FROM intake_events v WHERE v.episode_id=intake_episodes.episode_id AND v.seq=1 AND json_extract(v.event_json,'$.outcome')='abandoned') "
-          + 'RETURNING episode_id',now,now,limit]
+          + 'RETURNING episode_id', now, now, limit]
       ]);
       return results.at(-1).results;
     },
-    /** Keyset pages include pending episodes and complete ordered groups; overflow/oversize fails export rather than truncating. */
+    /**
+     * One keyset page of at most 100 episodes after ``afterEpisode`` (a lowercase UUID, or '' for the start), each
+     * with its complete ordered event group read in the same statement. Pending episodes are included. Groups
+     * over 101 events or events over 4096 characters come back as an overflow row or null, so the caller rejects
+     * the page rather than truncating it.
+     */
     exportIntakeEvents: ({ afterEpisode = '', limit = 100 } = {}) => {
-      if (typeof afterEpisode !== 'string' || (afterEpisode && !/^[0-9a-f-]{36}$/.test(afterEpisode)) || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid export bounds');
+      if (typeof afterEpisode !== 'string' || (afterEpisode && !EPISODE_CURSOR.test(afterEpisode)) || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid export bounds');
       return all('WITH page AS (SELECT episode_id FROM intake_episodes WHERE episode_id>? ORDER BY episode_id LIMIT ?) '
         + 'SELECT p.episode_id,(SELECT json_group_array(json(event_json)) FROM '
         + '(SELECT CASE WHEN length(event_json)<=4096 THEN event_json ELSE NULL END AS event_json '
@@ -229,7 +242,7 @@ export function createStore(db) {
       + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
       + 'LEFT JOIN transactions t ON t.transaction_id=c.transaction_id AND t.customer_id=e.customer_id '
       + "WHERE e.state=h.kind||'_handoff' AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))", protocol, protocol),
-    /** At most 101 indexed events; overflow is explicit. ponytail: guided chains have <=5 events; add a cursor before supporting >100. */
+    /** At most 101 indexed events, so overflow is explicit. Guided chains have at most 5 events; add a cursor before supporting more than 100. */
     listIntakeHistory: episodeId => all(
       'SELECT event_json FROM intake_events WHERE episode_id=? ORDER BY seq LIMIT 101', episodeId),
 

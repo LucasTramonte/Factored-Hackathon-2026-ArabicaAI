@@ -105,20 +105,59 @@ test('idle_close_and_export_keep_pending_and_unknown_visible on local D1',async 
   const {withIntakeStore}=await import('../../scripts/intake-store.mjs');
   const {exportIntakeEvents}=await import('../../scripts/export-intake-events.mjs');
   const {closeIdleIntakes}=await import('../../scripts/close-idle-intakes.mjs');
-  const {resolve}=await import('node:path');const {mkdir,rm,readFile}=await import('node:fs/promises');
-  const root=resolve(import.meta.dirname,'../../..');const output=resolve(root,'data/intake-events',crypto.randomUUID(),'events.jsonl');await mkdir(resolve(output,'..'),{recursive:true});t.after(()=>rm(resolve(output,'..'),{recursive:true,force:true}));
+  const {resolve}=await import('node:path');const {mkdir,rm,readFile}=await import('node:fs/promises');const {execFileSync}=await import('node:child_process');
+  const root=resolve(import.meta.dirname,'../../..');const dir=resolve(root,'data/intake-events',crypto.randomUUID());const output=resolve(dir,'events.jsonl');
+  await mkdir(dir,{recursive:true});t.after(()=>rm(dir,{recursive:true,force:true}));
+  const config=resolve(process.cwd(),'wrangler.jsonc');
   const ana=await customer();const start=await ana.call('/intake/start',startBody());
   const complete=await ana.call('/intake/confirm',{episode_id:start.body.episode_id,transaction_id:'demo-tx-001',customer_confirmed:true,idempotency_key:crypto.randomUUID()});assert.equal(complete.status,201);
   const incompleteStart=await ana.call('/intake/start',startBody());assert.equal((await ana.call('/intake/handoff',{episode_id:incompleteStart.body.episode_id,kind:'incomplete',idempotency_key:crypto.randomUUID()})).status,201);
-  await withIntakeStore({config:resolve(process.cwd(),'wrangler.jsonc')},async store=>{
-    const now=Date.now();const expired=(await store.startIntake({customerId:'demo-ana',language:'es',statement:'No reconozco este cargo.',key:crypto.randomUUID(),now:now-600000,expiresAt:now+100000})).episode;
-    const closed=await closeIdleIntakes(store,{now,limit:100});assert.ok(closed.closed>=1);assert.equal((await store.findIntake('demo-ana',expired.episode_id)).state,'abandoned');
+  const open=await ana.call('/intake/start',startBody('pt'));assert.equal(open.status,201);
+  let expired;
+  await withIntakeStore({config},async store=>{
+    const now=Date.now();expired=(await store.startIntake({customerId:'demo-ana',language:'es',statement:'No reconozco este cargo.',key:crypto.randomUUID(),now:now-600000,expiresAt:now+100000})).episode;
+    const closed=await closeIdleIntakes(store,{now,limit:100});assert.ok(closed.closed>=1);assert.equal(closed.complete,true);assert.equal((await store.findIntake('demo-ana',expired.episode_id)).state,'abandoned');
     const repeated=await closeIdleIntakes(store,{now,limit:100});assert.equal(repeated.closed,0);console.log('D1_IDLE_TWO_SWEEPS '+JSON.stringify(store.metrics()));
   });
-  await withIntakeStore({config:resolve(process.cwd(),'wrangler.jsonc')},async store=>{
-    const result=await exportIntakeEvents(store,{output,python:process.env.INTAKE_PYTHON,limit:100});
-    assert.ok(result.summary.all.eligible_started>=3);assert.ok(result.summary.all.outcomes.accepted>=1);assert.ok(result.summary.all.outcomes.routed>=1);assert.ok(result.summary.all.outcomes.pending>=1);assert.ok(result.summary.all.usage_unknown_episodes>=1);assert.equal(result.summary.all.safe_accepted,0);
-    const text=await readFile(output,'utf8');for(const forbidden of ['"customer_id"','No reconozco','demo-tx-001','"customer_statement"'])assert.ok(!text.includes(forbidden));
-    const m=result.metrics;assert.ok(m.queries===1&&m.roundTrips===1&&m.rowsWritten===0);console.log('D1_EXPORT_PAGE '+JSON.stringify({episodes:result.episodes,...m}));
+  let result;
+  await withIntakeStore({config},async store=>{
+    // Small pages force the keyset cursor through several pages of the shared population; nothing is omitted.
+    result=await exportIntakeEvents(store,{output,python:process.env.INTAKE_PYTHON,limit:7});
+    assert.equal(result.complete,true);assert.ok(result.pages>1);
+    const m=result.metrics;assert.equal(m.queries,result.pages);assert.equal(m.roundTrips,result.pages);assert.equal(m.rowsWritten,0);
+    console.log('D1_EXPORT_RUN '+JSON.stringify({episodes:result.episodes,pages:result.pages,...m}));
   });
+  const text=await readFile(output,'utf8');for(const forbidden of ['"customer_id"','No reconozco','Não reconheço','demo-tx-001','demo-ana','"customer_statement"'])assert.ok(!text.includes(forbidden),forbidden);
+  const events=text.trim().split('\n').map(line=>JSON.parse(line));const byEpisode=new Map();
+  for(const e of events){if(!byEpisode.has(e.case_id))byEpisode.set(e.case_id,[]);byEpisode.get(e.case_id).push(e);}
+  assert.equal(byEpisode.size,result.episodes,'one group per exported episode');
+  const names=id=>byEpisode.get(id).map(e=>e.event);const end=id=>byEpisode.get(id).at(-1);
+  assert.deepEqual(names(start.body.episode_id),['intake_started','transaction_confirmed','handoff_created','handoff_accepted','intake_ended']);
+  assert.equal(end(start.body.episode_id).outcome,'accepted');assert.equal(end(start.body.episode_id).safety,'not_assessed');
+  assert.deepEqual(names(incompleteStart.body.episode_id),['intake_started','handoff_created','intake_ended']);assert.equal(end(incompleteStart.body.episode_id).outcome,'routed');
+  assert.deepEqual(names(open.body.episode_id),['intake_started'],'an open episode stays pending in the denominator');
+  assert.deepEqual(names(expired.episode_id),['intake_started','intake_ended']);assert.equal(end(expired.episode_id).outcome,'abandoned');
+  // Reconcile the published artifact with the scorer CLI directly: every exported episode is an eligible start.
+  const python=process.env.INTAKE_PYTHON??resolve(root,'.venv/bin/python');
+  const scored=JSON.parse(execFileSync(python,['-m','evals.intake.episodes',output],{cwd:root,encoding:'utf8'}));
+  assert.deepEqual(scored,result.summary);
+  const pending=[...byEpisode.values()].filter(seq=>seq.at(-1).event!=='intake_ended').length;
+  assert.equal(scored.all.eligible_started,result.episodes);assert.equal(scored.all.outcomes.pending,pending);
+  assert.equal(scored.all.safe_accepted,0,'production safety stays not_assessed');assert.equal(scored.all.not_assessed,result.episodes);
+  // Guided episodes call no model: usage is measured zero, and only pending episodes have unknown usage.
+  assert.equal(scored.all.usage_unknown_episodes,pending);assert.equal(scored.all.llm_calls,0);assert.equal(scored.all.input_tokens,0);assert.equal(scored.all.usage_unavailable_calls,0);
+  console.log('D1_SCORER_RECONCILED '+JSON.stringify({episodes:result.episodes,pending,outcomes:scored.all.outcomes}));
+});
+
+test('export CLI on the shared local D1 never relays scorer output or partial artifacts', async t => {
+  const {resolve}=await import('node:path');const {mkdir,rm,readdir,writeFile}=await import('node:fs/promises');const {spawnSync}=await import('node:child_process');
+  const root=resolve(import.meta.dirname,'../../..');const dir=resolve(root,'data/intake-events',crypto.randomUUID());
+  await mkdir(dir,{recursive:true});t.after(()=>rm(dir,{recursive:true,force:true}));
+  // The fake scorer echoes the artifact it was given (opaque references) and customer-looking text to both streams.
+  const scorer=resolve(dir,'scorer.sh');
+  await writeFile(scorer,'#!/bin/sh\necho "SENTINEL No reconozco demo-ana"; cat "$3"; echo SENTINEL_STDERR >&2; cat "$3" >&2; exit 3\n',{mode:0o755});
+  const run=spawnSync(process.execPath,[resolve(root,'back-end/scripts/export-intake-events.mjs'),'--config',resolve(process.cwd(),'wrangler.jsonc'),
+    '--output',resolve(dir,'events.jsonl'),'--python',scorer],{encoding:'utf8',timeout:120000});
+  assert.equal(run.status,1);assert.equal(run.stdout,'');assert.equal(run.stderr,'Export failed\n');
+  assert.deepEqual(await readdir(dir),['scorer.sh'],'no temporary or partial artifact remains');
 });
