@@ -144,3 +144,14 @@ test('atomic start failure leaves no partial episode or durable receipt', async 
   assert.equal(db.prepare('SELECT count(*) AS n FROM intake_episodes').get().n, 0);
   assert.equal(db.prepare('SELECT count(*) AS n FROM intake_turns').get().n, 0);
 });
+
+test('U+0000 statements return 422 before storage and do not consume the start key', async t => {
+  const { db, store } = await setup(t);
+  for (const statement of ['a\u0000bbbbbbbbbb', 'No reconozco este cargo.\u0000']) {
+    const res = await route(request({ ...body, customer_statement: statement }), env, store);
+    assert.equal(res.status, 422);
+    assertContract('error', await res.json());
+  }
+  assert.equal(db.prepare('SELECT count(*) AS n FROM intake_episodes').get().n, 0);
+  assert.equal((await route(request(), env, store)).status, 201);
+});

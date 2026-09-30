@@ -88,3 +88,14 @@ test('new guided start reports local D1 work without altering existing route bud
   assert.ok(result.metrics, 'local harness exposes measured D1 counters');
   console.log('D1_INTAKE_START ' + JSON.stringify(result.metrics));
 });
+
+test('U+0000 guided statements return 422 on local D1 and leave their key reusable', async () => {
+  const ana = await customer();
+  const body = startBody();
+  for (const statement of ['a\u0000bbbbbbbbbb', 'No reconozco este cargo.\u0000']) {
+    const rejected = await ana.call('/intake/start', { ...body, customer_statement: statement });
+    assert.equal(rejected.status, 422);
+    assertContract('error', rejected.body);
+  }
+  assert.equal((await ana.call('/intake/start', body)).status, 201);
+});
