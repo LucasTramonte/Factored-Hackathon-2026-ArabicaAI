@@ -75,3 +75,16 @@ Made by Lucas's Claude session, which has seen frozen cases, so the ADR-006 limi
 - Missing or invalid provider usage, and any attempt that fails in transport (timeout, reset, cut body), adds 0 tokens and counts in `usage_unavailable_calls`. The runner reports that count, and a majority row with no usage stays unknown instead of 0.
 
 None of these paths occurred in iteration 4: 48/48 calls returned usage and no failure envelope. The iteration-4 numbers above are unchanged.
+
+## Development relabel (2026-09-30)
+
+The two `missing_currency` development cases ("85" on 2026-06-10, no currency) were relabelled from clarify to **confirm `EVAL-A1`**. Applying `POLICY.md` to the stated facts through `policy_prediction` gives exactly one owned purchase that day (85.00 USD), and a currency is only required when the other facts fit more than one purchase. The old gold followed the checklist's own requirement for a currency, not the written policy. The frozen gold was built with the policy, so it already agrees.
+
+| Development split | Before | After |
+|---|---|---|
+| Extractor v1, iteration 4 (majority) | 16/18 | 18/18 |
+| Checklist | 18/18 | 16/18 |
+| Always-handoff reference | 4/18 | 4/18 |
+| Unsafe outcomes, any system | 0 | 0 |
+
+The extractor's score is re-derived from iteration 4's outputs, which were the facts above in every repetition. No model was called for it. The original 16/18 stays in the iterations table above as it was recorded. The relabel needs Manoella's approval as the unexposed reviewer (ADR-006 decision 5), given in the PR that carries it.
