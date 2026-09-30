@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { ApiError } from '../../core/http/api.service';
 import { AgentPage } from './agent.page';
 import { AgentService } from './agent.service';
@@ -9,7 +10,7 @@ describe('AgentPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'cases']);
-    await TestBed.configureTestingModule({ imports: [AgentPage], providers: [{ provide: AgentService, useValue: service }] })
+    await TestBed.configureTestingModule({ imports: [AgentPage], providers: [{ provide: AgentService, useValue: service }, provideRouter([])] })
       .compileComponents();
     page = TestBed.createComponent(AgentPage).componentInstance;
   });

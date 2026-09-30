@@ -8,16 +8,13 @@ describe('App shell', () => {
     await TestBed.configureTestingModule({ imports: [App], providers: [provideRouter(routes)] }).compileComponents();
   });
 
-  it('renders the title, the synthetic-demo notice and both views', () => {
+  it('renders the router outlet only; each page carries its own chrome', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
-    const page = fixture.nativeElement as HTMLElement;
-    expect(page.querySelector('h1')?.textContent).toContain('ArabicaAI');
-    expect(page.textContent).toContain('SYNTHETIC DEMO');
-    expect([...page.querySelectorAll('nav a')].map(a => a.getAttribute('href'))).toEqual(['/', '/agent']);
+    expect((fixture.nativeElement as HTMLElement).querySelector('router-outlet')).not.toBeNull();
   });
 
-  it('routes the customer view at / and the agent view at /agent', () => {
+  it('routes the customer flow at / and the agent view at /agent, the two documents the Worker serves', () => {
     expect(routes.map(r => r.path)).toEqual(['', 'agent', '**']);
   });
 });

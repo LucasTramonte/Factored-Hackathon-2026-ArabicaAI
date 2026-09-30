@@ -1,17 +1,22 @@
 import { Component, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { formatSourceTime } from '../../shared/format/source-time.util';
+import { LangService } from '../../shared/i18n/lang.service';
+import { LangSwitch } from '../../shared/i18n/lang-switch.component';
+import { Mark } from '../../shared/mark/mark.component';
 import { AgentCase } from '../../shared/models/intake.model';
 import { AgentService } from './agent.service';
 
 /** Agent queue: the most recent accepted cases with their transaction evidence. Read-only. */
 @Component({
   selector: 'app-agent-page',
-  imports: [DatePipe],
+  imports: [DatePipe, RouterLink, LangSwitch, Mark],
   templateUrl: './agent.page.html'
 })
 export class AgentPage {
   private readonly service = inject(AgentService);
+  readonly t = inject(LangService).t;
   readonly busy = signal(false);
   readonly error = signal('');
   readonly loaded = signal(false);
