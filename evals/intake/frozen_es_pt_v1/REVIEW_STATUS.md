@@ -1,6 +1,6 @@
 # Review status: `frozen_es_pt_v1`
 
-Last updated 2026-09-30. This page gives aggregates and case IDs only. No message text or fixture detail appears here until the set is published.
+Last updated 2026-09-30. This page gives aggregates and rules only. No case IDs, message text or fixture detail appear here until the set is published.
 
 ## Progress
 
