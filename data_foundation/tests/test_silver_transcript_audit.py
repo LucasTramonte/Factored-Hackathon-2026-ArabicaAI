@@ -48,7 +48,7 @@ def test_complete_audit_on_controlled_snapshot(tmp_path):
             con.execute(f'CREATE TABLE bronze.{name} ({ddl}, _ingested_at TIMESTAMPTZ)')
         text = 'Cliente: Quiero consultar mi saldo.'
         for name, extra in [
-            ('call_center_interactions',dict(interaction_id='i',interaction_date='2025-01-01',contact_reason='Producto',reason_category='Producto',channel='Phone',has_transcript='true',requires_followup='false',was_escalated='false')),
+            ('call_center_interactions',dict(interaction_id='i',interaction_date='2025-01-01',contact_reason='Producto',reason_category='Producto',channel='Phone',has_transcript='true',requires_followup='false',was_escalated='false',has_recording='true')),
             ('call_transcripts',dict(transcript_id='t',interaction_id='i',full_text=text,detected_language='es'))]:
             row = {key:'x' for key in CONTRACTS[name].required}
             row.update(customer_id='c',agent_id='a',process_date='2025-01-01',_source_file='year=2025/month=01/day=01/a.csv',_ingested_at=datetime.now(timezone.utc),**extra)

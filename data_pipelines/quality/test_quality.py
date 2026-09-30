@@ -118,6 +118,35 @@ def test_partial_silver_build_blocks_readiness(con):
     assert delta['severity'] == 'error'
 
 
+def test_unique_field_violation_counts_excess_rows_not_groups(con):
+    # 3 customers share one document_number -> 2 excess rows (the group's size minus 1), not 3 and
+    # not "1 violation" -- matches the duplicate_primary_keys convention. A 4th, distinct customer
+    # with a NULL document_number must not be swept in as a false collision.
+    tables(con, 'customers', [
+        {'customer_id': 'C1', 'document_number': 'DOC-1', 'country': 'México', 'customer_status': 'Active'},
+        {'customer_id': 'C2', 'document_number': 'DOC-1', 'country': 'México', 'customer_status': 'Active'},
+        {'customer_id': 'C3', 'document_number': 'DOC-1', 'country': 'México', 'customer_status': 'Active'},
+        {'customer_id': 'C4', 'document_number': None, 'country': 'México', 'customer_status': 'Active'},
+    ])
+    result = run_checks(con, ['customers'])
+    violation = find(result, 'unique_field_violations', 'customers', 'document_number')
+    assert violation['numerator'] == 2
+    assert violation['severity'] == 'warning'
+
+
+def test_unique_field_violation_is_clean_when_values_differ(con):
+    tables(con, 'products', [
+        {'product_id': 'P1', 'customer_id': 'C1', 'product_number': 'ACC-1',
+         'product_type': 'Checking', 'currency': 'USD', 'product_status': 'Active'},
+        {'product_id': 'P2', 'customer_id': 'C1', 'product_number': 'ACC-2',
+         'product_type': 'Checking', 'currency': 'USD', 'product_status': 'Active'},
+    ])
+    result = run_checks(con, ['products'])
+    violation = find(result, 'unique_field_violations', 'products', 'product_number')
+    assert violation['numerator'] == 0
+    assert violation['severity'] == 'info'
+
+
 def test_focused_foreign_key_parent_is_skipped(con):
     tables(con, "campaign_sends", [{"send_id": "S1", "send_date": "2024-01-01",
         "process_date": "2024-01-01", "campaign_id": "M1", "customer_id": "C1",
