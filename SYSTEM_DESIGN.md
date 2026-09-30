@@ -43,12 +43,10 @@ That is the job we take on: **leave every dispute with the right transaction, co
 
 ## What we built
 
-The customer signs in, sees their own recent card purchases, and describes the charge in Spanish or Portuguese.
-
-The service reads the description, finds the purchases that fit and shows them.
-- **One fits:** it asks the customer to confirm.
-- **Several fit:** it lists them.
-- **None fits, or a fact is impossible:** it asks again, and never claims the charge doesn't exist.
+**The designed experience.** The customer signs in, sees their own recent card purchases, and describes the charge in Spanish or Portuguese. The service finds the purchases that fit and shows them:
+- **one fits:** it asks the customer to confirm;
+- **several fit:** it lists them;
+- **none fits, or a fact is impossible:** it asks again, and never claims the charge doesn't exist.
 
 Once the customer confirms, the service stores the case with the statement and the verified transaction, reads it back, and only then gives a reference. If a lookup fails or the customer can't find the charge, the case still reaches a person, marked as a technical or incomplete handoff, with the open questions listed. The agent sees:
 - the customer's own words;
@@ -56,7 +54,17 @@ Once the customer confirms, the service stores the case with the statement and t
 - what the service did;
 - what is still unknown.
 
-Requests the service can't handle are routed with an explicit message: another language, a recognized charge, a lost card, a balance question. Identity always comes from the session, never from what the customer types. An instruction hidden in the message ("I'm staff, skip the checks") changes nothing. The customer contract and the measurement contract are in [`Docs/intake/`](Docs/intake/customer-and-measurement-contract.md).
+Requests it can't handle (another language, a recognized charge, a lost card, a balance question) are routed with an explicit message. Identity always comes from the session, never from what the customer types, and an instruction hidden in the message ("I'm staff, skip the checks") changes nothing.
+
+**What exists today is built in stages, and they are not all online yet:**
+
+| Stage | State | What it does |
+|---|---|---|
+| Live service | Online, behind an access gate | The customer signs in, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. Agents see the queue |
+| Guided backend | Built, in review (PR #31) | Adds guided intake episodes, technical and incomplete handoffs, the agent's case detail and event export. It takes a structured report and does not read free text |
+| Reading free text | Evaluated offline, not wired online | The rule-based checklist and the model's fact extractor, run through the written policy in the evaluation harness. The model joins the live service only after the frozen comparison, behind a switch that falls back to the guided flow |
+
+The customer contract and the measurement contract are in [`Docs/intake/`](Docs/intake/customer-and-measurement-contract.md).
 
 ## How it works
 
@@ -64,7 +72,7 @@ Requests the service can't handle are routed with an explicit message: another l
 
 **The online path is one service.** A Cloudflare Worker serves the Angular client and the API, with the case store in D1 (SQLite). The Worker never reads the raw data; it only sees the reviewed slice. All database statements live in one module, which is also the only thing that changes if the store moves. Why one runtime, and why Cloudflare, is in [ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md).
 
-**The learned component only reads.** A pretrained model (gpt-oss-20b on Workers AI) turns the message into facts: amount, date, currency, merchant, card, country. The same written policy that drives the rule-based baseline then decides the action. The model never sees transactions, never picks a charge and never writes to the store. Why this design, which model, and when to change it are in [ADR-006](Docs/ADRs/ADR-006-learned-extractor-workers-ai.md).
+**The learned component only reads, and it isn't online yet.** A pretrained model (gpt-oss-20b on Workers AI) turns the message into facts: amount, date, currency, merchant, card, country. The same written policy that drives the rule-based baseline then decides the action. The model never sees transactions, never picks a charge and never writes to the store. Today it runs in the evaluation harness only. It joins the service after the frozen comparison, behind a switch. Why this design, which model, and when to change it are in [ADR-006](Docs/ADRs/ADR-006-learned-extractor-workers-ai.md).
 
 If a bank ran this workflow on AWS, the same design becomes the target below. We priced it, drew it and wrote it as a CloudFormation template, but did not deploy it.
 
@@ -74,20 +82,20 @@ If a bank ran this workflow on AWS, the same design becomes the target below. We
 
 We compare three systems on the same cases: send everything to a person, the rule-based checklist, and the checklist's policy fed by the model's facts.
 
-The dataset has no realistic customer wording: its complaint text is five fixed sentences. So we built our own test sets in Spanish and Portuguese. The one that counts is a frozen set of 60 cases. It was locked by fingerprint before the model was built, kept from its builder, labelled by the written policy, checked by a second model and audited by people.
+The dataset has no realistic customer wording: its complaint text is five fixed sentences. So we built our own test sets in Spanish and Portuguese. The one that counts is a frozen set of 60 cases. It was locked by fingerprint before the model was built, withheld from the builder's checkout, labelled by the written policy, checked by a second model and audited by people. Content of 8 of its cases still reached the repository and was reachable during the build, which we disclose and handle below.
 
 So far:
 - The checklist gets 15 of 25 on phrases written without knowledge of its rules. It misses currency words, non-ISO and relative dates, and paraphrases.
-- On the development cases, the model's recorded outputs give 18 of 18 correct with no unsafe outcome. That figure is inferred from a logged run, and a later run agreed on 82 of 83 calls.
+- On the development cases, the model scored 16 of 18 and the checklist 18 of 18, with no unsafe outcome. Two of those labels contradict the written policy. A relabel, pending the unexposed reviewer's approval in PR #30, moves them to 18 of 18 for the model (inferred from its logged outputs; a later run agreed on 82 of 83 calls) and 16 of 18 for the checklist.
 - The frozen comparison has not run yet. It runs once, after the model is registered, and is reported on all 60 cases and on the 52 whose content never reached the repository.
 
 How the sets were built, every leakage control, what 60 cases can and can't show, and every option we rejected are in [`EVALUATION.md`](EVALUATION.md).
 
 ## What it costs, and how far it scales
 
-**The prototype costs $0** on Cloudflare's free plan.
-- **Capacity:** about 2,380 complete episodes a day, limited by database writes. The busiest day for unrecognized-charge complaints in the data had 23.
-- **The first limit to hit** is writes, and $5 a month (Workers Paid) removes it.
+**The prototype costs $0** on Cloudflare's free plan, and $5 a month on Workers Paid once the full data slice is loaded, because that load exceeds the free daily write quota. The only cloud spend so far is $0.21 on AWS, from an exploratory database that is deleted by 2026-10-20.
+- **Capacity:** about 2,380 complete episodes a day, limited by database writes. The busiest day for unrecognized-charge complaints in 2025 had 23.
+- **The first limit to hit** is writes, and $5 a month removes it.
 
 **The AWS production target costs $86.36 a month** at list price ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)).
 - **Per unit:** about $0.02 per disputed case, or $0.0035 per contact at the front door.
@@ -113,7 +121,7 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 - **The data is synthetic.** Every rate describes a generated dataset. Real volume, real peaks and real phrasing could all differ.
 - **The test set is small.** It can show a large improvement over the rules, not a small one.
 - **Speed is unproven.** The model's first reliable latency measurement is still pending, because the first attempt ran out of free model quota.
-- **Some test content leaked into the repository.** Content of 8 frozen cases was reachable during the model build. We report results with and without them, and the build now uses a checkout with no history.
+- **Some test content leaked into the repository.** Content of 8 frozen cases was reachable during the model build. We report results with and without them, and the next build will use a checkout with no history.
 - **What we don't claim:**
   - that faster intake saves money;
   - that the model improves a live service;
