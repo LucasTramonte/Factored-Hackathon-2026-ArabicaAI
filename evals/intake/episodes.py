@@ -159,7 +159,7 @@ def main():
                     if not isinstance(event, dict):
                         raise ValueError('Expected an object')
                     _check_event(event)
-                except (ValueError, TypeError):
+                except (ValueError, TypeError, RecursionError):
                     parser.error(f'Invalid JSON or event contract at line {line_number}')
                 events.append(event)
     except (OSError, UnicodeError):

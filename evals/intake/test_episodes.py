@@ -146,7 +146,8 @@ class EpisodeCliTests(unittest.TestCase):
 
     def test_cli_rejects_bad_input_without_echoing_content_or_partial_results(self):
         valid = json.dumps(ACCEPTED[0]) + '\n'
-        for bad in ['{"customer_name": "PRIVATE-CONTENT"', '"PRIVATE-CONTENT"',
+        for bad in ['[' * 1200 + '"PRIVATE-CONTENT"' + ']' * 1200,
+                    '{"customer_name": "PRIVATE-CONTENT"', '"PRIVATE-CONTENT"',
                     '["PRIVATE-CONTENT"]', '{"event": "PRIVATE-CONTENT"}',
                     json.dumps(dict(ACCEPTED[1], missing=['PRIVATE-CONTENT'])),
                     json.dumps(dict(ACCEPTED[1], event={'private': 'PRIVATE-CONTENT'}))]:
