@@ -137,13 +137,12 @@ def _usage(payload: dict) -> tuple[int, int]:
         return 0, 0
 
 
-def parse(content: str, as_of) -> dict:
+def parse(content: str) -> dict:
     """Parse the model's JSON and apply the fixed output normalisation, then validate the schema.
 
     Normalisation (parsing only, no inference): surrounding prose or code fences are ignored;
     ``stated_facts`` entries whose value is null are dropped, since a null means "not stated".
-    With no session time (``as_of`` null) the date fact is dropped, because the written policy can
-    only apply a date against an ``as_of``; the explicit confirmation step still guards the match.
+    Every stated fact, including a date, is kept whether or not the session has an ``as_of``.
     """
     text = content.strip()
     start, end = text.find("{"), text.rfind("}")
@@ -154,10 +153,7 @@ def parse(content: str, as_of) -> dict:
     except json.JSONDecodeError:
         raise ValueError("model output is not valid JSON") from None
     if isinstance(data, dict) and isinstance(data.get("stated_facts"), dict):
-        facts = {k: v for k, v in data["stated_facts"].items() if v is not None}
-        if as_of is None:
-            facts.pop("date", None)
-        data["stated_facts"] = facts
+        data["stated_facts"] = {k: v for k, v in data["stated_facts"].items() if v is not None}
     return validate_extraction(data)
 
 
@@ -179,7 +175,7 @@ def extract(message: str, session_language, as_of, vocabulary: dict) -> dict:
         input_tokens += i
         output_tokens += o
         try:
-            extracted = parse(_content(payload), as_of)
+            extracted = parse(_content(payload))
         except ValueError:
             if attempt + 1 == ATTEMPTS:
                 raise ValueError(f"invalid model output after {ATTEMPTS} attempts") from None

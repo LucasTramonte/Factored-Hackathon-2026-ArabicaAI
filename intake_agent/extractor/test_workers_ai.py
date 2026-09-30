@@ -69,12 +69,13 @@ class ExtractTests(unittest.TestCase):
         out, _ = self.run_with(fenced)
         self.assertEqual(out["extracted"], GOOD)
 
-    def test_date_is_dropped_only_without_a_session_time(self):
-        dated = dict(GOOD, stated_facts=dict(GOOD["stated_facts"], date={"expression": "hoy", "from": "2026-06-12", "to": "2026-06-12"}))
-        out, _ = self.run_with(json.dumps(dated))
-        self.assertIn("date", out["extracted"]["stated_facts"])
-        out, _ = self.run_with(json.dumps(dated), as_of=None)
-        self.assertNotIn("date", out["extracted"]["stated_facts"])
+    def test_stated_date_is_kept_with_or_without_a_session_time(self):
+        date = {"expression": "2026-06-10", "from": "2026-06-10", "to": "2026-06-10"}
+        dated = dict(GOOD, stated_facts=dict(GOOD["stated_facts"], date=date))
+        for as_of in ("2026-06-12T10:00:00", None):
+            with self.subTest(as_of=as_of):
+                out, _ = self.run_with(json.dumps(dated), as_of=as_of)
+                self.assertEqual(out["extracted"]["stated_facts"]["date"], date)
 
     def test_one_retry_on_invalid_json_then_success(self):
         out, calls = self.run_with("not json", json.dumps(GOOD))

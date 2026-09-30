@@ -24,6 +24,8 @@ python -m evals.intake.run --split development --repetitions 3 \
 
 The development cases have no `as_of`. `label_rules._date_bounds` calls `datetime.fromisoformat(as_of)` for **any** date fact, including an absolute ISO date. With `as_of=None` that raises `TypeError`, and the policy then returns clarify. I checked this directly with `policy_prediction`: `{amount 85.00, currency USD, date 2026-06-10}` gives clarify, and `{amount 85.00, currency USD}` gives confirm. A faithful extractor that kept the stated dates would therefore clarify every dated development case (about 12/18). So `parse()` drops the date fact **only when `as_of` is null**. With a session time, as in production and in the frozen set's schema, the rule does nothing. This is a parsing rule, and it's flagged for review.
 
+**Superseded (iteration 4).** Reviewer commit `b27e0a0` changed `label_rules._date_bounds` so that only relative expressions need `as_of`. The workaround then had no reason to exist and hid stated dates, so I removed it from `parse()`. Every stated fact, dates included, is now kept whether or not `as_of` is set.
+
 The `missing_currency` pair ("85" on 2026-06-10, no currency) has gold `clarify`. Under `POLICY.md` the stated facts fit exactly one purchase (85.00 USD), which gives confirm. So the gold follows the checklist's requirement for a currency, not the written policy. I didn't tune toward it, because that would mean inventing an `invalid` reason the customer never stated. Both cases are lost in every iteration, which caps the development score at 16/18.
 
 ## Iterations
@@ -35,24 +37,30 @@ Per-call latency is wall time per case in the harness. The token figures are sum
 | 1 | 2026-09-30 02:40 | Initial prompt | 15 / 15 / 16 | 16/18 | 0 | 3 | 2/18 (11%) | 3.1 s / 10.0 s | 92,977 / 16,137 (359) |
 | 2 | 2026-09-30 02:43 | `Reasoning: low` line at the top of the prompt | 15 / 15 / 16 | 16/18 | 0 | 3 | 3/18 (17%) | 3.0 s / 10.0 s | 93,205 / 14,722 (327) |
 | 3 | 2026-09-30 02:46 | Also: "keep any private reasoning to one or two short sentences", output compact on one line | 16 / 15 / 15 | 15/18 | 0 | 2 | 1/18 (6%) | 2.6 s / 9.3 s | 96,887 / 12,511 (272) |
+| 4 | 2026-09-30 02:56 | No prompt change. Runs on reviewer commit `b27e0a0` (overall deadline enforced, service failures become `ConnectionError`, absolute dates work without `as_of`). Date-drop workaround removed from `parse()` | 16 / 16 / 16 | 16/18 | 0 | 0 (0 timeouts, 0 service failures, 0 invalid) | 0/18 (0%) | 2.3 s / 3.3 s | 101,103 / 12,757 (266) |
 
+- Iteration 4: the stated dates are now extracted (for example `{"expression": "2026-06-10", "from": "2026-06-10", "to": "2026-06-10"}`) and applied by the policy. The only losses are the two `missing_currency` cases. There were no timeouts or service failures in this run. The per-repetition p95 was 2.79, 3.25 and 4.10 s, and the slowest call took 4.1 s.
 - Every call that returned produced JSON that passed `validate_extraction` (0 retries needed, 0 schema failures). Every error was a 10 s timeout, which became a technical handoff.
 - The extracted facts were identical and correct in every returned call: amounts with `approx=false`, the stated currency, and `out_of_scope:balance` for the balance questions. The losses are the two `missing_currency` cases (see above) plus timeouts.
 - Latency tracks output tokens at roughly 110 tokens/s. On top of that there is a service-side tail: about 2 to 3 of 48 calls hit the 10 s timeout, and a few took 4 to 9 s with fewer than 350 tokens. Shortening the reasoning lowered p50 from 3.1 s to 2.6 s but didn't change the tail.
-- Model calls used: 1 probe + 3 × 48 = 145, or about 9 per model-calling case, within the budget of about 30.
+- Model calls used: 1 probe + 4 × 48 = 193, or about 12 per model-calling case, within the budget of about 30.
 
-## ADR-006 triggers (iteration 3, the committed prompt)
+## ADR-006 triggers
+
+Iteration 4, the current code and prompt:
 
 | Trigger | Result | Status |
 |---|---|---|
-| < 16/18 correct (majority) | 15/18 (16/18 in iterations 1 and 2) | **FIRES** |
+| < 16/18 correct (majority) | 16/18, exactly at the floor. The only losses are the two `missing_currency` cases | ok (no margin) |
 | Any unsafe outcome | 0 | ok |
-| < 95% schema-valid outputs | 46/46 returned outputs valid; 46/48 = 95.8% if timeouts count as not valid | ok |
-| p95 latency > 3 s | 9.3, 10.3 and 10.0 s per repetition; majority row 10.0 s | **FIRES** |
-| > 10% of cases changing answer | 1/18 (5.6%); 11% and 17% in iterations 1 and 2 | ok in iteration 3 |
+| < 95% schema-valid outputs | 48/48 (100%) | ok |
+| p95 latency > 3 s | 2.79, 3.25 and 4.10 s per repetition; 3.25 s over all 48 calls; 2.79 s on the majority row (the per-case median) | **FIRES**, except on the majority-row reading. ADR-006 doesn't say which p95 to use, so I apply the conservative one |
+| > 10% of cases changing answer | 0/18 | ok |
 
-The triggers fired, so tuning stopped here, as the instructions require. The model was not switched, and the pre-registration was not filled in.
+Iteration 3, before the fix: majority 15/18 (**fires**), p95 9.3 to 10.3 s (**fires**), 0 unsafe, 46/48 schema-valid, 1/18 changing answer.
+
+Iteration 4 was a single measurement run after the fix, with no prompt tuning. I didn't switch models, didn't fill in the pre-registration and didn't create a tag.
 
 ## Cost per call (observed)
 
-About 2,100 input and 272 output tokens per call (iteration 3). At $0.20 / M input and $0.30 / M output, that is about $0.00050 per call. The probe used 3.05 neurons for 141 tokens. The harness doesn't record neurons per call.
+About 2,106 input and 266 output tokens per call (iteration 4; 272 in iteration 3). At $0.20 / M input and $0.30 / M output, that is about $0.00050 per call. The probe used 3.05 neurons for 141 tokens. The harness doesn't record neurons per call.
