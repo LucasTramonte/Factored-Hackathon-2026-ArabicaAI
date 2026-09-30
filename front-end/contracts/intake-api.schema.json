@@ -341,6 +341,65 @@
           }
         }
       }
+    },
+    "agentIntake": {
+      "type": "object", "additionalProperties": false,
+      "required": ["protocol", "episode_id", "kind", "tool_status", "destination", "priority", "accepted_at"],
+      "properties": {
+        "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+        "episode_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+        "kind": {"type": "string", "pattern": "^(complete|technical|incomplete)$"},
+        "tool_status": {"type": "string", "pattern": "^(ok|failed|timeout)$"},
+        "destination": {"type": "string", "minLength": 1},
+        "priority": {"type": "string", "minLength": 1},
+        "accepted_at": {"type": "string", "minLength": 1}
+      }
+    },
+    "agentIntakeList": {
+      "type": "object", "additionalProperties": false,
+      "required": ["items", "has_more", "scope"],
+      "properties": {
+        "items": {"type": "array", "maxItems": 50, "items": {"$ref": "#/$defs/agentIntake"}},
+        "has_more": {"type": "boolean"},
+        "scope": {"const": "synthetic_demo_only"}
+      }
+    },
+    "intakeServiceTransition": {
+      "type": "object", "additionalProperties": false,
+      "required": ["seq", "event", "ts"],
+      "properties": {
+        "seq": {"type": "integer"},
+        "event": {"type": "string", "pattern": "^(intake_started|clarification_requested|transaction_confirmed|handoff_created|handoff_accepted|intake_ended)$"},
+        "ts": {"type": "string", "minLength": 1},
+        "transaction_ref": {"type": "string", "minLength": 1},
+        "case_ref": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "pattern": "^(complete|technical|incomplete)$"},
+        "tool_status": {"type": "string", "pattern": "^(ok|failed|timeout)$"},
+        "accepted_by": {"type": "string", "minLength": 1},
+        "outcome": {"type": "string", "pattern": "^(accepted|abandoned|withdrawn|technical_failure|routed)$"},
+        "missing": {"type": "array", "items": {"type": "string", "pattern": "^(date|currency|amount|matching_transaction|transaction_disambiguation|customer_confirmation|valid_customer_confirmation)$"}}
+      }
+    },
+    "agentIntakeDetail": {
+      "type": "object", "additionalProperties": false,
+      "required": ["protocol", "episode_id", "kind", "tool_status", "destination", "priority", "accepted_at", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "scope"],
+      "properties": {
+        "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+        "episode_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+        "kind": {"type": "string", "pattern": "^(complete|technical|incomplete)$"},
+        "tool_status": {"type": "string", "pattern": "^(ok|failed|timeout)$"},
+        "destination": {"type": "string", "minLength": 1},
+        "priority": {"type": "string", "minLength": 1},
+        "accepted_at": {"type": "string", "minLength": 1},
+        "language": {"type": "string", "pattern": "^(es|pt)$"},
+        "customer_statement": {"type": "string", "minLength": 10, "maxLength": 2000},
+        "verified_evidence": {"type": "object", "additionalProperties": false, "required": ["transaction"], "properties": {"transaction": {"type": ["object", "null"], "additionalProperties": false, "required": ["transaction_id", "occurred_at", "source_occurred_at", "merchant_name", "amount", "currency"], "properties": {"transaction_id": {"type": "string", "minLength": 1}, "occurred_at": {"type": ["string", "null"]}, "source_occurred_at": {"type": ["string", "null"]}, "merchant_name": {"type": "string"}, "amount": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,2})?$"}, "currency": {"type": "string", "pattern": "^[A-Z]{3}$"}}}}},
+        "actions_taken": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "unresolved_questions": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "history": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/intakeServiceTransition"}},
+        "history_has_more": {"type": "boolean"},
+        "scope": {"const": "synthetic_demo_only"}
+      }
     }
   }
 }

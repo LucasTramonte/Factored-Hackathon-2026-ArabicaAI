@@ -44,7 +44,7 @@ async function finishIntake(request, store, complete) {
   if (!episode) return fail(404, 'Episode not found for this session');
   if (turnKey === episode.start_key) return fail(409, 'Key already used with different content');
   const payloadHash = await tokenHash(JSON.stringify([complete ? 'complete' : 'incomplete', transactionId]));
-  const prior = await store.findIntakeHandoff(customerId, episodeId);
+  const prior = await store.findOwnedIntakeHandoff(customerId, episodeId);
   if (prior && (prior.turn_key !== turnKey || prior.payload_hash !== payloadHash)) return fail(409, 'Episode already submitted with different content or key');
   if (!prior && episode.state !== 'selection_required') return fail(409, 'Episode is no longer open');
   let kind = complete ? 'complete' : 'incomplete';

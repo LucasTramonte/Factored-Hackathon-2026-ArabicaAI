@@ -74,7 +74,7 @@ export function createStore(db) {
       'SELECT transaction_id,occurred_at,source_occurred_at,merchant_name,amount,currency FROM transactions '
       + 'WHERE customer_id=? AND transaction_id=?', customerId, transactionId),
     /** Read a reservation only through its owning episode. */
-    findIntakeHandoff: (customerId, episodeId) => first(
+    findOwnedIntakeHandoff: (customerId, episodeId) => first(
       'SELECT h.* FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.episode_id=?', customerId, episodeId),
     /** Atomically reserve one immutable handoff and optional confirmed case; SQL revalidates live session and ownership. */
     persistIntakeHandoff: async ({ customerId, episodeId, turnKey, payloadHash, sessionHash, completeCase, kind, evidence, actions, questions, usage, now }) => {
@@ -182,6 +182,24 @@ export function createStore(db) {
     findCaseByKey: (customerId, idempotencyKey) => first(
       'SELECT case_id, transaction_id, customer_statement, status, accepted_at FROM cases '
       + 'WHERE customer_id=? AND idempotency_key=?', customerId, idempotencyKey),
+
+    /** One handoff per episode; only acknowledged terminal rows enter this bounded queue. */
+    listIntakeHandoffs: limit => all(
+      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
+      + 'h.destination,h.priority,h.accepted_at FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+      + "WHERE e.state=h.kind||'_handoff' ORDER BY h.accepted_at DESC,protocol LIMIT ?", Math.min(limit, 51)),
+    /** Optional complete evidence is one-to-one and owner-scoped; missing evidence never drops a handoff. */
+    findIntakeHandoff: protocol => first(
+      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
+      + 'h.destination,h.priority,h.accepted_at,h.evidence_json,h.actions_json,h.questions_json,'
+      + 'e.customer_statement,e.language,t.transaction_id AS verified_transaction_id '
+      + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+      + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
+      + 'LEFT JOIN transactions t ON t.transaction_id=c.transaction_id AND t.customer_id=e.customer_id '
+      + "WHERE e.state=h.kind||'_handoff' AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))", protocol, protocol),
+    /** At most 101 indexed events; overflow is explicit. ponytail: guided chains have <=5 events; add a cursor before supporting >100. */
+    listIntakeHistory: episodeId => all(
+      'SELECT event_json FROM intake_events WHERE episode_id=? ORDER BY seq LIMIT 101', episodeId),
 
     listAgentCases: limit => all(
       'SELECT c.case_id AS protocol, c.customer_id, u.display_name, c.transaction_id, t.merchant_name, '
