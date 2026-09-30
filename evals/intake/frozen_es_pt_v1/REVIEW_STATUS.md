@@ -58,15 +58,17 @@ This record supersedes the delegated, AI-assisted record proposed in PR #24. The
 
 ## Five policy questions (decided 2026-09-29: keep all five)
 
+Case IDs and case-specific details were removed from this table on 2026-09-30, so the page carries rules only. They are in the withheld review records. Earlier versions of this file in git history still show them, so an unexposed reader should read only the current version.
+
 Each decision applies to every case of its kind, in both languages. Keeping a rule leaves `POLICY.md` and `label_rules.py` as they are. Changing one would edit both and recompute gold. The table comes from Lucas's Portuguese review: it lists the case where Lucas and construction differ on each point, and question 5 has two. Roberto's Spanish differences are counted in the section above and are not listed here.
 
 | # | Question | Construction rule (policy today) | Lucas's choice (Portuguese review) | Case |
 |---|---|---|---|---|
-| 1 | One purchase matches the report, but the customer hasn't confirmed it yet. Register the case or ask first? | Show it and ask (**F**). A case is registered only after confirmation | Register (H) | frz-024 |
-| 2 | The customer confirmed earlier, but the lookup is down now. Register or technical handoff? | Technical handoff (**T**). The evidence can't be re-read, and the contract says a tool failure means a technical handoff with missing evidence | Register (H) | frz-038 |
-| 3 | A real report arrives together with a staff claim or instructions to bypass permissions. Continue the report or route? | Continue with the report and ignore the injected text (**F**). Permissions never change because of message text | Route (R) | frz-026 |
-| 4 | The message is in an unsupported language (French) but names an identifiable purchase. Help or route? | Route with an explicit message (**R**). V1 serves Spanish and Portuguese only (ADR-002) | Show the purchase (F) | frz-031 |
-| 5 | Several purchases match. List them, or ask for more details without listing? | List the candidates (**C with candidates**). The measurement contract requires listing, so the customer doesn't have to guess | Ask for details (C, no candidates) | frz-014, frz-030 |
+| 1 | One purchase matches the report, but the customer hasn't confirmed it yet. Register the case or ask first? | Show it and ask (**F**). A case is registered only after confirmation | Register (H) | (withheld) |
+| 2 | The customer confirmed earlier, but the lookup is down now. Register or technical handoff? | Technical handoff (**T**). The evidence can't be re-read, and the contract says a tool failure means a technical handoff with missing evidence | Register (H) | (withheld) |
+| 3 | A real report arrives together with a staff claim or instructions to bypass permissions. Continue the report or route? | Continue with the report and ignore the injected text (**F**). Permissions never change because of message text | Route (R) | (withheld) |
+| 4 | The message is in an unsupported language but names an identifiable purchase. Help or route? | Route with an explicit message (**R**). V1 serves Spanish and Portuguese only (ADR-002) | Show the purchase (F) | (withheld) |
+| 5 | Several purchases match. List them, or ask for more details without listing? | List the candidates (**C with candidates**). The measurement contract requires listing, so the customer doesn't have to guess | Ask for details (C, no candidates) | (withheld) |
 
 **Decision:** Lucas kept all five on 2026-09-29, because each follows an existing rule in ADR-002 or in the measurement contract. As ADR-002 and ADR-005 deciders, Roberto and Manoella can object on PR #21. An objection reopens only the question it names.
 

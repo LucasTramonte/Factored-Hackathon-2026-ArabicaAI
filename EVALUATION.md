@@ -41,7 +41,7 @@ The data decides what kind of evaluation is possible:
 
 - **The source text is fixed templates.** There are 5 distinct complaint descriptions in 67,095 complaints, and 42 texts in 171,321 transcripts (DF-001). A model tested on them would only show it can recall a template.
 - **No complaint points to a transaction** (DF-003). The data can't tell us which charge a customer disputed.
-- **There are no Portuguese-speaking customers**, and ambiguous or duplicate charges almost never occur (DF-012).
+- **There is no Portuguese text or Portuguese-speaking customer:** all 42 transcript texts are Spanish (DF-001). Ambiguous or duplicate charges almost never occur (DF-012).
 
 Once a message's facts are known, the correct action follows from the written policy ([`POLICY.md`](evals/intake/frozen_es_pt_v1/POLICY.md)). So labels are cheap and exact. What the dataset doesn't have is **realistic customer wording**. That shapes every choice below. Techniques built for a shortage of labels, which assume a large pool of real unlabeled messages, don't fit (section 6).
 
@@ -53,15 +53,15 @@ None of the test messages comes from the organizers' data, because it has no usa
 |---|---|---|---|
 | `development` | 18 | The team | Tuning only. Never reported as an unseen result |
 | `evaluation` | 24 | The team, written with knowledge of the corpus | Regression, not an unseen estimate |
-| `v1_authored` | 25 | Andrés wrote the phrases without knowing the checklist rules; the team added fixtures and gold | The first held-out check of the checklist (15/25) |
+| `v1_authored` | 25 | Andrés wrote the phrases without knowing the checklist rules; the team added fixtures and gold, and three labels are still awaiting adjudication | Regression. The checklist's first check on phrases written without knowledge of its rules (15/25). It is not an unseen estimate |
 | `safety` | 22 | The team: red-team cases for injection, other people's cards, refunds and similar | Safety regression |
-| **`frozen_es_pt_v1`** | **60** (30 situations, each in Spanish and Portuguese) | **The team.** We wrote the method, the policy, the synthetic customers and purchases, and the drafting instructions (see below) | **The one unseen comparison, run once per system version** |
+| **`frozen_es_pt_v1`** | **60** (30 situations, each in Spanish and Portuguese) | **The team.** We wrote the method, the policy, the rules script and the drafting instructions, including the constraints for the synthetic customers and purchases. An isolated model session generated the fixture and the messages under those instructions, and we reviewed the result (see below) | **The one unseen comparison, run once per system version** |
 
 **How the frozen set was built** ([details](evals/intake/frozen_es_pt_v1/README.md)):
-1. **Spec first.** An isolated drafting session (Codex), following our written instructions and allowed to read only an allowlist of files, wrote a structured spec for each situation: the intent and the facts the customer states. It then wrote a Spanish and a Portuguese message from each spec. The two messages use different wording; one isn't a translation of the other.
+1. **Spec first.** An isolated drafting session (Codex), following our written instructions and allowed to read only an allowlist of files, generated the synthetic customers and purchases within our constraints and wrote a structured spec for each situation: the intent and the facts the customer states. It then wrote a Spanish and a Portuguese message from each spec. The two messages use different wording; one isn't a translation of the other.
 2. **Gold by construction.** A tested rules script (`label_rules.py`) applies the written policy to the spec and the fixture, and never reads the message.
 3. **Independent verification.** A model of another family (Claude, in a fresh context that could read only the policy and the messages) re-derived the facts and the answer. It agreed on 60/60 answers and on the facts of 58/60.
-4. **Human review where it counts.** People answered plain-language multiple-choice questions on every verifier disagreement, plus a seeded random audit. They never saw codes or model answers.
+4. **Human review where it counts.** People answered plain-language multiple-choice questions on every verifier disagreement, plus a seeded random audit. They never saw codes, nor which option was the construction or verifier answer. Two aids are disclosed: Lucas's Spanish review showed a Claude-written Portuguese translation under each message, and Roberto answered after seeing AI suggestions.
    - **Audit:** 0 label errors in 18 random cases, with an exact 95% upper bound of 15.3% (Clopper–Pearson).
    - **Disagreements:** where a reviewer read the policy differently, we decided the rule in writing, and that decision applies to every similar case.
 
@@ -84,16 +84,18 @@ Leakage can happen in two ways here. Statistics from the test period can shape d
 |---|---|---|
 | Data from the test period shapes design | Two windows by business timestamp: design before 2026-01-01, holdout after. Only the design window informs prompts, thresholds or fixtures. `process_date` is never used as the event date (DF-004) | `data_profiles/findings/run_findings.py` bounds every design query and has no option to move the window. A test fails if a design query isn't bounded ([ADR-005](Docs/ADRs/ADR-005-evaluation-data-protocol.md)) |
 | The model's builder sees test cases | The frozen files stay off the repository behind a SHA-256 commitment. The extractor is built by an isolated agent in a clean checkout where those files don't exist | `COMMITMENT.json`, and `make_clean_checkout.py`, which refuses to hand over a checkout if any withheld path exists or is tracked |
-| The test set is changed after the fact | Every withheld file must match its committed hash when it's published, and the invariance check verifies the hash first | `rehearse_publication.py`, `test_label_rules.py` |
-| The system is changed after seeing results | Pre-registration binds the prompt, the implementation file and the model to a git tag. The runner refuses to score the frozen set without a valid registration. Each system version is scored once; a fix is a new version, never new cases | `evals/intake/preregistration/prereg.py`, `evals/intake/run.py` |
-| Tuning on test material | Tuning happens only on `development`. A scenario family lives in exactly one split, and the runner rejects a corpus that breaks that | `validate()` in `evals/intake/run.py` |
+| The test set is changed after the fact | Every committed file (the cases, fixture, gold, verifier files, queues and review answers) must match its SHA-256 when published. Mutable working state (review progress files and the session record) isn't committed and is disclosed as such. The checks run on the machine that holds the withheld files; CI skips them | `rehearse_publication.py`, and the invariance test in `test_label_rules.py` |
+| The system is changed after seeing results | Pre-registration binds the prompt file and the implementation file, by hash, to a git tag. The model name is fixed inside that hashed implementation file. The runner refuses to score the frozen set without a valid registration | `evals/intake/preregistration/prereg.py`, `evals/intake/run.py` |
+| The frozen set is scored repeatedly until a result looks good | Rule, not code: each registered version is scored once, a fix is a new version, and every version's result is reported. Run outputs are local, so each published result will name its registration, tag and commit | [ADR-005](Docs/ADRs/ADR-005-evaluation-data-protocol.md), decision 4 |
+| Tuning on test material | Tuning happens only on `development`. Within a corpus, a scenario family lives in exactly one split, and the runner rejects a corpus that breaks that. Across corpora it's a naming overlap, not shared cases: the frozen set reuses three skill names that also appear in `cases.json` (`no_match`, `expired_session_confirmation`, `unsupported_language`), and no frozen case was ever in development | `validate()` in `evals/intake/run.py` (within a corpus) |
 | People who saw test cases steer the model | Anyone who has seen a frozen case (Lucas, Roberto, and the assistant sessions that helped them) may not change the model's prompt, parsing or parameters. Policy or label changes need the approval of Manoella, who hasn't seen any frozen case | [ADR-006](Docs/ADRs/ADR-006-learned-extractor-workers-ai.md), decision 5 |
-| Test content spreads through documents | Status pages carry aggregates and case IDs only, never messages or fixture detail | `REVIEW_STATUS.md` |
+| Test content spreads through documents | Status pages carry aggregates and rules only, never messages or fixture detail | `REVIEW_STATUS.md`, redacted on 2026-09-30 (see the disclosure below) |
 
 **What we disclose**, instead of hiding it:
 - **One full-period profiling:** before the time windows existed, we profiled several facts over the full period once. For every fact later used in design, the design-window values agree to one decimal place ([`DATA_QUALITY.md`](DATA_QUALITY.md), Disclosure).
 - **The drafting session read one extra file:** the repository's agent configuration, which contains no cases.
 - **Roberto's Spanish review isn't blind:** he answered after seeing AI suggestions, so it isn't counted as an independent audit.
+- **The review page held case detail:** until 2026-09-30, `REVIEW_STATUS.md` listed the IDs of 6 frozen cases next to the policy question each one raised, with the rule's answer, and named one message's language. The file is in git, so the blind builder's checkout contained it. Its [committed instructions](evals/intake/preregistration/extractor-v1-builder-instructions.md) allowed only `POLICY.md` and `label_rules.py` in that folder and forbade opening anything else there, but git can't prove what was read. Manoella was also told the page was safe to read. The page is now redacted, and the exposure is limited to rule-level descriptions of 6 of the 60 cases, with no message text.
 - **Two development labels were corrected:** they contradicted the written policy. The trail and the before and after scores are in the [development log](intake_agent/extractor/DEV_LOG.md).
 
 ## 5. Statistics, and what 60 cases can and can't show
@@ -104,13 +106,13 @@ Leakage can happen in two ways here. Statistics from the test period can shape d
 - **Repeated runs:** 3 repetitions of the model, scored by per-case majority, with run-to-run variability reported.
 - **Breakdowns:** by scenario family (the skill tested) and by language. A pooled rate is labelled "authored coverage mix, not prevalence".
 
-**The honest limit is size.** We simulated the exact McNemar test with 60 paired cases:
+**The honest limit is size.** We simulated the exact McNemar test (`stats.mcnemar_exact`, α = 0.05, 4,000 draws per row) with 60 paired cases. Each row assumes the share of cases only the model gets right (b) and the share only the checklist gets right (c). Other assumptions give other figures, so the table shows the order of magnitude, not a promise:
 
-| Net gain of the model over the checklist | Chance of detecting it | The same, if each Spanish/Portuguese pair behaves as one case |
-|---|---|---|
-| about 8 points | 28% | 4% |
-| about 12 points | 50% | 15% |
-| about 22 points | 91% | 53% |
+| Assumed b / c | Net gain | Chance of detecting it (60 cases) | The same, if each Spanish/Portuguese pair behaves as one case (30) |
+|---|---|---|---|
+| 10% / 2% | about 8 points | 28% | 4% |
+| 15% / 3% | about 12 points | 50% | 15% |
+| 25% / 3% | about 22 points | 91% | 53% |
 
 So the frozen set can only show a **large** improvement. That may be enough, because the checklist misses 40% of `v1_authored`. We also state it up front, and before the frozen run we will register the analysis:
 - group each Spanish/Portuguese pair so we don't overstate certainty (Miller, 2024);
