@@ -30,10 +30,18 @@
     "reviews/lucas_es.jsonl": {
       "sha256": "d46ead0576d97ce7e38c3de46bc7fad6fb76bd21077e68242dd912f28582d6d6",
       "bytes": 6666
+    },
+    "reviews/roberto.jsonl": {
+      "sha256": "155bd8e0cf69399902f4a3530296b3e4e6ac336caf1a7a9ad96739658f419f74",
+      "bytes": 4749
     }
   },
   "not_committed_yet": [
     "review_state.json, review_state_es.json and session_record.json (mutable working state)",
-    "reviews/roberto_message.txt (unused after option B; contains case text)"
+    "reviews/roberto_message.txt (the Spanish packet Roberto answered; contains case text)"
+  ],
+  "amended_utc": "2026-09-30",
+  "amendments": [
+    "2026-09-30: added reviews/roberto.jsonl (Roberto's native Spanish review). No earlier entry changed."
   ]
 }

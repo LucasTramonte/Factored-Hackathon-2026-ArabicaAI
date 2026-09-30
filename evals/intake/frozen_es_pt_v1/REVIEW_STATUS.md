@@ -1,6 +1,6 @@
 # Review status: `frozen_es_pt_v1`
 
-Last updated 2026-09-29. This page gives aggregates and case IDs only. No message text or fixture detail appears here until the set is published.
+Last updated 2026-09-30. This page gives aggregates and case IDs only. No message text or fixture detail appears here until the set is published.
 
 ## Progress
 
@@ -14,7 +14,7 @@ Last updated 2026-09-29. This page gives aggregates and case IDs only. No messag
 | Harness for learned systems | Done | `run.py --system/--repetitions/--split/--preregistration`, `systems.py`, `prereg.py`; checklist scores pinned unchanged |
 | Publication rehearsal (local) | Done | Hashes verified, 60 cases valid for the runner, manifest drafted; nothing scored |
 | Blind builder setup | Done | `make_clean_checkout.py` (14 withheld paths verified absent) and verbatim `extractor-v1-builder-instructions.md` |
-| Roberto's native Spanish review | **Pending**: Roberto | The same 9 questions, as a native second reviewer next to Lucas. After seeing them he is exposed, so he doesn't build the extractor and reviews its code for non-behavioural aspects only (ADR-006, decision 5) |
+| Roberto's native Spanish review | Done (2026-09-30) | The same 9 questions, answered by Roberto himself. `reviews/roberto.jsonl` hash in `COMMITMENT.json`. He is now exposed, so he doesn't build the extractor and reviews its code for non-behavioural aspects only (ADR-006, decision 5) |
 | Extractor v1 build and pre-registration | **Pending**: isolated agent, then Roberto's code review and the `extractor-v1` tag | ADR-006 |
 | Publish, verify hashes, tag `eval-es-pt-v1` | Pending | |
 | Run checklist and extractor v1 once each | Pending | `python -m evals.intake.run --cases ...` |
@@ -37,6 +37,31 @@ With all five rules kept, no gold answer changes. **The Portuguese audit found 0
 - **The Spanish audit found 0 label errors in 6 random cases** (upper bound 39.3%).
 - **Both audits together: 0 label errors in 18 random cases, with an exact 95% upper bound of 15.3%.**
 
+## Roberto's native Spanish review
+
+Roberto answered the same 9 Spanish questions himself, as a native reader, on 2026-09-30. He saw the same option texts as Lucas and neither gold nor the other answers. The record is `reviews/roberto.jsonl`, and its SHA-256 is in `COMMITMENT.json`.
+
+| | Flagged (3) | Audit (6) | All (9) |
+|---|---|---|---|
+| Exact agreement with construction | 1 | 2 | 3 |
+| Exact agreement with Lucas | 0 | 1 | 1 |
+
+Cohen's kappa on the action is 0.21 against construction and −0.06 against Lucas. Two readers of the same packet agreed with each other less often than either agreed with construction.
+
+All six differences from construction fall under a rule that `POLICY.md` already states, so no gold changes:
+
+- two register a case before the customer has confirmed the purchase (policy question 1 below);
+- one shows a purchase for confirmation although the lookup is down, where the policy asks for a technical handoff (policy question 2);
+- one registers after the session expired, where the policy asks the customer to sign in again;
+- one registers a purchase the customer named with an identifier that isn't theirs, where the policy asks for clarification;
+- one shows a purchase for confirmation when the report lacks a detail needed to pick it, where the policy asks for clarification.
+
+None of these is shown to be a labelling error, so the audit count stays at 0 label errors in 18 random cases. Roberto's audit answers cover the same 6 Spanish cases Lucas audited, so they add no new cases to that bound.
+
+What this does show is that the rules are not self-evident from the message and the options alone. Two careful readers disagreed with the policy on two thirds of these questions. The evaluation scores systems against the written policy, and the report will say that human readers without the policy text disagree with it this often.
+
+This record supersedes the delegated, AI-assisted record proposed in PR #24. The answers here are Roberto's own.
+
 ## Five policy questions (decided 2026-09-29: keep all five)
 
 Each decision applies to every case of its kind, in both languages. Keeping a rule leaves `POLICY.md` and `label_rules.py` as they are. Changing one would edit both and recompute gold. There is one case where the reviewer and construction differ on each point, except question 5, which has two.
@@ -54,7 +79,7 @@ Each decision applies to every case of its kind, in both languages. Keeping a ru
 ## Disclosures
 
 - **Option texts:** the Portuguese questions used short option texts without the rule stated. Five of the six differences involve a rule the text didn't show. The Spanish review used texts that state the rule, for example "only if the customer already confirmed this purchase". The two reviews therefore differ in presentation, and the report says so.
-- **Who reviewed the Spanish cases:** Lucas, who is not a native Spanish reader, reviewed them with a Portuguese translation aid written by Claude and shown under each original message. This replaced the planned review by Roberto ("option B"), so that the extractor's author never sees a case. Each record carries `reviewer_note`.
+- **Who reviewed the Spanish cases:** Lucas, who is not a native Spanish reader, reviewed them with a Portuguese translation aid written by Claude and shown under each original message. This replaced the planned review by Roberto ("option B"), so that the extractor's author never sees a case. Each record carries `reviewer_note`. On 2026-09-30 Roberto also reviewed the Spanish cases himself (section above). The extractor is built by an isolated agent (ADR-006), so his exposure doesn't affect the blind build.
 - **Where the review ran:** the Portuguese review began in the Codex session and was finished in Claude Code after the Codex credits ran out. Each record says which tool wrote it (`recorded_by`), and the questions and option order are unchanged, taken from `queues.json`.
 - **Codex isolation exception:** the drafting session read `.codex/agents/hackathon-context.toml`, which is repository startup configuration with no cases and no system code. It recorded this itself. Its model is "GPT-6 (Codex)", and no exact snapshot was exposed.
 - **What the reviewer knew:** the Portuguese reviewer had seen summaries of the baseline's documented failure categories, not its rules or cases.
