@@ -207,6 +207,18 @@ test('idle closure updates only its selected page even when prior end rows exist
   assert.equal(ends(closed[0].episode_id),1,'exactly one end event');
 });
 
+test('an eventless open episode ends at sequence 0 and does not block the rest of the sweep', async t => {
+  const {db,store,start} = await setup(t);
+  const now = Date.parse('2026-09-30T12:00:00.000Z');
+  const [bare, other] = [await start(now - 700000, now + 3600000), await start(now - 700000, now + 3600000)];
+  // Manual repair state: the start event is gone. A NULL next sequence would roll back the whole page.
+  db.prepare('DELETE FROM intake_events WHERE episode_id=?').run(bare.episode_id);
+  assert.equal((await store.closeIdleIntakes({now,limit:100})).length,2,'both due episodes close in one page');
+  const ended = db.prepare("SELECT seq FROM intake_events WHERE episode_id=? AND json_extract(event_json,'$.event')='intake_ended'").all(bare.episode_id);
+  assert.deepEqual(ended.map(row => row.seq),[0]);
+  assert.equal(db.prepare('SELECT state FROM intake_episodes WHERE episode_id=?').get(other.episode_id).state,'abandoned');
+});
+
 test('an open episode that already holds an end event never gets a second one', async t => {
   const {db,store,start} = await setup(t);
   const now = Date.parse('2026-09-30T12:00:00.000Z');

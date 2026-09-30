@@ -191,7 +191,9 @@ export function createStore(db) {
       // whose latest event already ends it (a corrupt state) gets no second end event.
       const latest = "(SELECT json_object('seq',v.seq,'event',json_extract(v.event_json,'$.event')) FROM intake_events v "
         + 'WHERE v.episode_id=e.episode_id ORDER BY v.seq DESC LIMIT 1)';
-      const next = "json_extract(d.latest,'$.seq')+1";
+      // An eventless episode (never produced by a start, but possible after manual repair) ends at sequence 0
+      // instead of a NULL sequence that would roll back the whole page.
+      const next = "COALESCE(json_extract(d.latest,'$.seq'),-1)+1";
       const results = await batch([
         ['INSERT INTO intake_events(episode_id,seq,event_json) SELECT d.episode_id,' + next + ',json_patch(json_object('
           + "'event','intake_ended','version','2','case_id',d.episode_id,"
