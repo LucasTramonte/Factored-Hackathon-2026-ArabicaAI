@@ -22,7 +22,7 @@ Findings from `03_deep_dive_branches.ipynb`, run against the real production Duc
 
 - Column inventory, row count (350, matches the dictionary exactly), dedup: all clean.
 - NOT NULL audit: all 16 declared columns, zero NULLs.
-- **`branch_code`**: confirmed genuinely unique -- 350 distinct values, 0 NULLs, 0 collisions. Not yet declared in `contracts.py`'s `unique_fields` (unlike `document_number`/`product_number`, added earlier) -- **Contract change applied**: `branch_code` is now in `unique_fields`.
+- **`branch_code`**: confirmed genuinely unique -- 350 distinct values, 0 NULLs, 0 collisions. **Contract change applied**: `branch_code` is now in `unique_fields`, alongside `document_number`/`product_number`.
 - `branch_type`: matches the dictionary's 4 declared values exactly, plausible distribution.
 - Country canonicalization: full coverage. State/country pairs: all plausible, same state sets as `customers`.
 - `postal_code`: 80.0% numeric-parseable -- consistent with `customers`' 80.09%, no new concern.

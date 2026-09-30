@@ -60,6 +60,4 @@ Section 7: `comp_exceeds_claimed = 62`. Compensation paid out that's larger than
 
 ## Status
 
-The contract changes above are applied in `contracts.py`. Still open: a decision on the `product_owner_mismatch` severity question (headline finding) -- that's a judgment call about the check framework itself, not something I'd change without you weighing in.
-
-Last table left: `campaign_sends` (13/13) -- ready to build that notebook whenever you want to finish the series.
+The contract changes above are applied in `contracts.py`. Still open: the severity of the `product_owner_mismatch` check (headline finding). That is a decision about the check framework itself and needs the team's call. The `campaign_sends` review is in its own report.

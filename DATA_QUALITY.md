@@ -163,9 +163,9 @@ The [bronze profile findings](data_profiles/bronze_data_profile/bronze_profile_f
 
 ### DF-018 Categorical values are in Spanish where the dictionary lists English
 
-- **Evidence:** `product_type`, `document_type` (`Pasaporte`, no `CURP`), `geographic_zone` (only `Urbana`), `reason_category` and `detected_sentiment` hold Spanish values, while the dictionary lists English labels. `comment_sentiment` in satisfaction surveys is in English. `transaction_type` has `Adjustment` where the dictionary says `Advance`.
+- **Evidence:** `product_type`, `document_type` (`Pasaporte`, no `CURP`), `geographic_zone` (only `Urbana`), `reason_category` and `detected_sentiment` hold Spanish values, while the dictionary lists English labels. `comment_sentiment` in satisfaction surveys is in English.
 - **Impact:** a domain check or filter written from the dictionary would reject every row, or silently match none.
-- **Handling:** the quality gate's domains for `reason_category`, `detected_sentiment` and `transaction_type` use the observed values; `product_type`, `document_type` and `geographic_zone` are not gated. Code that filters these columns uses the source spelling, e.g. `Tarjeta Crédito`, `Queja`.
+- **Handling:** the quality gate's domains for `reason_category` and `detected_sentiment` use the observed values; `product_type`, `document_type` and `geographic_zone` are not gated. Code that filters these columns uses the source spelling, e.g. `Tarjeta Crédito`, `Queja`.
 
 ## Disclosure
 
