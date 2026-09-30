@@ -1,6 +1,6 @@
 # Worker intake completion, handoffs and gated AI integration
 
-Status: approved by Roberto; fresh agent review completed and three findings resolved. Implementation (2026-09-30): backend plan Tasks 1–5 are implemented and verified locally, Task 5 and the whole branch were independently reviewed with their fix waves ([Task 5 completion note](../../Handoffs/2026-09-30-task-5-completion.md)), Task 6 is gated, the frontend is deferred, and nothing has been applied remotely or deployed.
+Status: approved by Roberto; fresh agent review completed and three findings resolved. Implementation (2026-09-30): backend plan Tasks 1–5 are implemented and verified locally, Task 5 and the whole branch were independently reviewed with their fix waves ([Task 5 completion note](../handoffs/2026-09-30-task-5-completion.md)), Task 6 is gated, the frontend is deferred, and nothing has been applied remotely or deployed.
 Author: Roberto, with Codex. Local date: 2026-09-29.
 Baseline: main `dbeebaf`, after the ordered merges #27, #28 and #26.
 

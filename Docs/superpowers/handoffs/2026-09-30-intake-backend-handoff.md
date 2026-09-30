@@ -11,8 +11,8 @@ The user requested that the current work be saved, committed and pushed so anoth
 - Local implementation worktree: `<implementation worktree>`.
 - Original checkout: `<original checkout>`. Do not switch or reset that checkout; it has unrelated work.
 - Partial Task 5 checkpoint: `ba7d062`. Current main `557f45d` was merged into this branch in `1925ca2`; that merge changed no file content.
-- Approved spec: [online completion design](../superpowers/specs/2026-09-29-intake-online-completion-design.md).
-- Approved task plan: [backend completion](../superpowers/plans/2026-09-29-intake-backend-completion.md).
+- Approved spec: [online completion design](../specs/2026-09-29-intake-online-completion-design.md).
+- Approved task plan: [backend completion](../plans/2026-09-29-intake-backend-completion.md).
 - Full partial implementation/test report: [Task 5 checkpoint report](2026-09-30-task-5-checkpoint-report.md). Read it before changing Task 5.
 
 ## Authorization and boundaries

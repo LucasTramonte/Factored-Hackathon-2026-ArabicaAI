@@ -1,6 +1,6 @@
 # Task 5 completion: idle closure, export and cost evidence (2026-09-30)
 
-This finishes Task 5 of the [backend completion plan](../superpowers/plans/2026-09-29-intake-backend-completion.md) on top of the checkpoint in [the handoff](2026-09-30-intake-backend-handoff.md) and [its report](2026-09-30-task-5-checkpoint-report.md). The work is on branch `claude/gifted-einstein-mi8vh3`, starting from `052ba28`. It was verified locally only. Task 5 was independently reviewed (spec and quality), fixed and re-reviewed with approval. The whole-branch review's findings are addressed in the final fix wave below. Task 6 remains gated and the frontend deferred. There was no remote D1, deploy, model call, frozen or withheld case access, or credential file read.
+This finishes Task 5 of the [backend completion plan](../plans/2026-09-29-intake-backend-completion.md) on top of the checkpoint in [the handoff](2026-09-30-intake-backend-handoff.md) and [its report](2026-09-30-task-5-checkpoint-report.md). The work is on branch `claude/gifted-einstein-mi8vh3` (PR #31), starting from `052ba28`. It was verified locally only. Task 5 was independently reviewed (spec and quality), fixed and re-reviewed with approval. The whole-branch review's findings are addressed in the final fix wave below. Task 6 remains gated and the frontend deferred. There was no remote D1, deploy, model call, frozen or withheld case access, or credential file read.
 
 ## Commits
 
@@ -14,7 +14,8 @@ This finishes Task 5 of the [backend completion plan](../superpowers/plans/2026-
 | `353c184` | `docs: record the idle-sweep ruling and fix-wave evidence` (fix wave) |
 | `ceee33c` | `fix: drop superseded intake indexes and add state checks before merge` (final wave) |
 | `7e59da6` | `fix: tighten intake routing, refused reservations, sweep ends and scorer lookup` (final wave) |
-| (final docs commit) | final-wave documentation and this section |
+| `0e81b8a` | `docs: record the final fix wave and the guided backend's current state` (final wave) |
+| `98e4574` | `fix: end eventless idle episodes at sequence 0 and refresh handoff banner` (whole-branch re-review nits) |
 
 ## What changed and why
 
