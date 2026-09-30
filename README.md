@@ -30,7 +30,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 **Status (2026-09-29):**
 
 - The deterministic intake flow is deployed and tested. That covers the adversarial gate, session, isolation and idempotency suites and a D1 budget test.
-- It runs on the Free plan, which [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes at 10,000 episodes/day against measured volumes of 17–818 per day.
+- It runs on the Free plan, which [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes at 10,000 episodes/day for the legacy one-step `/cases` flow, against measured volumes of 17–818 per day. The guided intake flow (`/intake/*`, backend branch, 2026-09-30) writes more rows per episode, so ADR-004 sizes it at about 2,100 complete episodes/day.
 - **Not done yet:** retrieval-outcome states, case kinds, ES/PT interface text, event instrumentation, and any AI. These are covered in the [intake roadmap](Docs/Plans/intake-roadmap.md).
 
 Quick starts:

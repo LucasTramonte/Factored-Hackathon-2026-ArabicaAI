@@ -38,7 +38,7 @@ Roberto, 29 September 2026. Proposed for Lucas (backend) and Manoella (tools). I
 
 `outcome` values: `accepted`, `abandoned`, `withdrawn`, `technical_failure`, `routed`. `safety` values: `assessed_safe`, `unsafe`, `not_assessed`. Safety assessment is by the guardrail layer or a reviewer, recorded when known; the evaluation runner sets it from the decision-point safety check in `baseline.score()`, production sets `not_assessed` unless a check ran. An `intake_ended` with `outcome = accepted` but an incomplete chain is rejected, not counted.
 
-Usage fields are actual measured values (monotonic request durations, provider-reported token counts), never estimates. `operating_cost` is left `null` by the scorer until the team fixes a price table; multiply tokens by price outside the scorer.
+Usage fields are actual measured values (monotonic request durations, provider-reported token counts), never estimates. `operating_cost` is left `null` by the scorer until the team fixes a price table; multiply tokens by price outside the scorer. *For the Worker's `guided-0.1` producer, `duration_ms` is instead a wall-clock episode span; for abandoned episodes it runs to the idle deadline (see Timing below). Its `latency_p50_ms`/`latency_p95_ms` therefore measure episode span, including customer think time, not service latency.*
 
 ### Usage compatibility and missingness
 
@@ -86,6 +86,7 @@ Everything is reported for `all`, `es` and `pt`. Empty denominators are `null`, 
 The Worker's explicit guided flow (`POST /intake/start`, `/intake/confirm`, `/intake/handoff`; `back-end/README.md`) emits v2 events only, with `model_version = guided-0.1`. It stores each event in D1 `intake_events` in the same atomic batch as the state change it records, and assigns `seq` from 0. What it emits:
 
 - **Start:** one `intake_started` when an authenticated customer starts an explicit ES/PT unrecognized-charge report. The report type is chosen by the customer, not classified from free text. A replayed start emits nothing.
+- **Start replay receipt:** a same-key start replay returns the original, immutable start receipt, `state: selection_required`, even after the episode was abandoned or handed off. The receipt does not describe the current state. A later confirm or handoff on a closed episode returns 409 "Episode is no longer open".
 - **Complete:** `transaction_confirmed` → `handoff_created` (`kind = complete`, `tool_status = ok`) → `handoff_accepted` (`accepted_by = case_service`) → `intake_ended` (`accepted`). All four are appended only after the confirmed case and handoff have been read back, and only with a live session of the same customer. The D1 case store is the receiving service, so `handoff_accepted` is that read-back, not a person's action.
 - **Incomplete / technical:** `handoff_created` (`incomplete` + `ok`, or `technical` + `failed`) → `intake_ended` (`routed` or `technical_failure`). No `handoff_accepted` is emitted, so these can never count as safe accepted intake. A later report starts a new episode.
 - **Abandoned:** one `intake_ended` (`abandoned`) from the idle-closure script (below).
@@ -96,24 +97,30 @@ The Worker's explicit guided flow (`POST /intake/start`, `/intake/confirm`, `/in
 ### Timing
 
 - **`duration_ms`** is server wall-clock time from the persisted start (`created_at`) to the invocation that writes the terminal acknowledgment. It includes customer think time, renewal and pending retries. A backward clock step is clamped to 0. It is not a monotonic clock across invocations, so it is not per-request latency.
-- **Abandoned episodes** end at their deadline: `ts` is min(last activity + 10 minutes, bound session expiry) and `duration_ms` is measured to that deadline, not to when the sweep ran.
+- **Abandoned episodes:** the end event's `ts` is the idle deadline, min(last activity + 10 minutes, bound session expiry), and its `duration_ms` runs to that deadline. Only these two values are anchored to the deadline. *Whether* an episode is abandoned, and so which outcome and duration it gets, depends on when the sweep runs (see Idle abandonment).
 - **Per-operation elapsed time** (monotonic, within one request) accumulates in the restricted `intake_handoffs.usage_json.operation_duration_ms`. It isn't exported. It excludes the final acknowledgment round trip, which starts after it is measured.
 
 ### Tool-call ledger
 
-`tool_calls` counts business-tool work: start storage (1), the owned-transaction lookup, the handoff persistence, the receipt read-back and the finalization. Failed attempts count while the episode is open or its reservation is pending. Session reads, idempotency checks, housekeeping, export and replays after the episode ended are not tool calls. D1 measures them separately ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)). If an operation and the write that records its usage both fail, the attempt can't be reconstructed, so `tool_calls` can undercount during a storage outage.
+`tool_calls` counts business-tool work: start storage (1), the owned-transaction lookup, the handoff persistence, the receipt read-back and the finalization. Failed attempts count while the episode is open or its reservation is pending. Two exceptions return before the attempt is recorded, so their work is not counted: a lookup that finds no owned transaction (404), and a session that drops between the lookup and the reservation (401). Session reads, idempotency checks, housekeeping, export and replays after the episode ended are not tool calls. D1 measures them separately ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)). If an operation and the write that records its usage both fail, the attempt can't be reconstructed, so `tool_calls` can undercount during a storage outage.
 
 ### Idle abandonment
 
-An episode still in `selection_required` is abandoned 10 minutes after its last activity or when its bound session expires, whichever comes first (open question 1 below, as implemented). `back-end/scripts/close-idle-intakes.mjs` records it: nothing schedules it, and it closes at most 100 episodes per atomic page at one cutoff. A `handoff_pending` episode (its reservation committed but its read-back or acknowledgment not confirmed) is never abandoned and never acknowledged by housekeeping. Only the same customer's live session can finish it, and until then it stays pending in the denominator.
+An episode still in `selection_required` becomes due 10 minutes after its last activity or when its bound session expires, whichever comes first (open question 1 below, as implemented). *Activity* is the start or its latest same-key replay. Failed confirm or handoff attempts do not extend it, and neither does a confirm from a renewed session, which doesn't rebind the episode's expiry.
 
-### Export: cutoff, pages and allowlist
+The deadline is evaluated **only when the manual sweep runs** (`back-end/scripts/close-idle-intakes.mjs`). Nothing schedules it, and the online path doesn't enforce it. A customer who returns after the deadline but before a sweep simply continues: confirm and handoff still succeed, and a same-key start replay renews the activity time and expiry, which revives the episode. The recorded outcome (accepted or routed versus abandoned) and the episode duration therefore depend on sweep timing. **Operator procedure:** run the idle sweep immediately before an export, with the same cutoff, and state that cutoff with the figures.
+
+A sweep closes at most 100 episodes per atomic page at one cutoff, which may be at most 60 s past the server clock. It appends the end event at the episode's next sequence number. It reports `complete: false` while any unreserved episode is still due.
+
+A `handoff_pending` episode (its reservation committed but its read-back or acknowledgment not confirmed) is never abandoned and never acknowledged by housekeeping. Only the same customer's live session can finish it, and until then it stays pending in the denominator.
+
+### Export: run start, pages and allowlist
 
 `back-end/scripts/export-intake-events.mjs` writes every episode, pending ones included, to one JSONL file under the ignored `data/intake-events/`, then scores it with `python -m evals.intake.episodes` before publishing it.
 
 - **Pages and cursor:** keyset pages of at most 100 episodes ordered by episode id. Each page is a single D1 statement, so every episode's event group is complete and consistent as of its page. The run fails, keeping the previous artifact, rather than publish a partial population. A run is bounded to 100 pages (10,000 episodes). One page holds at most 100 episodes × 101 events × 4,096 characters in memory, and the scorer then makes one O(events) pass over the file.
-- **Cutoff:** the output's `cutoff` is when the run started. Pages are read one after another, so the export is not a snapshot across pages. An episode that starts or ends during a run appears in the state its page saw, and one that starts with an id below the cursor appears in the next run. For a fixed denominator, close idle episodes first and export after traffic stops, stating the cutoff with the figures.
-- **Allowlist:** for each event, only that event's contract fields; version `2`; `model_version = guided-0.1`; `accepted_by = case_service`; `case_id`, `session_ref`, `transaction_ref` and `case_ref` must be lowercase UUIDs. Anything else fails the run instead of being cleaned. Customer ids, names, statements, source transaction ids, evidence and model output never reach the file. The scorer then rechecks every field, sequence and usage rule.
+- **Run start, not a data bound:** the output's `started_at` records when the run began. It does not bound the data. Pages are read one after another, so the export is not a snapshot across pages. An episode that starts or ends during a run appears in the state its page saw, and one that starts with an id below the cursor appears in the next run. For a fixed denominator, run the idle sweep immediately before the export, export after traffic stops, and state the sweep's cutoff with the figures.
+- **Allowlist:** for each event, only the fields the `guided-0.1` producer writes. That means no `scenario`, which is an evaluation-run label the service never writes; an injected one fails the run. Also required: version `2`, `model_version = guided-0.1`, `accepted_by = case_service`; `case_id`, `session_ref`, `transaction_ref` and `case_ref` must be lowercase UUIDs. Anything else fails the run instead of being cleaned. Customer ids, names, statements, source transaction ids, evidence and model output never reach the file. The scorer then rechecks every field, sequence and usage rule.
 
 ### Retention
 
