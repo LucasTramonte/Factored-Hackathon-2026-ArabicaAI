@@ -1,0 +1,50 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  DESIGN ONLY, NEVER DEPLOYED. Edge stack for the intake AWS target, created in us-east-1 because a
+  CloudFront-scoped WAF web ACL can only live there. Its ARN is passed to architecture.yaml (us-east-2).
+  WAF log delivery is deliberately not enabled: WAF logs always carry the full client IP, which the
+  design doesn't keep (ADR-004 section 3). Metrics and sampled requests are used instead.
+
+Resources:
+  EdgeFirewall:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Scope: CLOUDFRONT
+      DefaultAction: { Allow: {} }
+      VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: intake-edge }
+      Rules:
+        - Name: aws-core-rule-set
+          Priority: 0
+          OverrideAction: { None: {} }
+          Statement: { ManagedRuleGroupStatement: { VendorName: AWS, Name: AWSManagedRulesCommonRuleSet } }
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: core }
+        - Name: aws-known-bad-inputs
+          Priority: 1
+          OverrideAction: { None: {} }
+          Statement: { ManagedRuleGroupStatement: { VendorName: AWS, Name: AWSManagedRulesKnownBadInputsRuleSet } }
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: bad-inputs }
+        - Name: aws-ip-reputation
+          Priority: 2
+          OverrideAction: { None: {} }
+          Statement: { ManagedRuleGroupStatement: { VendorName: AWS, Name: AWSManagedRulesAmazonIpReputationList } }
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: ip-reputation }
+        - Name: api-rate-limit
+          Priority: 3
+          Action: { Block: {} }
+          Statement:
+            RateBasedStatement:
+              Limit: 100
+              EvaluationWindowSec: 300
+              AggregateKeyType: IP
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  FieldToMatch: { UriPath: {} }
+                  PositionalConstraint: STARTS_WITH
+                  SearchString: /api/
+                  TextTransformations: [{ Priority: 0, Type: NONE }]
+          VisibilityConfig: { SampledRequestsEnabled: true, CloudWatchMetricsEnabled: true, MetricName: api-rate }
+
+Outputs:
+  EdgeWebAclArn:
+    Description: Pass to architecture.yaml as EdgeWebAclArn
+    Value: !GetAtt EdgeFirewall.Arn

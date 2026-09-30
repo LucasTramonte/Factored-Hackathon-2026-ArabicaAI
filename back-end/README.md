@@ -112,7 +112,7 @@ node scripts/export-intake-events.mjs [--output ../data/intake-events/events.jso
 npx wrangler d1 execute arabica-intake-demo --local --file scripts/reset-demo-activity.sql
 ```
 
-The remote run is ADR-004's retention step after 2026-10-31 and follows a final export. It isn't part of tests or CI.
+The remote run is ADR-004's retention step after 2026-10-20 and follows a final export. It isn't part of tests or CI.
 
 ## Deployment
 

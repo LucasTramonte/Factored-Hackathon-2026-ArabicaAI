@@ -22,7 +22,7 @@
 - Durable technical/incomplete handoff is terminal; recovery starts a distinct episode. No second chain/end event.
 - Provider errors are not retried; only the approved adapter’s one invalid-output retry is permitted within a shared 10 s deadline. p95 qualification remains 3 s.
 - Never change extractor prompt, parsing, thresholds, model, frozen labels or corpus; no model/frozen calls, remote migration/import/deploy/tag in this plan.
-- Keep operational data through October 31. Expired sessions still purge. Events contain opaque references only.
+- Keep operational data until the shutdown after 2026-10-20 (ADR-004, section 7; earlier drafts said October 31). Expired sessions still purge. Events contain opaque references only.
 - Native execution is recommended because the tasks share transactional state and store/contract files; task review happens before final integration.
 
 ## Review focus

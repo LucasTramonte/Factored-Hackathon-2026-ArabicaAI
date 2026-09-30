@@ -132,7 +132,7 @@ A `handoff_pending` episode (its reservation committed but its read-back or ackn
 
 ### Retention
 
-Episodes, turns, events, handoffs and cases stay through 2026-10-31 ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)). Expired sessions are still purged at every login. After the window, the team takes a final export, then runs `back-end/scripts/reset-demo-activity.sql`, which deletes in foreign-key order.
+Episodes, turns, events, handoffs and cases stay until the shutdown after 2026-10-20 ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)). Expired sessions are still purged at every login. After the window, the team takes a final export, then runs `back-end/scripts/reset-demo-activity.sql`, which deletes in foreign-key order.
 
 ## Open questions for Lucas and Manoella
 
