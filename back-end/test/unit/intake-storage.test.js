@@ -17,7 +17,7 @@ const TYPICAL = 'No reconozco el cargo de Mercado Demo del 25 de septiembre; no 
 const VARIANTS = { typical: TYPICAL, max_ascii: 'x'.repeat(2000), max_4byte: '\u{1F600}'.repeat(2000) };
 // Bytes of retained pages per episode (rows, index entries and B-tree free space), about 10% above the values
 // measured on 2026-09-30; ADR-004 uses these bounds. Sessions are excluded: they are purged at expiry.
-const BOUND = { complete: { typical: 5700, max_ascii: 14000, max_4byte: 23500 }, incomplete: { typical: 3900, max_ascii: 8000, max_4byte: 13000 } };
+const BOUND = { complete: { typical: 5500, max_ascii: 13800, max_4byte: 23400 }, incomplete: { typical: 3700, max_ascii: 7800, max_4byte: 12900 } };
 
 function setup() {
   const db = new DatabaseSync(':memory:'); db.exec('PRAGMA foreign_keys=ON');

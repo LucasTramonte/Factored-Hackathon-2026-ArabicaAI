@@ -5,7 +5,7 @@ CREATE TABLE intake_episodes (
   session_ref TEXT NOT NULL,
   language TEXT NOT NULL CHECK (language IN ('es', 'pt')),
   mode TEXT NOT NULL CHECK (mode = 'guided'),
-  state TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('selection_required','handoff_pending','complete_handoff','technical_handoff','incomplete_handoff','abandoned')),
   customer_statement TEXT NOT NULL CHECK (length(customer_statement) BETWEEN 10 AND 2000),
   start_key TEXT NOT NULL,
   payload_hash TEXT NOT NULL,
@@ -16,7 +16,6 @@ CREATE TABLE intake_episodes (
   UNIQUE(customer_id, start_key)
 );
 CREATE INDEX intake_episodes_owner ON intake_episodes(customer_id, episode_id);
-CREATE INDEX intake_episodes_updated ON intake_episodes(updated_at, episode_id);
 CREATE TABLE intake_turns (
   episode_id TEXT NOT NULL REFERENCES intake_episodes(episode_id),
   turn_key TEXT NOT NULL,
@@ -42,12 +41,11 @@ CREATE TABLE intake_handoffs (
   evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
   actions_json TEXT NOT NULL CHECK (json_valid(actions_json) AND json_type(actions_json)='array'),
   questions_json TEXT NOT NULL CHECK (json_valid(questions_json) AND json_type(questions_json)='array'),
-  destination TEXT NOT NULL,
-  priority TEXT NOT NULL,
+  destination TEXT NOT NULL CHECK (destination = 'case_service'),
+  priority TEXT NOT NULL CHECK (priority = 'normal'),
   accepted_at TEXT NOT NULL,
   usage_json TEXT NOT NULL CHECK (json_valid(usage_json)),
   CHECK ((kind='complete' AND complete_case_id IS NOT NULL AND tool_status='ok')
     OR (kind='incomplete' AND complete_case_id IS NULL AND tool_status='ok')
     OR (kind='technical' AND complete_case_id IS NULL AND tool_status IN ('failed','timeout')))
 );
-CREATE INDEX intake_handoffs_queue ON intake_handoffs(accepted_at DESC,handoff_id);
