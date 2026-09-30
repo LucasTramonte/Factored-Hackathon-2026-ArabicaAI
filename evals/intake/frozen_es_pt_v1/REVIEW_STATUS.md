@@ -14,7 +14,7 @@ Last updated 2026-09-29. This page gives aggregates and case IDs only. No messag
 | Harness for learned systems | Done | `run.py --system/--repetitions/--split/--preregistration`, `systems.py`, `prereg.py`; checklist scores pinned unchanged |
 | Publication rehearsal (local) | Done | Hashes verified, 60 cases valid for the runner, manifest drafted; nothing scored |
 | Blind builder setup | Done | `make_clean_checkout.py` (14 withheld paths verified absent) and verbatim `extractor-v1-builder-instructions.md` |
-| Roberto's native Spanish review | **Pending**: Roberto | The same 9 questions, as a native second reviewer next to Lucas. After seeing them he is exposed, so he doesn't build the extractor and reviews its code for non-behavioural aspects only (ADR-006, decision 5) |
+| Roberto's native Spanish review | **Pending**: native-human judgment; delegated AI-assisted answers received separately | The same 9 questions, as a native second reviewer next to Lucas. After seeing them he is exposed, so he doesn't build the extractor and reviews its code for non-behavioural aspects only (ADR-006, decision 5) |
 | Extractor v1 build and pre-registration | **Pending**: isolated agent, then Roberto's code review and the `extractor-v1` tag | ADR-006 |
 | Publish, verify hashes, tag `eval-es-pt-v1` | Pending | |
 | Run checklist and extractor v1 once each | Pending | `python -m evals.intake.run --cases ...` |
@@ -36,6 +36,31 @@ With all five rules kept, no gold answer changes. **The Portuguese audit found 0
   Case details stay out of this page, so that a reviewer who has seen no frozen case can read it and stay unexposed (ADR-006, decision 5).
 - **The Spanish audit found 0 label errors in 6 random cases** (upper bound 39.3%).
 - **Both audits together: 0 label errors in 18 random cases, with an exact 95% upper bound of 15.3%.**
+
+## Roberto’s delegated AI-assisted Spanish review
+
+Roberto supplied the existing nine-question Spanish packet and explicitly authorized
+Codex to generate answers under his name. All nine answers were recorded privately
+as **delegated AI-assisted review for Roberto**, not native-human verification.
+The answering model is GPT-6 (Codex); an exact model snapshot was unavailable.
+The rubric was the supplied rules and existing `POLICY.md`: first matching rule,
+trusted session and lookup precedence, confirmation restricted to owned purchases,
+literal relative-date conventions, and no permission changes from demands or
+injected instructions. The review did not use construction gold or verifier answers.
+
+- Answer receipt SHA-256 (UTF-8 answer line with one trailing newline): `c58c240d53b240c38721b8adca15b42dde62db117ad644471409b3ee5735c30d`.
+- The private `queues.json` and `verifier_input.jsonl` remain unavailable locally.
+  The supplied question order is recorded, but its case-ID mapping is not verified;
+  `continue_review.py roberto-answers` was not run and no `roberto.jsonl` was invented.
+  Lucas can reconcile the private receipt through the existing queue when available.
+- Agreement with construction and the flagged/audit breakdown are **not measured**.
+  No label, policy, commitment hash, fixture, extractor, or registration changed.
+- This is model-assisted evidence with user-authorized attribution. The native-human
+  review gate remains pending unless its named deciders explicitly revise the protocol.
+  The independent human audit remains **0 errors / 18 random cases**; these answers
+  add no independent human observations or stronger confidence interval.
+- Answer text and case details remain private until the planned corpus publication.
+  This reviewing session is exposed; it cannot build or tune the extractor (ADR-006).
 
 ## Five policy questions (decided 2026-09-29: keep all five)
 
