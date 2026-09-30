@@ -161,8 +161,8 @@ test('50-row queue scan budget is qualified against 50 terminal and 50 pending t
   const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
   // Bounded fixture: no source data, exactly 100 incomplete reservations with identical timestamps, stored with the
   // production evidence/action/question shape. Half are acknowledged (terminal); half stay pending, as after a
-  // lost read-back. Their 2027 timestamps put them at the head of the newest-first queue.
-  const now = Date.parse('2027-01-01T12:00:00.000Z'); const sessionHash = '9'.repeat(64);
+  // lost read-back. Timestamps a year ahead of the clock keep them at the head of the newest-first queue.
+  const now = Date.now() + 365 * 86400000; const sessionHash = '9'.repeat(64);
   const payloadHash = await tokenHash(JSON.stringify(['incomplete', null]));
   const receipts = [];
   await withIntakeStore({ config: config() }, async store => {

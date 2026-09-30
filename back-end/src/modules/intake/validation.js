@@ -1,5 +1,6 @@
 /** Explicit guided-start validation; no free-text classification or client-supplied identity. */
-/** RFC 4122 UUID (versions 1-8), the shape of every client key, episode id and protocol. */
+/** RFC 4122 UUID (versions 1-8), the shape of every client key, episode id and protocol. Input is case-insensitive;
+ * callers store and compare the lowercase form, so a case-changed retry replays instead of forking. */
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const KEYS = 'customer_statement,idempotency_key,language,mode,report_type';
 const invalid = detail => ({ error: { status: 422, detail } });
@@ -20,7 +21,7 @@ export function validateStartRequest(body) {
   const length = [...statement].length;
   if (length < 10 || length > 2000) return invalid('Describe the charge in 10–2000 characters');
   if (typeof body.idempotency_key !== 'string' || !UUID.test(body.idempotency_key)) return invalid('Invalid request key');
-  return { value: { language: body.language, statement, key: body.idempotency_key } };
+  return { value: { language: body.language, statement, key: body.idempotency_key.toLowerCase() } };
 }
 
 /** Accept only explicit confirmation or incomplete handoff fields; failure evidence stays server-controlled. */
@@ -29,5 +30,5 @@ export function validateHandoffRequest(body, complete) {
   if (body === null || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).sort().join() !== keys) return invalid('Provide exactly the handoff fields');
   if (typeof body.episode_id !== 'string' || !UUID.test(body.episode_id) || typeof body.idempotency_key !== 'string' || !UUID.test(body.idempotency_key)) return invalid('Invalid episode or request key');
   if (complete ? body.customer_confirmed !== true || typeof body.transaction_id !== 'string' || !body.transaction_id || body.transaction_id.length > 100 || !body.transaction_id.isWellFormed() || body.transaction_id.includes('\u0000') : body.kind !== 'incomplete') return invalid('Explicit owned confirmation or incomplete handoff required');
-  return { value: { episodeId: body.episode_id, turnKey: body.idempotency_key, transactionId: complete ? body.transaction_id : null } };
+  return { value: { episodeId: body.episode_id.toLowerCase(), turnKey: body.idempotency_key.toLowerCase(), transactionId: complete ? body.transaction_id : null } };
 }

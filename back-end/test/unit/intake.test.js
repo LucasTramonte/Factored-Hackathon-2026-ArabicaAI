@@ -155,3 +155,14 @@ test('U+0000 statements return 422 before storage and do not consume the start k
   assert.equal(db.prepare('SELECT count(*) AS n FROM intake_episodes').get().n, 0);
   assert.equal((await route(request(), env, store)).status, 201);
 });
+
+test('a start key retried in a different letter case replays the same episode', async t => {
+  const { db, store } = await setup(t);
+  const first = await route(request(), env, store);
+  assert.equal(first.status, 201);
+  const upper = await route(request({ ...body, idempotency_key: body.idempotency_key.toUpperCase() }), env, store);
+  assert.equal(upper.status, 200);
+  assert.equal((await upper.json()).episode_id, (await first.json()).episode_id);
+  assert.equal(db.prepare('SELECT count(*) n FROM intake_episodes').get().n, 1);
+  assert.equal(db.prepare('SELECT start_key FROM intake_episodes').get().start_key, body.idempotency_key);
+});

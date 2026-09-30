@@ -40,10 +40,15 @@ test('agent_detail_includes_incomplete_handoff_without_transaction', async t => 
   const complete = await finish(), incomplete = await finish('incomplete');
   const saved = db.prepare('SELECT * FROM intake_events ORDER BY episode_id,seq').all();
   const usage = db.prepare('SELECT usage_json FROM intake_handoffs ORDER BY handoff_id').all();
+  // The node:sqlite stand-in reports no D1 meta, so count writes with SQLite's own connection counter.
+  const changes = () => db.prepare('SELECT total_changes() AS n').get().n;
+  const writesBefore = changes();
   const queue = await get('/agent/intakes'); assert.equal(queue.status,200); const list = await queue.json();
   assertContract('agentIntakeList',list); assert.deepEqual(new Set(list.items.map(x=>x.kind)),new Set(['complete','incomplete']));
   assert.ok(list.items.every(x=>!('customer_statement' in x)));
   const detail = await get('/agent/intake-detail?protocol=' + incomplete.receipt.protocol); assert.equal(detail.status,200);
+  const upper = await get('/agent/intake-detail?protocol=' + incomplete.receipt.protocol.toUpperCase());
+  assert.equal(upper.status,200,'protocol lookup is case-insensitive');
   const body = await detail.json(); assertContract('agentIntakeDetail',body);
   assert.equal(body.customer_statement,'Não reconheço esta cobrança.'); assert.equal(body.verified_evidence.transaction,null);
   assert.deepEqual(body.unresolved_questions,['matching_transaction','customer_confirmation']); assert.deepEqual(body.actions_taken,[]);
@@ -57,7 +62,7 @@ test('agent_detail_includes_incomplete_handoff_without_transaction', async t => 
   assert.equal(full.history.at(-1).outcome,'accepted');
   assert.deepEqual(db.prepare('SELECT * FROM intake_events ORDER BY episode_id,seq').all(),saved);
   assert.deepEqual(db.prepare('SELECT usage_json FROM intake_handoffs ORDER BY handoff_id').all(),usage);
-  assert.equal(store.metrics().rowsWritten,0);
+  assert.equal(changes(),writesBefore,'agent reads write nothing');
   for (const bad of [{...body,extra:'leak'},{...body,verified_evidence:{...body.verified_evidence,customer_id:'ana'}},
     {...body,history:[{...body.history[0],customer_statement:'leak'}]}]) assert.throws(()=>assertContract('agentIntakeDetail',bad),/violated/);
   assert.throws(()=>assertContract('agentIntakeList',{...list,items:[{...list.items[0],customer_statement:'leak'}]}),/violated/);

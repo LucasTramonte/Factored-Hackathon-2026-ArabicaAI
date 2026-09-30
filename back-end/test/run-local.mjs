@@ -80,8 +80,10 @@ try {
       cwd: temp, env: { ...env, WORKER_TEST_URL: `http://127.0.0.1:${port}`, EXPIRED_TOKEN: 'e'.repeat(64) },
       encoding: 'utf8', timeout: 120_000
     });
-    process.stdout.write(tested.stdout);
-    process.stderr.write(tested.stderr);
+    process.stdout.write(tested.stdout ?? '');
+    process.stderr.write(tested.stderr ?? '');
+    // A spawn failure or timeout leaves status null and output possibly null; report why instead of throwing.
+    if (tested.error) process.stderr.write(`${tested.error.message}\n`);
     if (tested.status !== 0) process.exitCode = 1;
   }
 } finally {

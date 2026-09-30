@@ -34,7 +34,7 @@ export async function getAgentIntakeDetail(request, env, store) {
   if ([...params.keys()].join() !== 'protocol' || !UUID.test(protocol ?? '')) {
     return fail(422, 'Provide exactly one valid protocol');
   }
-  const row = await store.findIntakeHandoff(protocol);
+  const row = await store.findIntakeHandoff(protocol.toLowerCase());
   if (!row) return fail(404, 'Intake handoff not found');
   const evidence = JSON.parse(row.evidence_json).transaction;
   const transaction = row.verified_transaction_id && evidence?.transaction_id === row.verified_transaction_id
