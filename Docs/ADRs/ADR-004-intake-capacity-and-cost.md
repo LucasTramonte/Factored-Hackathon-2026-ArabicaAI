@@ -70,7 +70,7 @@ Other measured inputs used below:
 | Batch: Bronze → Silver → Gold | Parquet + DuckDB | Glue, EMR, Athena | 2.86 GB builds in about 11 minutes on one machine | DuckDB, wherever it runs | Over ~100 GB, a build over 1 h, or several concurrent jobs |
 | Online store | SQLite (D1) | RDS PostgreSQL, Aurora, DynamoDB | 165 reads and 10 writes per episode; the serving slice is about 0.3 GB | D1 in the prototype, PostgreSQL in the AWS target | A database over 5 GB (ADR-003's exit trigger; Paid caps at 10 GB), write p95 over 200 ms, cross-customer online queries, or a row-level security requirement |
 | API | Cloudflare Worker | API Gateway + Lambda, ECS Fargate | 7 requests per episode, CPU 0–4 ms | Worker in the prototype, Lambda in the AWS target | Section 4 |
-| AI extraction | Workers AI gpt-oss-20b ($0.0005 per call, measured) | Bedrock, SageMaker endpoint | 16/18 on development, p95 3.25 s | Workers AI now, the same model on Bedrock in the AWS target | The extractor fails the frozen test on quality → the next ADR-006 rung |
+| AI extraction | Workers AI gpt-oss-20b ($0.0005 per call, measured) | Bedrock, SageMaker endpoint | 16/18 on development, p95 3.25 s | Workers AI for development and the frozen evaluation only. The live service calls it after the frozen run, behind a switch that falls back to the deterministic flow (ADR-006, decision 6). The same model runs on Bedrock in the AWS target | The extractor fails the frozen test on quality → the next ADR-006 rung |
 | Observability | Workers logs and analytics | CloudWatch, X-Ray | About 29 log events per episode | Workers logs now, CloudWatch in the target | Moving the runtime |
 
 The pattern is deliberate. Processing stays open source (DuckDB, SQLite, the same model), and the managed cloud services are the ones a bank needs for availability, private networking and audit.
@@ -84,7 +84,7 @@ The daily quotas bound the service at **10,000 episodes a day**, and rows writte
 | S1 | 119 | 2,805 | 170 | 0.2% | not triggered |
 | S2 | 1,015 | 23,925 | 1,450 | 1.5% | not triggered |
 | S3 | 5,726 | 134,970 | 8,180 | 8.2% | not triggered |
-| S4 | 57,260 | 1,349,700 | 81,800 | 82% | **triggered: Workers Paid** |
+| S4 | 57,260 | 1,349,700 | 81,800 | 82% | **triggers Workers Paid if sustained for 3 days** (the policy needs 3 consecutive days above 70%; S4 is a one-day stress case) |
 
 **Cost of the prototype:** $0 on Free, and $5 a month on Workers Paid, which covers every scenario. **Cost per attempted case** is $0 on Free and $5 ÷ episodes per month on Paid ($0.0098 at S1). **Cost per successful automated resolution** is `not defined` for intake, because V1 always ends in a handoff (ADR-002). It is reported for the recent-transactions path once that path is measured.
 
