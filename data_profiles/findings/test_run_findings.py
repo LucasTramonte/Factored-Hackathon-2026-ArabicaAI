@@ -38,6 +38,19 @@ INSERT INTO silver.fact_complaints VALUES
   ('Q2','2025-04-10 12:00:00','2025-04-10','C2','Cobro indebido','Queja relacionada con fees',NULL,NULL,NULL);
 INSERT INTO silver.fact_call_center_interactions VALUES ('I1','Queja','Queja'), ('I2','Producto','Producto');
 INSERT INTO silver.fact_call_transcripts VALUES ('X1','I1','hola','es'), ('X2','I2','hola','es');
+ALTER TABLE silver.dim_customers ADD COLUMN registration_branch_id VARCHAR;
+ALTER TABLE silver.dim_customers ADD COLUMN document_type VARCHAR;
+UPDATE silver.dim_customers SET registration_branch_id = CASE customer_id WHEN 'C1' THEN 'B1' ELSE 'SUC-ORPHAN' END, document_type = 'CC';
+ALTER TABLE silver.dim_products ADD COLUMN product_number VARCHAR;
+UPDATE silver.dim_products SET product_number = 'N1';
+ALTER TABLE silver.fact_call_center_interactions ADD COLUMN detected_sentiment VARCHAR;
+UPDATE silver.fact_call_center_interactions SET detected_sentiment = 'Neutral';
+CREATE TABLE silver.dim_branches(branch_id VARCHAR, geographic_zone VARCHAR);
+INSERT INTO silver.dim_branches VALUES ('B1','Urbana'), ('B2','Urbana');
+CREATE TABLE silver.dim_service_agents(agent_id VARCHAR, employee_code VARCHAR, assigned_branch_id VARCHAR);
+INSERT INTO silver.dim_service_agents VALUES ('A1','E1','B2'), ('A2','E2',NULL), ('A3','E2','SUC-ORPHAN');
+CREATE TABLE silver.fact_satisfaction_surveys(comment_sentiment VARCHAR);
+INSERT INTO silver.fact_satisfaction_surveys VALUES ('Positive'), (NULL);
 """
 
 HOLDOUT_ROWS = """
@@ -106,3 +119,13 @@ def test_only_selects_the_requested_findings(tmp_path):
     assert [r["id"] for r in result["results"]] == ["DF-001", "DF-008"]
     with pytest.raises(ValueError, match="Unknown finding"):
         rf.run(tmp_path / "o.duckdb", only=("DF-999",))
+
+
+def test_reference_and_code_checks_count_orphans_and_shared_codes(tmp_path):
+    db = make_db(tmp_path / "f.duckdb", with_holdout=False)
+    rows = {f["id"]: f["rows"] for f in rf.run(db, only=("DF-016", "DF-017"))["results"]}
+    # link, total, populated, distinct, resolves, distinct branches resolved
+    assert rows["DF-016"] == [["dim_customers.registration_branch_id", 2, 2, 2, 1, 1],
+                              ["dim_service_agents.assigned_branch_id", 3, 2, 2, 1, 1]]
+    # code, codes, codes with several ids, rows: N1 is shared by P1 and P2, E2 by A2 and A3
+    assert rows["DF-017"] == [["dim_products.product_number", 1, 1, 2], ["dim_service_agents.employee_code", 2, 1, 3]]
