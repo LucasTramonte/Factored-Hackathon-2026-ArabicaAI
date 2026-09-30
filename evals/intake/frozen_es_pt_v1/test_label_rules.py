@@ -143,5 +143,17 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(evaluate(a, EX), evaluate(b, EX))
 
 
+class NoSessionTimeTests(unittest.TestCase):
+    """Corpora without ``as_of`` (the development split) can still use an absolute date."""
+
+    def test_an_absolute_date_needs_no_session_time(self):
+        facts = {'merchant': 'Uber', 'date': {'expression': '2026-03-29', 'from': '2026-03-29', 'to': '2026-03-29'}}
+        self.assertEqual(evaluate(spec(facts, as_of=None), EX), {'action': 'F', 'candidate_ids': ['T01'], 'completion_ready': False})
+
+    def test_a_relative_date_without_session_time_asks_again(self):
+        facts = {'merchant': 'Uber', 'date': {'expression': 'ayer'}}
+        self.assertEqual(evaluate(spec(facts, as_of=None), EX)['action'], 'C')
+
+
 if __name__ == '__main__':
     unittest.main()

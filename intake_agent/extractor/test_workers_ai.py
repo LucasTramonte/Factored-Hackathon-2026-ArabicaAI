@@ -98,10 +98,45 @@ class ExtractTests(unittest.TestCase):
                 self.run_with(exc)
 
     def test_http_error_reports_status_without_body(self):
-        err = urllib.error.HTTPError("u", 429, "Too Many Requests", {}, io.BytesIO(b"echo " + MESSAGE.encode()))
-        with self.assertRaises(RuntimeError) as ctx:
-            self.run_with(err)
-        self.assertEqual(str(ctx.exception), "Workers AI HTTP 429")
+        # A service failure is a tool failure (technical handoff), never a crash of the whole run.
+        for code in (429, 500, 503):
+            err = urllib.error.HTTPError("u", code, "err", {}, io.BytesIO(b"echo " + MESSAGE.encode()))
+            with self.subTest(code=code), self.assertRaises(ConnectionError) as ctx:
+                self.run_with(err)
+            self.assertEqual(str(ctx.exception), f"Workers AI HTTP {code}")
+
+    def test_rejected_credentials_stop_the_run_loudly(self):
+        for code in (401, 403):
+            err = urllib.error.HTTPError("u", code, "no", {}, io.BytesIO(b""))
+            with self.subTest(code=code), self.assertRaises(workers_ai.CredentialsError):
+                self.run_with(err)
+
+    def test_connection_drops_and_truncated_bodies_are_tool_failures(self):
+        import http.client
+        for exc in (ConnectionResetError("reset"), http.client.IncompleteRead(b"{"), urllib.error.URLError(OSError("dns"))):
+            with self.subTest(exc=type(exc).__name__), self.assertRaises(ConnectionError):
+                self.run_with(exc)
+
+    def test_malformed_envelopes_are_invalid_output_not_crashes(self):
+        for bad in ({"result": {"choices": [{"message": None}]}}, {"result": []}, {"result": {"choices": "x"}}, []):
+            with self.subTest(bad=bad), mock.patch.dict(os.environ, ENV, clear=True), \
+                    mock.patch.object(workers_ai.urllib.request, "urlopen",
+                                      side_effect=lambda r, timeout, b=bad: FakeResponse(json.dumps(b).encode())):
+                with self.assertRaises(ValueError):
+                    workers_ai.extract(MESSAGE, "es", None, VOCABULARY)
+
+    def test_the_overall_deadline_holds_even_when_a_response_trickles(self):
+        import time as _time
+
+        def slow(request, timeout):
+            _time.sleep(1.0)  # each read would be within the socket timeout; the whole call is not
+            return FakeResponse(json.dumps(payload(json.dumps(GOOD))).encode())
+        with mock.patch.dict(os.environ, ENV, clear=True), mock.patch.object(workers_ai, "TIMEOUT_S", 0.2), \
+                mock.patch.object(workers_ai.urllib.request, "urlopen", side_effect=slow):
+            started = _time.monotonic()
+            with self.assertRaises(TimeoutError):
+                workers_ai.extract(MESSAGE, "es", None, VOCABULARY)
+            self.assertLess(_time.monotonic() - started, 0.6)
 
     def test_missing_credentials_give_a_clear_error(self):
         for missing in ("CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"):

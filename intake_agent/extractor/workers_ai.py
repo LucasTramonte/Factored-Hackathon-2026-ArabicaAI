@@ -10,12 +10,18 @@ Invariants:
 - The message text is never printed, logged or put in an exception message.
 - Temperature 0; a 10 s overall deadline raises ``TimeoutError``; one retry on invalid JSON or
   schema-invalid output, then ``ValueError``.
+- A service or network failure (HTTP 429/5xx, connection reset, truncated body) raises
+  ``ConnectionError``, which the harness turns into a technical handoff. Rejected credentials
+  (HTTP 401/403) raise ``CredentialsError`` and stop the run, so a configuration error is never
+  counted as handoffs.
 """
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import socket
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -59,16 +65,51 @@ def _post(url: str, token: str, body: dict, timeout: float) -> dict:
                                      headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
+            raw = response.read()
     except urllib.error.HTTPError as exc:
         # Status only: the error body is not echoed, so nothing from the request can leak into logs.
-        raise RuntimeError(f"Workers AI HTTP {exc.code}") from None
+        if exc.code in (401, 403):
+            raise CredentialsError(f"Workers AI rejected the credentials (HTTP {exc.code})") from None
+        raise ConnectionError(f"Workers AI HTTP {exc.code}") from None
     except (socket.timeout, TimeoutError) as exc:
         raise TimeoutError(f"Workers AI call exceeded {TIMEOUT_S:.0f} s") from exc
     except urllib.error.URLError as exc:
         if isinstance(exc.reason, (socket.timeout, TimeoutError)):
             raise TimeoutError(f"Workers AI call exceeded {TIMEOUT_S:.0f} s") from None
-        raise RuntimeError(f"Workers AI unreachable: {type(exc.reason).__name__}") from None
+        raise ConnectionError(f"Workers AI unreachable: {type(exc.reason).__name__}") from None
+    except (OSError, http.client.HTTPException) as exc:  # connection reset, truncated body
+        raise ConnectionError(f"Workers AI connection failed: {type(exc).__name__}") from None
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ValueError("response is not JSON") from None
+
+
+def _within(deadline: float, fn, *args):
+    """Run ``fn`` in a worker thread and give up at ``deadline``.
+
+    Socket timeouts bound each connect or read, not the whole call (a response that trickles in can
+    exceed them, and DNS is not covered), so the overall deadline is enforced here. An abandoned
+    call keeps running in its daemon thread; its result is discarded.
+    """
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError(f"Workers AI call exceeded {TIMEOUT_S:.0f} s")
+    box: dict = {}
+
+    def run():
+        try:
+            box["value"] = fn(*args, remaining)
+        except BaseException as exc:  # re-raised in the caller's thread
+            box["error"] = exc
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(remaining)
+    if worker.is_alive():
+        raise TimeoutError(f"Workers AI call exceeded {TIMEOUT_S:.0f} s")
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
 
 
 def _content(payload: dict) -> str:
@@ -76,16 +117,24 @@ def _content(payload: dict) -> str:
     result = payload.get("result") if isinstance(payload, dict) else None
     if not isinstance(result, dict):
         raise ValueError("response without result")
-    choices = result.get("choices") or []
-    content = choices[0].get("message", {}).get("content") if choices and isinstance(choices[0], dict) else None
+    choices = result.get("choices")
+    first = choices[0] if isinstance(choices, list) and choices else None
+    message = first.get("message") if isinstance(first, dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
     if not isinstance(content, str) or not content.strip():
         raise ValueError("response without content")
     return content
 
 
 def _usage(payload: dict) -> tuple[int, int]:
-    usage = ((payload or {}).get("result") or {}).get("usage") or {}
-    return int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
+    result = payload.get("result") if isinstance(payload, dict) else None
+    usage = result.get("usage") if isinstance(result, dict) else None
+    if not isinstance(usage, dict):
+        return 0, 0
+    try:
+        return int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
+    except (TypeError, ValueError):
+        return 0, 0
 
 
 def parse(content: str, as_of) -> dict:
@@ -125,10 +174,7 @@ def extract(message: str, session_language, as_of, vocabulary: dict) -> dict:
     deadline = time.monotonic() + TIMEOUT_S
     input_tokens = output_tokens = 0
     for attempt in range(ATTEMPTS):
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise TimeoutError(f"Workers AI call exceeded {TIMEOUT_S:.0f} s")
-        payload = _post(url, token, body, remaining)
+        payload = _within(deadline, _post, url, token, body)
         i, o = _usage(payload)
         input_tokens += i
         output_tokens += o

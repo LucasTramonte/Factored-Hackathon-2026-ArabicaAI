@@ -64,6 +64,13 @@ class PolicyAdapterTests(unittest.TestCase):
         self.assertEqual(p['action'], 'technical_handoff')
         self.assertEqual(p['requested_action'], 'human_review')
 
+    def test_service_failures_become_a_technical_handoff(self):
+        def down(*args):
+            raise ConnectionError('Workers AI HTTP 503')
+        p, meta = FactExtractorSystem('x', down)(CASE, RECORDS, CUSTOMERS)
+        self.assertEqual((p['action'], p['candidates'], p['requested_action']), ('technical_handoff', [], 'human_review'))
+        self.assertIn('unavailable', meta['error'])
+
     def test_the_model_never_receives_transactions(self):
         seen = {}
 

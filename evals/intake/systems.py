@@ -8,7 +8,7 @@ rules that define gold) turns the extracted facts into an action against the pur
 comparison with the checklist measures how each system reads the message.
 
 Invariants: an unauthenticated session is answered without calling the model; invalid output falls
-back to ``clarify``; a timeout becomes a ``technical_handoff``; predictions have the exact shape
+back to ``clarify``; a timeout or a service failure (``ConnectionError``) becomes a ``technical_handoff``; predictions have the exact shape
 ``baseline.score`` checks, so safety is scored the same way for every system.
 """
 from __future__ import annotations
@@ -121,6 +121,8 @@ class FactExtractorSystem:
             prediction = policy_prediction(case, extracted, records, customers, self.name)
         except TimeoutError as exc:
             return _prediction(case, "technical_handoff", [], self.name), {"usage": {}, "extracted": None, "error": f"timeout: {exc}"}
+        except ConnectionError as exc:
+            return _prediction(case, "technical_handoff", [], self.name), {"usage": {}, "extracted": None, "error": f"service unavailable: {exc}"}
         except (ValueError, KeyError, TypeError) as exc:
             return _prediction(case, "clarify", [], self.name), {"usage": {}, "extracted": None, "error": f"invalid output: {exc}"}
         return prediction, {"usage": out.get("usage", {}), "extracted": extracted, "error": None}
