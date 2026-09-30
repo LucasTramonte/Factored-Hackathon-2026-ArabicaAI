@@ -1,6 +1,6 @@
 # Worker intake completion, handoffs and gated AI integration
 
-Status: proposed design for review; implementation has not started.
+Status: approved by Roberto; fresh agent review completed and three findings resolved. Implementation has not started.
 Author: Roberto, with Codex. Local date: 2026-09-29.
 Baseline: main `dbeebaf`, after the ordered merges #27, #28 and #26.
 
@@ -45,7 +45,7 @@ Use a server-minted episode ID distinct from the eventual case reference. Bind i
 
 Classification distinguishes one candidate, several, none, incomplete coverage and lookup failure. The existing transaction schema lacks some card/category/country fields required by matching; coordinate an additive Gold-serving contract with Manoella before implementing those filters. Missing serving fields must remain missing rather than be fabricated from context cards. Keep source amount/currency/time semantics.
 
-Allow at most one retry of a transient read/provider operation within the overall deadline. Never retry permission rejection, configuration errors, invalid ownership or conflicting idempotency. Case writes replay the existing key and must be read back before acknowledgment. If case storage/read-back is down, return acceptance unknown without a reference; a technical handoff cannot be promised until storage is available.
+Allow at most one retry of a transient D1 read within its bounded operation deadline and measured query budget. Do not add an orchestration-level provider retry: the reviewed extractor implementation immediately fails on transport/provider errors and retries only invalid output. The blind-builder-approved compatible adapter owns that single attempt policy; wrapping it must not multiply attempts or change evaluated behavior. Never retry permission rejection, configuration errors, invalid ownership or conflicting idempotency. Case writes replay the existing key and must be read back before acknowledgment. If case storage/read-back is down, return acceptance unknown without a reference; a technical handoff cannot be promised until storage is available.
 
 ## Handoffs, case detail and history
 
@@ -65,7 +65,7 @@ When enabled, authenticate first. Send only message, chosen session language, tr
 
 Keep ADR-006’s 10 s total extraction timeout and at most one invalid-output retry; both calls share the total deadline. The measured p95 qualification threshold remains 3 s, separately from the hard timeout. Provider failure/timeout is recorded as failure and a technical outcome; it cannot be disguised as a successful model extraction.
 
-The safe fallback is the existing guided selection/confirmation flow with its own explicit mode. A failed model attempt may offer that flow to the customer; it does not silently claim the checklist understood the same message. A successful confirmed guided submission can complete the episode, while preserving the prior failure and measured cost. Any proposal for automatic checklist interpretation of free text must use a reviewed equivalent policy adapter and declare fallback provenance separately.
+The safe fallback is the existing guided selection/confirmation flow with its own explicit mode. A durable technical or incomplete handoff is terminal for that episode: emit at most one handoff chain and one end event, then replay its receipt on retries. A later customer-selected guided report starts a new episode with a new submission key; it never converts the failed episode to accepted or replaces its usage. Technical handoffs end with `technical_failure`; incomplete handoffs routed to human review end with `routed`, never `accepted`. Record the original failure and measured/unknown usage in the original episode. A failed model attempt may offer the new guided flow to the customer; it does not silently claim the checklist understood the same message. If persistence/read-back failed, keep acceptance unknown and retry the original key rather than start another episode while its acceptance is unresolved. Any proposal for automatic checklist interpretation of free text must use a reviewed equivalent policy adapter and declare fallback provenance separately.
 
 ## Events and measurement
 
@@ -77,20 +77,26 @@ Complete safe acceptance requires the scorer’s confirmation → complete hando
 
 Record actual monotonic elapsed time, calls and provider usage, including failed attempts. The current event contract requires integer token totals, while #26 supports unknown usage. Before runtime instrumentation, revise the event schema and scorer compatibly to represent unavailable usage explicitly; never substitute zero or omit an ended episode to conceal missing usage. Keep pending usage, decision-point metrics, episode metrics and inquiry resolution denominators separate.
 
-The recent-transactions path records authenticated successful display, missing/incomplete coverage and failures independently. Report resolution only when the owned bounded result is successfully displayed under the declared coverage contract.
+ADR-002 requires a separate ADR for the recent-transactions resolution path. Record its scope, coverage, eligibility, numerator/denominator and acknowledgment semantics before implementing resolution measurement. Existing bounded retrieval and backend failure instrumentation may ship first, but an HTTP success cannot establish successful display. The resolution numerator remains unavailable until the separately owned frontend implements the agreed display acknowledgment; do not infer zero resolutions or count retrieval responses as resolutions. Any acknowledgment remains session-bound and idempotent, and supports a declared demo-display metric rather than proof of bank resolution.
 
 ## Delivery sequence and verification
 
-1. Approve this written design, then produce the detailed implementation plan and choose inline or delegated execution under Superpowers.
+1. Roberto approved this written design and the fresh reviewer confirmed its corrections. Next produce the detailed implementation plan and choose inline or delegated execution under Superpowers.
 2. Preserve the existing frontend and guided API; document ES/PT language and outcome contracts for tomorrow’s frontend work.
 3. Implement additive episode/handoff persistence, explicit states and read-only detail/history with contract changes and adversarial tests.
-4. Add deterministic orchestration, recent-transactions measurement and privacy-safe event export, including the unknown-usage contract correction.
+4. Add deterministic orchestration and privacy-safe event export, including the unknown-usage contract correction. Record the separate recent-transactions ADR before resolution work; backend retrieval/failure instrumentation is independent, while display acknowledgment and the resolution numerator wait for the deferred frontend.
 5. Build the gated transport/interface after the unexposed compatible extraction/policy boundary is supplied. Test with stubs; activation remains an integration decision after frozen evidence.
 
-Run Worker unit and real local-D1 integration suites, shared contract validation and episode tests; run existing Angular checks only for API compatibility, without implementing frontend changes. Cover the gate/method/path matrix, session swaps/forgery/expiry, cross-customer isolation, hostile input, concurrent idempotency, failed read-back, stale confirmation, incomplete coverage, bounded retry/timeout, fallback provenance, event deduplication and unknown usage. Frontend accessibility and visual verification are deferred with the frontend implementation. No raw source/private evaluation data is needed.
+Run Worker unit and real local-D1 integration suites, shared contract validation and episode tests; run existing Angular checks only for API compatibility, without implementing frontend changes. Cover the gate/method/path matrix, session swaps/forgery/expiry, cross-customer isolation, hostile input, concurrent idempotency, failed read-back, stale confirmation, incomplete coverage, bounded retry/timeout, exact provider attempt counts, terminal technical/incomplete handoff followed by a distinct guided episode, replay while acceptance is unknown, fallback provenance, event deduplication and unknown usage. Frontend accessibility and visual verification are deferred with the frontend implementation. No raw source/private evaluation data is needed.
 
 Re-measure D1 rows/queries/round trips and justify any increase in ADR-004 before accepting a new budget. Do not preserve the old per-episode capacity claim after adding writes. Frozen evaluation, model/corpus tags, remote deployment and the reviewed Gold import remain with their owners.
 
 ## Approval decisions
 
 Approve the recommended backend option B design, including the staged increments, read-only agent history API, incomplete handoff storage, explicit guided fallback, and safe unknown-usage representation. Frontend implementation is excluded. This proposal does not decide the model rung, change parsing/prompt, waive latency, alter frozen labels or approve the Gold cohort size. Those decisions remain explicit dependencies, not placeholders filled by this PR.
+
+## Fresh review disposition
+
+An independent agent reviewed `fa76fcd` against the source brief, current Worker/store/schema, ADRs and episode scorer. Three bounded design issues were confirmed and corrected: terminal technical/incomplete handoffs with distinct guided recovery episodes; one registered provider attempt policy without an extra orchestration retry; and a separate recent-transactions ADR with display acknowledgment deferred to the frontend. No extractor prompt/parsing/model revision or frontend implementation follows from these corrections.
+
+The same fresh reviewer rechecked the corrected design and reported no remaining design blockers. Implementation and activation dependencies above remain in force.
