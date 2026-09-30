@@ -153,7 +153,7 @@ class RunnerIntegrationTests(unittest.TestCase):
         result = evaluate(self.corpus(), systems={'s': FactExtractorSystem('s', flaky)}, repetitions=3)
         rows = {s['repetition']: s['correct'] for s in result['summary']
                 if s['baseline'] == 's' and s['split'] == 'frozen_es_pt_v1' and s['language'] == 'all'}
-        self.assertEqual(rows, {1: 1, 2: 0, 3: 1, 'majority': 1})
+        self.assertEqual(rows, {1: 1, 2: 0, 3: 1, 'majority': 1, 'all': 2})  # 'all' pools the 3 executions
 
     def test_unavailable_usage_is_reported_as_unknown_not_as_free(self):
         def unmeasured(*args):
@@ -170,6 +170,21 @@ class RunnerIntegrationTests(unittest.TestCase):
                 self.assertEqual(rows[1]['usage_unavailable_calls'], calls // 2)
                 if extract is silent:  # no usage at all is unknown, never a measured zero
                     self.assertIsNone(rows['majority']['input_tokens'])
+
+    def test_summaries_report_the_p95_interval_the_latency_rule_uses(self):
+        def extract(*args):
+            return dict(extracted=FACTS, usage=dict(input_tokens=1, output_tokens=1))
+        for repetitions, has_upper in ((3, False), (80, True)):
+            result = evaluate(self.corpus(), systems={'s': FactExtractorSystem('s', extract)}, repetitions=repetitions)
+            row = next(s for s in result['summary'] if s['baseline'] == 's' and s['split'] == 'frozen_es_pt_v1'
+                       and s['language'] == 'all' and s['repetition'] == 1)
+            pooled = next(s for s in result['summary'] if s['baseline'] == 's' and s['split'] == 'frozen_es_pt_v1'
+                          and s['language'] == 'all' and s['repetition'] == 'all')
+            with self.subTest(repetitions=repetitions):
+                self.assertEqual(len(row['latency_p95_interval_ms']), 2)
+                # The rule pools every execution, so the pooled row carries the deciding interval.
+                self.assertEqual(pooled['cases'], repetitions)
+                self.assertEqual(pooled['latency_p95_interval_ms'][1] is not None, has_upper)
 
     def test_split_filter_scores_only_that_split(self):
         corpus = json.loads((Path(__file__).with_name('cases.json')).read_text(encoding='utf-8'))

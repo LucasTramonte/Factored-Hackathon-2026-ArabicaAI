@@ -82,6 +82,17 @@ class QuantileIntervalTests(unittest.TestCase):
             with self.subTest(values=values, q=q, conf=conf), self.assertRaises((ValueError, TypeError)):
                 quantile_interval(values, q, conf)
 
+    def test_large_samples_are_fast_and_do_not_overflow(self):
+        import time
+        started = time.perf_counter()
+        low, high = quantile_interval(list(range(5000)), 0.95, 0.95)
+        self.assertLess(time.perf_counter() - started, 1.0)
+        # The p95 of 0..4999 is about 4750; the interval must straddle it closely.
+        self.assertLess(low, 4750)
+        self.assertGreater(high, 4750)
+        # Normal approximation: about +/-1.96 sd of Bin(5000, 0.95) ranks, plus a few ranks of discreteness.
+        self.assertLess(high - low, 2 * 1.96 * (5000 * 0.95 * 0.05) ** 0.5 + 4)
+
     def test_tiny_samples_give_only_the_bounds_they_can_support(self):
         # n=1: P(B=0)=5% > 2.5%, so not even the minimum bounds p95 from below.
         self.assertEqual(quantile_interval([1.0], 0.95, 0.95), (None, None))
