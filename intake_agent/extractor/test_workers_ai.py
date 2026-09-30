@@ -132,6 +132,12 @@ class ExtractTests(unittest.TestCase):
             self.run_with("not json", "still not json")
         self.assertEqual(ctx.exception.usage, {"input_tokens": 200, "output_tokens": 40})
 
+    def test_a_failed_transport_attempt_is_unmeasured_not_free(self):
+        for exc in (socket.timeout("timed out"), ConnectionResetError("reset")):
+            with self.subTest(exc=type(exc).__name__), self.assertRaises((TimeoutError, ConnectionError)) as ctx:
+                self.run_with("junk", exc)
+            self.assertEqual(ctx.exception.usage, {"input_tokens": 100, "output_tokens": 20, "usage_unavailable_calls": 1})
+
     def test_rejected_credentials_stop_the_run_loudly(self):
         for code in (401, 403):
             err = urllib.error.HTTPError("u", code, "no", {}, io.BytesIO(b""))

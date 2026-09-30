@@ -72,6 +72,6 @@ Made by Lucas's Claude session, which has seen frozen cases, so the ADR-006 limi
 - The body is read one socket read at a time with the time left as the socket timeout. An abandoned worker therefore stops at the deadline and doesn't drain a slow body. At most `MAX_IN_FLIGHT = 4` workers exist at once.
 - `HTTPError` bodies are closed on every status branch.
 - A `success: false` envelope is a provider failure (`ConnectionError`, no retry), not invalid model output.
-- Missing or invalid provider usage adds 0 tokens and counts in `usage_unavailable_calls`. The runner reports that count, and a majority row with no usage stays unknown instead of 0.
+- Missing or invalid provider usage, and any attempt that fails in transport (timeout, reset, cut body), adds 0 tokens and counts in `usage_unavailable_calls`. The runner reports that count, and a majority row with no usage stays unknown instead of 0.
 
 None of these paths occurred in iteration 4: 48/48 calls returned usage and no failure envelope. The iteration-4 numbers above are unchanged.

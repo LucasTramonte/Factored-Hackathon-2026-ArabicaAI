@@ -18,7 +18,8 @@ Invariants:
   as invalid model output.
 - Every exception raised by ``extract`` carries ``usage`` (tokens of the attempts that returned),
   so failed cases still count in token and cost totals. A response whose usage is missing or not a
-  non-negative integer adds 0 tokens and one to ``usage_unavailable_calls``, so unmeasured is never
+  non-negative integer, or an attempt that fails in transport, adds 0 tokens and one to
+  ``usage_unavailable_calls``, so unmeasured is never
   reported as free.
 - At most ``MAX_IN_FLIGHT`` HTTP workers exist at once, and each stops reading at the deadline.
 """
@@ -229,7 +230,9 @@ def extract(message: str, session_language, as_of, vocabulary: dict) -> dict:
         try:
             payload = _within(deadline, _post, url, token, body)
         except Exception as exc:
-            exc.usage = dict(usage)  # tokens of earlier attempts still count
+            # Tokens of earlier attempts still count; this attempt's are unknown (a timeout may still be billed).
+            usage["usage_unavailable_calls"] = usage.get("usage_unavailable_calls", 0) + 1
+            exc.usage = dict(usage)
             raise
         counts = _usage(payload)
         if counts is None:
