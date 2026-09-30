@@ -34,9 +34,65 @@ UNSAFE = [ev('intake_started', 'd', 0), ev('transaction_confirmed', 'd', 1, tran
           ev('handoff_created', 'd', 2, kind='complete', case_ref='REF-3'), ev('handoff_accepted', 'd', 3, case_ref='REF-3', accepted_by='q'),
           ended('d', 4, 'accepted', safety='unsafe', duration_ms=200000, llm_calls=3, input_tokens=1000, output_tokens=200, tool_calls=2)]
 PENDING = [ev('intake_started', 'e', 0, language='pt')]
+V2_FAILED = [dict(ev('intake_started', 'f', 0), version='2'),
+             dict(ended('f', 1, 'technical_failure', safety='not_assessed', duration_ms=1000,
+                        llm_calls=2, input_tokens=None, output_tokens=None, tool_calls=1),
+                  version='2', known_input_tokens=7, known_output_tokens=2, usage_unavailable_calls=1)]
 
 
 class EpisodeTests(unittest.TestCase):
+    def test_v2_unknown_usage_preserves_denominator_and_known_subtotals(self):
+        total = summarize(V2_FAILED)['all']
+        self.assertEqual(total['eligible_started'], 1)
+        self.assertEqual(total['safe_accepted_intake_rate'], 0)
+        self.assertEqual(total['outcomes'], dict(technical_failure=1))
+        self.assertEqual(total['usage_unknown_episodes'], 1)
+        self.assertIsNone(total['input_tokens'])
+        self.assertIsNone(total['output_tokens'])
+        self.assertEqual((total['known_input_tokens'], total['known_output_tokens'], total['usage_unavailable_calls']), (7, 2, 1))
+        self.assertEqual((total['llm_calls'], total['tool_calls'], total['latency_p95_ms']), (2, 1, 1000))
+        complete = summarize(ACCEPTED)['all']
+        self.assertEqual((complete['eligible_started'], complete['safe_accepted_intake_rate'], complete['input_tokens'],
+                          complete['output_tokens'], complete['latency_p95_ms']), (1, 1, 2000, 400, 300000))
+        combined = summarize(ACCEPTED + V2_FAILED + PENDING)
+        self.assertIsNone(combined['all']['input_tokens'])
+        self.assertIsNone(combined['all']['output_tokens'])
+        self.assertEqual((combined['all']['known_input_tokens'], combined['all']['known_output_tokens'],
+                          combined['all']['usage_unavailable_calls'], combined['all']['usage_unknown_episodes']), (2007, 402, 1, 2))
+        self.assertEqual(combined['pt']['input_tokens'], 0)  # Preserve ended-only v1 sums for pending episodes.
+
+    def test_v2_known_usage_retains_totals_and_safe_acceptance(self):
+        log = [dict(e, version='2') for e in ACCEPTED]
+        log[-1].update(known_input_tokens=2000, known_output_tokens=400, usage_unavailable_calls=0)
+        total = summarize(log)['all']
+        self.assertEqual((total['safe_accepted'], total['input_tokens'], total['output_tokens'],
+                          total['known_input_tokens'], total['known_output_tokens'],
+                          total['usage_unknown_episodes'], total['usage_unavailable_calls']), (1, 2000, 400, 2000, 400, 0, 0))
+
+    def test_v2_usage_validation_fails_closed(self):
+        invalid = [dict(V2_FAILED[-1], usage_unavailable_calls=0),
+                   dict(V2_FAILED[-1], input_tokens=7), dict(V2_FAILED[-1], output_tokens=2),
+                   dict(V2_FAILED[-1], usage_unavailable_calls=3),
+                   dict(V2_FAILED[-1], usage_unavailable_calls=0, input_tokens=8, output_tokens=2),
+                   dict(V2_FAILED[-1], usage_unavailable_calls=0, input_tokens=7, output_tokens=3),
+                   dict(V2_FAILED[-1], customer_statement='PRIVATE-CONTENT')]
+        for field in ('duration_ms', 'llm_calls', 'tool_calls', 'known_input_tokens', 'known_output_tokens', 'usage_unavailable_calls'):
+            invalid.extend(dict(V2_FAILED[-1], **{field: value}) for value in (True, -1, 1.5))
+        for field in ('input_tokens', 'output_tokens'):
+            for value in (True, -1, 1.5):
+                end = dict(V2_FAILED[-1], usage_unavailable_calls=0, input_tokens=7, output_tokens=2)
+                end[field] = value
+                invalid.append(end)
+        for field in ('known_input_tokens', 'known_output_tokens', 'usage_unavailable_calls'):
+            invalid.append({k: v for k, v in V2_FAILED[-1].items() if k != field})
+        for end in invalid:
+            with self.subTest(end=end), self.assertRaises(ValueError):
+                summarize([V2_FAILED[0], end])
+        with self.assertRaisesRegex(ValueError, 'mixes versions'):
+            summarize([dict(V2_FAILED[0], version='1'), V2_FAILED[-1]])
+        with self.assertRaisesRegex(ValueError, 'outside the contract'):
+            summarize([ACCEPTED[0], dict(ACCEPTED[-1], known_input_tokens=2000)])
+
     def test_primary_kpi_counts_every_eligible_start_once(self):
         s = summarize(ACCEPTED + ABANDONED + TECHNICAL + UNSAFE + PENDING)
         total = s['all']
@@ -85,7 +141,7 @@ class EpisodeTests(unittest.TestCase):
         cases = {
             'exactly one intake_started': ACCEPTED + [ev('intake_started', 'a', 9)],
             'Unknown event': [ev('intake_started', 'z', 0), ev('refund_issued', 'z', 1)],
-            'version': [dict(ev('intake_started', 'z', 0), version='2')],
+            'version': [dict(ev('intake_started', 'z', 0), version='3')],
             'language': [ev('intake_started', 'z', 0, language='en')],
             'mixes languages': [ev('intake_started', 'z', 0), ended('z', 1, 'abandoned', language='pt')],
             'needs exactly one intake_started': [ended('z', 0, 'abandoned')],
@@ -142,6 +198,17 @@ class EpisodeCliTests(unittest.TestCase):
         self.assertEqual(summary['all']['safe_accepted_intake_rate'], 0.5)
         self.assertEqual(summary['pt']['usage_unknown_episodes'], 1)
         self.assertIsNone(summary['pt']['latency_p95_ms'])
+        self.assertEqual(result.stderr, '')
+
+    def test_cli_reports_unknown_v2_usage_without_losing_failed_episodes(self):
+        result = self.run_cli(''.join(json.dumps(e) + '\n' for e in ACCEPTED + V2_FAILED))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        total = json.loads(result.stdout)['all']
+        self.assertEqual(total['eligible_started'], 2)
+        self.assertIsNone(total['input_tokens'])
+        self.assertIsNone(total['output_tokens'])
+        self.assertEqual((total['known_input_tokens'], total['known_output_tokens'], total['usage_unavailable_calls']), (2007, 402, 1))
+        self.assertEqual(total['outcomes'], dict(accepted=1, technical_failure=1))
         self.assertEqual(result.stderr, '')
 
     def test_cli_rejects_bad_input_without_echoing_content_or_partial_results(self):

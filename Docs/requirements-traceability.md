@@ -33,14 +33,14 @@ Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ mi
 
 | # | Requirement | Status | Evidence and remaining scope | Owner |
 |---|---|---|---|---|
-| S1 | Transaction and action logging | 🔵 | #16 merged the event contract; #18 adds explicit sequence order. #17 has durable case rows. Runtime event emission is pending. | Roberto |
-| S2 | Audit trail | 🟡 | #17 has case receipts and Gold provenance; #16 merged event references and scoring. No end-to-end runtime event log yet. | Lucas, Roberto |
+| S1 | Transaction and action logging | 🔵 | #16 merged the event contract; #18 adds explicit sequence order. #17 has durable case rows. The guided backend (#31) writes v2 events to D1 `intake_events` in the same batch as each state change, with a validated export; the legacy `/cases` flow emits none. | Roberto |
+| S2 | Audit trail | 🟡 | #17 has case receipts and Gold provenance; #16 merged event references and scoring. No event log for the legacy `/cases` flow; guided episodes keep a per-episode service history (#31). | Lucas, Roberto |
 | S3 | Tool permissions enforced outside the LLM | 🟡 | #8 evaluation and #17 D1 routes derive customer identity from the session and enforce ownership outside model text. Agent tools are not implemented. | Lucas, Roberto |
 | S4 | Prompt-injection handling | 🔵 | #16 merged the safety split and unsafe-action scorer. A live agent has not yet been tested against it. | Roberto |
 | S5 | Unauthorized-access handling | 🟡 | #17 tests forged/expired sessions, actor isolation, and foreign transactions; #16 merged adversarial cases. | Lucas, Roberto |
-| S6 | Tool failure fallback | 🔵 | #8 harness models technical handoff; #11 specifies fail-closed runtime behavior. The live service has no agent tool calls yet. | Roberto |
+| S6 | Tool failure fallback | 🟡 | #8 harness models technical handoff; #11 specifies fail-closed runtime behavior. The guided backend (#31) ends a failed owned-transaction lookup in a durable technical handoff (`technical_failure`, `tool_status: failed`) and keeps acceptance unknown (503, same-key retry) when storage or read-back fails. A bounded lookup retry and agent tool calls are not implemented. | Roberto |
 | S7 | Human escalation | 🟡 | #17 accepts reports into an agent queue. #9 scenarios define further handoff types; assignment and resolution history remain planned. | Lucas, Roberto |
-| S8 | Data retention defined | 🟡 | ADR-004 keeps demo activity with no age-based deletion until judging ends, allows a reset of demo activity before a recorded demo, purges expired sessions at login, and shuts everything down after 2026-10-20. Deletes follow foreign-key order (`back-end/scripts/reset-demo-activity.sql` once #31 lands). Event retention and a scripted, guarded reset remain. | Lucas, team acceptance |
+| S8 | Data retention defined | 🟡 | ADR-004 keeps demo activity with no age-based deletion until judging ends, allows a reset of demo activity before a recorded demo, purges expired sessions at login, and shuts everything down after 2026-10-20. Guided intake episodes, turns, events and handoffs follow the same retention. Deletes follow foreign-key order through `back-end/scripts/reset-demo-activity.sql`, which is unit-tested (the old cases-and-sessions recipe fails since migration 0004), and the event export is documented. Still open: team acceptance, a guard against running the reset before the final export, and segmented exports above 10,000 episodes. | Lucas, team acceptance |
 
 ## Decisions still needed
 

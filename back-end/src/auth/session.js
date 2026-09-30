@@ -20,7 +20,7 @@ export async function tokenHash(token) {
   return [...new Uint8Array(digest)].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 
-/** The live session row for ``actor`` (``{ customer_id }``), or ``null``. */
+/** The live session row for ``actor`` (``{ customer_id, expires_at }``; expiry is internal only), or ``null``. */
 export async function readSession(request, store, actor) {
   const token = readCookies(request)[COOKIE[actor]];
   if (!token || !TOKEN.test(token)) return null;

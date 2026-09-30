@@ -70,15 +70,22 @@ try {
     await new Promise(done => setTimeout(done, 250));
   }
   if (!ready) throw new Error('Local Worker did not start:\n' + output);
-  const suites = (await readdir(join(project, 'test/integration'))).filter(name => name.endsWith('.test.js')).sort()
-    .map(name => join(project, 'test/integration', name));
-  const tested = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...suites], {
-    cwd: temp, env: { ...env, WORKER_TEST_URL: `http://127.0.0.1:${port}`, EXPIRED_TOKEN: 'e'.repeat(64) },
-    encoding: 'utf8', timeout: 60_000
-  });
-  process.stdout.write(tested.stdout);
-  process.stderr.write(tested.stderr);
-  if (tested.status !== 0) process.exitCode = 1;
+  // Budgets run last, in their own test-runner invocation (the runner orders files itself): they measure against
+  // every other suite's retained rows, and their bounded fixtures (100 queue reservations, 100 idle starts)
+  // cannot change what earlier suites observe in the shared D1.
+  const names = (await readdir(join(project, 'test/integration'))).filter(name => name.endsWith('.test.js')).sort();
+  for (const group of [names.filter(name => name !== 'budget.test.js'), names.filter(name => name === 'budget.test.js')]) {
+    if (!group.length) continue;
+    const tested = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...group.map(name => join(project, 'test/integration', name))], {
+      cwd: temp, env: { ...env, WORKER_TEST_URL: `http://127.0.0.1:${port}`, EXPIRED_TOKEN: 'e'.repeat(64) },
+      encoding: 'utf8', timeout: 120_000
+    });
+    process.stdout.write(tested.stdout ?? '');
+    process.stderr.write(tested.stderr ?? '');
+    // A spawn failure or timeout leaves status null and output possibly null; report why instead of throwing.
+    if (tested.error) process.stderr.write(`${tested.error.message}\n`);
+    if (tested.status !== 0) process.exitCode = 1;
+  }
 } finally {
   if (server && server.exitCode === null) server.kill('SIGTERM');
   await rm(temp, { recursive: true, force: true });

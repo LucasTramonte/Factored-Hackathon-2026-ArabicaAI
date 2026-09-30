@@ -40,11 +40,25 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 
 **Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/, behind Cloudflare Access (ask the team to be allowlisted) and a Basic gate. Sign-ins are simulated.
 
-**Status (2026-09-29):**
+**Status (2026-09-30):**
 
-- The deterministic intake flow is deployed and tested. That covers the adversarial gate, session, isolation and idempotency suites and a D1 budget test.
+- The deterministic intake flow is deployed and tested, as of 2026-09-29. That covers the adversarial gate, session, isolation and idempotency suites and a D1 budget test.
+- The guided intake backend is merged, tested locally and not deployed yet. It covers:
+  - owned ES/PT guided episodes;
+  - complete, incomplete and technical handoffs;
+  - the agent intake queue and detail with service history;
+  - a validated event export and a manual idle sweep.
+
+  The frontend doesn't use these routes yet, and the AI extraction step is still gated.
 - It runs on the Cloudflare Free plan ($0). [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes the guided flow at about 2,380 complete episodes a day, against measured volumes of 17–818 a day. The same record prices a production target on AWS at $86.36 a month and explains each service choice.
-- **Not done yet:** retrieval-outcome states, case kinds, ES/PT interface text, event instrumentation, and any AI. These are covered in the [intake roadmap](Docs/Plans/intake-roadmap.md).
+- **Not done yet:**
+  - frontend use of the guided routes and ES/PT interface text;
+  - automatic one / several / none classification of free text;
+  - the recent-transactions resolution path (a draft proposal);
+  - a remote run of the new routes;
+  - any AI.
+
+  These are covered in the [intake roadmap](Docs/Plans/intake-roadmap.md).
 
 Quick starts:
 

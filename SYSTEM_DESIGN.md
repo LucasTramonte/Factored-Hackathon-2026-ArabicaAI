@@ -61,7 +61,7 @@ Requests it can't handle (another language, a recognized charge, a lost card, a 
 | Stage | State | What it does |
 |---|---|---|
 | Live service | Online, behind an access gate | The customer signs in, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. Agents see the queue |
-| Guided backend | Built, in review (PR #31) | Adds guided intake episodes, technical and incomplete handoffs, the agent's case detail and event export. It takes a structured report and does not read free text |
+| Guided backend | Merged, tested locally, not deployed | Adds guided intake episodes, technical and incomplete handoffs, the agent's case detail and event export. It takes a structured report and does not read free text |
 | Reading free text | Evaluated offline, not wired online | The rule-based checklist and the model's fact extractor, run through the written policy in the evaluation harness. The model joins the live service only after the frozen comparison, behind a switch that falls back to the guided flow |
 
 The customer contract and the measurement contract are in [`Docs/intake/`](Docs/intake/customer-and-measurement-contract.md).
@@ -131,7 +131,7 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 
 **Live today** (behind an access gate): sign-in, the customer's own purchases, confirmation, a stored case with its reference, and the agent queue.
 
-**Built and in review:**
+**Merged, not deployed yet:**
 - the guided flow with technical and incomplete handoffs;
 - the agent's case detail;
 - event export.
