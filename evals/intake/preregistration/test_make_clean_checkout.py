@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from evals.intake.preregistration.make_clean_checkout import assert_blind, export_snapshot, withheld_paths
+from evals.intake.preregistration.prereg import clean_git_env
 
 
 class BlindCheckoutTests(unittest.TestCase):
@@ -48,8 +49,9 @@ class BlindCheckoutTests(unittest.TestCase):
 
 
 def git(repo, *args):
+    # Same isolation as the code under test: inherited GIT_DIR or GIT_WORK_TREE must not redirect the fixture.
     return subprocess.run(['git', '-C', str(repo), '-c', 'user.email=t@example.com', '-c', 'user.name=T', *args],
-                          check=True, capture_output=True, text=True).stdout
+                          check=True, capture_output=True, text=True, env=clean_git_env()).stdout
 
 
 class SnapshotTests(unittest.TestCase):

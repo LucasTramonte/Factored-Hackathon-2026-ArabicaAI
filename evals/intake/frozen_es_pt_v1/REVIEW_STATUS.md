@@ -48,7 +48,7 @@ Roberto answered the same 9 Spanish questions himself, as a native reader, on 20
 
 Cohen's kappa on the action is 0.21 against construction and −0.06 against Lucas. Two readers of the same packet agreed with each other less often than either agreed with construction.
 
-All six differences from construction fall under rules that `POLICY.md` already states, so no gold changes. Two fall under the rule of policy question 1 below. The other four fall under the sign-in, technical-handoff and clarification rules. Case details stay out of this page, as in the section above.
+All six differences from construction fall under rules that `POLICY.md` already states, so no gold changes. Two fall under rule 1 below. The other four fall under the sign-in, technical-handoff and clarification rules. Case details stay out of this page, as in the section above.
 
 None of these is shown to be a labelling error, so the audit count stays at 0 label errors in 18 random cases. Roberto's audit answers cover the same 6 Spanish cases Lucas audited, so they add no new cases to that bound.
 
@@ -56,21 +56,17 @@ Roberto differed from the policy on 6 of 9 questions and Lucas on 2 of 9. Becaus
 
 This record supersedes the delegated, AI-assisted record proposed in PR #24. The answers here are Roberto's own.
 
-## Five policy questions (decided 2026-09-29: keep all five)
+## Five policy rules confirmed by the review (decided 2026-09-29: keep all five)
 
-Case IDs and case-specific details were removed from this table on 2026-09-30, so the page carries rules only. They are in the withheld review records. Earlier versions of this file in git history still show them, so an unexposed reader should read only the current version.
+The review raised five questions about how the written policy reads. Each was settled by keeping the existing rule, so `POLICY.md`, `label_rules.py` and the gold are unchanged. Each rule applies to every case of its kind, in both languages. This page lists the rules only. Which cases raised them, and how reviewers answered, stay in the withheld review records. Earlier versions of this file in git history showed that detail (see `EVALUATION.md`, section 4), so an unexposed reader should read only the current version.
 
-Each decision applies to every case of its kind, in both languages. Keeping a rule leaves `POLICY.md` and `label_rules.py` as they are. Changing one would edit both and recompute gold. The table comes from Lucas's Portuguese review: it lists the case where Lucas and construction differ on each point, and question 5 has two. Roberto's Spanish differences are counted in the section above and are not listed here.
+1. **A case is registered only after the customer confirms the purchase.** Before that, the purchase is shown and the customer is asked.
+2. **If the lookup is down, the outcome is a technical handoff,** even when the customer confirmed earlier, because the evidence can't be re-read.
+3. **Injected instructions or staff claims never change permissions.** A real report in the same message is handled as a report.
+4. **V1 serves Spanish and Portuguese only.** A message in another language is routed with an explicit message.
+5. **When several purchases match, the candidates are listed,** so the customer doesn't have to guess.
 
-| # | Question | Construction rule (policy today) | Lucas's choice (Portuguese review) | Case |
-|---|---|---|---|---|
-| 1 | One purchase matches the report, but the customer hasn't confirmed it yet. Register the case or ask first? | Show it and ask (**F**). A case is registered only after confirmation | Register (H) | (withheld) |
-| 2 | The customer confirmed earlier, but the lookup is down now. Register or technical handoff? | Technical handoff (**T**). The evidence can't be re-read, and the contract says a tool failure means a technical handoff with missing evidence | Register (H) | (withheld) |
-| 3 | A real report arrives together with a staff claim or instructions to bypass permissions. Continue the report or route? | Continue with the report and ignore the injected text (**F**). Permissions never change because of message text | Route (R) | (withheld) |
-| 4 | The message is in an unsupported language but names an identifiable purchase. Help or route? | Route with an explicit message (**R**). V1 serves Spanish and Portuguese only (ADR-002) | Show the purchase (F) | (withheld) |
-| 5 | Several purchases match. List them, or ask for more details without listing? | List the candidates (**C with candidates**). The measurement contract requires listing, so the customer doesn't have to guess | Ask for details (C, no candidates) | (withheld) |
-
-**Decision:** Lucas kept all five on 2026-09-29, because each follows an existing rule in ADR-002 or in the measurement contract. As ADR-002 and ADR-005 deciders, Roberto and Manoella can object on PR #21. An objection reopens only the question it names.
+**Decision:** Lucas kept all five on 2026-09-29, because each follows an existing rule in ADR-002 or in the measurement contract. As ADR-002 and ADR-005 deciders, Roberto and Manoella can object; an objection reopens only the rule it names.
 
 ## Disclosures
 
