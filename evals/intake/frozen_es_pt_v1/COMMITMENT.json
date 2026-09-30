@@ -1,0 +1,39 @@
+{
+  "purpose": "Hash commitment for the withheld frozen ES/PT set. These files stay off the repository until extractor v1 is pre-registered and frozen, so the extractor's author never sees the test cases. When they are published, each file must match its SHA-256 below; a mismatch means the set changed after this commitment.",
+  "committed_utc": "2026-09-29",
+  "algorithm": "sha256",
+  "files": {
+    "draft.json": {
+      "sha256": "09ee99b1dd7ad778e7d434c97755b303907a9816d04c5ba4f6cb18c60f9f0a2a",
+      "bytes": 57226
+    },
+    "build_phase1.py": {
+      "sha256": "008938e2b4bbedfcb1b92e48c805b581684f603cb1241c820a5f7b2f12c3b5a7",
+      "bytes": 16765
+    },
+    "verifier_input.jsonl": {
+      "sha256": "e48b6da9acfb56e5629141294eef1a18cb13b0bd161b0ea07b4a71cde159e3a2",
+      "bytes": 154857
+    },
+    "verifier_output.jsonl": {
+      "sha256": "f7b395f3ecc50950acf0a2c40d658d1af23a0bce1d61b47431220615c49198c8",
+      "bytes": 31171
+    },
+    "queues.json": {
+      "sha256": "7b26a7aee2e302d79d9d3f58dfffd6dfb8a1bf0f2be258d865c62f73ab140fb8",
+      "bytes": 29757
+    },
+    "reviews/lucas.jsonl": {
+      "sha256": "af7812c34dbcc3292d870f5115d41b8b69415300319eb8f191709a0f6fb847f6",
+      "bytes": 7830
+    },
+    "reviews/lucas_es.jsonl": {
+      "sha256": "d46ead0576d97ce7e38c3de46bc7fad6fb76bd21077e68242dd912f28582d6d6",
+      "bytes": 6666
+    }
+  },
+  "not_committed_yet": [
+    "review_state.json, review_state_es.json and session_record.json (mutable working state)",
+    "reviews/roberto_message.txt (unused after option B; contains case text)"
+  ]
+}

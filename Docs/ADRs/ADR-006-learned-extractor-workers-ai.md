@@ -1,0 +1,75 @@
+# ADR-006 — Learned component: a fact extractor on Workers AI, smallest model first
+
+- **Status:** Proposed
+- **Date:** 2026-09-29
+- **Deciders:** Lucas Tramonte, Roberto Z, Manoella R
+- **Related:** [ADR-002](ADR-002-v1-workflow-unrecognized-charge-intake.md) (deterministic MVP, when a model may be added), [ADR-003](ADR-003-intake-single-runtime-worker-d1.md) (runtime), [ADR-004](ADR-004-intake-capacity-and-cost.md) (cost envelope), [ADR-005](ADR-005-evaluation-data-protocol.md) (evaluation protocol)
+
+## Context
+
+The brief requires at least one learned component evaluated against a baseline on the same held-out workload (Sound Data and ML Practice). ADR-002 lets us add a model only when the evaluation shows a failure the checklist can't fix, and only with its own ADR. That trigger is met. The checklist gets 15 of 25 `v1_authored` cases right, and it misses currency words, non-ISO and relative dates, and paraphrases (`evals/intake/README.md`). Relative dates are outside what it can resolve, by design.
+
+The workload is ready: `frozen_es_pt_v1` has 60 blind cases and 0 label errors in an 18-case audit. The service runs on a Cloudflare Worker (ADR-003), and the data is synthetic, with no free text a model could learn from (DF-001). Submissions close on 2026-10-05.
+
+The question is which model, doing what, and how we avoid spending more than the evidence justifies.
+
+## Decision
+
+1. **The model extracts, and deterministic code decides.**
+   - The model reads the customer's message, the session language, the session time `as_of` and the closed merchant and category vocabulary (DF-006).
+   - It returns exactly five extraction fields: `intent`, `stated_facts`, `invalid`, `demand` and `injection`. It never returns `customer_id`, `authenticated`, `confirmed_id`, `tool_failure` or `as_of`. The caller supplies those from trusted session state and adds them after the extracted fields, so no model output can override them. Any extra field fails validation (`evals/intake/systems.py`).
+   - It never sees the customer's transactions or anyone else's data. It never picks an action, and never writes to D1.
+   - The written policy applies the extracted facts to the customer's purchases: identity, ownership, confirmation and candidate matching. These are the same rules that define the frozen gold.
+   - So the comparison with the checklist measures how well each system *reads the message*. Both sides follow the same policy.
+2. **Start with the smallest capable model in the runtime we already have:** Workers AI `@cf/openai/gpt-oss-20b`.
+   - It runs inside the Cloudflare account that already serves the Worker, through the same binding. There is no new provider, no new credential in the Worker, and the data doesn't leave Cloudflare.
+   - It fits the free allocation. ADR-004's envelope, at 12k input and 2k output tokens, gives $0.0030 an episode and 36 free episodes a day, and extraction prompts are much shorter than that. The real tokens and cost are measured in the pre-registered run.
+3. **Move to a bigger model only on evidence, in a fixed order.** The rungs are:
+   1. `gpt-oss-20b`;
+   2. a larger Workers AI model (for example `llama-3.3-70b`, $0.0080 an episode in ADR-004);
+   3. Claude Haiku 4.5 on Bedrock, which needs a second provider, an AWS credential and a data-handling approval.
+
+   We climb one rung only when the current rung fails on the `development` split, by any of these:
+   - fewer than 16 of 18 correct next actions (per-case majority over 3 repetitions);
+   - any unsafe outcome;
+   - fewer than 95% schema-valid outputs;
+   - p95 latency over 3 s;
+   - more than 10% of cases changing answer across the 3 repetitions.
+
+   The floor is absolute on purpose. The checklist gets 18 of 18 there because its rules were written on those cases, so "at least as good as the checklist on development" would compare a learned system against rules fitted to that very split. At 16 of 18, the extractor can miss two cases before we escalate. These triggers never read the frozen set. Each rung is a new pre-registered version, and the frozen set scores it once. Every version run is reported.
+4. **Fail safe:**
+   - temperature 0, or the lowest the model allows;
+   - a committed prompt with its SHA-256 in the pre-registration;
+   - JSON schema validation, and one retry on invalid output;
+   - after that, a deterministic fallback: clarify, or a technical handoff on timeout (10 s).
+   - The model's output is never shown to the customer as a decision.
+5. **Build and freeze.** Lucas and Roberto have seen frozen cases, so neither may write or tune the extractor.
+   - It is built by an isolated agent in a clean checkout where the withheld files don't exist. It uses only `POLICY.md`, the `development` split and the checklist interface.
+   - The instructions given to that agent are committed verbatim, so reviewers can check they contain no test content.
+   - Anyone who has seen a frozen case reviews only **non-behavioural** aspects: security, secrets, data handling, interfaces, tests and error paths. That covers Roberto, as the extractor's code reviewer, and Lucas.
+   - Any **behaviour-changing** revision needs the approval of a reviewer who has seen no frozen case (Manoella), and it is re-run by the builder on the `development` split only. That covers the prompt, the parsing, the thresholds or the model. An exposed reviewer's comments may flag a behaviour problem, but may not propose the fix.
+   - The pre-registration and the `extractor-v1` tag follow `evals/intake/preregistration/`.
+6. **Live service later.** The Worker calls the same prompt through its AI binding only after the frozen run, in a separate change behind a switch that falls back to the current deterministic flow.
+
+## Consequences
+
+- **+** It satisfies the brief's learned-component requirement with the least new infrastructure. It's the same runtime, the same account, at $0 within the free allocation.
+- **+** The boundary between AI and deterministic logic is explicit and easy to test. A wrong extraction can make the service ask again or route wrongly, but it can't disclose another customer's data or take an action. Permissions are enforced outside model output, as the brief requires.
+- **+** Moving to a bigger model is a measured decision with triggers written before the test. It isn't a guess, and it isn't tuned on the test.
+- **−** A 20B model may miss regional slang or implicit dates that a larger model would catch. We accept that for v1, and the ladder shows how we'd respond.
+- **−** gpt-oss comes from the same model family as the Codex session that drafted the frozen messages. Shared phrasing habits could flatter it. That's recorded as a limitation, and gold comes from the rules, not from a model.
+- **−** The free allocation covers the evaluation and a demo, not production traffic (ADR-004). Beyond it, cost grows linearly per episode.
+- **−** Extraction quality in Portuguese is measured on synthetic cases only (DF-001).
+
+## Alternatives considered
+
+- **Claude Haiku 4.5 on Bedrock first.** It's probably stronger. But it needs a second provider in the runtime, AWS credentials and a data-handling approval, and it costs about 7× more per episode than gpt-oss-20b on ADR-004's envelope. Rejected for v1. Reopen it as rung 3 if the triggers fire.
+- **A larger Workers AI model first.** Rejected, because nothing yet shows the smaller one fails. It's rung 2.
+- **Train or fine-tune a classifier on the dataset.** The source text is fixed templates, so a model would learn the label from the template (DF-001). Rejected. Reopen it if the organisers supply free text.
+- **Let the model choose the action end to end.** That would put permission and policy decisions inside model output, which the brief forbids. Rejected.
+- **Keep only the checklist.** It fails the brief's learned-component requirement, and it leaves 10 of 25 known misses unaddressed. Rejected.
+
+## Implementation notes
+
+- Evaluation: `python -m evals.intake.run --cases <frozen corpus>` for the checklist. The extractor gets a runner entry in its own PR. Its batch follows the pre-registration template: 3 unchanged repetitions if the model is stochastic, scored by per-case majority, with Wilson intervals and McNemar against the checklist (`evals/intake/stats.py`).
+- Prices are ADR-004's, checked on 2026-09-29 against the [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/) page. The pre-registered run records the actual tokens and neurons.

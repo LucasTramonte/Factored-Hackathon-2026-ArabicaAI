@@ -1,0 +1,9 @@
+# Facts about the served data (design window, before 2026-01-01; IDs refer to the team's data findings register)
+- The service shows only APPROVED CARD PURCHASES: 22.5% of all transactions; not withdrawals, transfers, payments, deposits, fees/adjustments, or declined/pending/reversed rows (DF-008).
+- Cards: "Tarjeta Crédito" 72%, "Tarjeta Débito" 28%; 32% of buyers hold more than one credit card, 14% more than one debit card (DF-013). Never use card opening/expiration dates (DF-014).
+- Currency: Mexican customers use USD only (USD cards; they talk about dollars); no MXN exists. Colombia COP 90% / USD 10%; Argentina ARS 90% / USD 10%. Purchase currency equals card currency (DF-005).
+- Amounts always have 2 decimals. Ranges: USD 5.00–500.00 (p50 252.20); ARS 1,750.05–174,999.31 (p50 88,303.46); COP 20,006.90–1,999,997.03 (p50 1,011,764.16) (DF-007).
+- 4.6% of purchases are abroad: USA, Spain or Brazil (~0.9% each) or another of the three bank countries (DF-009).
+- 24 merchants, one category each: Entertainment: Cine Premium, Conciertos Live, Streaming Music, Teatro Nacional. Food: Mercado Central, Restaurante El Buen Sabor, Super Ahorro, Tienda Don José. Health: Clínica Médica, Farmacia Salud, Laboratorio Central, Óptica Visión. Other: Boutique Moda, Centro Comercial, Ferretería, Tienda General. Services: Cable TV, Empresa Telefónica, Internet Plus, Servicios Públicos. Transport: Estación de Servicio, Gasolinera Express, Taxi Seguro, Uber. 5% of purchases have no merchant name but keep their category (DF-006).
+- Timestamps are local wall time, no timezone; hours spread evenly; 1–2 purchases per customer-month; same merchant within a week is rare (0.4%); exact double charges never occur (DF-012).
+- Customers: Mexico 50%, Colombia 30%, Argentina 20%; segments Basic, Plus, Premium, Student (DF-010). Source text is fixed templates: do not imitate it (DF-001). Portuguese cases are synthetic, written as Brazilian customers of this bank.
