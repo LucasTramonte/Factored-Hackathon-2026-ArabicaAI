@@ -9,6 +9,26 @@ def _norm(value):
                    if not unicodedata.combining(c)).strip()
 
 
+# Closed map from Spanish, Portuguese and English spellings to ISO 3166-1 alpha-2. The source stores
+# foreign countries in English ("USA", "Spain", "Brazil") while customers name them in their own
+# language, so both sides are compared as codes. Unknown names map to None and never fit.
+_COUNTRIES = {
+    'US': ('usa', 'estados unidos', 'estados unidos de america', 'estados unidos da america', 'eeuu', 'ee.uu.',
+           'ee. uu.', 'eua', 'united states', 'united states of america'),
+    'ES': ('espana', 'espanha', 'spain'),
+    'BR': ('brasil', 'brazil'),
+    'MX': ('mexico',),
+    'CO': ('colombia',),
+    'AR': ('argentina',),
+}
+_COUNTRY_CODE = {name: code for code, names in _COUNTRIES.items() for name in names}
+
+
+def _country(value):
+    """ISO code for a country name in any supported spelling, or None when the name is unknown."""
+    return _COUNTRY_CODE.get(_norm(value))
+
+
 def _date_bounds(fact, as_of):
     if not fact:
         return None
@@ -131,9 +151,10 @@ def evaluate(spec, fixture):
             return False
         if card.get('last4') and card['last4'] != t['last4']:
             return False
-        if facts.get('country') and facts['country'] != t['transaction_country']:
+        if facts.get('country') and (_country(facts['country']) is None
+                                     or _country(facts['country']) != _country(t['transaction_country'])):
             return False
-        if facts.get('abroad') is not None and facts['abroad'] != (t['transaction_country'] != customer['country']):
+        if facts.get('abroad') is not None and facts['abroad'] != (_country(t['transaction_country']) != _country(customer['country'])):
             return False
         return True
 

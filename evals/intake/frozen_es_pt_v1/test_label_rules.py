@@ -157,3 +157,74 @@ class NoSessionTimeTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def country_fixture():
+    """EX plus rows spelled as the source stores them: foreign countries in English, and a Bronze-style 'Mexico'."""
+    fx = deepcopy(EX)
+    fx['customers'].append({'customer_id': 'EX-M', 'country': 'México', 'segment': 'Basic',
+                            'cards': [{'product_type': CREDIT, 'last4': '5555', 'currency': 'USD'}]})
+    for tid, customer, country in [('T05', 'EX-C', 'Spain'), ('T06', 'EX-C', 'Brazil'),
+                                   ('M01', 'EX-M', 'Mexico'), ('M02', 'EX-M', 'USA')]:
+        fx['transactions'].append({'transaction_id': tid, 'customer_id': customer, 'transaction_date': '2026-03-28 10:00:00',
+                                   'amount': '10.00', 'currency': 'USD' if customer == 'EX-M' else 'COP',
+                                   'merchant_name': 'Uber', 'merchant_category': 'Transport',
+                                   'product_type': CREDIT, 'last4': '5555' if customer == 'EX-M' else '4821',
+                                   'transaction_country': country})
+    return fx
+
+
+class CountryNormalizationTests(unittest.TestCase):
+    """A stated country fits the stored one whatever language or spelling the customer used."""
+
+    def test_spanish_portuguese_and_english_names_fit_the_stored_english_names(self):
+        fx = country_fixture()
+        cases = {'T03': ['USA', 'usa', 'Estados Unidos', 'estados unidos', 'EE.UU.', 'EEUU', 'EE. UU.', 'EUA',
+                         'Estados Unidos da América', 'Estados Unidos de América', 'United States'],
+                 'T05': ['España', 'espana', 'Espanha', 'Spain'],
+                 'T06': ['Brasil', 'Brazil', 'BRASIL']}
+        for expected, names in cases.items():
+            for name in names:
+                with self.subTest(name=name):
+                    self.assertEqual(evaluate(spec({'country': name}), fx)['candidate_ids'], [expected])
+
+    def test_home_countries_fit_both_accented_and_unaccented_spellings(self):
+        fx = country_fixture()
+        for name in ('Colombia', 'colombia', 'COLOMBIA'):
+            with self.subTest(name=name):
+                self.assertEqual(evaluate(spec({'country': name}), fx)['candidate_ids'], ['T01', 'T02', 'T04'])
+        for name in ('México', 'Mexico', 'mexico'):
+            with self.subTest(name=name):
+                self.assertEqual(evaluate(spec({'country': name}, customer_id='EX-M'), fx)['candidate_ids'], ['M01'])
+
+    def test_unknown_partial_or_hostile_names_match_nothing(self):
+        fx = country_fixture()
+        for name in ('Francia', 'Estados', 'Unidos', 'United', 'US of A', '   ', "USA'; --", 'USA\u0000', 'Colombiaa'):
+            with self.subTest(name=repr(name)):
+                result = evaluate(spec({'country': name}), fx)
+                self.assertEqual((result['action'], result['candidate_ids']), ('C', []))
+
+    def test_an_empty_country_is_not_stated(self):
+        self.assertEqual(evaluate(spec({'country': '', 'merchant': 'Uber'}), country_fixture())['candidate_ids'], ['T01', 'T02', 'T05', 'T06'])
+
+    def test_abroad_compares_canonical_countries(self):
+        fx = country_fixture()
+        # A Bronze-style 'Mexico' row is at home for a 'México' customer; 'USA' is abroad.
+        self.assertEqual(evaluate(spec({'abroad': False}, customer_id='EX-M'), fx)['candidate_ids'], ['M01'])
+        self.assertEqual(evaluate(spec({'abroad': True}, customer_id='EX-M'), fx)['candidate_ids'], ['M02'])
+        self.assertEqual(evaluate(spec({'abroad': True}), fx)['candidate_ids'], ['T03', 'T05', 'T06'])
+
+
+DRAFT = __import__('pathlib').Path(__file__).with_name('draft.json')
+
+
+@unittest.skipUnless(DRAFT.exists(), 'draft.json is withheld until extractor v1 is frozen (see COMMITMENT.json)')
+class GoldInvarianceTests(unittest.TestCase):
+    """Normalizing countries must not change a single committed answer. Only counts are reported."""
+
+    def test_every_committed_answer_is_unchanged(self):
+        import json
+        draft = json.loads(DRAFT.read_text(encoding='utf-8'))
+        specs = {s['situation_id']: s for s in draft['specs']}
+        changed = sum(evaluate(specs[c['situation_id']], draft['fixture']) != c['construction_gold'] for c in draft['cases'])
+        self.assertEqual(changed, 0, f'{changed} of {len(draft["cases"])} committed answers would change')
