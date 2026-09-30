@@ -4,10 +4,15 @@ A customer reports a card charge they don't recognize, confirms which of their o
 
 The data is a synthetic LATAM banking dataset. Descriptive counts from it are not measured bank outcomes.
 
-**Evaluators: start with the [reading guide](Docs/README.md).** It maps each point of the brief to the document that answers it. The three deliverables beyond the working service are:
+**Evaluators: start with [`SYSTEM_DESIGN.md`](SYSTEM_DESIGN.md).** It tells the whole story in one narrative: the customer and the problem, what we built, how it works, how we know it works, what it costs, and what is missing. The [reading guide](Docs/README.md) then maps each point of the brief to the document that answers it.
+
+![AWS production target: CloudFront and WAF at the edge, HTTP API and Lambda in a two-AZ VPC with RDS PostgreSQL Multi-AZ and a Bedrock endpoint, a daily Fargate batch into an S3 lake](Docs/Costs/aws-target/architecture.png)
+
+*The AWS production target (design only, not deployed; the live prototype runs on Cloudflare). Source: [`Docs/Costs/aws-target/`](Docs/Costs/aws-target/).*
 
 | Deliverable | Document |
 |---|---|
+| **System design:** customer, problem, solution, architecture, results, cost and risks, in one narrative | [`SYSTEM_DESIGN.md`](SYSTEM_DESIGN.md) |
 | **Evaluation:** how the model is compared with a baseline, the test sets we built ourselves, how data leakage is prevented, and every option we considered | [`EVALUATION.md`](EVALUATION.md) |
 | **Data quality:** every finding that changes or limits a decision, each with its query | [`DATA_QUALITY.md`](DATA_QUALITY.md) |
 | **Capacity and cost:** where each layer runs and why, the Cloudflare limits, and a priced AWS production target ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)) | [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) |
