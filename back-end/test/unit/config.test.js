@@ -17,6 +17,6 @@ test('observability is kept in the file so deploys never reset it', () => {
 test('only API and HTML document paths run the Worker first; bundles stay free', () => {
   const paths = config.assets.run_worker_first;
   assert.ok(Array.isArray(paths));
-  for (const p of ['/', '/index.html', '/agent', '/healthz', '/demo/*', '/transactions', '/cases', '/agent/*']) assert.ok(paths.includes(p), p);
+  for (const p of ['/', '/index.html', '/agent', '/healthz', '/demo/*', '/transactions', '/cases', '/intake', '/intake/*', '/agent/*']) assert.ok(paths.includes(p), p);
   assert.ok(!paths.some(p => p === '/*' || p.endsWith('.js') || p.endsWith('.css')));
 });

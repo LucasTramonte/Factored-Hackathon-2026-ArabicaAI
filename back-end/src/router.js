@@ -6,6 +6,7 @@
 import { checkAccessGate } from './auth/access-gate.js';
 import { fail, json } from './http.js';
 import { createCase, listIdentities, listTransactions, startCustomerSession } from './modules/customer/routes.js';
+import { startIntake } from './modules/intake/routes.js';
 import { listAgentCases, startAgentSession } from './modules/agent/routes.js';
 
 export const API_ROUTES = {
@@ -13,10 +14,11 @@ export const API_ROUTES = {
   '/demo/session': { POST: startCustomerSession },
   '/transactions': { GET: listTransactions },
   '/cases': { POST: createCase },
+  '/intake/start': { POST: startIntake },
   '/demo/agent-session': { POST: startAgentSession },
   '/agent/cases': { GET: listAgentCases }
 };
-export const API_PREFIXES = ['/demo/', '/agent/', '/transactions/', '/cases/'];
+export const API_PREFIXES = ['/demo/', '/agent/', '/transactions/', '/cases/', '/intake'];
 /** HTML documents go through the gate so the browser asks for the team credential once; hashed bundles do not. */
 export const DOCUMENT_PATHS = new Set(['/', '/index.html', '/agent']);
 

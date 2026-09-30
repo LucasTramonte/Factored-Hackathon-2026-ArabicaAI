@@ -4,6 +4,18 @@
   "title": "Intake API response contracts",
   "description": "Response bodies the Angular client relies on. back-end/test validates every integration-test response against these definitions, so a change here and in the Worker must land together.",
   "$defs": {
+    "intakeStart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["episode_id", "state", "language", "mode", "replayed"],
+      "properties": {
+        "episode_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "state": { "const": "selection_required" },
+        "language": { "type": "string", "pattern": "^(es|pt)$" },
+        "mode": { "const": "guided" },
+        "replayed": { "type": "boolean" }
+      }
+    },
     "error": {
       "type": "object",
       "additionalProperties": false,
