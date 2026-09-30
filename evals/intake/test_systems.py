@@ -106,6 +106,21 @@ class PolicyAdapterTests(unittest.TestCase):
         self.assertEqual((p['action'], p['candidates']), ('clarify', []))
         self.assertIn('invalid', meta['error'])
 
+    def test_malformed_nested_facts_are_rejected_before_the_policy_sees_them(self):
+        bad_facts = [dict(date='2026-06-10'), dict(amount='45300'), dict(amount=dict(value=45300, approx=False)),
+                     dict(amount=dict(value='45300.00')), dict(card='credito'), dict(card=dict(type=1)),
+                     dict(merchant=['Uber']), dict(abroad='yes'), dict(date=dict(expression=7))]
+        for facts in bad_facts:
+            with self.subTest(facts=facts), self.assertRaises(ValueError):
+                validate_extraction(dict(FACTS, stated_facts=facts))
+        # A string date from a model must clarify, not crash the run.
+        bad = dict(FACTS, stated_facts=dict(merchant='Uber', date='2026-06-10'))
+        p, meta = FactExtractorSystem('x', extractor_returning(bad, []))(CASE, RECORDS, CUSTOMERS)
+        self.assertEqual(p['action'], 'clarify')
+        validate_extraction(dict(FACTS, stated_facts=dict(merchant='Uber', abroad=True, country='USA',
+                            date=dict(expression='ayer', **{'from': '2026-03-31', 'to': '2026-03-31'}),
+                            card=dict(type='Tarjeta Crédito', last4='4821'))))
+
     def test_schema_validation_is_strict(self):
         validate_extraction(FACTS)
         for bad in [dict(FACTS, intent='x'), dict(FACTS, demand='cash'), dict(FACTS, injection='no'),

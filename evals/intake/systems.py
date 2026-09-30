@@ -47,6 +47,32 @@ VOCABULARY = {
 }
 
 
+def _optional(value, kind) -> bool:
+    return value is None or isinstance(value, kind)
+
+
+def _validate_facts(facts: dict) -> None:
+    """Check nested fact shapes, so a malformed value clarifies instead of crashing the policy."""
+    for key in ("merchant", "category", "currency", "country"):
+        if not _optional(facts.get(key), str):
+            raise ValueError(f"invalid {key}")
+    if not _optional(facts.get("abroad"), bool):
+        raise ValueError("invalid abroad")
+    amount = facts.get("amount")
+    if amount is not None and not (isinstance(amount, dict) and set(amount) == {"value", "approx"}
+                                   and isinstance(amount["value"], str) and type(amount["approx"]) is bool):
+        raise ValueError("invalid amount")
+    date = facts.get("date")
+    if date is not None and not (isinstance(date, dict) and set(date) <= {"expression", "from", "to"}
+                                 and isinstance(date.get("expression"), str)
+                                 and _optional(date.get("from"), str) and _optional(date.get("to"), str)):
+        raise ValueError("invalid date")
+    card = facts.get("card")
+    if card is not None and not (isinstance(card, dict) and set(card) <= {"type", "last4"}
+                                 and _optional(card.get("type"), str) and _optional(card.get("last4"), str)):
+        raise ValueError("invalid card")
+
+
 def validate_extraction(extracted: dict) -> dict:
     """Reject anything outside the spec schema; the policy must never see free-form keys."""
     if not isinstance(extracted, dict) or set(extracted) != {"intent", "stated_facts", "invalid", "demand", "injection"}:
@@ -56,6 +82,7 @@ def validate_extraction(extracted: dict) -> dict:
     facts = extracted["stated_facts"]
     if not isinstance(facts, dict) or set(facts) - FACT_KEYS:
         raise ValueError("invalid stated_facts keys")
+    _validate_facts(facts)
     if extracted["demand"] not in DEMANDS:
         raise ValueError("invalid demand")
     if type(extracted["injection"]) is not bool:
