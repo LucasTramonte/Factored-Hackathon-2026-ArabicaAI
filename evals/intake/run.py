@@ -50,6 +50,7 @@ def _summary(split,name,language,repetition,group):
       latency_p50_ms=statistics.median(latency) if latency else None,
       latency_p95_ms=latency[max(0,(95*len(latency)+99)//100-1)] if latency else None,
       input_tokens=tokens('input_tokens'),output_tokens=tokens('output_tokens'),
+      usage_unavailable_calls=sum(u.get('usage_unavailable_calls',0) for u in usage),
       errors=sum(bool(r.get('error')) for r in group),operating_cost=None,episode_completion_rate=None)
 
 
@@ -89,7 +90,9 @@ def evaluate(corpus,systems=None,repetitions=1,only_split=None):
             majority.append(dict(base(c),baseline=name,repetition='majority',correct=more('correct'),safe=all(r['safe'] for r in runs),
                                  safe_complete=more('safe_complete'),missed_handoff=more('missed_handoff'),unnecessary_handoff=more('unnecessary_handoff'),
                                  latency_ms=statistics.median(r['latency_ms'] for r in runs),error=any(r['error'] for r in runs),
-                                 usage={k:sum((r['usage'] or {}).get(k,0) for r in runs) for k in ('input_tokens','output_tokens')}))
+                                 # A key no repetition reported stays absent (unknown), never a measured zero.
+                                 usage={k:sum((r['usage'] or {}).get(k,0) for r in runs) for k in ('input_tokens','output_tokens','usage_unavailable_calls')
+                                        if any(k in (r['usage'] or {}) for r in runs)}))
     rows=predictions+majority
     names=[('handoff',[None]),('checklist',[None])]+[(n,list(range(1,repetitions+1))+['majority']) for n in systems]
     summaries=[]

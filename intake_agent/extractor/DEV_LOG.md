@@ -64,3 +64,14 @@ Iteration 4 was a single measurement run after the fix, with no prompt tuning. I
 ## Cost per call (observed)
 
 About 2,106 input and 266 output tokens per call (iteration 4; 272 in iteration 3). At $0.20 / M input and $0.30 / M output, that is about $0.00050 per call. The probe used 3.05 neurons for 141 tokens. The harness doesn't record neurons per call.
+
+## Non-behavioural fixes after review (2026-09-30)
+
+Made by Lucas's Claude session, which has seen frozen cases, so the ADR-006 limits apply. Nothing here touches the prompt, parsing, thresholds or model. The changes cover the transport, error paths and accounting only (Roberto's review and CodeRabbit on #26):
+
+- The body is read one socket read at a time with the time left as the socket timeout. An abandoned worker therefore stops at the deadline and doesn't drain a slow body. At most `MAX_IN_FLIGHT = 4` workers exist at once.
+- `HTTPError` bodies are closed on every status branch.
+- A `success: false` envelope is a provider failure (`ConnectionError`, no retry), not invalid model output.
+- Missing or invalid provider usage adds 0 tokens and counts in `usage_unavailable_calls`. The runner reports that count, and a majority row with no usage stays unknown instead of 0.
+
+None of these paths occurred in iteration 4: 48/48 calls returned usage and no failure envelope. The iteration-4 numbers above are unchanged.

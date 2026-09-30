@@ -14,8 +14,13 @@ Invariants:
   ``ConnectionError``, which the harness turns into a technical handoff. Any other HTTP 4xx is a
   configuration problem: 401/403 raise ``CredentialsError`` and the rest ``ConfigurationError``, and
   both stop the run, so a configuration error is never counted as handoffs.
+- A ``success: false`` envelope is a provider failure: ``ConnectionError``, no retry, never counted
+  as invalid model output.
 - Every exception raised by ``extract`` carries ``usage`` (tokens of the attempts that returned),
-  so failed cases still count in token and cost totals.
+  so failed cases still count in token and cost totals. A response whose usage is missing or not a
+  non-negative integer adds 0 tokens and one to ``usage_unavailable_calls``, so unmeasured is never
+  reported as free.
+- At most ``MAX_IN_FLIGHT`` HTTP workers exist at once, and each stops reading at the deadline.
 """
 from __future__ import annotations
 
@@ -38,6 +43,10 @@ TEMPERATURE = 0
 # gpt-oss is a reasoning model: its reasoning tokens count against max_tokens (the documented default is 256).
 MAX_TOKENS = 2048
 ATTEMPTS = 2  # the first call plus one retry
+MAX_IN_FLIGHT = 4  # HTTP workers alive at once, including abandoned ones still unwinding
+WORKER_NAME = "workers-ai-call"
+_READ_CHUNK = 65536
+_slots = threading.BoundedSemaphore(MAX_IN_FLIGHT)
 _URL = "https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/" + MODEL
 
 
@@ -66,13 +75,36 @@ def build_body(message: str, session_language, as_of, vocabulary: dict) -> dict:
             "temperature": TEMPERATURE, "max_tokens": MAX_TOKENS}
 
 
+def _set_read_timeout(response, seconds: float) -> None:
+    """Best effort: bound the next socket read by the time left (urllib keeps the socket private)."""
+    sock = getattr(getattr(getattr(response, "fp", None), "raw", None), "_sock", None)
+    if sock is not None:
+        sock.settimeout(max(seconds, 0.001))
+
+
+def _read_until(response, deadline: float) -> bytes:
+    """Read the body one socket read at a time and stop at ``deadline`` instead of draining a trickle."""
+    chunks = []
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError(f"Workers AI call exceeded {TIMEOUT_S:.0f} s")
+        _set_read_timeout(response, remaining)
+        chunk = response.read1(_READ_CHUNK)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
+
+
 def _post(url: str, token: str, body: dict, timeout: float) -> dict:
+    deadline = time.monotonic() + timeout
     request = urllib.request.Request(url, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), method="POST",
                                      headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read()
+            raw = _read_until(response, deadline)
     except urllib.error.HTTPError as exc:
+        exc.close()  # the error is a response with an open body
         # Status only: the error body is not echoed, so nothing from the request can leak into logs.
         if exc.code in (401, 403):
             raise CredentialsError(f"Workers AI rejected the credentials (HTTP {exc.code})") from None
@@ -99,11 +131,14 @@ def _within(deadline: float, fn, *args):
 
     Socket timeouts bound each connect or read, not the whole call (a response that trickles in can
     exceed them, and DNS is not covered), so the overall deadline is enforced here. An abandoned
-    call keeps running in its daemon thread; its result is discarded.
+    worker stops at its own deadline once its current socket read returns (``_read_until``); one
+    blocked where no timeout applies (DNS) keeps its slot, and when all ``MAX_IN_FLIGHT`` slots are
+    taken a new call times out without starting a worker.
     """
     remaining = deadline - time.monotonic()
-    if remaining <= 0:
+    if remaining <= 0 or not _slots.acquire(timeout=remaining):
         raise TimeoutError(f"Workers AI call exceeded {TIMEOUT_S:.0f} s")
+    remaining = deadline - time.monotonic()
     box: dict = {}
 
     def run():
@@ -111,7 +146,9 @@ def _within(deadline: float, fn, *args):
             box["value"] = fn(*args, remaining)
         except BaseException as exc:  # re-raised in the caller's thread
             box["error"] = exc
-    worker = threading.Thread(target=run, daemon=True)
+        finally:
+            _slots.release()
+    worker = threading.Thread(target=run, name=WORKER_NAME, daemon=True)
     worker.start()
     worker.join(remaining)
     if worker.is_alive():
@@ -135,15 +172,25 @@ def _content(payload: dict) -> str:
     return content
 
 
-def _usage(payload: dict) -> tuple[int, int]:
+def _usage(payload: dict) -> tuple[int, int] | None:
+    """Provider token counts, or ``None`` when they are missing or not non-negative integers."""
     result = payload.get("result") if isinstance(payload, dict) else None
     usage = result.get("usage") if isinstance(result, dict) else None
     if not isinstance(usage, dict):
-        return 0, 0
-    try:
-        return int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
-    except (TypeError, ValueError):
-        return 0, 0
+        return None
+    counts = usage.get("prompt_tokens"), usage.get("completion_tokens")
+    if all(isinstance(n, int) and not isinstance(n, bool) and n >= 0 for n in counts):
+        return counts
+    return None
+
+
+def _provider_failure(payload) -> ConnectionError | None:
+    """A ``success: false`` envelope, reported by its numeric error codes only (messages may echo input)."""
+    if not (isinstance(payload, dict) and payload.get("success") is False):
+        return None
+    errors = payload.get("errors") if isinstance(payload.get("errors"), list) else []
+    codes = [str(e["code"]) for e in errors if isinstance(e, dict) and isinstance(e.get("code"), int)]
+    return ConnectionError("Workers AI reported a failure" + (f" (codes {', '.join(codes)})" if codes else ""))
 
 
 def parse(content: str) -> dict:
@@ -184,9 +231,16 @@ def extract(message: str, session_language, as_of, vocabulary: dict) -> dict:
         except Exception as exc:
             exc.usage = dict(usage)  # tokens of earlier attempts still count
             raise
-        i, o = _usage(payload)
-        usage["input_tokens"] += i
-        usage["output_tokens"] += o
+        counts = _usage(payload)
+        if counts is None:
+            usage["usage_unavailable_calls"] = usage.get("usage_unavailable_calls", 0) + 1
+        else:
+            usage["input_tokens"] += counts[0]
+            usage["output_tokens"] += counts[1]
+        failure = _provider_failure(payload)
+        if failure is not None:
+            failure.usage = dict(usage)
+            raise failure
         try:
             extracted = parse(_content(payload))
         except (ValueError, TypeError):  # schema validation raises TypeError for wrongly typed fields

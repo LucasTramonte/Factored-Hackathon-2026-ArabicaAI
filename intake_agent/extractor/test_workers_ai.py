@@ -3,8 +3,11 @@ import io
 import json
 import os
 import socket
+import threading
+import time
 import unittest
 import urllib.error
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 from evals.intake.systems import VOCABULARY, validate_extraction
@@ -184,6 +187,120 @@ class ExtractTests(unittest.TestCase):
         raw = calls[0][0].data.decode()
         for forbidden in ("customer_id", "transaction_id", "EVAL-", "confirmed_id", "authenticated", "tool_failure", "token-test"):
             self.assertNotIn(forbidden, raw)
+
+    def test_http_error_bodies_are_closed_on_every_status_branch(self):
+        for code, expected in ((401, workers_ai.CredentialsError), (503, ConnectionError), (400, workers_ai.ConfigurationError)):
+            body = io.BytesIO(b"echo " + MESSAGE.encode())
+            err = urllib.error.HTTPError("u", code, "err", {}, body)
+            with self.subTest(code=code), self.assertRaises(expected):
+                self.run_with(err)
+            self.assertTrue(body.closed)
+
+    def test_missing_or_invalid_usage_is_unavailable_not_zero(self):
+        cases = {"missing": None, "negative": {"prompt_tokens": -10, "completion_tokens": 5},
+                 "boolean": {"prompt_tokens": 10, "completion_tokens": True}, "text": {"prompt_tokens": "10", "completion_tokens": 5}}
+        for name, usage in cases.items():
+            body = payload(json.dumps(GOOD))
+            if usage is None:
+                del body["result"]["usage"]
+            else:
+                body["result"]["usage"] = usage
+            with self.subTest(name), mock.patch.dict(os.environ, ENV, clear=True), mock.patch.object(
+                    workers_ai.urllib.request, "urlopen", side_effect=lambda r, timeout, b=body: FakeResponse(json.dumps(b).encode())):
+                out = workers_ai.extract(MESSAGE, "es", None, VOCABULARY)
+            self.assertEqual(out["usage"], {"input_tokens": 0, "output_tokens": 0, "usage_unavailable_calls": 1})
+
+    def test_measured_usage_keeps_its_plain_shape(self):
+        out, _ = self.run_with("junk", json.dumps(GOOD))
+        self.assertEqual(out["usage"], {"input_tokens": 200, "output_tokens": 40})
+
+    def test_a_provider_failure_envelope_is_a_service_failure_not_invalid_output(self):
+        envelope = {"success": False, "errors": [{"code": 3040, "message": "echo " + MESSAGE}], "result": None}
+        calls = []
+
+        def urlopen(request, timeout):
+            calls.append(request)
+            return FakeResponse(json.dumps(envelope).encode())
+        with mock.patch.dict(os.environ, ENV, clear=True), mock.patch.object(workers_ai.urllib.request, "urlopen", urlopen):
+            with self.assertRaises(ConnectionError) as ctx:
+                workers_ai.extract(MESSAGE, "es", None, VOCABULARY)
+        self.assertEqual(len(calls), 1)  # a provider failure is not retried as if the model had misbehaved
+        self.assertIn("3040", str(ctx.exception))
+        self.assertNotIn(MESSAGE, str(ctx.exception))
+        self.assertEqual(ctx.exception.usage, {"input_tokens": 0, "output_tokens": 0, "usage_unavailable_calls": 1})
+
+    def test_a_fragmented_real_body_times_out_and_its_worker_exits(self):
+        body = json.dumps(payload(json.dumps(GOOD))).encode()
+        stop = threading.Event()
+
+        class Trickle(BaseHTTPRequestHandler):
+            """Send one byte every 40 ms: each read is quick, the whole body is not."""
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers["Content-Length"]))
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                for i in range(len(body)):
+                    try:
+                        self.wfile.write(body[i:i + 1])
+                        self.wfile.flush()
+                    except OSError:
+                        return
+                    if stop.wait(0.04):
+                        return
+
+            def log_message(self, *_args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Trickle)
+        server.daemon_threads = True
+        serving = threading.Thread(target=server.serve_forever, daemon=True)
+        serving.start()
+        self.addCleanup(serving.join, 2)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.addCleanup(stop.set)
+        local = f"http://127.0.0.1:{server.server_port}/"
+        real_urlopen = urllib.request.urlopen
+
+        def transport(request, timeout):
+            return real_urlopen(urllib.request.Request(local, data=request.data, method="POST"), timeout=timeout)
+        with mock.patch.dict(os.environ, ENV, clear=True), mock.patch.object(workers_ai, "TIMEOUT_S", 0.3), \
+                mock.patch.object(workers_ai.urllib.request, "urlopen", side_effect=transport):
+            for _ in range(2):
+                started = time.monotonic()
+                with self.assertRaises(TimeoutError):
+                    workers_ai.extract(MESSAGE, "es", None, VOCABULARY)
+                self.assertLess(time.monotonic() - started, 0.6)
+        # The abandoned workers stop reading at the deadline instead of draining the body.
+        limit = time.monotonic() + 1.0
+        while time.monotonic() < limit and any(th.name == workers_ai.WORKER_NAME for th in threading.enumerate()):
+            time.sleep(0.02)
+        self.assertEqual([th for th in threading.enumerate() if th.name == workers_ai.WORKER_NAME], [])
+
+    def test_calls_that_never_return_are_capped_at_a_fixed_number_of_workers(self):
+        release = threading.Event()
+        self.addCleanup(release.set)
+        started = []
+
+        def hang(request, timeout):  # e.g. DNS, which no socket timeout covers
+            started.append(request)
+            release.wait(5)
+            raise OSError("released")
+        with mock.patch.dict(os.environ, ENV, clear=True), mock.patch.object(workers_ai, "TIMEOUT_S", 0.1), \
+                mock.patch.object(workers_ai.urllib.request, "urlopen", side_effect=hang):
+            for _ in range(workers_ai.MAX_IN_FLIGHT + 2):
+                with self.assertRaises(TimeoutError):
+                    workers_ai.extract(MESSAGE, "es", None, VOCABULARY)
+        self.assertEqual(len(started), workers_ai.MAX_IN_FLIGHT)
+        release.set()
+        limit = time.monotonic() + 2.0
+        while time.monotonic() < limit and any(th.name == workers_ai.WORKER_NAME for th in threading.enumerate()):
+            time.sleep(0.02)
+        self.assertEqual([th for th in threading.enumerate() if th.name == workers_ai.WORKER_NAME], [])
+        out, _ = self.run_with(json.dumps(GOOD))  # the slots come back once the hung calls end
+        self.assertEqual(out["extracted"]["intent"], "report")
 
     def test_message_text_is_never_printed_or_logged(self):
         with mock.patch("sys.stdout", new_callable=io.StringIO) as out, mock.patch("sys.stderr", new_callable=io.StringIO) as err, \

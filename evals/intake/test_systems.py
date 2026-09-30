@@ -155,6 +155,22 @@ class RunnerIntegrationTests(unittest.TestCase):
                 if s['baseline'] == 's' and s['split'] == 'frozen_es_pt_v1' and s['language'] == 'all'}
         self.assertEqual(rows, {1: 1, 2: 0, 3: 1, 'majority': 1})
 
+    def test_unavailable_usage_is_reported_as_unknown_not_as_free(self):
+        def unmeasured(*args):
+            return dict(extracted=FACTS, usage=dict(input_tokens=0, output_tokens=0, usage_unavailable_calls=1))
+
+        def silent(*args):
+            return dict(extracted=FACTS, usage={})
+        for extract, calls in ((unmeasured, 2), (silent, 0)):
+            result = evaluate(self.corpus(), systems={'s': FactExtractorSystem('s', extract)}, repetitions=2)
+            rows = {s['repetition']: s for s in result['summary']
+                    if s['baseline'] == 's' and s['split'] == 'frozen_es_pt_v1' and s['language'] == 'all'}
+            with self.subTest(extract.__name__):
+                self.assertEqual(rows['majority']['usage_unavailable_calls'], calls)
+                self.assertEqual(rows[1]['usage_unavailable_calls'], calls // 2)
+                if extract is silent:  # no usage at all is unknown, never a measured zero
+                    self.assertIsNone(rows['majority']['input_tokens'])
+
     def test_split_filter_scores_only_that_split(self):
         corpus = json.loads((Path(__file__).with_name('cases.json')).read_text(encoding='utf-8'))
         result = evaluate(corpus, only_split='development')
