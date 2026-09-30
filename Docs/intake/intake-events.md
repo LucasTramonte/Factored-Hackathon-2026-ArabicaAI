@@ -86,7 +86,9 @@ Everything is reported for `all`, `es` and `pt`. Empty denominators are `null`, 
 The Worker's explicit guided flow (`POST /intake/start`, `/intake/confirm`, `/intake/handoff`; `back-end/README.md`) emits v2 events only, with `model_version = guided-0.1`. It stores each event in D1 `intake_events` in the same atomic batch as the state change it records, and assigns `seq` from 0. What it emits:
 
 - **Start:** one `intake_started` when an authenticated customer starts an explicit ES/PT unrecognized-charge report. The report type is chosen by the customer, not classified from free text. A replayed start emits nothing.
-- **Start replay receipt:** a same-key start replay returns the original, immutable start receipt, `state: selection_required`, even after the episode was abandoned or handed off. The receipt does not describe the current state. A later confirm or handoff on a closed episode returns 409 "Episode is no longer open".
+- **Start replay receipt:** a same-key start replay returns the original, immutable start receipt, `state: selection_required`, even after the episode was abandoned or handed off. The receipt does not describe the current state.
+  - After abandonment, with no reservation, a later confirm or handoff returns 409 "Episode is no longer open".
+  - After a handoff, a request with a different key or content returns 409 "Episode already submitted with different content or key", and the same key and content replays the receipt (200).
 - **Complete:** `transaction_confirmed` → `handoff_created` (`kind = complete`, `tool_status = ok`) → `handoff_accepted` (`accepted_by = case_service`) → `intake_ended` (`accepted`). All four are appended only after the confirmed case and handoff have been read back, and only with a live session of the same customer. The D1 case store is the receiving service, so `handoff_accepted` is that read-back, not a person's action.
 - **Incomplete / technical:** `handoff_created` (`incomplete` + `ok`, or `technical` + `failed`) → `intake_ended` (`routed` or `technical_failure`). No `handoff_accepted` is emitted, so these can never count as safe accepted intake. A later report starts a new episode.
 - **Abandoned:** one `intake_ended` (`abandoned`) from the idle-closure script (below).
@@ -102,7 +104,9 @@ The Worker's explicit guided flow (`POST /intake/start`, `/intake/confirm`, `/in
 
 ### Tool-call ledger
 
-`tool_calls` counts business-tool work: start storage (1), the owned-transaction lookup, the handoff persistence, the receipt read-back and the finalization. Failed attempts count while the episode is open or its reservation is pending. Two exceptions return before the attempt is recorded, so their work is not counted: a lookup that finds no owned transaction (404), and a session that drops between the lookup and the reservation (401). Session reads, idempotency checks, housekeeping, export and replays after the episode ended are not tool calls. D1 measures them separately ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)). If an operation and the write that records its usage both fail, the attempt can't be reconstructed, so `tool_calls` can undercount during a storage outage.
+`tool_calls` counts business-tool work: start storage (1), the owned-transaction lookup, the handoff persistence, the receipt read-back and the finalization. Failed attempts count while the episode is open or its reservation is pending. Two exceptions return before the attempt is recorded, so their work is not counted: a lookup that finds no owned transaction (404), and a session found dead by the route's live check between the lookup and the reservation (401).
+
+When the reservation's own SQL refuses to reserve, the attempt *is* recorded while the episode is open. That happens if the session expired within the statement, a sweep closed the episode, or the owned transaction vanished. The answer then comes from a fresh read: 401 without a live same-owner session, 409 "Episode is no longer open" for a closed episode with no reservation, and otherwise 503. Session reads, idempotency checks, housekeeping, export and replays after the episode ended are not tool calls. D1 measures them separately ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)). If an operation and the write that records its usage both fail, the attempt can't be reconstructed, so `tool_calls` can undercount during a storage outage.
 
 ### Idle abandonment
 
@@ -121,6 +125,10 @@ A `handoff_pending` episode (its reservation committed but its read-back or ackn
 - **Pages and cursor:** keyset pages of at most 100 episodes ordered by episode id. Each page is a single D1 statement, so every episode's event group is complete and consistent as of its page. The run fails, keeping the previous artifact, rather than publish a partial population. A run is bounded to 100 pages (10,000 episodes). One page holds at most 100 episodes × 101 events × 4,096 characters in memory, and the scorer then makes one O(events) pass over the file.
 - **Run start, not a data bound:** the output's `started_at` records when the run began. It does not bound the data. Pages are read one after another, so the export is not a snapshot across pages. An episode that starts or ends during a run appears in the state its page saw, and one that starts with an id below the cursor appears in the next run. For a fixed denominator, run the idle sweep immediately before the export, export after traffic stops, and state the sweep's cutoff with the figures.
 - **Allowlist:** for each event, only the fields the `guided-0.1` producer writes. That means no `scenario`, which is an evaluation-run label the service never writes; an injected one fails the run. Also required: version `2`, `model_version = guided-0.1`, `accepted_by = case_service`; `case_id`, `session_ref`, `transaction_ref` and `case_ref` must be lowercase UUIDs. Anything else fails the run instead of being cleaned. Customer ids, names, statements, source transaction ids, evidence and model output never reach the file. The scorer then rechecks every field, sequence and usage rule.
+
+### Legacy case list
+
+`GET /agent/cases` (legacy, unchanged) lists every confirmed case row. That includes a guided complete case whose reservation is still `handoff_pending` after a lost read-back: the customer got 503 and no reference, and a same-owner retry completes it. `GET /agent/intakes` is the authoritative guided queue. The episode stays pending in this log, and in the denominator, until the retry acknowledges it.
 
 ### Retention
 

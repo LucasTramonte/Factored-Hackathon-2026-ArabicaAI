@@ -1,6 +1,6 @@
 # Task 5 completion: idle closure, export and cost evidence (2026-09-30)
 
-This finishes Task 5 of the [backend completion plan](../superpowers/plans/2026-09-29-intake-backend-completion.md) on top of the checkpoint in [the handoff](2026-09-30-intake-backend-handoff.md) and [its report](2026-09-30-task-5-checkpoint-report.md). The work is on branch `claude/gifted-einstein-mi8vh3`, starting from `052ba28`. It was verified locally only. **Independent Task 5 review is still pending.** Task 6 remains gated and the frontend deferred. There was no remote D1, deploy, model call, frozen or withheld case access, or credential file read.
+This finishes Task 5 of the [backend completion plan](../superpowers/plans/2026-09-29-intake-backend-completion.md) on top of the checkpoint in [the handoff](2026-09-30-intake-backend-handoff.md) and [its report](2026-09-30-task-5-checkpoint-report.md). The work is on branch `claude/gifted-einstein-mi8vh3`, starting from `052ba28`. It was verified locally only. Task 5 was independently reviewed (spec and quality), fixed and re-reviewed with approval. The whole-branch review's findings are addressed in the final fix wave below. Task 6 remains gated and the frontend deferred. There was no remote D1, deploy, model call, frozen or withheld case access, or credential file read.
 
 ## Commits
 
@@ -9,7 +9,12 @@ This finishes Task 5 of the [backend completion plan](../superpowers/plans/2026-
 | `3841b8c` | `test: qualify guided D1 budgets and storage; add FK-ordered demo reset` |
 | `2a4684f` | `feat: page intake exports and idle sweeps with bounded, quiet operator CLIs` |
 | `f695b15` | `ci: run the Worker suite with a stdlib Python scorer` |
-| (this commit) | ADR-004, back-end README, event contract, recent-transactions proposal, spec status, plan boxes, this note |
+| `7a2a7f1` | `docs: record guided intake capacity and export operations` |
+| `f45f5e6` | `fix: harden intake export and idle sweep after Task 5 review` (fix wave) |
+| `353c184` | `docs: record the idle-sweep ruling and fix-wave evidence` (fix wave) |
+| `ceee33c` | `fix: drop superseded intake indexes and add state checks before merge` (final wave) |
+| `7e59da6` | `fix: tighten intake routing, refused reservations, sweep ends and scorer lookup` (final wave) |
+| (final docs commit) | final-wave documentation and this section |
 
 ## What changed and why
 
@@ -29,7 +34,7 @@ This finishes Task 5 of the [backend completion plan](../superpowers/plans/2026-
 
 ## Measured (local D1; details in ADR-004)
 
-Figures are queries / rows read / rows written / round trips. Where two read values appear, the first is an empty store and the second is with neighbouring rows present.
+This table records the first Task 5 pass, with fix-wave rows marked. Final values after the 0004 edit are in the Final fix wave section below and in ADR-004. Figures are queries / rows read / rows written / round trips. Where two read values appear, the first is an empty store and the second is with neighbouring rows present.
 
 | Unit | Measured | Ceiling |
 |---|---|---|
@@ -90,19 +95,19 @@ A scratch run also covered every outcome on a separate local D1 with the real CL
 - **Not changed:**
   - The cost workbook still models the legacy flow and was not regenerated.
   - The start renewal `UPDATE` costs 3 writes on a first start; that saving is not made.
-  - `DATA_QUALITY.md` DF-002 calls the random-draw cause "confirmed in Bronze". The proposal treats that as an inference; the finding text was not edited.
+  - The register labels the random-draw cause for DF-002 "confirmed in Bronze". The proposal treats the cause as an inference, while the mismatch itself is observed. `DATA_QUALITY.md` was not edited.
 - **Environment:** Miniflare still fetches `cf.json` from Cloudflare when a local binding starts. It is cached under ignored directories.
 
 ## Fix wave after independent review (2026-09-30)
 
-The independent Task 5 spec and quality reviews both returned CHANGES REQUIRED, with no Critical finding. This wave applied the controller's list on top of `7a2a7f1`. Nothing was pushed, run remotely, or sent to a model, and no frontend file changed.
+The independent Task 5 spec and quality reviews both returned CHANGES REQUIRED, with no Critical finding. This wave applied the controller's list on top of `7a2a7f1`. The implementer did not push; the controller pushed the branch. Nothing was run remotely, or sent to a model, and no frontend file changed.
 
 ### Rulings recorded
 
 - **Idle abandonment is applied only by the manual sweep.** The online confirm and handoff path does not enforce the deadline. Enforcing `MIN(updated_at+600000, expires_at)` in the reservation would break the reviewed Task 2/3 invariant that a renewed same-owner session resumes its episode (a confirm from a renewed session doesn't rebind `expires_at`). Changing that is a team decision.
   - *Consequence:* outcome classification and duration depend on sweep timing. The operator procedure is to sweep immediately before export, at the same cutoff.
   - *Cost if wrong:* outcome counts depend on sweep discipline, and enforcing it online would need a team decision plus a Task 2/3 behaviour change.
-- **A same-key start replay returns the original immutable start receipt** (`state: selection_required`), even after abandonment or handoff. A later confirm returns 409 "Episode is no longer open". Documentation only; no behaviour change.
+- **A same-key start replay returns the original immutable start receipt** (`state: selection_required`), even after abandonment or handoff. After abandonment, with no reservation, a later confirm returns 409 "Episode is no longer open". After a handoff, a different key or content gets 409 "Episode already submitted with different content or key", and the same key and content replays the receipt (200). Documentation only; no behaviour change.
 
 ### Changes
 
@@ -147,3 +152,57 @@ The independent Task 5 spec and quality reviews both returned CHANGES REQUIRED, 
 | `node --check` on the changed JavaScript files; `git diff --check` | clean |
 
 **Failing-first evidence:** the updated `intake-evidence` file (16 tests), run against `7a2a7f1`'s store and scripts in a scratch copy, failed 11 of 16.
+
+## Final fix wave after the whole-branch review (2026-09-30)
+
+A fresh whole-branch review of `origin/main...353c184` returned CHANGES REQUIRED: 1 Important and 8 Minor. The Task 5 re-reviews approved, with minor nits. This single final wave addressed the list. The implementer did not push; the controller pushed the branch. Nothing was run remotely, no model was called, no frontend source changed, and no frozen case was read.
+
+### Disposition
+
+| Finding | Disposition |
+|---|---|
+| I1 `npm test` needed `.venv` | **Fixed.** `back-end/scripts/scorer-python.mjs` resolves `INTAKE_PYTHON`, then `<root>/.venv/bin/python` if it exists, then `python3`. The exporter and the unit and integration tests share it, and a unit test covers the order. `back-end/README.md` states the Workers Builds deployer action: `python3` on `PATH`, or set `INTAKE_PYTHON`. Verified in a scratch clone without `.venv` or `INTAKE_PYTHON`: `npm test` unit 79/79, integration 29/29, budget 4/4. |
+| M1 `/intake` prefix | **Fixed.** The prefix is now `/intake/` plus the bare `/intake` namespace, so `/intakes`, `/intakeX` and `/intake-foo` reach the assets. Unit tests check `run_worker_first` against the router in both directions, plus the look-alike paths. |
+| M2 legacy `/agent/cases` lists pending complete cases | **Documented, not changed.** Per the controller's ruling, the plan's global constraints preserve the legacy `/agent/cases`. `back-end/README.md` (agent routes), `intake-events.md` (Legacy case list) and ADR-004's limitations say that `/agent/intakes` is authoritative and that pending reservations stay pending in the denominator until retried. |
+| M3 refused reservation always 503 | **Fixed.** The attempt is recorded, then a fresh read decides: 401 (no live same-owner session), 409 "Episode is no longer open" (closed without a reservation), otherwise 503. Unit tests cover session expiry within the SQL, a racing sweep, a vanished transaction and a failing re-read. The `intake-events.md` ledger exceptions are updated. |
+| M4 superseded indexes | **Fixed by editing 0004 before merge**, per the controller's decision. `intake_episodes_updated` and `intake_handoffs_queue` are removed. CHECKs are added on `state` (the six written states), `destination = 'case_service'` and `priority = 'normal'`. The superseded-index note is replaced by a dated note. The README and ADR-004 tell anyone with a pre-merge local D1 to recreate it. |
+| M5 AGENTS.md matrix for new routes | **Fixed.** The confirm, handoff, queue and detail routes are in the adversarial gate/credential/405 matrix. The suite adds guided path tricks, identical bodies for foreign and missing episodes or transactions, 10 concurrent identical handoffs (one 201, nine 200, one chain), and 3 trials of 6 concurrent divergent confirm/confirm/handoff requests (exactly one 201, one identical 200, the rest 409; one reservation and one end event; retries agree). |
+| (e) second end event | **Fixed.** The sweep never inserts an end when the latest event is already `intake_ended`. An existing abandoned end closes the state without a second event; another end blocks the change and stays visible as due work. The test asserts exactly one end event. |
+| (c) next sequence evaluated twice | **Fixed.** The latest event is read once per episode through a derived table that SQLite cannot flatten (it has a LIMIT and the outer query a WHERE); the plan shows a co-routine with index SEARCHes. Measured reads stay 1,100 per 100-episode page: saving the second lookup paid for the end-event guard. ADR-004 wording matches. |
+| M8 duplicated UUID regex / packed tests | **Partly fixed.** The agent detail route reuses the exported `UUID` from intake validation. Reformatting the packed single-line tests is **declined** (churn), per the controller's ruling. |
+| M6 stale docs | **Fixed:** the root README status block; `intake-roadmap.md` rows (classify outcome, tool error, case kinds, human review, offline evaluation); traceability S6; the review-status lines in the spec (one sentence), the plan and this note; the plan's PR #29 item, annotated without changing the requirement. |
+| M7 personal paths | **Fixed.** `<implementation worktree>`, `<original checkout>` and `<temporary scratch directory>` replace the personal paths in both handoff documents. |
+| (a) 409 wording | **Fixed** in `intake-events.md`, the `back-end/README.md` route table and this note. "Episode is no longer open" applies only after abandonment, with no reservation. After a handoff, a different key or content gets "Episode already submitted with different content or key", and the same key and content replays 200. |
+| (b) DF-002 caveat | **Fixed**, with the same wording in the proposal and this note. |
+| (d) push wording | **Fixed.** |
+
+### Re-measured (old → new; local D1, CI run; ceilings never loosened)
+
+- **start:** 6 / 6 / 13 / 2 → 6 / 7 / 11 / 2, ceiling 6 / 8 / 11 / 2 (writes were 13).
+- **start replay:** 6 / 4 / 3 / 2 → 6 / 5 / 2 / 2, ceiling 6 / 6 / 2 / 2.
+- **confirm:** 18 / 54 / 25 / 8 → 18 / 56 / 22 / 8, ceiling 18 / 60 / 22 / 8.
+- **incomplete:** 14 / 38 / 17 / 7 → 14 / 40 / 14 / 7, ceiling 14 / 42 / 14 / 7.
+- **Unchanged:** confirm replay 42, incomplete replay 33, details 12 and 7, and the 50 + 50 queue 203.
+- **Complete episode:** 30 / 66 / 41 / 15 → 30 / 69 / 36 / 15, ceiling 30 / 72 / 36 / 15.
+- **Incomplete episode:** 26 / 50 / 33 / 14 → 26 / 53 / 28 / 14, ceiling 26 / 56 / 28 / 14.
+- **Where the reads come from:** the CHECKs add one counted read per statement that writes an episode row, separated by applying old and new 0004 to separate scratch D1s. The removed indexes cut 2–3 writes per request.
+- **Idle page of 100:** 2 / 1,100 / 400 / 1 → 2 / 1,100 / 300 / 1, ceiling 2 / 1,210 / 300 / 1. The no-op sweep (6) and due probe (1) are unchanged.
+- **Storage per complete episode** (typical / 2,000 ASCII / 2,000 four-byte): 5,161 / 12,739 / 21,422 B → 4,997 / 12,534 / 21,299 B, bounds 5,500 / 13,800 / 23,400. Incomplete: 3,482 / 7,209 / 11,837 → 3,318 / 7,045 / 11,674 B, bounds 3,700 / 7,800 / 12,900.
+- **Capacity per complete episode with one agent look:**
+  - measured 282 / 44 → 285 / 39 rows read / written;
+  - at the ceilings, 318 / 47 → 318 / 42;
+  - Free capacity by rows written: 2,127 → **2,380 a day** (measured basis 2,272 → 2,564).
+- **S1–S4 writes a day:** 799 / 6,815 / 38,446 / 384,460 → 714 / 6,090 / 34,356 / 343,560. S4 still exceeds the Free write quota, so Workers Paid is needed.
+- **Storage after 32 days at S3** (typical / 2,000 ASCII / 4-byte): 149 / 367 / 615 MB → 144 / 361 / 613 MB.
+- **Query plans:** over the 38 distinct statements of a full flow, all are index SEARCHes except the two newest-first list walks under LIMIT.
+
+### Commands and results (final wave)
+
+| Command | Result |
+|---|---|
+| `INTAKE_PYTHON=python3 npm --prefix back-end test` | unit 79/79; integration 29/29, then budget 4/4 |
+| `env -u INTAKE_PYTHON npm test` in a scratch clone without `.venv` | unit 79/79; integration 29/29, then budget 4/4 |
+| `CHROME_BIN=<scratch>/chrome-nosandbox INTAKE_PYTHON=python3 make intake-test PYTHON=.venv/bin/python` | Gold 61 passed; Angular 17 SUCCESS; UI build; Worker 79 + 29 + 4 |
+| `.venv/bin/python -m pytest evals/intake -q` | 88 passed, 5 skipped (withheld frozen artifacts), 162 subtests |
+| `make test` | 202 passed, 31 subtests |
+| `node --check` on the changed JavaScript files; `git diff --check` | clean |

@@ -42,7 +42,14 @@ npm --prefix back-end ci && npm --prefix back-end run prepare-assets
 npm --prefix back-end test          # unit tests, then integration tests on a throwaway local D1
 ```
 
-The event-export tests run the Python scorer `evals/intake/episodes.py`, which needs only the standard library (Python 3.10 or newer). Set `INTAKE_PYTHON` to the interpreter, for example `INTAKE_PYTHON=python3 npm --prefix back-end test`. Without it the tests and the exporter use `.venv/bin/python` at the repository root, which `make setup` creates. CI sets `INTAKE_PYTHON: python`.
+The event-export tests run the Python scorer `evals/intake/episodes.py`, which needs only the standard library (Python 3.10 or newer). The tests and the exporter pick the interpreter in this order (`scripts/scorer-python.mjs`):
+1. `INTAKE_PYTHON`, if set and non-empty, for example `INTAKE_PYTHON=python3 npm --prefix back-end test`;
+2. else the repository's `.venv/bin/python`, if it exists (`make setup` creates it);
+3. else `python3` from `PATH`.
+
+CI sets `INTAKE_PYTHON: python`.
+
+If you applied an earlier, pre-merge version of migration 0004 to your local D1, recreate the database: delete `back-end/.wrangler/state`, then reapply the migrations and seeds. The final 0004 dropped two indexes and added CHECK constraints before merge. Local state is ignored and disposable.
 
 To browse locally, create `back-end/.dev.vars` (ignored by Git) with `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD`. Then, from `back-end/`:
 
@@ -65,7 +72,7 @@ Every route except `GET /healthz` needs the team gate (HTTP Basic, below Cloudfl
 | `GET /transactions` | customer | The customer's own charges, one page, with `has_more` | 200, 401 |
 | `POST /cases` | customer | Legacy one-step confirmed case | 201, 200 (replay), 401, 404, 409, 422, 503 |
 | `POST /intake/start` | customer | Start an explicit guided ES/PT unrecognized-charge report (10–2,000 code points, no U+0000, UUID key). No case reference is returned. A same-key replay returns the original, immutable start receipt (`state: selection_required`) even after the episode was abandoned or handed off, so it does not describe the current state | 201, 200 (same key and content), 401, 409 (same key, other content), 422, 503 (retry the same key) |
-| `POST /intake/confirm` | customer | Confirm one owned transaction; returns the protocol only after the case and handoff are read back | 201, 200 (replay), 401 (expired or revoked; renew as the same customer and retry the same key), 404 (episode or transaction not owned), 409 (other key or content, or "Episode is no longer open" after abandonment or handoff), 422, 503 (acceptance unknown; retry the same key) |
+| `POST /intake/confirm` | customer | Confirm one owned transaction; returns the protocol only after the case and handoff are read back | 201, 200 (same key and content replays the receipt), 401 (expired or revoked, including in the reservation itself; renew as the same customer and retry the same key), 404 (episode or transaction not owned; foreign and missing look identical), 409 ("Episode already submitted with different content or key" once a handoff exists; "Episode is no longer open" after abandonment, when there is no reservation), 422, 503 (acceptance unknown; retry the same key) |
 | `POST /intake/handoff` | customer | Ask for human review without a confirmed transaction (`kind: incomplete`); same receipt rules | same as confirm, without the transaction 404 |
 | `POST /demo/agent-session` | none | Simulated agent login | 200 |
 | `GET /agent/cases` | agent | Legacy read-only case list, 50 per page | 200, 401 |
@@ -73,6 +80,8 @@ Every route except `GET /healthz` needs the team gate (HTTP Basic, below Cloudfl
 | `GET /agent/intake-detail?protocol=<uuid>` | agent | Statement, verified evidence (or `null`), server actions, open questions and recorded service history (100 events, `history_has_more`) | 200, 401, 404, 422 (anything but exactly one valid `protocol`) |
 
 Agent routes are read-only; nothing changes status, refunds, blocks a card or decides fraud. A customer session never opens an agent route and an agent session never opens a customer route.
+
+`GET /agent/intakes` is the authoritative queue for guided reports. The legacy `GET /agent/cases` is unchanged: it lists every confirmed case row, including a guided complete case whose reservation is still `handoff_pending` after a lost read-back. In that case the customer got 503 and no reference, and a same-owner retry with the same key completes it. Until then the episode counts as pending in the event export.
 
 ## Operator scripts: idle closure and event export
 
@@ -93,7 +102,7 @@ node scripts/export-intake-events.mjs [--output ../data/intake-events/events.jso
   - **Reservations:** episodes with a handoff reservation (`handoff_pending`) are never closed and never acknowledged. Only the same customer's live session can finish them.
 - **Event export** reads every episode in keyset pages (`--limit` 1–100 episodes, cursor = last episode id), each page one D1 statement with complete per-episode event groups, and appends them to a temporary file. It then validates the whole file with `python -m evals.intake.episodes` (`--python`, else `INTAKE_PYTHON`, else `.venv/bin/python`) and renames it into place. The output is `{episodes, pages, complete: true, started_at, summary, metrics}`. `started_at` labels when the run began; it is not a data bound. The export is all-or-nothing. If the episodes don't fit in `--max-pages` (at most 100 pages, 10,000 episodes), if any group exceeds 101 events or an event exceeds 4,096 characters, or if an event carries a field or reference outside the reviewed `guided-0.1` allowlist (which has no `scenario`), the run fails and the previous artifact stays. `--limit` and `--max-pages` must be plain decimal integers in range, checked before the database is opened. A partial population is never published.
 - **Where artifacts go:** only under the repository's ignored `data/intake-events/`, ending in `.jsonl`. The export rejects a path that resolves outside it through a symlink, a `data/` that links into another repository path, and a nested directory that doesn't exist yet. It creates nothing through a link. Artifacts hold opaque references and aggregate usage only; see `Docs/intake/intake-events.md` for the allowlist, the cutoff and the timing rules.
-- **Costs** (D1, local counters, ADR-004): one idle page of 100 is 2 queries, 1,100 rows read and 400 written. A sweep with nothing due reads 6, and the final due probe reads 1. An export page reads 2 rows per episode plus its events (at most 702 for 100 guided episodes); CI checks each page against that formula.
+- **Costs** (D1, local counters, ADR-004): one idle page of 100 is 2 queries, 1,100 rows read and 300 written. A sweep with nothing due reads 6, and the final due probe reads 1. An export page reads 2 rows per episode plus its events (at most 702 for 100 guided episodes); CI checks each page against that formula.
 
 ## Resetting demo activity
 
@@ -111,6 +120,7 @@ The Worker `factored-hackathon-2026-arabicaai` deploys through Cloudflare Worker
 
 - **Root directory:** `back-end`
 - **Build command:** `npm ci && npm --prefix ../front-end ci && npm --prefix ../front-end run build && npm run prepare-assets && npm test`
+- **Python for `npm test`:** the event-export tests run the stdlib-only scorer. The build image needs `python3` on `PATH`, or the build environment must set `INTAKE_PYTHON`. This is a deployer action in the Workers Builds settings; it isn't verified from this repository.
 - **Deploy command:** `npm run deploy`
 - **Watch paths:** `back-end/**`, `front-end/**`
 
@@ -140,7 +150,7 @@ Record the date and the results of each check in ADR-004's implementation notes:
 Free plan: 100,000 Worker requests per day, 10 ms of CPU per request, 50 D1 queries per invocation, 5 million rows read and 100,000 rows written per day, and 500 MB per database. A page load adds 2 Worker requests (document + identity list) that touch no D1. Measured D1 cost on local D1 (budget test, 2026-09-30):
 
 - **Legacy customer episode** (login, list, `POST /cases`): 3 API requests, 10 queries, 10 rows read, 7 rows written.
-- **Guided complete episode** (login, list, start, confirm): 4 API requests, 30 queries, 66 rows read, 41 rows written, 15 round trips.
-- **Guided incomplete episode** (login, list, start, handoff): 4 API requests, 26 queries, 50 rows read, 33 rows written, 14 round trips.
+- **Guided complete episode** (login, list, start, confirm): 4 API requests, 30 queries, 69 rows read, 36 rows written, 15 round trips.
+- **Guided incomplete episode** (login, list, start, handoff): 4 API requests, 26 queries, 53 rows read, 28 rows written, 14 round trips.
 
-The guided flow writes about 4 to 6 times more rows per episode, and rows written is the binding daily quota. [ADR-004](../Docs/ADRs/ADR-004-intake-capacity-and-cost.md) turns these numbers into capacity and cost, per request and per episode.
+The guided flow writes about 4 to 5 times more rows per episode, and rows written is the binding daily quota. [ADR-004](../Docs/ADRs/ADR-004-intake-capacity-and-cost.md) turns these numbers into capacity and cost, per request and per episode.

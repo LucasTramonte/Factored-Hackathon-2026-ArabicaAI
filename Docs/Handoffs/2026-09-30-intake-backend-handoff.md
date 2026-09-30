@@ -8,8 +8,8 @@ The user requested that the current work be saved, committed and pushed so anoth
 
 - Repository: https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI
 - Continuation branch: `codex/intake-backend-completion`.
-- Local implementation worktree: `/Users/robertozuniga/.codex/worktrees/review-extractor-26/Factored-Hackathon-2026-ArabicaAI`.
-- Original checkout: `/Users/robertozuniga/Desktop/code/Factored-Hackathon-2026-ArabicaAI`. Do not switch or reset that checkout; it has unrelated work.
+- Local implementation worktree: `<implementation worktree>`.
+- Original checkout: `<original checkout>`. Do not switch or reset that checkout; it has unrelated work.
 - Partial Task 5 checkpoint: `ba7d062`. Current main `557f45d` was merged into this branch in `1925ca2`; that merge changed no file content.
 - Approved spec: [online completion design](../superpowers/specs/2026-09-29-intake-online-completion-design.md).
 - Approved task plan: [backend completion](../superpowers/plans/2026-09-29-intake-backend-completion.md).
@@ -86,9 +86,9 @@ After Task 5 review, recheck current main/migration conflicts and the Task 6 dep
 Commands from repository root (Python override is local-machine-specific; another checkout should create its own .venv):
 
 ```sh
-make intake-test PYTHON=/Users/robertozuniga/Desktop/code/Factored-Hackathon-2026-ArabicaAI/.venv/bin/python
-INTAKE_PYTHON=/Users/robertozuniga/Desktop/code/Factored-Hackathon-2026-ArabicaAI/.venv/bin/python npm --prefix back-end test
-/Users/robertozuniga/Desktop/code/Factored-Hackathon-2026-ArabicaAI/.venv/bin/python -m pytest evals/intake/test_episodes.py -q
+make intake-test PYTHON=<original checkout>/.venv/bin/python
+INTAKE_PYTHON=<original checkout>/.venv/bin/python npm --prefix back-end test
+<original checkout>/.venv/bin/python -m pytest evals/intake/test_episodes.py -q
 git diff --check
 ```
 

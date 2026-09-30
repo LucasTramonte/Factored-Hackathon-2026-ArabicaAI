@@ -4,7 +4,7 @@
 
 Status: INCOMPLETE / UNREVIEWED. User requested a save/commit/push checkpoint and Markdown handoff instead of completing implementation. Controller owns that commit/push/handoff; this recovery agent did not commit or push. Product edits and test execution stopped after the instruction. HEAD remains `f649395d22ff79462cbb3b861f18bd9fa07dd6bf`, branch `codex/intake-online-design`.
 
-Workspace: `/Users/robertozuniga/.codex/worktrees/review-extractor-26/Factored-Hackathon-2026-ArabicaAI`.
+Workspace: `<implementation worktree>`.
 
 ## Requirements and source context read
 
@@ -37,9 +37,9 @@ Tracked diff stat excludes untracked new files:3 files,118insertions/1deletion. 
 
 ## Commands/tests actually run and results
 
-Root commands used workspace above; npm commands used its back-end directory. INTAKE_PYTHON was `/Users/robertozuniga/Desktop/code/Factored-Hackathon-2026-ArabicaAI/.venv/bin/python`.
+Root commands used workspace above; npm commands used its back-end directory. INTAKE_PYTHON was `<original checkout>/.venv/bin/python`.
 
-1. Scratch recovery RED: copied bounded source/scripts/migrations/evals/test into `/var/folders/8s/xp7mmcyx65j8333mq9vnr64r0000gn/T/task5-red-7yq73qva`, symlinked installed node_modules and replaced scratch d1.js with `git show f649395:back-end/src/store/d1.js`. Current working files never reverted. `INTAKE_PYTHON=... node --test "$(cat /tmp/task5-red-path)/back-end/test/unit/intake-evidence.test.js" > /tmp/task5-recovered-red.log 2>&1`: tests2/pass0/fail2. First assertion says bounded idle closure missing (actualundefined vsfunction); second export fails because base store has no export method. Initial worker RED logs were not recovered; these are newly observed recovery checks, not claimed original TDD chronology. Shell command also displayed log afterward, so returned combined shell exit0 despite recorded failing test output.
+1. Scratch recovery RED: copied bounded source/scripts/migrations/evals/test into `<temporary scratch directory>`, symlinked installed node_modules and replaced scratch d1.js with `git show f649395:back-end/src/store/d1.js`. Current working files never reverted. `INTAKE_PYTHON=... node --test "$(cat /tmp/task5-red-path)/back-end/test/unit/intake-evidence.test.js" > /tmp/task5-recovered-red.log 2>&1`: tests2/pass0/fail2. First assertion says bounded idle closure missing (actualundefined vsfunction); second export fails because base store has no export method. Initial worker RED logs were not recovered; these are newly observed recovery checks, not claimed original TDD chronology. Shell command also displayed log afterward, so returned combined shell exit0 despite recorded failing test output.
 2. `INTAKE_PYTHON=... node --test back-end/test/unit/intake-evidence.test.js` against inherited partial working feature: exit0,tests2/pass2/fail0.
 3. `INTAKE_PYTHON=... npm test > /tmp/task5-inherited-npm.log 2>&1`: exit0;unit58/pass58/fail0;localD1 integration25/pass25/fail0. Fresh isolated harness applies0001–0005 before seeds/Worker. Legacy customer episode10queries/10read/7write unchanged. Integration exporter17episodes/read79/onequery/oneroundtrip. No remote execution.
 4. Added page-bound and artifact-invalid regressions. `INTAKE_PYTHON=... node --test back-end/test/unit/intake-evidence.test.js > /tmp/task5-bounds-red.log 2>&1`: exit1;tests4/pass2/fail2. Correct regression fails close return2 whenlimit1. Other failure was a TEST mistake: seq99 is allowed nonnegative sequence, scorer does not require seq0; corrected test to seq-1, not product behavior.

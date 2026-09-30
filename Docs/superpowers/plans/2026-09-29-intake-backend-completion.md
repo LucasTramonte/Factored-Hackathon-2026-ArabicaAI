@@ -10,7 +10,7 @@
 
 **Spec:** `Docs/superpowers/specs/2026-09-29-intake-online-completion-design.md` (Roberto approved; fresh-review findings resolved in `acaccd7`).
 
-**Status (2026-09-30):** Tasks 1–5 are implemented and verified locally. Their boxes are ticked from the recorded commits and independent reviews in `Docs/Handoffs/2026-09-30-intake-backend-handoff.md` (Tasks 1–4) and from `Docs/Handoffs/2026-09-30-task-5-completion.md` (Task 5). The independent Task 5 review is pending. Task 6 is gated: its external artifacts are absent, and its boxes stay open. The final handoff steps have not been done.
+**Status (2026-09-30):** Tasks 1–5 are implemented and verified locally. Their boxes are ticked from the recorded commits and independent reviews in `Docs/Handoffs/2026-09-30-intake-backend-handoff.md` (Tasks 1–4) and from `Docs/Handoffs/2026-09-30-task-5-completion.md` (Task 5). Task 5 was independently reviewed (spec and quality), fixed and re-reviewed. The whole-branch review was done, and its findings were addressed in a final fix wave (see the completion note). Task 6 is gated: its external artifacts are absent, and its boxes stay open. The remaining final-handoff steps belong to the controller.
 
 ## Global constraints
 
@@ -112,5 +112,5 @@ Recent-transactions resolution is a separate extension: reuse existing retrieval
 
 - [ ] Run `make intake-test`, episode scorer/CLI suites, `git diff --check`, and inspect staged changes for frontend, prompt/parsing or private artifacts.
 - [ ] Obtain a fresh whole-branch review before marking implementation ready. Resolve only verified findings; preserve Manoella’s behavior ownership.
-- [ ] Update PR #29 around the implemented scope, exact validation and remaining Task 6/inquiry activation dependencies; attach all created PRs to this chat. Never describe a gated task as implemented or frontend display as verified.
+- [ ] Update PR #29 around the implemented scope, exact validation and remaining Task 6/inquiry activation dependencies; attach all created PRs to this chat. Never describe a gated task as implemented or frontend display as verified. *(Annotation, 2026-09-30: PR #29 was merged as design-only, so per the 2026-09-30 handoff a new implementation PR is opened instead. The requirement text above is unchanged.)*
 - [ ] Ask the user to review this plan and choose native or subagent-driven execution before product implementation, as required by the requested writing-plans workflow.

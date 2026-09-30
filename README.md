@@ -27,11 +27,25 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 
 **Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/, behind Cloudflare Access (ask the team to be allowlisted) and a Basic gate. Sign-ins are simulated.
 
-**Status (2026-09-29):**
+**Status (2026-09-30):**
 
-- The deterministic intake flow is deployed and tested. That covers the adversarial gate, session, isolation and idempotency suites and a D1 budget test.
-- It runs on the Free plan, which [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes at 10,000 episodes/day for the legacy one-step `/cases` flow, against measured volumes of 17–818 per day. The guided intake flow (`/intake/*`, backend branch, 2026-09-30) writes more rows per episode, so ADR-004 sizes it at about 2,100 complete episodes/day.
-- **Not done yet:** retrieval-outcome states, case kinds, ES/PT interface text, event instrumentation, and any AI. These are covered in the [intake roadmap](Docs/Plans/intake-roadmap.md).
+- The deterministic intake flow is deployed and tested, as of 2026-09-29. That covers the adversarial gate, session, isolation and idempotency suites and a D1 budget test.
+- The guided intake backend is on the backend implementation branch, tested locally and not deployed. It covers:
+  - owned ES/PT guided episodes;
+  - complete, incomplete and technical handoffs;
+  - the agent intake queue and detail with service history;
+  - a validated event export and a manual idle sweep.
+
+  The frontend doesn't use these routes yet, and the AI extraction step is still gated.
+- It runs on the Free plan, which [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes at 10,000 episodes/day for the legacy one-step `/cases` flow, against measured volumes of 17–818 per day. The guided intake flow (`/intake/*`, backend branch, 2026-09-30) writes more rows per episode, so ADR-004 sizes it at about 2,400 complete episodes/day.
+- **Not done yet:**
+  - frontend use of the guided routes and ES/PT interface text;
+  - automatic one / several / none classification of free text;
+  - the recent-transactions resolution path (a draft proposal);
+  - a remote run of the new routes;
+  - any AI.
+
+  These are covered in the [intake roadmap](Docs/Plans/intake-roadmap.md).
 
 Quick starts:
 
