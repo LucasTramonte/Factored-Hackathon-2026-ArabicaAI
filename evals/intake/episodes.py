@@ -4,6 +4,8 @@ One episode is one case_id. Every event is checked against a per-event allowlist
 outside the contract (a customer id, a name, a statement) rejects the whole log instead of
 leaking into analytics. Memory is O(events); logs are bounded evaluation runs, not streams.
 """
+import argparse
+import json
 from collections import Counter
 from datetime import datetime
 import re
@@ -141,3 +143,33 @@ def summarize(events):
         _check_episode(case_id, seq)
     return {label: _summary([seq for seq in groups.values() if label == 'all' or seq[0]['language'] == label])
             for label in ('all', 'es', 'pt')}
+
+
+def main():
+    """Score a bounded JSONL export; reject invalid logs without echoing customer content."""
+    parser = argparse.ArgumentParser(description='Validate intake event JSONL and print episode KPIs.')
+    parser.add_argument('input', help='UTF-8 JSONL event export (one object per line)')
+    args = parser.parse_args()
+    events = []
+    try:
+        with open(args.input, encoding='utf-8') as source:
+            for line_number, line in enumerate(source, 1):
+                try:
+                    event = json.loads(line)
+                    if not isinstance(event, dict):
+                        raise ValueError('Expected an object')
+                    _check_event(event)
+                except (ValueError, TypeError):
+                    parser.error(f'Invalid JSON or event contract at line {line_number}')
+                events.append(event)
+    except (OSError, UnicodeError):
+        parser.error('Cannot read input as UTF-8 JSONL')
+    try:
+        summary = summarize(events)
+    except (ValueError, TypeError):
+        parser.error('Invalid episode log: check event sequence and handoff evidence')
+    print(json.dumps(summary, indent=2, allow_nan=False))
+
+
+if __name__ == '__main__':
+    main()
