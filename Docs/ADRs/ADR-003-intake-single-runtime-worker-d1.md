@@ -15,8 +15,8 @@ Session handling, customer scoping, idempotent case creation, reference-after-co
 
 Constraints for this decision:
 
-- **Window.** Submissions close on 2026-10-05, finalists are announced on 2026-10-15 and awards follow on 2026-10-16 (kickoff deck, p. 6). The service has to run from 2026-09-29 until 2026-10-31, so the deployed link keeps working through judging.
-- **Budget.** No hosting spend. Lucas's AWS account is on the Free plan: $100 in credits, available until 2027-03-22, and no card on file, so it can't be charged. We keep those credits for estimating a later scale path, not for running the demo.
+- **Window.** Submissions close on 2026-10-05, finalists are announced on 2026-10-15 and awards follow on 2026-10-16 (kickoff deck, p. 6). The service has to run from 2026-09-29 until 2026-10-31, so the deployed link keeps working through judging. ADR-004 (revised 2026-09-30) shortens this: everything online is shut down after 2026-10-20.
+- **Budget.** No hosting spend. Lucas's AWS account is on the Free plan: $100 in credits at the time of this record ($199.79 on 2026-09-30), available until 2027-03-22, and no card on file, so it can't be charged. We keep those credits for estimating a later scale path, not for running the demo.
 - **MVP.** Deterministic, no model calls ([ADR-002](ADR-002-v1-workflow-unrecognized-charge-intake.md)).
 - **Volume.** The online store holds very little: a handful of customers, at most 20 transactions each, and dozens of cases. The heavy data (millions of rows) stays offline in DuckDB.
 - **Brief requirements.** The brief asks for scalability reasoning, explicit latency and cost trade-offs, capacity limits, monitoring, access control and data retention.

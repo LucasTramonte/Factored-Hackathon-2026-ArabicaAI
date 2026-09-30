@@ -10,11 +10,11 @@ This is the only record for cloud cost, sizing and layer placement. `Docs/Costs/
 
 ## Context
 
-The brief asks us to make "explicit trade-offs across autonomy, accuracy, latency, cost, and human oversight" and to "justify where AI is appropriate, where deterministic logic is preferable" (problem statement, p. 1). It also asks for capacity limits, monitoring, access controls, retention and the remaining deployment work (p. 2), and for p50/p95 latency and cost per attempted case and per successful automated resolution, with the workload and assumptions stated (p. 3). Streaming, new model training and extra workflows earn nothing by themselves (pp. 1–2). So what counts is showing where each piece runs and why, with numbers, and what would make us change it. Spending more does not.
+The brief asks us to make "explicit trade-offs across autonomy, accuracy, latency, cost, and human oversight" and to "justify where AI is appropriate, where deterministic logic is preferable" (problem statement, p. 2). It also asks for capacity limits, monitoring, access controls, retention and the remaining deployment work (p. 4), and for p50/p95 latency and cost per attempted case and per successful automated resolution, with the workload and assumptions stated (p. 6). Extra workflows earn no automatic bonus (p. 3), and streaming and new model training are not required (p. 4). So what counts is showing where each piece runs and why, with numbers, and what would make us change it. Spending more does not.
 
 Factored confirmed on Slack that the dataset (about 780–900 interactions a day) is not production volume, that a prototype isn't expected to carry full volume, and that recognizing sizing limits is part of the evaluation. Nothing below is a production forecast.
 
-- **Evaluation window:** judges review through 2026-10-15 (kickoff deck, p. 6). Everything online is shut down after 2026-10-20.
+- **Evaluation window:** submissions close on 2026-10-05, finalists are announced on 2026-10-15 and awards follow on 2026-10-16 (kickoff deck, p. 6). Everything online is shut down after 2026-10-20, which shortens the 2026-10-31 window first set in ADR-003.
 - **Prototype runtime:** Cloudflare Workers + D1 ([ADR-003](ADR-003-intake-single-runtime-worker-d1.md)).
 - **Learned component:** a fact extractor on Workers AI gpt-oss-20b ([ADR-006](ADR-006-learned-extractor-workers-ai.md)). The policy stays deterministic.
 
@@ -68,7 +68,7 @@ Other measured inputs used below:
 | Layer | Open-source or low-cost choice | AWS alternative | What the data says | Decision | Trigger to move |
 |---|---|---|---|---|---|
 | Batch: Bronze → Silver → Gold | Parquet + DuckDB | Glue, EMR, Athena | 2.86 GB builds in about 11 minutes on one machine | DuckDB, wherever it runs | Over ~100 GB, a build over 1 h, or several concurrent jobs |
-| Online store | SQLite (D1) | RDS PostgreSQL, Aurora, DynamoDB | 165 reads and 10 writes per episode; the serving slice is about 0.3 GB | D1 in the prototype, PostgreSQL in the AWS target | Over 10 GB per database, write p95 over 200 ms, cross-customer online queries, or a row-level security requirement |
+| Online store | SQLite (D1) | RDS PostgreSQL, Aurora, DynamoDB | 165 reads and 10 writes per episode; the serving slice is about 0.3 GB | D1 in the prototype, PostgreSQL in the AWS target | A database over 5 GB (ADR-003's exit trigger; Paid caps at 10 GB), write p95 over 200 ms, cross-customer online queries, or a row-level security requirement |
 | API | Cloudflare Worker | API Gateway + Lambda, ECS Fargate | 7 requests per episode, CPU 0–4 ms | Worker in the prototype, Lambda in the AWS target | Section 4 |
 | AI extraction | Workers AI gpt-oss-20b ($0.0005 per call, measured) | Bedrock, SageMaker endpoint | 16/18 on development, p95 3.25 s | Workers AI now, the same model on Bedrock in the AWS target | The extractor fails the frozen test on quality → the next ADR-006 rung |
 | Observability | Workers logs and analytics | CloudWatch, X-Ray | About 29 log events per episode | Workers logs now, CloudWatch in the target | Moving the runtime |
@@ -77,7 +77,7 @@ The pattern is deliberate. Processing stays open source (DuckDB, SQLite, the sam
 
 ### 2. The prototype stays on Cloudflare Free for the evaluation window
 
-The daily quotas bound the service at **10,000 episodes a day**, and rows written is the binding quota (100,000 a day ÷ 10 per episode). That is 588× S1, 69× S2 and 12× S3. It is a daily bound, not a window capacity: storage is cumulative, and the 500 MB database cap lasts about 136 days at 10,000 typical episodes a day but only about 12 days at maximum statement length.
+The daily quotas bound the service at **10,000 episodes a day**, and rows written is the binding quota (100,000 a day ÷ 10 per episode). That is 588× S1, 69× S2 and 12× S3. It is a daily bound, not a window capacity: storage is cumulative. With today's small seed, the 500 MB cap lasts about 136 days at 10,000 typical episodes a day, and about 12 days at maximum statement length. With the full serving slice loaded (about 0.3 GB), about 200 MB remain, which is about 54 days and 5 days. Either way, stored cases use under 1% of the cap at S1 over the whole window.
 
 | Scenario | Worker requests/day | Rows read/day | Rows written/day | Highest use of a daily Free limit | 70% upgrade policy |
 |---|---|---|---|---|---|
@@ -124,10 +124,10 @@ The volumes are S3 for the front door (24,880 contacts a month, 124,400 API requ
 | Edge | S3 (site) | 0.01 GB (last 10 releases of a 326 KB build), 20,000 GETs from cache misses | 0.01 | A static origin, not an application server | — |
 | API | API Gateway, HTTP API | 0.125 M requests, bodies capped at 16 KB | 0.13 | A REST API costs about 3.5× more for usage plans and keys we don't use; an ALB is about $16 fixed | Per-partner quotas or request validation |
 | API | Lambda | Arm64, 124,400 invocations, 512 MB, 200 ms (assumed, including the in-region database trip) | 0.19 | Section 4 | Section 4 |
-| Data | RDS for PostgreSQL | db.t4g.small Multi-AZ, 20 GB, 7-day backups included | 52.05 | Sized for availability and memory (a working set under 1 GB in 2 GiB), not CPU (about 0.35 req/s at a 3× peak). Single-AZ (about $26 with storage) could lose accepted cases in an AZ failure. The Multi-AZ DB cluster (about 50% more) buys readable standbys we don't need. Aurora Serverless v2 costs more at its minimum. DynamoDB loses the foreign keys and uniqueness the idempotency tests rely on. RDS Proxy (about $22) solves connection pressure we don't have | CPU p95 over 60% or connections over 80% → db.t4g.medium; Lambda connection errors → RDS Proxy; 2–3 stable months → reserved instance |
+| Data | RDS for PostgreSQL | db.t4g.small Multi-AZ, 20 GB, 7-day backups included | 52.05 | Sized for availability and memory (a working set under 1 GB in 2 GiB), not CPU (about 0.25 API requests a second at 3× the busiest observed hour). Single-AZ (about $26 with storage) could lose accepted cases in an AZ failure. The Multi-AZ DB cluster (about 50% more) buys readable standbys we don't need. Aurora Serverless v2 costs more at its minimum. DynamoDB loses the foreign keys and uniqueness the idempotency tests rely on. RDS Proxy (about $22) solves connection pressure we don't have | CPU p95 over 60% or connections over 80% → db.t4g.medium; Lambda connection errors → RDS Proxy; 2–3 stable months → reserved instance |
 | Data | PrivateLink | 1 interface endpoint (Bedrock) in 2 AZs, 0.05 GB | 14.60 | A NAT gateway costs about $33 plus traffic. RDS IAM authentication signs tokens locally, so no Secrets Manager endpoint is needed. Tracing uses correlation IDs in Lambda logs, so no X-Ray endpoint either ($14.60 more) | More than 3 AWS services called from the VPC → compare against NAT |
 | Data | Public IPv4 | The batch task's address, about 10 h a month, no inbound rules | 0.05 | Private subnets would need 3 more endpoints (about $44) just to pull the image and ship logs | — |
-| AI | Bedrock, gpt-oss-20b, In-Region, On-Demand | 5,400 calls (4,410 episodes × 1.1, rounded up), 2,106 in / 266 out tokens | 2.57 | The same model that was registered and evaluated, so moving providers needs no new evaluation, and In-Region keeps processing in us-east-2. That is $0.00048 a call, against $0.0005 on Workers AI. Provisioned throughput bills by the hour for about 160 calls a day. Prompt caching isn't worth the complexity at $2.57 | AI cost over ~$50 a month → prompt caching |
+| AI | Bedrock, gpt-oss-20b, In-Region, On-Demand | 5,400 calls entered (1 a minute for 3 h a day over 30 days), a conservative rounding of 4,851 (4,410 episodes × 1.1); 2,106 in / 266 out tokens | 2.57 | The same model that was registered and evaluated, so moving providers needs no new evaluation, and In-Region keeps processing in us-east-2. That is $0.00048 a call, against $0.0005 on Workers AI. Provisioned throughput bills by the hour for about 160 calls a day. Prompt caching isn't worth the complexity at $2.57 | AI cost over ~$50 a month → prompt caching |
 | Batch | S3 (lake) | 13 GB: Bronze 1.4 GB plus 8 Silver/Gold rebuilds kept 7 days by lifecycle; 15,000 PUTs, 250,000 GETs | 0.47 | Standard, because the data is read daily; Infrequent Access charges retrieval and a 30-day minimum on data rewritten every day | Incremental builds would cut GETs |
 | Batch | Fargate | 1 task a day, 15 min (11 min 15 s measured, plus margin), 2 vCPU, 4 GB, Arm | 0.60 | The same DuckDB code. Glue at its 2-DPU minimum would be about $6.60 a month and a rewrite to Spark; EMR is for much larger data | Section 1 |
 | Ops | CloudWatch | 10 custom KPI metrics, 1.4 GB of logs (0.4 GB of it WAF), 30-day retention, 10 alarms, 1 dashboard | 4.76 | Vended metrics are free. Synthetic canaries (about $10), Lambda Insights, RUM and Application Signals add cost without a question to answer at this volume | Real users → RUM |
@@ -146,7 +146,7 @@ The S4 row scales only the volume-driven lines (CDN, WAF requests, API, Lambda, 
 
 ### 4. Lambda for the API, Fargate for the batch
 
-The two services put different work on the team. Lambda leaves the code and the runtime version to maintain; AWS retires Node versions, and ours is pinned in infrastructure code. Fargate adds the container image (base patches, CVE scans), scaling policies, a minimum of two tasks for availability, and health checks. At 0.05 requests a second on average and about 0.35 at a 3× peak, the API is sparse. Lambda costs about $0.20 a month here, and two always-on Fargate tasks cost about $14 idle. The break-even is about 9 M requests a month, 7× the S4 stress case.
+The two services put different work on the team. Lambda leaves the code and the runtime version to maintain; AWS retires Node versions, and ours is pinned in infrastructure code. Fargate adds the container image (base patches, CVE scans), scaling policies, a minimum of two tasks for availability, and health checks. At about 0.05 API requests a second on average, and about 0.25 at 3× the busiest observed hour (60 contacts × 3 × 5 requests), the API is sparse. Lambda costs about $0.20 a month here, and two always-on Fargate tasks cost about $14 idle. The break-even is about 9 M requests a month, 7× the S4 stress case.
 
 The batch is the opposite: one long, predictable job, which fits Fargate.
 
@@ -162,19 +162,26 @@ Check the account's Lambda concurrency quota before any pilot, because new accou
 | Service | Why not | What would change it |
 |---|---|---|
 | SageMaker real-time endpoint | An ml.g6.xlarge is $1.13/h in us-east-2, about $822 a month always on (more with a second one for availability). Against $0.0005 per call, break-even is about 55,000 calls a day. At the S4 stress case the model gets about 1,600 calls a day (in-scope episodes only), so the endpoint would be about 34× over-provisioned; even if every S4 contact called the model (8,180 a day) it would be about 7× short of break-even. Training our own model is also unsound: the source text is templated (DF-001: 5 distinct complaint descriptions in 67,095 rows), so a model trained on it learns a lookup | Sustained volume above break-even, or a labelled corpus of real customer messages |
-| Claude on Bedrock | About 15× the cost per call of gpt-oss-20b | The extractor fails the frozen test on quality (ADR-006 ladder) |
+| Claude on Bedrock | About 7× (Haiku 4.5) to 14× (Sonnet 5) the cost per call of gpt-oss-20b (section 6) | The extractor fails the frozen test on quality (ADR-006 ladder) |
 | Glue, EMR, Redshift, Athena | 2.86 GB builds in minutes with DuckDB | Section 1 trigger |
 | Comprehend, Kendra, OpenSearch | Language comes from the session, events carry references only, and the policy is small and deterministic, so retrieval adds risk | Free-text policy content, or an unstructured knowledge base |
 | Cognito | Identity belongs to the bank's provider; the brief accepts a trusted test session | A pilot with real customers |
 | NAT gateway, RDS Proxy, X-Ray endpoint | Section 3 | Section 3 triggers |
 | Hosting the prototype on RDS through Hyperdrive | D1 already holds the serving slice; RDS would add about $18 a month and a network hop with nothing to show for it | D1 triggers in section 1 |
 
-### 6. AI cost is measured, not an envelope
+### 6. AI cost, measured and enveloped
 
-- **Per call:** $0.0005 on Workers AI (measured tokens at list price), and $0.00048 on Bedrock In-Region (calculator).
-- **At S2:** about $2.50 a month on either.
-- **At the S4 stress case:** about $26 a month.
-- **Latency is the open question, not cost.** The development p95 of 3.25 s trips the 3 s trigger in ADR-006, and that decision is recorded there.
+The per-call figures use the measured 2,106 input and 266 output tokens. The envelope column keeps the first version's 12k/2k-token episode, which ADR-006 cites for its model ladder.
+
+| Model | Per call, measured tokens | Envelope per episode (12k in, 2k out) | S2, 4,851 calls/month | vs gpt-oss-20b |
+|---|---|---|---|---|
+| Workers AI gpt-oss-20b ($0.20 / $0.30 per M) | $0.00050 | $0.0030 | $2.43 | 1× |
+| Bedrock gpt-oss-20b, In-Region (calculator) | $0.00048 | — | $2.33 | about 1× |
+| Workers AI llama-3.3-70b ($0.293 / $2.253 per M) | $0.0012 | $0.0080 | $5.92 | about 2.4× |
+| Claude Haiku 4.5 ($1 / $5 per M) | $0.0034 | $0.022 | $16.70 | about 7× |
+| Claude Sonnet 5 ($2 / $10 per M) | $0.0069 | $0.044 | $33.30 | about 14× |
+
+At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency is the open question, not cost.** The development p95 of 3.25 s trips ADR-006's 3 s trigger. The response (the next rung or a recorded exception) has to be decided before pre-registration, and it is still open.
 
 ### 7. Operating the evaluation window
 
@@ -198,20 +205,25 @@ Check the account's Lambda concurrency quota before any pilot, because new accou
 
 ## Consequences
 
-- **+** One place answers where each layer runs, what it costs and what would change it, with every figure traced to a measurement or a list price.
+- **+** One place answers where each layer runs, what it costs and what would change it. Every figure is a measurement, a list price, or an assumption named as such.
 - **+** The prototype costs $0, and the production target costs $86 a month. Both are explained by requirements, not by volume.
 - **+** Open-source processing (DuckDB, SQLite, gpt-oss-20b) carries over to the AWS target unchanged, so the evaluation stays valid after a migration.
 - **−** Sizing rests on a synthetic sample with a flat hourly profile. Real peaks and volume could be very different.
-- **−** Some inputs are assumptions and are marked as such: Lambda duration (200 ms), batch duration on Fargate (15 min budget), log volume.
+- **−** Several inputs are assumptions:
+  - the 3× peak factor and the 1.1 retry allowance;
+  - 5 API requests for every front-door contact (measured per intake episode, assumed for out-of-scope contacts);
+  - about 11 CDN requests per contact;
+  - 8 retained rebuilds, 250,000 lake GETs and the log volume;
+  - Lambda duration (200 ms) and the 15-minute Fargate budget.
 - **−** The calculator estimate excludes tax, credits and free tier, and doesn't check eligibility for any specific account.
 
 ## Alternatives considered
 
-- **Host the prototype on AWS with the $200 credits.** Nothing the evaluation measures would improve, and it would add operations and about $18–86 a month. Rejected. Reopen it if a requirement can't be met on Cloudflare.
+- **Host the prototype on AWS with the credits** ($199.79 left on 2026-09-30, up from the $100 recorded in ADR-003). Nothing the evaluation measures would improve, and it would add operations and about $18–86 a month. Rejected. Reopen it if a requirement can't be met on Cloudflare.
 - **One ADR per cost decision.** It would scatter sizing across records. Rejected: this record stays the single source, and `Docs/Costs/` holds only its evidence.
 - **Size the AWS target for the whole database online.** The workflow reads only the serving slice (about 0.3 GB), and the full history belongs in the lake. Rejected: it would have meant a db.t4g.medium and 50 GB for no measured need.
 - **CloudFront flat-rate Pro plan.** It costs $15 against about $9.87 for pay-as-you-go plus WAF, and its advantage (no overage) is already covered. Kept as the option if traffic becomes unpredictable.
-- **Buy Workers Paid now.** Measured use is under 9% of Free even at S3. Rejected, unless the full serving slice is loaded (section 2).
+- **Buy Workers Paid now.** Modelled use is under 9% of Free even at S3. Rejected, unless the full serving slice is loaded (section 2).
 
 ## Implementation notes
 
@@ -221,7 +233,8 @@ Check the account's Lambda concurrency quota before any pilot, because new accou
 - **Calculator caveats, as exported:**
   - The six layers above were entered as one flat group.
   - The RDS line shows gp2. The price is the same as gp3 for Multi-AZ, and the target is gp3, for its 3,000-IOPS baseline at any size.
-  - Bedrock was entered as 1 request a minute for 3 hours a day (5,400 calls), a conservative rounding of 4,850.
+  - Bedrock was entered as 1 request a minute for 3 hours a day (5,400 calls), a conservative rounding of 4,851.
+  - Some line descriptions say "measured" for the 5 API requests per contact and quote 0.35 req/s. The 5 requests are measured per intake episode and assumed for other contacts. This record uses 0.25 req/s: API requests only, at 3× the busiest hour.
 - **Prices checked 2026-09-30** with the AWS Price List API (us-east-2) and the calculator:
   - RDS db.t4g.small Multi-AZ $0.065/h; Multi-AZ storage $0.23/GB-month;
   - interface endpoint $0.01/h per AZ; public IPv4 $0.005/h;
