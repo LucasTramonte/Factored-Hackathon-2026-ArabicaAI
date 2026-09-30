@@ -34,11 +34,17 @@ const CEILING = {
   intakeQueue: [2, 225, 0, 2],
   completeDetail: [3, 15, 0, 3],
   incompleteDetail: [3, 10, 0, 3],
-  // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, one 100-episode export page.
-  idleSweepPage: [2, 880, 400, 1],
+  // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
+  idleSweepPage: [2, 1210, 400, 1],
   idleSweepNoop: [2, 10, 0, 1],
-  exportPage: [1, 700, 0, 1]
+  idleDueProbe: [1, 3, 0, 1]
 };
+// An export page reads about 2 rows per episode (its page entry and the look-ahead that ends its event range) plus
+// its events, so the ceiling is computed from the page actually read, with a small fixed slack. A scan of
+// intake_episodes or intake_events adds rows per retained episode or event and fails here even on a small store.
+// The guided producer writes at most 5 events per episode, so a full page is at most 702 rows.
+const EXPORT_SLACK = 2;
+const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
 // Customer requests of one guided episode (login + list + start + terminal request); ADR-004 sizes capacity on these.
 const EPISODE_CEILING = { complete: [30, 72, 41, 15], incomplete: [26, 56, 33, 14] };
 
@@ -134,11 +140,20 @@ test('housekeeping and export store calls stay within their page budgets', async
     const repeat = await storeCall(store, () => store.closeIdleIntakes({ now, limit: 100 }));
     assert.equal(repeat.result.length, 0);
     within('idleSweepNoop', repeat.metrics);
+    const probe = await storeCall(store, () => store.hasDueIdleIntakes({ now }));
+    assert.equal(probe.result, false);
+    within('idleDueProbe', probe.metrics);
+    // Neither page is the whole table: the first is followed by more episodes, the second starts after a cursor.
     const page = await storeCall(store, () => store.exportIntakeEvents({ afterEpisode: '', limit: 100 }));
-    assert.equal(page.result.length, 100, 'the retained population fills one export page');
-    within('exportPage', page.metrics);
-    console.log('D1_HOUSEKEEPING_EXPORT ' + JSON.stringify({ idle_page: { closed: 100, ...sweep.metrics }, idle_noop: repeat.metrics,
-      export_page: { episodes: 100, ...page.metrics } }));
+    assert.equal(page.result.length, 100, 'the retained population fills more than one export page');
+    within('exportPage', page.metrics, exportCeiling(page.result));
+    const later = await storeCall(store, () => store.exportIntakeEvents({ afterEpisode: page.result[49].episode_id, limit: 100 }));
+    assert.ok(later.result.length > 50, 'a page after a cursor');
+    within('exportPageAfterCursor', later.metrics, exportCeiling(later.result));
+    const events = rows => rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0);
+    console.log('D1_HOUSEKEEPING_EXPORT ' + JSON.stringify({ idle_page: { closed: 100, ...sweep.metrics }, idle_noop: repeat.metrics, due_probe: probe.metrics,
+      export_page: { episodes: 100, events: events(page.result), ceiling: exportCeiling(page.result)[1], ...page.metrics },
+      export_after_cursor: { episodes: later.result.length, events: events(later.result), ceiling: exportCeiling(later.result)[1], ...later.metrics } }));
   });
 });
 

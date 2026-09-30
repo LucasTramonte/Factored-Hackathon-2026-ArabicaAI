@@ -28,6 +28,10 @@ async function artifactDir(t) {
   return dir;
 }
 const lines = text => text.trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+/** The exporter fails with one generic message; its ``cause`` pins which guard fired, so a test can't pass for the wrong reason. */
+const exportFails = (promise, reason) => assert.rejects(promise, error => error.message === 'Export failed' && reason.test(String(error.cause?.message)));
+// Fake-clock sweeps beyond the real clock need the store's skew guard lifted explicitly.
+const FAKE_CLOCK = { maxNow: Number.MAX_SAFE_INTEGER };
 
 test('idle_close_and_export_keep_pending_and_unknown_visible', async t => {
   const {db,store,start}=await setup(t); const now=Date.parse('2026-09-30T12:00:00.000Z');
@@ -50,16 +54,16 @@ test('idle_close_and_export_keep_pending_and_unknown_visible', async t => {
   const text=await readFile(output,'utf8');assert.ok(!text.includes('No reconozco'));assert.ok(!text.includes('"customer_id"'));
   const before=text; const row=db.prepare('SELECT event_json FROM intake_events WHERE episode_id=? AND seq=0').get(active.episode_id);
   db.prepare('UPDATE intake_events SET event_json=? WHERE episode_id=? AND seq=0').run(JSON.stringify({...JSON.parse(row.event_json),customer_id:'SECRET_ID'}),active.episode_id);
-  await assert.rejects(exportIntakeEvents(store,{output,python}),/Export failed/);
+  await exportFails(exportIntakeEvents(store,{output,python}),/^Invalid event$/);
   assert.equal(await readFile(output,'utf8'),before,'failed page cannot replace a validated artifact');assert.deepEqual(await readdir(dir),['events.jsonl']);
 });
 
-test('abandonment is recorded at the idle or session-expiry deadline, independent of sweep time', async t => {
+test('an abandoned episode records its idle or session-expiry deadline as its end time, whenever the sweep runs', async t => {
   const {db,store,start} = await setup(t);
   const created = Date.parse('2026-09-30T12:00:00.123Z');
   const idle = await start(created, created + 3600000), expiring = await start(created, created + 240007);
   const sweep = created + 5 * 3600000;
-  assert.equal((await store.closeIdleIntakes({now:sweep,limit:100})).length,2);
+  assert.equal((await store.closeIdleIntakes({now:sweep,limit:100,...FAKE_CLOCK})).length,2);
   const end = id => JSON.parse(db.prepare('SELECT event_json FROM intake_events WHERE episode_id=? AND seq=1').get(id).event_json);
   assert.equal(end(idle.episode_id).ts,'2026-09-30T12:10:00.123Z'); assert.equal(end(idle.episode_id).duration_ms,600000);
   assert.equal(end(expiring.episode_id).ts,'2026-09-30T12:04:00.130Z'); assert.equal(end(expiring.episode_id).duration_ms,240007);
@@ -76,7 +80,8 @@ test('a real pending reservation is never abandoned and only a live same-owner s
     sessionHash:owner, completeCase:{transaction_id:'tx-ana'}, kind:'complete', evidence:{transaction:null,tool_status:'ok'}, actions:[], questions:[],
     usage:{tool_calls:0,operation_duration_ms:0}, now });
   assert.ok(reserved.handoff, 'reservation committed; read-back/acknowledgment then failed');
-  for (const sweep of [now, now + 86400000]) assert.equal((await store.closeIdleIntakes({now:sweep,limit:100})).length,0);
+  for (const sweep of [now, now + 86400000]) assert.equal((await store.closeIdleIntakes({now:sweep,limit:100,...FAKE_CLOCK})).length,0);
+  assert.equal(await store.hasDueIdleIntakes({now:now + 86400000}),false,'a reservation is never reported as due work');
   assert.equal((await store.findIntake('ana',episode.episode_id)).state,'handoff_pending');
   assert.equal(db.prepare('SELECT count(*) n FROM intake_events WHERE episode_id=?').get(episode.episode_id).n,1,'no end event without authority');
   const receipt = await store.readIntakeReceipt('ana',episode.episode_id,{sessionHash:owner,now});
@@ -85,19 +90,20 @@ test('a real pending reservation is never abandoned and only a live same-owner s
   assert.equal((await store.findIntake('ana',episode.episode_id)).state,'handoff_pending');
   assert.equal(await store.finishIntakeHandoff({customerId:'ana',episode,receipt,sessionHash:owner,now,operationDuration:0,toolCalls:0}),true);
   assert.equal((await store.findIntake('ana',episode.episode_id)).state,'complete_handoff');
-  assert.equal((await store.closeIdleIntakes({now:now + 86400000,limit:100})).length,0);
+  assert.equal((await store.closeIdleIntakes({now:now + 86400000,limit:100,...FAKE_CLOCK})).length,0);
 });
 
 test('export pages through every episode with complete ordered groups and fails closed at its page bound', async t => {
   const {db,store,start} = await setup(t);
   const now = Date.parse('2026-09-30T12:00:00.000Z');
   const episodes = []; for (let i = 0; i < 5; i++) episodes.push(await start(now, now + 3600000));
-  await store.closeIdleIntakes({now:now + 3600000,limit:100});
+  await store.closeIdleIntakes({now:now + 3600000,limit:100,...FAKE_CLOCK});
   const {exportIntakeEvents} = await import('../../scripts/export-intake-events.mjs');
   const dir = await artifactDir(t); const output = resolve(dir,'events.jsonl');
   for (const [limit,maxPages,pages] of [[2,100,3],[1,100,6],[1,5,5],[5,1,1],[100,100,1]]) {
     const result = await exportIntakeEvents(store,{output,python,limit,maxPages});
     assert.equal(result.episodes,5); assert.equal(result.pages,pages); assert.equal(result.complete,true);
+    assert.equal('cutoff' in result,false); assert.ok(Date.parse(result.started_at) <= Date.now(),'started_at labels the run, not a data bound');
     assert.equal(result.summary.all.eligible_started,5); assert.equal(result.summary.all.outcomes.abandoned,5);
     const events = lines(await readFile(output,'utf8'));
     assert.equal(events.length,10);
@@ -106,10 +112,10 @@ test('export pages through every episode with complete ordered groups and fails 
   }
   const before = await readFile(output,'utf8');
   for (const [limit,maxPages] of [[1,4],[2,2]]) {
-    await assert.rejects(exportIntakeEvents(store,{output,python,limit,maxPages}),/^Error: Export failed$/);
+    await exportFails(exportIntakeEvents(store,{output,python,limit,maxPages}),/^Page bound reached$/);
     assert.equal(await readFile(output,'utf8'),before,'a partial population is never published'); assert.deepEqual(await readdir(dir),['events.jsonl']);
   }
-  for (const bounds of [{maxPages:0},{maxPages:101},{maxPages:1.5},{limit:0},{limit:101},{limit:'5'}]) await assert.rejects(exportIntakeEvents(store,{output,python,...bounds}),/^Error: Export failed$/);
+  for (const bounds of [{maxPages:0},{maxPages:101},{maxPages:1.5},{limit:0},{limit:101},{limit:'5'}]) await exportFails(exportIntakeEvents(store,{output,python,...bounds}),/^Invalid bounds$/);
   assert.equal(await readFile(output,'utf8'),before); assert.deepEqual(await readdir(dir),['events.jsonl']);
   db.exec('DELETE FROM intake_events; DELETE FROM intake_turns; DELETE FROM intake_episodes');
   const empty = await exportIntakeEvents(store,{output,python});
@@ -141,7 +147,7 @@ test('export destination stays inside the ignored data/intake-events directory a
   for (const [dataDir,output] of [[escapedBase,join(escapedBase,'intake-events','events.jsonl')],[selfBase,join(selfBase,'intake-events','events.jsonl')],
     [escapedNested,join(escapedNested,'intake-events','nested','events.jsonl')],[join(intoRepo,'data'),join(intoRepo,'data','intake-events','events.jsonl')],
     [ok,join(ok,'events.jsonl')],[ok,join(ok,'intake-events','events.txt')],[ok,join(ok,'intake-events','missing','events.jsonl')],[ok,join(ok,'intake-events')]]) {
-    await assert.rejects(run(dataDir,output),/^Error: Export failed$/,output);
+    await exportFails(run(dataDir,output),/^Invalid destination$|ENOENT/);
   }
   assert.deepEqual(await readdir(outside),[],'nothing is written through an escaping link');
   assert.equal((await readdir(resolve(root,'back-end/test/support'))).includes('intake-events'),false,'nothing is created in a tracked directory');
@@ -160,14 +166,16 @@ test('event export validates failures, acceptance, unknown usage and opaque refe
   const output=resolve(dir,'events.jsonl');const result=await exportIntakeEvents(store,{output,python});assert.equal(result.summary.all.safe_accepted,1);assert.equal(result.summary.all.outcomes.technical_failure,1);assert.equal(result.summary.all.input_tokens,null);
   assert.equal(result.summary.all.known_input_tokens,0); assert.equal(result.summary.all.usage_unavailable_calls,1); assert.equal(result.summary.all.usage_unknown_episodes,1);
   db.prepare('UPDATE intake_events SET event_json=json_set(event_json,\'$.session_ref\',?) WHERE episode_id=?').run('SECRET customer statement',complete.episode_id);
-  await assert.rejects(exportIntakeEvents(store,{output,python}),/Export failed/);
+  await exportFails(exportIntakeEvents(store,{output,python}),/^Invalid reference$/);
 });
 
 test('operator CLIs print only their own generic line on failure, with third-party diagnostics silenced', () => {
   // Exact equality is deliberate: the CLIs silence Wrangler and Node warnings, so any extra stderr text is a regression.
   const missing = resolve(root,'back-end/missing-wrangler.jsonc');
-  for (const [script,args,message] of [['export-intake-events.mjs',['--unknown'],'Export failed\n'],['export-intake-events.mjs',['--max-pages','0','--config',missing],'Export failed\n'],
-    ['close-idle-intakes.mjs',['--unknown'],'Idle closure failed\n'],['close-idle-intakes.mjs',['--limit','101','--config',missing],'Idle closure failed\n']]) {
+  for (const [script,args,message] of [['export-intake-events.mjs',['--unknown'],'Export failed\n'],['export-intake-events.mjs',['--max-pages','0'],'Export failed\n'],['export-intake-events.mjs',['--limit',''],'Export failed\n'],
+    ['close-idle-intakes.mjs',['--unknown'],'Idle closure failed\n'],['close-idle-intakes.mjs',['--limit','101'],'Idle closure failed\n'],
+    ['close-idle-intakes.mjs',['--now',''],'Idle closure failed\n'],['close-idle-intakes.mjs',['--now',String(Date.now() + 3600000)],'Idle closure failed\n'],
+    ['close-idle-intakes.mjs',['--now','-5','--config',missing],'Idle closure failed\n']]) {
     const run = spawnSync(process.execPath,[cli(script),...args],{encoding:'utf8',timeout:60000});
     assert.equal(run.status,1,script); assert.equal(run.stdout,'',script); assert.equal(run.stderr,message,script);
   }
@@ -206,6 +214,9 @@ test('housekeeping sweeps at one cutoff, one bounded atomic page at a time, and 
   const noop = await closeIdleIntakes(store,{now,limit:2,maxPages:5});
   assert.equal(noop.closed,0); assert.equal(noop.pages,1); assert.equal(noop.complete,true);
   for (const maxPages of [0,101,1.5]) await assert.rejects(closeIdleIntakes(store,{now,maxPages}),/Invalid closure bounds/);
+  // complete comes from a due probe, not page size: a short page that leaves due work behind is not complete.
+  const stuck = { closeIdleIntakes: async () => [], hasDueIdleIntakes: async () => true, metrics: () => ({}) };
+  assert.equal((await closeIdleIntakes(stuck,{now,limit:2,maxPages:5})).complete,false);
 });
 
 test('invalid, oversized or incomplete event pages never publish or leak scorer diagnostics', async t => {
@@ -218,19 +229,87 @@ test('invalid, oversized or incomplete event pages never publish or leak scorer 
   const output = resolve(dir,'events.jsonl');
   await exportIntakeEvents(store,{output,python});
   const before = await readFile(output,'utf8');
-  for (const value of [{...JSON.parse(original),seq:-1}, {...JSON.parse(original),scenario:'SECRET'.repeat(1000)}]) {
+  // Over 4,096 characters the SQL returns null (Invalid event); a short bad session_ref would be Invalid reference.
+  for (const [value,reason] of [[{...JSON.parse(original),seq:-1},/Command failed/],[{...JSON.parse(original),session_ref:'x'.repeat(5000)},/^Invalid event$/]]) {
     db.prepare('UPDATE intake_events SET event_json=? WHERE episode_id=?').run(JSON.stringify(value),e.episode_id);
-    await assert.rejects(exportIntakeEvents(store,{output,python}),/^Error: Export failed$/);
+    await exportFails(exportIntakeEvents(store,{output,python}),reason);
     assert.equal(await readFile(output,'utf8'),before);
     assert.deepEqual(await readdir(dir),['events.jsonl']);
   }
   db.prepare('UPDATE intake_events SET event_json=? WHERE episode_id=?').run(original,e.episode_id);
   // Existing scorer remains the authority for sequence validity and usage; its failure is captured.
-  await assert.rejects(exportIntakeEvents(store,{output,python:process.execPath}),/^Error: Export failed$/);
+  await exportFails(exportIntakeEvents(store,{output,python:process.execPath}),/Command failed/);
   for(let seq=1;seq<=101;seq++) db.prepare('INSERT INTO intake_events VALUES(?,?,?)').run(e.episode_id,seq,original);
-  await assert.rejects(exportIntakeEvents(store,{output,python}),/^Error: Export failed$/);
+  await exportFails(exportIntakeEvents(store,{output,python}),/^Invalid group$/);
   assert.equal(await readFile(output,'utf8'),before);
   assert.deepEqual(await readdir(dir),['events.jsonl']);
   for (const bounds of [{limit:0},{limit:101},{afterEpisode:'secret statement'}]) assert.throws(()=>store.exportIntakeEvents(bounds));
   for (const bounds of [{now:-1},{now,limit:101},{now:NaN}]) await assert.rejects(store.closeIdleIntakes(bounds));
+});
+
+test('an injected scenario label fails the guided export closed, even when it looks like a valid scenario id', async t => {
+  const {db,store,start} = await setup(t);
+  const e = await start(Date.now(), Date.now() + 1000);
+  const {exportIntakeEvents} = await import('../../scripts/export-intake-events.mjs');
+  const dir = await artifactDir(t); const output = resolve(dir,'events.jsonl');
+  await exportIntakeEvents(store,{output,python}); const before = await readFile(output,'utf8');
+  db.prepare("UPDATE intake_events SET event_json=json_set(event_json,'$.scenario','demo-ana') WHERE episode_id=?").run(e.episode_id);
+  await exportFails(exportIntakeEvents(store,{output,python}),/^Invalid event$/);
+  assert.equal(await readFile(output,'utf8'),before); assert.ok(!before.includes('demo-ana'));
+});
+
+test('export rejects a data link to a repository ancestor whose intake-events links back into tracked code', async t => {
+  const {store,start} = await setup(t); await start(Date.now(), Date.now() + 1000);
+  const {exportIntakeEvents} = await import('../../scripts/export-intake-events.mjs');
+  const scratch = await mkdtemp(join(tmpdir(),'intake-export-ancestor-')); t.after(()=>rm(scratch,{recursive:true,force:true}));
+  // A stand-in repository: data -> the repository's parent, and <parent>/intake-events -> tracked back-end/src.
+  const repository = join(scratch,'repo'); const src = join(repository,'back-end','src'); await mkdir(src,{recursive:true});
+  await symlink(scratch,join(repository,'data')); await symlink(src,join(scratch,'intake-events'));
+  await exportFails(exportIntakeEvents(store,{python,repository,dataDir:join(repository,'data'),output:join(repository,'data','intake-events','events.jsonl')}),/^Invalid destination$/);
+  // Without the ancestor link, a parent resolving into the repository outside data/ is rejected too.
+  const other = join(scratch,'other'); await mkdir(other); await symlink(src,join(other,'intake-events'));
+  await exportFails(exportIntakeEvents(store,{python,repository,dataDir:other,output:join(other,'intake-events','events.jsonl')}),/^Invalid destination$/);
+  assert.deepEqual(await readdir(src),[],'nothing is written into tracked code');
+});
+
+test('housekeeping refuses a cutoff beyond the allowed clock skew and malformed CLI numbers', async t => {
+  const {store,start} = await setup(t);
+  const real = Date.now(); const e = await start(real - 60000, real + 3600000);
+  await assert.rejects(store.closeIdleIntakes({now:real + 86400000,limit:100}),/Invalid closure bounds/);
+  await assert.rejects(store.closeIdleIntakes({now:real + 120000,limit:100}),/Invalid closure bounds/);
+  assert.equal((await store.findIntake('ana',e.episode_id)).state,'selection_required','an active episode is not closed by a future cutoff');
+  assert.equal((await store.closeIdleIntakes({now:real + 30000,limit:100})).length,0,'a cutoff within the skew is accepted');
+  const {sweepOptions} = await import('../../scripts/close-idle-intakes.mjs');
+  const clock = Date.parse('2026-09-30T12:00:00.000Z');
+  assert.deepEqual(sweepOptions({},clock),{now:clock,limit:100,maxPages:1});
+  assert.deepEqual(sweepOptions({now:String(clock + 60000),limit:'5','max-pages':'3'},clock),{now:clock + 60000,limit:5,maxPages:3});
+  for (const values of [{now:''},{now:'1.5'},{now:'-1'},{now:'1e12'},{now:' 1'},{now:'abc'},{now:String(clock + 60001)},{limit:'0'},{limit:'101'},{'max-pages':'0'},{'max-pages':'101'},{limit:'007'}])
+    assert.throws(()=>sweepOptions(values,clock),/Invalid closure bounds/,JSON.stringify(values));
+  const {exportOptions} = await import('../../scripts/export-intake-events.mjs');
+  assert.deepEqual(exportOptions({}),{output:undefined,python:undefined,limit:100,maxPages:100});
+  assert.deepEqual(exportOptions({limit:'7','max-pages':'2'}),{output:undefined,python:undefined,limit:7,maxPages:2});
+  for (const values of [{limit:''},{limit:'0'},{limit:'101'},{limit:'1.5'},{'max-pages':'0'},{'max-pages':'101'},{'max-pages':'-1'},{'max-pages':'05'}])
+    assert.throws(()=>exportOptions(values),/Invalid bounds/,JSON.stringify(values));
+});
+
+test('an idle sweep appends the end event after existing events instead of assuming sequence 1', async t => {
+  const {db,store,start} = await setup(t);
+  const now = Date.parse('2026-09-30T12:00:00.000Z');
+  const stuck = await start(now - 900000, now + 3600000), normal = await start(now - 800000, now + 3600000);
+  // A non-terminal event already at seq 1 (for example a future clarification producer) used to block the sweep.
+  db.prepare('INSERT INTO intake_events VALUES(?,?,?)').run(stuck.episode_id,1,JSON.stringify({event:'clarification_requested',version:'2',case_id:stuck.episode_id,
+    ts:new Date(now - 850000).toISOString(),seq:1,session_ref:stuck.session_ref,language:'es',model_version:'guided-0.1',missing:['date']}));
+  const {closeIdleIntakes} = await import('../../scripts/close-idle-intakes.mjs');
+  const swept = await closeIdleIntakes(store,{now,limit:1,maxPages:10});
+  assert.equal(swept.closed,2); assert.equal(swept.complete,true);
+  for (const e of [stuck,normal]) assert.equal((await store.findIntake('ana',e.episode_id)).state,'abandoned');
+  const seqs = id => db.prepare('SELECT seq,json_extract(event_json,\'$.event\') AS event FROM intake_events WHERE episode_id=? ORDER BY seq').all(id).map(r=>[r.seq,r.event]);
+  assert.deepEqual(seqs(stuck.episode_id),[[0,'intake_started'],[1,'clarification_requested'],[2,'intake_ended']]);
+  assert.deepEqual(seqs(normal.episode_id),[[0,'intake_started'],[1,'intake_ended']]);
+  assert.equal(JSON.parse(db.prepare('SELECT event_json FROM intake_events WHERE episode_id=? AND seq=2').get(stuck.episode_id).event_json).seq,2);
+  assert.equal((await closeIdleIntakes(store,{now,limit:1,maxPages:10})).closed,0,'once only');
+  const {exportIntakeEvents} = await import('../../scripts/export-intake-events.mjs');
+  const dir = await artifactDir(t);
+  const result = await exportIntakeEvents(store,{output:resolve(dir,'events.jsonl'),python});
+  assert.equal(result.summary.all.outcomes.abandoned,2); assert.equal(result.summary.all.clarifications_per_episode,0.5);
 });

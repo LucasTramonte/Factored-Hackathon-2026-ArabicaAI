@@ -160,4 +160,16 @@ test('export CLI on the shared local D1 never relays scorer output or partial ar
     '--output',resolve(dir,'events.jsonl'),'--python',scorer],{encoding:'utf8',timeout:120000});
   assert.equal(run.status,1);assert.equal(run.stdout,'');assert.equal(run.stderr,'Export failed\n');
   assert.deepEqual(await readdir(dir),['scorer.sh'],'no temporary or partial artifact remains');
+  // The same database exports when the options are valid, so the failures below come from option validation.
+  const cli=(script,args)=>spawnSync(process.execPath,[resolve(root,'back-end/scripts',script),'--config',resolve(process.cwd(),'wrangler.jsonc'),...args],{encoding:'utf8',timeout:120000});
+  const python=process.env.INTAKE_PYTHON??resolve(root,'.venv/bin/python');const output=resolve(dir,'events.jsonl');
+  const ok=cli('export-intake-events.mjs',['--output',output,'--python',python,'--max-pages','100']);
+  assert.equal(ok.status,0,ok.stderr);const exported=JSON.parse(ok.stdout);assert.equal(exported.complete,true);assert.ok(exported.started_at);assert.equal('cutoff' in exported,false);
+  for(const args of [['--max-pages','0'],['--max-pages','101'],['--limit','0'],['--limit','1.5']]){
+    const bad=cli('export-intake-events.mjs',['--output',output,'--python',python,...args]);assert.equal(bad.status,1,args.join(' '));assert.equal(bad.stderr,'Export failed\n');
+  }
+  const swept=cli('close-idle-intakes.mjs',['--now',String(Date.now())]);assert.equal(swept.status,0,swept.stderr);assert.equal(JSON.parse(swept.stdout).complete,true);
+  for(const now of [String(Date.now()+3600000),'','-1','12.5']){
+    const bad=cli('close-idle-intakes.mjs',['--now',now]);assert.equal(bad.status,1,now);assert.equal(bad.stdout,'');assert.equal(bad.stderr,'Idle closure failed\n');
+  }
 });

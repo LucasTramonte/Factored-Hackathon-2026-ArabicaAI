@@ -10,6 +10,11 @@ import { tokenHash } from '../auth/session.js';
 
 /** Export cursors are server-minted episode ids: lowercase RFC 4122 UUIDs, so text order matches the keyset. */
 const EPISODE_CURSOR = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+/** Housekeeping may not close episodes at a cutoff more than this far past the server clock. */
+export const IDLE_CUTOFF_SKEW_MS = 60000;
+const IDLE_DUE = 'MIN(e.updated_at+600000,e.expires_at)';
+const IDLE_CANDIDATES = "FROM intake_episodes e WHERE e.state='selection_required' AND " + IDLE_DUE + '<=? '
+  + 'AND NOT EXISTS(SELECT 1 FROM intake_handoffs h WHERE h.episode_id=e.episode_id)';
 
 export function createStore(db) {
   const totals = { queries: 0, rowsRead: 0, rowsWritten: 0, roundTrips: 0 };
@@ -169,31 +174,41 @@ export function createStore(db) {
     },
 
     /**
-     * Close at most ``limit`` (<=100) due unreserved starts atomically. An episode is due at
-     * min(last activity + 10 min, bound session expiry); its end event records that deadline as ``ts`` and
-     * measures ``duration_ms`` to it, so the result does not depend on how often housekeeping runs.
-     * Reserved (``handoff_pending``) episodes are never closed: their acceptance needs customer-authorized read-back.
+     * Close at most ``limit`` (<=100) due unreserved starts atomically, at cutoff ``now`` (never more than
+     * IDLE_CUTOFF_SKEW_MS past ``maxNow``, the server clock by default). An episode is due at min(last activity +
+     * 10 min, bound session expiry), where activity is the start or its latest same-key replay. The deadline is
+     * evaluated only when this sweep runs: an episode whose deadline passed but that has not been swept can still be
+     * confirmed or handed off, and a same-key start replay renews it. The end event is appended at the episode's next
+     * sequence number and records the deadline as ``ts`` and ``duration_ms``; the state changes only when that event
+     * is the episode's latest. Reserved (``handoff_pending``) episodes are never closed: their acceptance needs
+     * customer-authorized read-back.
      */
-    closeIdleIntakes: async ({ now, limit = 100 }) => {
-      if (!Number.isSafeInteger(now) || now < 0 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid closure bounds');
-      const due = 'MIN(e.updated_at+600000,e.expires_at)';
-      const page = "FROM intake_episodes e WHERE e.state='selection_required' AND " + due + '<=? '
-        + 'AND NOT EXISTS(SELECT 1 FROM intake_handoffs h WHERE h.episode_id=e.episode_id) '
-        + 'ORDER BY ' + due + ',e.episode_id LIMIT ?';
+    closeIdleIntakes: async ({ now, limit = 100, maxNow = Date.now() + IDLE_CUTOFF_SKEW_MS }) => {
+      if (!Number.isSafeInteger(now) || now < 0 || !(now <= maxNow) || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid closure bounds');
+      const page = IDLE_CANDIDATES + ' ORDER BY ' + IDLE_DUE + ',e.episode_id LIMIT ?';
+      // MAX alone in the subquery keeps SQLite's min/max index lookup (one row); COALESCE outside it.
+      const next = 'COALESCE((SELECT MAX(v.seq) FROM intake_events v WHERE v.episode_id=e.episode_id),-1)+1';
       const results = await batch([
-        ["INSERT INTO intake_events(episode_id,seq,event_json) SELECT e.episode_id,1,json_patch(json_object("
+        ['INSERT INTO intake_events(episode_id,seq,event_json) SELECT e.episode_id,' + next + ',json_patch(json_object('
           + "'event','intake_ended','version','2','case_id',e.episode_id,"
-          + "'ts',strftime('%Y-%m-%dT%H:%M:%S'," + due + "/1000,'unixepoch')||printf('.%03dZ'," + due + "%1000),"
-          + "'seq',1,'session_ref',e.session_ref,'language',e.language,'model_version','guided-0.1'),"
-          + "json_object('outcome','abandoned','safety','not_assessed','duration_ms',MAX(0," + due + "-e.created_at),"
+          + "'ts',strftime('%Y-%m-%dT%H:%M:%S'," + IDLE_DUE + "/1000,'unixepoch')||printf('.%03dZ'," + IDLE_DUE + "%1000),"
+          + "'seq'," + next + ",'session_ref',e.session_ref,'language',e.language,'model_version','guided-0.1'),"
+          + "json_object('outcome','abandoned','safety','not_assessed','duration_ms',MAX(0," + IDLE_DUE + "-e.created_at),"
           + "'llm_calls',0,'input_tokens',0,'output_tokens',0,'known_input_tokens',0,'known_output_tokens',0,"
           + "'usage_unavailable_calls',0,'tool_calls',json_extract(e.usage_json,'$.tool_calls'))) "
           + page + ' ON CONFLICT(episode_id,seq) DO NOTHING', now, limit],
         ["UPDATE intake_episodes SET state='abandoned',updated_at=? WHERE episode_id IN (SELECT e.episode_id " + page + ') '
-          + "AND EXISTS(SELECT 1 FROM intake_events v WHERE v.episode_id=intake_episodes.episode_id AND v.seq=1 AND json_extract(v.event_json,'$.outcome')='abandoned') "
+          + 'AND EXISTS(SELECT 1 FROM (SELECT v.event_json FROM intake_events v WHERE v.episode_id=intake_episodes.episode_id '
+          + "ORDER BY v.seq DESC LIMIT 1) latest WHERE json_extract(latest.event_json,'$.event')='intake_ended' "
+          + "AND json_extract(latest.event_json,'$.outcome')='abandoned') "
           + 'RETURNING episode_id', now, now, limit]
       ]);
       return results.at(-1).results;
+    },
+    /** Whether any unreserved start is still due at ``now``; lets a sweep report completion without trusting page size. */
+    hasDueIdleIntakes: async ({ now }) => {
+      if (!Number.isSafeInteger(now) || now < 0) throw new Error('Invalid closure bounds');
+      return Boolean(await first('SELECT 1 AS due ' + IDLE_CANDIDATES + ' LIMIT 1', now));
     },
     /**
      * One keyset page of at most 100 episodes after ``afterEpisode`` (a lowercase UUID, or '' for the start), each
