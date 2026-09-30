@@ -14,7 +14,7 @@
           <button type="button" class="ar-btn" (click)="start()">{{ t().start }}
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5l7 7-7 7"></path></svg>
           </button>
-          <div class="lang-links" role="group" aria-label="Idioma">
+          <div class="lang-links" role="group" [attr.aria-label]="t().language">
             <button type="button" [attr.aria-pressed]="lang.lang() === 'es'" (click)="lang.set('es')">Español</button>
             <button type="button" [attr.aria-pressed]="lang.lang() === 'pt'" (click)="lang.set('pt')">Português</button>
             <button type="button" [attr.aria-pressed]="lang.lang() === 'en'" (click)="lang.set('en')">English</button>
@@ -66,7 +66,7 @@
 
     @case ('home') {
       <div class="step home">
-        <nav class="ar-sidebar" aria-label="Principal">
+        <nav class="ar-sidebar" [attr.aria-label]="t().mainNav">
           <div style="display: flex; flex-direction: column; gap: 28px">
             <div style="padding: 0 8px"><span class="ar-lockup"><span class="sidebar-mark-slot"></span><span class="ar-wordmark" style="font-size: 20px">Arabica<b>AI</b></span></span></div>
             <div class="ar-nav">
@@ -104,7 +104,7 @@
             <section class="agent-panel">
               <div class="agent-panel-head">
                 <app-mark [size]="40" slit="var(--accent-soft)" />
-                <div style="display: flex; flex-direction: column; gap: 4px"><span class="ar-tile-title">{{ t().yourAgent }}</span><span class="ar-small" style="font-size: 14px; line-height: 20px">{{ t().agentBlurb }}</span></div>
+                <div style="display: flex; flex-direction: column; gap: 4px"><span class="ar-tile-title">{{ t().guideTitle }}</span><span class="ar-small" style="font-size: 14px; line-height: 20px">{{ t().guideBlurb }}</span></div>
               </div>
               <div class="agent-panel-foot">
                 <div class="agent-facts"><span>{{ lang.lang() }}</span><span>{{ client() }}</span><span>{{ transactions().length }} {{ t().count }}</span></div>

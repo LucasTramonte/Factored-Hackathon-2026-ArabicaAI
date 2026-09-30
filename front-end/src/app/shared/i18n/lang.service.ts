@@ -1,11 +1,12 @@
 import { Injectable, computed, signal } from '@angular/core';
+import { ApiError } from '../../core/http/api.service';
 
 export type Lang = 'es' | 'pt' | 'en';
 
 /** Every interface string, in the three required languages. Evidence (amounts, IDs, timestamps) is never translated. */
 const es = {
-    greeting: 'Hola', tagline: 'Agentes creados para ti.',
-    promise: 'Tu agente conoce tus cargos, tu idioma y tu banco. Una persona revisa cada caso. Nadie mueve tu dinero.',
+    greeting: 'Hola', tagline: 'Reporta un cargo que no reconoces.',
+    promise: 'Ves solo tus propios cargos, en tu idioma. Una persona revisa cada caso. Nadie mueve tu dinero.',
     start: 'Comenzar', continue: 'Continuar', sandbox: 'sandbox', synthetic: 'Datos sintéticos. Inicio de sesión simulado.',
     noMoney: 'Datos sintéticos. Nadie mueve tu dinero.',
     whoAreYou: '¿Quién eres?', chooseIdentity: 'Elige una identidad de demostración. El inicio de sesión es simulado.',
@@ -13,7 +14,7 @@ const es = {
     promise3: 'Una persona lo revisa. Nadie mueve tu dinero.', renew: 'Renovar la misma sesión',
     hello: 'Hola', loaded: 'cargos cargados', home: 'Inicio', charges: 'Cargos', agentView: 'Vista de agente',
     demoAccount: 'Cuenta de demostración', loadedCharges: 'Cargos cargados', currencies: 'Monedas',
-    yourAgent: 'Tu agente', agentBlurb: 'Creado para ti: conoce tu idioma, tu identidad y tus cargos cargados. Prepara tu caso; una persona lo revisa.',
+    guideTitle: 'Reporte guiado', guideBlurb: 'Eliges el cargo, cuentas qué pasó y confirmas. Una persona revisa el caso.',
     report: 'Reportar un cargo', openCases: 'Casos abiertos', inReview: 'en revisión', accepted: 'aceptada', none: 'ninguno',
     recent: 'Cargos recientes', merchant: 'Comercio', date: 'Fecha', state: 'Estado', amount: 'Monto',
     notRecognized: 'No lo reconozco', selected: 'seleccionado', noMerchant: 'Comercio: no consta en la fuente',
@@ -29,7 +30,13 @@ const es = {
     byCurrency: 'Por moneda', total: 'Total de los cargos cargados', count: 'cargos',
     agentTitle: 'Vista de agente', agentIntro: 'Acceso de agente simulado y separado. Muestra los 50 casos más recientes.',
     agentLoad: 'Entrar como agente y actualizar casos', noCases: 'No se devolvieron casos.', customer: 'Cliente', acceptedAt: 'Aceptada en la demo',
-    validation: 'Selecciona un cargo, describe el problema en al menos 10 caracteres y confirma.'
+    validation: 'Selecciona un cargo, describe el problema en al menos 10 caracteres y confirma.',
+    mainNav: 'Principal', language: 'Idioma',
+    err401: 'La sesión expiró. Vuelve a entrar con la misma identidad para continuar.',
+    err404: 'No se encontró el cargo para esta sesión.',
+    err409: 'Esta clave de solicitud ya se usó con otro contenido. No inicies otra solicitud; pide a un agente que revise el caso.',
+    err413: 'La descripción es demasiado larga.', err422: 'Revisa los campos y confirma la solicitud.',
+    err503: 'Servicio no disponible. La aceptación no se confirmó. Reintenta la misma solicitud.', errOther: 'La solicitud falló.'
 };
 
 /** The key set is the Spanish table; the other two must match it exactly. */
@@ -38,8 +45,8 @@ export type Strings = { [K in keyof typeof es]: string };
 const STRINGS: Record<Lang, Strings> = {
   es,
   pt: {
-    greeting: 'Olá', tagline: 'Agentes criados para você.',
-    promise: 'Seu agente conhece suas cobranças, seu idioma e seu banco. Uma pessoa analisa cada caso. Ninguém mexe no seu dinheiro.',
+    greeting: 'Olá', tagline: 'Reporte uma cobrança que você não reconhece.',
+    promise: 'Você vê apenas suas próprias cobranças, no seu idioma. Uma pessoa analisa cada caso. Ninguém mexe no seu dinheiro.',
     start: 'Começar', continue: 'Continuar', sandbox: 'sandbox', synthetic: 'Dados sintéticos. Login simulado.',
     noMoney: 'Dados sintéticos. Ninguém mexe no seu dinheiro.',
     whoAreYou: 'Quem é você?', chooseIdentity: 'Escolha uma identidade de demonstração. O login é simulado.',
@@ -47,7 +54,7 @@ const STRINGS: Record<Lang, Strings> = {
     promise3: 'Uma pessoa analisa. Ninguém mexe no seu dinheiro.', renew: 'Renovar a mesma sessão',
     hello: 'Olá', loaded: 'cobranças carregadas', home: 'Início', charges: 'Cobranças', agentView: 'Visão do agente',
     demoAccount: 'Conta de demonstração', loadedCharges: 'Cobranças carregadas', currencies: 'Moedas',
-    yourAgent: 'Seu agente', agentBlurb: 'Criado para você: conhece seu idioma, sua identidade e suas cobranças carregadas. Prepara seu caso; uma pessoa analisa.',
+    guideTitle: 'Relato guiado', guideBlurb: 'Você escolhe a cobrança, conta o que aconteceu e confirma. Uma pessoa analisa o caso.',
     report: 'Reportar uma cobrança', openCases: 'Casos abertos', inReview: 'em análise', accepted: 'aceito', none: 'nenhum',
     recent: 'Cobranças recentes', merchant: 'Estabelecimento', date: 'Data', state: 'Estado', amount: 'Valor',
     notRecognized: 'Não reconheço', selected: 'selecionado', noMerchant: 'Estabelecimento: não consta na fonte',
@@ -63,11 +70,17 @@ const STRINGS: Record<Lang, Strings> = {
     byCurrency: 'Por moeda', total: 'Total das cobranças carregadas', count: 'cobranças',
     agentTitle: 'Visão do agente', agentIntro: 'Acesso de agente simulado e separado. Mostra os 50 casos mais recentes.',
     agentLoad: 'Entrar como agente e atualizar casos', noCases: 'Nenhum caso retornado.', customer: 'Cliente', acceptedAt: 'Aceito na demo',
-    validation: 'Selecione uma cobrança, descreva o problema em pelo menos 10 caracteres e confirme.'
+    validation: 'Selecione uma cobrança, descreva o problema em pelo menos 10 caracteres e confirme.',
+    mainNav: 'Principal', language: 'Idioma',
+    err401: 'A sessão expirou. Entre novamente com a mesma identidade para continuar.',
+    err404: 'Cobrança não encontrada para esta sessão.',
+    err409: 'Esta chave de pedido já foi usada com outro conteúdo. Não inicie outro pedido; peça a um agente que verifique o caso.',
+    err413: 'A descrição é longa demais.', err422: 'Revise os campos e confirme o pedido.',
+    err503: 'Serviço indisponível. A aceitação não foi confirmada. Tente o mesmo pedido novamente.', errOther: 'O pedido falhou.'
   },
   en: {
-    greeting: 'Hello', tagline: 'Agents built for you.',
-    promise: 'Your agent knows your charges, your language and your bank. A person reviews every case. Nobody moves your money.',
+    greeting: 'Hello', tagline: 'Report a charge you do not recognize.',
+    promise: 'You see only your own charges, in your language. A person reviews every case. Nobody moves your money.',
     start: 'Start', continue: 'Continue', sandbox: 'sandbox', synthetic: 'Synthetic data. Simulated sign-in.',
     noMoney: 'Synthetic data. Nobody moves your money.',
     whoAreYou: 'Who are you?', chooseIdentity: 'Choose a demo identity. Sign-in is simulated.',
@@ -75,7 +88,7 @@ const STRINGS: Record<Lang, Strings> = {
     promise3: 'A person reviews it. Nobody moves your money.', renew: 'Renew the same session',
     hello: 'Hi', loaded: 'charges loaded', home: 'Home', charges: 'Charges', agentView: 'Agent view',
     demoAccount: 'Demo account', loadedCharges: 'Charges loaded', currencies: 'Currencies',
-    yourAgent: 'Your agent', agentBlurb: 'Built for you: it knows your language, your identity and your loaded charges. It prepares your case; a person reviews it.',
+    guideTitle: 'Guided report', guideBlurb: 'You pick the charge, say what happened and confirm. A person reviews the case.',
     report: 'Report a charge', openCases: 'Open cases', inReview: 'in review', accepted: 'accepted', none: 'none',
     recent: 'Recent charges', merchant: 'Merchant', date: 'Date', state: 'State', amount: 'Amount',
     notRecognized: 'I do not recognize it', selected: 'selected', noMerchant: 'Merchant: not in source',
@@ -91,7 +104,13 @@ const STRINGS: Record<Lang, Strings> = {
     byCurrency: 'By currency', total: 'Total of the loaded charges', count: 'charges',
     agentTitle: 'Agent view', agentIntro: 'Separate simulated agent access. Shows the 50 most recent cases.',
     agentLoad: 'Sign in as an agent and refresh cases', noCases: 'No cases returned.', customer: 'Customer', acceptedAt: 'Accepted in demo',
-    validation: 'Select a charge, describe the issue in at least 10 characters, and confirm.'
+    validation: 'Select a charge, describe the issue in at least 10 characters, and confirm.',
+    mainNav: 'Main', language: 'Language',
+    err401: 'Session expired. Sign in again with the same identity to continue.',
+    err404: 'Charge not found for this session.',
+    err409: 'This request key was used for different content. Do not start another request; ask an agent to check the case.',
+    err413: 'The description is too long.', err422: 'Check the fields and confirm the request.',
+    err503: 'Service unavailable. Acceptance was not confirmed. Retry the same request.', errOther: 'Request failed.'
   }
 };
 
@@ -120,4 +139,13 @@ export class LangService {
     const nav = typeof navigator !== 'undefined' ? navigator.language.slice(0, 2) : 'es';
     return nav === 'pt' ? 'pt' : nav === 'en' ? 'en' : 'es';
   }
+}
+
+const ERROR_KEYS: Record<number, keyof Strings> = { 0: 'err503', 401: 'err401', 404: 'err404', 409: 'err409', 413: 'err413', 422: 'err422', 503: 'err503' };
+
+/** The customer-facing text for a failed call, in the interface language. Server text is never shown; status 0 (no answer) reads as 503. */
+export function errorText(t: Strings, e: unknown): string {
+  if (!(e instanceof ApiError)) return t.errOther;
+  const key = ERROR_KEYS[e.status];
+  return key ? t[key] : `${t.errOther} (HTTP ${e.status})`;
 }

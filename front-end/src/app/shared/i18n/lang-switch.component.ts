@@ -5,7 +5,7 @@ import { LangService } from './lang.service';
 @Component({
   selector: 'app-lang-switch',
   template: `
-    <div class="ar-seg" role="group" aria-label="Idioma">
+    <div class="ar-seg" role="group" [attr.aria-label]="lang.t().language">
       @for (code of lang.all; track code) {
         <button type="button" [attr.aria-pressed]="lang.lang() === code" (click)="lang.set(code)">{{ code.toUpperCase() }}</button>
       }
