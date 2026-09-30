@@ -1,12 +1,13 @@
 """Small-sample statistics for evaluation reports, standard library only.
 
 Wilson intervals for rates, an exact one-sided Clopper–Pearson upper bound for error rates
-found in an audit sample, and McNemar's exact test for two systems scored on the same cases.
+found in an audit sample, McNemar's exact test for two systems scored on the same cases, and a
+distribution-free interval for a percentile such as p95 latency.
 Empty denominators return ``None``: they are undefined, never zero.
 """
 from __future__ import annotations
 
-from math import comb, sqrt
+from math import comb, isnan, sqrt
 
 Z95 = 1.959963984540054
 
@@ -58,3 +59,28 @@ def mcnemar_exact(b: int, c: int) -> float:
     if n == 0:
         return 1.0
     return min(1.0, 2 * _binom_cdf(min(b, c), n, 0.5))
+
+
+def quantile_interval(values, q: float = 0.95, conf: float = 0.95) -> tuple[float | None, float | None]:
+    """Equal-tailed, distribution-free interval for the ``q`` quantile of ``values``.
+
+    Uses order statistics: with ``B ~ Binomial(n, q)``, the lower bound is the ``j``-th smallest
+    value for the largest ``j`` with ``P(B <= j - 1) <= alpha/2``, and the upper bound the ``k``-th
+    for the smallest ``k`` with ``P(B <= k - 1) >= 1 - alpha/2``. A side is ``None`` when no
+    order statistic reaches it, which is the honest answer for small samples: for p95 at 95%
+    confidence the upper bound needs at least 72 values.
+    """
+    if not (isinstance(q, (int, float)) and isinstance(conf, (int, float))) or isnan(q) or isnan(conf) \
+            or not 0 < q < 1 or not 0 < conf < 1:
+        raise ValueError("need 0 < q < 1 and 0 < conf < 1")
+    data = list(values)
+    if not data:
+        raise ValueError("need at least one value")
+    if any(not isinstance(v, (int, float)) or isinstance(v, bool) or isnan(v) for v in data):
+        raise ValueError("values must be real numbers")
+    data.sort()
+    n, tail = len(data), (1 - conf) / 2
+    cdf = [_binom_cdf(i, n, q) for i in range(n + 1)]  # cdf[i] = P(B <= i)
+    lows = [j for j in range(1, n + 1) if cdf[j - 1] <= tail]
+    highs = [k for k in range(1, n + 1) if cdf[k - 1] >= 1 - tail]
+    return (data[lows[-1] - 1] if lows else None, data[highs[0] - 1] if highs else None)

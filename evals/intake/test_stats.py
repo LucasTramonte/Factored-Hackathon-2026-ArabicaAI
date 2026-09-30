@@ -1,7 +1,9 @@
 """Reference values for the interval and paired-test helpers used in evaluation reports."""
 import unittest
 
-from evals.intake.stats import clopper_pearson_upper, mcnemar_exact, wilson
+from math import comb
+
+from evals.intake.stats import clopper_pearson_upper, mcnemar_exact, quantile_interval, wilson
 
 
 class StatsTests(unittest.TestCase):
@@ -37,6 +39,54 @@ class StatsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             mcnemar_exact(-1, 2)
 
+
+def binom_cdf(k, n, p):
+    """Reference CDF, written independently of the module under test."""
+    return sum(comb(n, i) * p ** i * (1 - p) ** (n - i) for i in range(k + 1))
+
+
+class QuantileIntervalTests(unittest.TestCase):
+    """Distribution-free (order-statistic) interval for a percentile, e.g. the p95 latency."""
+
+    def test_48_calls_have_no_upper_bound_for_p95(self):
+        # 1 - 0.95**48 = 0.915 < 0.975: even the slowest call can't bound p95 from above.
+        low, high = quantile_interval([float(i) for i in range(48)], 0.95, 0.95)
+        self.assertIsNone(high)
+        self.assertIsNotNone(low)
+
+    def test_72_is_the_first_sample_size_with_an_upper_bound(self):
+        self.assertIsNone(quantile_interval(list(range(71)), 0.95, 0.95)[1])
+        self.assertEqual(quantile_interval(list(range(72)), 0.95, 0.95)[1], 71)  # the maximum
+
+    def test_ranks_have_the_promised_coverage_for_every_size(self):
+        for n in range(72, 301):
+            values = list(range(1, n + 1))  # value i is the i-th order statistic
+            low, high = quantile_interval(values, 0.95, 0.95)
+            with self.subTest(n=n):
+                # Equal tails: P(B <= low-1) <= 2.5% and P(B >= high) <= 2.5%, with B ~ Bin(n, 0.95).
+                self.assertLessEqual(binom_cdf(low - 1, n, 0.95), 0.025 + 1e-12)
+                self.assertLessEqual(1 - binom_cdf(high - 1, n, 0.95), 0.025 + 1e-12)
+                # Tight: moving either rank inward would break its tail.
+                self.assertGreater(binom_cdf(low, n, 0.95), 0.025)
+                self.assertGreater(1 - binom_cdf(high - 2, n, 0.95), 0.025)
+
+    def test_order_not_input_order_and_ties_are_kept(self):
+        values = [3.0] * 50 + [1.0] * 50 + [2.0] * 50
+        self.assertEqual(quantile_interval(values, 0.5, 0.95), quantile_interval(sorted(values), 0.5, 0.95))
+        self.assertEqual(quantile_interval(values, 0.5, 0.95), (2.0, 2.0))
+
+    def test_hostile_inputs_raise(self):
+        for values, q, conf in (([], 0.95, 0.95), ([1.0], 0.0, 0.95), ([1.0], 1.0, 0.95),
+                                ([1.0], 0.95, 0.0), ([1.0], 0.95, 1.0), ([1.0], float("nan"), 0.95),
+                                ([1.0, float("nan")], 0.5, 0.95), ([1.0, None], 0.5, 0.95)):
+            with self.subTest(values=values, q=q, conf=conf), self.assertRaises((ValueError, TypeError)):
+                quantile_interval(values, q, conf)
+
+    def test_tiny_samples_give_only_the_bounds_they_can_support(self):
+        # n=1: P(B=0)=5% > 2.5%, so not even the minimum bounds p95 from below.
+        self.assertEqual(quantile_interval([1.0], 0.95, 0.95), (None, None))
+        # n=2: P(B=0)=0.25% <= 2.5%, so the minimum is a valid lower bound; no upper bound.
+        self.assertEqual(quantile_interval([2.0, 1.0], 0.95, 0.95), (1.0, None))
 
 if __name__ == "__main__":
     unittest.main()
