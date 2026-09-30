@@ -17,7 +17,7 @@ Findings from `09_deep_dive_call_transcripts.ipynb`, run against the real produc
 | `transcription_model` | AWS Transcribe (43,117), Whisper v3 (42,803), Google STT (42,740), Azure Speech (42,661) -- near-even 25/25/25/25 split | Dictionary only gave examples ("Whisper, Google STT, etc.") rather than a fixed list; real values are more specific (`Whisper v3`, not `Whisper`) and include two more vendors than the examples named |
 | `audio_quality` | High, Medium, Low (+ 5.04% NULL, expected -- nullable) | Exact match |
 
-Want me to add `transcription_model` to `required` and both domains?
+**Contract change applied** (`contracts.py`): `transcription_model` is required and `audio_quality` is a gated domain. `transcription_model` is deliberately not domain-gated: the dictionary gives examples rather than a closed list, so a new vendor would be a false violation.
 
 ## Other findings (no action)
 
@@ -43,6 +43,6 @@ Want me to add `transcription_model` to `required` and both domains?
 - `duration_seconds`: no negatives, range 30-1,151 seconds (for the 85.97% of rows where it's populated).
 - **Window check**: zero rows before or after the declared 2023-06-17/2026-06-17 window on either edge -- the cleanest window result of any fact table checked so far.
 
-## Next
+## Status
 
-Two code-fix candidates above (`transcription_model` required + 2 domains) -- let me know if you want them applied, then `satisfaction_surveys` (10/13).
+The contract changes above are applied in `contracts.py`. `duration_seconds` stays out of `required` (14.03% real nulls).

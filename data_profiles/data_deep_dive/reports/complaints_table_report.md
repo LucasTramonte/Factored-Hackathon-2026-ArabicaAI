@@ -29,9 +29,9 @@ Section 7: `comp_exceeds_claimed = 62`. Compensation paid out that's larger than
 | `priority` | Low, Medium, High, Critical | Exact match |
 | `status` | In Process, Open, Resolved, Escalated, Closed, Rejected | Exact match (dictionary text was truncated in the PDF but all 6 values are confirmed) |
 
-**3. `currency` domain, also confirmed clean**: `{"MXN", "COP", "ARS", "USD"}` (each ~5,400-5,500 rows, 67.55% null -- matches the spec comment's stated null rate almost exactly). Same domain values as the still-pending `daily_exchange_rates` fix from earlier in this review.
+**3. `currency` domain, also confirmed clean**: `{"MXN", "COP", "ARS", "USD"}` (each ~5,400-5,500 rows, 67.55% null -- matches the spec comment's stated null rate almost exactly). Same domain values as the `daily_exchange_rates` currency domain.
 
-Want me to add `description`/`is_repeat_complainer` to `required` and all five domains (4 categorical + `currency`)?
+**Contract change applied** (`contracts.py`): `description` and `is_repeat_complainer` are required, and `case_type`, `category`, `priority`, `reception_channel`, `status` and `currency` are gated domains.
 
 ## Other findings (no action)
 
@@ -58,8 +58,8 @@ Want me to add `description`/`is_repeat_complainer` to `required` and all five d
 - **Window check**: 0 rows before the declared window start; 29 rows slightly past the end (`creation_date` up to 2026-06-18 07:56:52) -- same small-overshoot pattern as other fact tables.
 - `process_date` differs from `creation_date`'s date part in 22,585/67,095 rows (33.7%) -- same shape and range as the confirmed-clean timezone-rollback pattern seen in `transactions`/`digital_events`, not independently re-verified by hour-of-day here but consistent with that mechanism.
 
-## Next
+## Status
 
-Two categories of code-fix candidates above (2 required-column additions + 5 domains) -- let me know if you want them applied. Also worth a decision on the `product_owner_mismatch` severity question (headline finding) -- that's a judgment call about the check framework itself, not something I'd change without you weighing in.
+The contract changes above are applied in `contracts.py`. Still open: a decision on the `product_owner_mismatch` severity question (headline finding) -- that's a judgment call about the check framework itself, not something I'd change without you weighing in.
 
 Last table left: `campaign_sends` (13/13) -- ready to build that notebook whenever you want to finish the series.

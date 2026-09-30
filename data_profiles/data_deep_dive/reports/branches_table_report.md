@@ -22,7 +22,7 @@ Findings from `03_deep_dive_branches.ipynb`, run against the real production Duc
 
 - Column inventory, row count (350, matches the dictionary exactly), dedup: all clean.
 - NOT NULL audit: all 16 declared columns, zero NULLs.
-- **`branch_code`**: confirmed genuinely unique -- 350 distinct values, 0 NULLs, 0 collisions. Not yet declared in `contracts.py`'s `unique_fields` (unlike `document_number`/`product_number`, added earlier) -- since it's clean, this is a low-risk one-line addition to extend coverage; say the word and I'll add it.
+- **`branch_code`**: confirmed genuinely unique -- 350 distinct values, 0 NULLs, 0 collisions. Not yet declared in `contracts.py`'s `unique_fields` (unlike `document_number`/`product_number`, added earlier) -- **Contract change applied**: `branch_code` is now in `unique_fields`.
 - `branch_type`: matches the dictionary's 4 declared values exactly, plausible distribution.
 - Country canonicalization: full coverage. State/country pairs: all plausible, same state sets as `customers`.
 - `postal_code`: 80.0% numeric-parseable -- consistent with `customers`' 80.09%, no new concern.
@@ -30,6 +30,6 @@ Findings from `03_deep_dive_branches.ipynb`, run against the real production Duc
 - `opening_time`/`closing_time`: correct `TIME` casts, no branch closes before/at its own opening time, plausible banking hours (08:00-09:30 open, 17:00-20:00 close).
 - `branch_opening_date`: 100% of branches opened before the dataset's June 2023 window (earliest 1990-01-03, latest 2023-05-11) -- the cleanest confirmation yet of the `customers`/`products` conclusion that the dictionary's stated window describes transactional data, not entity lifecycle dates. No future-dated openings.
 
-## Next
+## Status
 
-Send back the longitude follow-up results, then `service_agents` (4/13).
+The `branch_code` uniqueness check is applied in `contracts.py`. The longitude follow-up is recorded above.

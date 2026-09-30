@@ -4,7 +4,7 @@ Findings from `04_deep_dive_service_agents.ipynb`, run against the real producti
 
 ## Real data-integrity issue -- third one found, same pattern as `product_number`
 
-**`employee_code`'s UNIQUE constraint is violated: 13 genuine collisions, not resends.** 1,187 distinct values across 1,200 rows. All 13 repeated codes (`E65389`, `E72566`, `E15072`, `E70142`, `E57622`, `E28894`, `E90492`, `E95303`, `E53456`, `E12787`, `E77608`, `E30468`, `E41258`) each map to **two different `agent_id`s** -- same signature as the `product_number` violation found earlier, not a duplicate-row artifact. `contracts.py` doesn't currently declare `employee_code` as unique, so nothing catches this today. Candidate for the same fix already applied to `document_number`/`product_number`/`branch_code` -- say the word and I'll add it.
+**`employee_code`'s UNIQUE constraint is violated: 13 genuine collisions, not resends.** 1,187 distinct values across 1,200 rows. All 13 repeated codes (`E65389`, `E72566`, `E15072`, `E70142`, `E57622`, `E28894`, `E90492`, `E95303`, `E53456`, `E12787`, `E77608`, `E30468`, `E41258`) each map to **two different `agent_id`s** -- same signature as the `product_number` violation found earlier, not a duplicate-row artifact. **Contract change applied**: `employee_code` is in `unique_fields`, like `document_number`/`product_number`/`branch_code`, so the quality gate now reports these collisions.
 
 ## Code fix candidate -- 5 clean domains ready to gate
 
@@ -18,7 +18,9 @@ Findings from `04_deep_dive_service_agents.ipynb`, run against the real producti
 | `agent_status` | Active (1,090), Vacation (62), Leave (29), Inactive (19) | Exact match |
 | `work_shift` | Afternoon (418), Morning (398), Rotating (203), Night (181) | Exact match |
 
-Since these are already 100% clean, adding all five to `contracts.py`'s `domains` costs nothing today and guards against a future regression -- the same reasoning as the `branch_code`/`branch_type` additions. Want me to add all five?
+Since these are already 100% clean, adding all five to `contracts.py`'s `domains` costs nothing today and guards against a future regression -- the same reasoning as the `branch_code`/`branch_type` additions.
+
+**Contract change applied** (`contracts.py`): all five columns are gated domains.
 
 ## Other findings (no action)
 
@@ -38,6 +40,6 @@ Since these are already 100% clean, adding all five to `contracts.py`'s `domains
 - `phone`/`email`: 5.75% phone nulls (69/1,200), 0 emails missing `@`, 0 phones with no digits.
 - `specialty`: 39.67% NULL (plausible -- likely only some experience levels get a specialty), 8 real Spanish-language categories otherwise, no anomalies.
 
-## Next
+## Status
 
-Two code-fix candidates above (`employee_code` uniqueness, 5 domains) -- let me know which to apply, then `marketing_campaigns` (5/13).
+The contract changes above are applied in `contracts.py`.

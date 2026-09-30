@@ -14,7 +14,9 @@ This is the cleanest table so far -- no UNIQUE violations, no FK orphans (it has
 | `campaign_objective` | Retention (62), Cross-sell (51), Acquisition (38), Reactivation (25), Up-sell (24) | Exact match, all 5 declared values present |
 | `campaign_status` | Completed (172), Paused (25), Active (3) | Matches the declared set, but **`Planned` never appears** -- see below |
 
-Same reasoning as the `service_agents`/`branches` additions: free to gate since they're already clean, guards against a future regression. Also, `campaign_name` is dictionary-declared `NOT NULL` (confirmed clean: 0 nulls in Bronze or Silver) but isn't in `contracts.py`'s `expected_columns` string at all -- a one-line addition alongside the domains. Want me to add all three domains and `campaign_name`?
+Same reasoning as the `service_agents`/`branches` additions: free to gate since they're already clean, guards against a future regression. Also, `campaign_name` is dictionary-declared `NOT NULL` (confirmed clean: 0 nulls in Bronze or Silver) but isn't in `contracts.py`'s `expected_columns` string at all -- a one-line addition alongside the domains.
+
+**Contract change applied** (`contracts.py`): `campaign_objective`, `campaign_status` and `campaign_type` are gated domains, and `campaign_name` is in `expected_columns`.
 
 ## Other findings (no action)
 
@@ -36,6 +38,6 @@ Same reasoning as the `service_agents`/`branches` additions: free to gate since 
 - `campaign_name`: zero duplicates across 200 rows (not dictionary-required, checked anyway).
 - `description`: 39/200 null (19.5%), populated values all 32-48 characters -- consistent, no anomaly.
 
-## Next
+## Status
 
-One code-fix candidate above (3 domains + `campaign_name` in `expected_columns`) -- let me know if you want it applied, then `daily_exchange_rates` (6/13).
+The contract changes above are applied in `contracts.py`.

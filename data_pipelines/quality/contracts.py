@@ -121,7 +121,6 @@ CONTRACTS = {
         "transcript_id interaction_id process_date customer_id agent_id full_text detected_language transcription_model",
         partition_field="process_date",
         domains={
-            "transcription_model": frozenset({"AWS Transcribe", "Whisper v3", "Google STT", "Azure Speech"}),
             "audio_quality": frozenset({"High", "Medium", "Low"}),
         },
         foreign_keys=(ForeignKey("interaction_id", "call_center_interactions", "interaction_id"), ForeignKey("customer_id", "customers", "customer_id"), ForeignKey("agent_id", "service_agents", "agent_id")),

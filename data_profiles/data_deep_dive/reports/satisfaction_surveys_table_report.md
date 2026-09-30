@@ -44,7 +44,7 @@ Standard NPS bucketing is Promoter 9-10 / Passive 7-8 / Detractor 0-6. Here the 
 
 `nps_category`'s domain is trickier: real data only ever produces `Detractor`/`Passive` (see finding above), but the dictionary declares `Promoter` too, and it's a legitimate value the source *could* produce if the score ceiling ever changes. Recommend gating on the full dictionary set `{"Promoter", "Passive", "Detractor"}` rather than the narrower observed set, so the contract doesn't have to change if `Promoter` ever shows up.
 
-Want me to add `send_channel` to `required` and all four domains?
+**Contract change applied** (`contracts.py`): `send_channel` is required, and `survey_type`, `send_channel`, `comment_sentiment` and `nps_category` are gated domains. `nps_category` uses the full dictionary set, including `Promoter`.
 
 ## Other findings (no action)
 
@@ -68,25 +68,11 @@ Want me to add `send_channel` to `required` and all four domains?
 - `question_1_response`/`question_2_response`/`question_3_response`: all within the declared 1-5 range, zero out-of-range values.
 - Nullable-column population rates all match cleanly between Bronze and Silver (no cast-introduced drift anywhere).
 
-## Next
+## Status
 
-Two code-fix candidates above (`send_channel` required + 4 domains, including the `nps_category` union-set recommendation) -- let me know if you want them applied.
+All contract changes proposed across the table reviews are applied in `contracts.py`:
 
-That's all 10 tables with dictionary-declared row counts checked so far (still `digital_events`, `complaints`, `campaign_sends` to go). As promised, here's the full running list of pending code fixes across all tables checked so far that haven't been applied yet:
-
-### Pending fixes -- `daily_exchange_rates`
-- Add domain `source_currency`/`target_currency` in `{"MXN","COP","ARS","USD"}` (confirmed 100% clean).
-
-### Pending fixes -- `call_center_interactions`
-- Add `has_recording` to `required` (confirmed 0 nulls).
-- Add domains: `interaction_type` {Inbound Call, Outbound Call, Chat, Email, Video}; `reason_category` {Transaccional, Producto, Queja, Técnico, Comercial, Retención} (Spanish real values -- also covers `contact_reason`, confirmed byte-identical); `detected_sentiment` {Neutral, Negativo, Positivo, Muy Negativo, Muy Positivo} (Spanish real values).
-
-### Pending fixes -- `call_transcripts`
-- Add `transcription_model` to `required` (confirmed 0 nulls). **Explicitly do NOT add `duration_seconds`** -- it's dictionary NOT NULL but has a real 14.03% null rate; adding it would create false violations every run.
-- Add domains: `transcription_model` {AWS Transcribe, Whisper v3, Google STT, Azure Speech}; `audio_quality` {High, Medium, Low}.
-
-### Pending fixes -- `satisfaction_surveys` (this table)
-- Add `send_channel` to `required` (confirmed 0 nulls).
-- Add domains: `survey_type` {CSAT, NPS, CES}; `send_channel` {Email, SMS, App, IVR, Web}; `comment_sentiment` {Positive, Neutral, Negative}; `nps_category` {Promoter, Passive, Detractor} (full dictionary set, even though `Promoter` never appears in current data -- see finding above).
-
-Say the word (all of them, or pick which tables) and I'll apply them to `contracts.py` and run the test suite.
+- `daily_exchange_rates`: `source_currency`/`target_currency` domain `{MXN, COP, ARS, USD}`.
+- `call_center_interactions`: `has_recording` required; domains `interaction_type`, `reason_category` and `detected_sentiment` with the real Spanish values.
+- `call_transcripts`: `transcription_model` required; `audio_quality` domain. `duration_seconds` is not required (14.03% real nulls), and `transcription_model` has no domain (open vendor list).
+- `satisfaction_surveys`: `send_channel` required; domains `survey_type`, `send_channel`, `comment_sentiment`, `nps_category` (full dictionary set).

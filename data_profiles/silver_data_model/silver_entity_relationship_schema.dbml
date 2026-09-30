@@ -9,9 +9,9 @@
 //   - Every relationship (Ref) below is a real, declared FK -- either checked by the quality
 //     gate (quality/contracts.py) or declared in the official data dictionary but not yet wired
 //     into the quality gate (marked "[dictionary only]" in the Ref list at the bottom).
-//   - Three FKs are known to be heavily orphaned in real production data (confirmed via
+//   - Two FKs are known to be heavily orphaned in real production data (confirmed via
 //     validate_silver.py / the quality gate): registration_branch_id (~100% orphaned),
-//     assigned_branch_id (~69% orphaned). They're drawn with a note rather than removed, since
+//     assigned_branch_id (~99.8% of populated values orphaned). They're drawn with a note rather than removed, since
 //     the relationship is declared in the schema even though it doesn't resolve cleanly today.
 //   - complaints.origin_interaction_id is NOT included -- the data dictionary declares it as an
 //     FK to call_center_interactions.interaction_id, but the column itself is dropped in Silver
@@ -110,7 +110,7 @@ Table dim_service_agents {
   phone varchar
   native_accent varchar
   country_of_origin varchar
-  assigned_branch_id varchar [note: 'FK to dim_branches.branch_id -- ~69% orphaned in real data, unresolved as of 2026-09']
+  assigned_branch_id varchar [note: 'FK to dim_branches.branch_id -- ~99.8% of populated values orphaned in real data, unresolved as of 2026-09']
   agent_type varchar
   experience_level varchar
   languages varchar [note: 'Comma-separated list, e.g. "español, inglés"']
