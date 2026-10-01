@@ -13,6 +13,7 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 ## Contents
 
 - [Deliverables](#deliverables)
+- [Repository layout](#repository-layout)
 - [How it fits together](#how-it-fits-together)
 - [Data pipeline: start here](#data-pipeline-start-here)
 - [Offline baseline from supplied CSVs](#offline-baseline-from-supplied-csvs)
@@ -29,6 +30,25 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 | **Data quality:** every finding that changes or limits a decision, each with its query | [`DATA_QUALITY.md`](Docs/deliverables/DATA_QUALITY.md) |
 | **Data engineering:** contracts, the quality gate, lineage from S3 to the served row, the update and freshness policy with its test fixture, and the stack with its trade-offs | [`DATA_ENGINEERING.md`](Docs/deliverables/DATA_ENGINEERING.md) |
 | **Capacity and cost:** where each layer runs and why, the Cloudflare limits, and a priced AWS production target ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)) | [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) |
+
+## Repository layout
+
+| Folder | What it holds | Who needs it |
+|---|---|---|
+| [`Docs/deliverables/`](Docs/deliverables/) | The documents the brief asks for: system design, data engineering, data quality, evaluation, plus architecture, business outcomes and reproduction | Evaluators, first |
+| [`Docs/`](Docs/README.md) | Decisions ([`ADRs/`](Docs/ADRs/README.md)), workflow contracts ([`intake/`](Docs/intake/)), runbooks and roadmaps ([`Plans/`](Docs/Plans/)), cost evidence ([`Costs/`](Docs/Costs/README.md)), accessibility and screenshot evidence ([`Evidence/`](Docs/Evidence/)), the organizers' originals ([`sources/`](Docs/sources/README.md)) and dated design notes ([`superpowers/`](Docs/superpowers/)) | Anyone checking why a decision was made |
+| [`data_pipelines/`](data_pipelines/) | The batch path: S3 → `bronze/` → `silver/` → `quality/` → `gold/` (the reviewed serving slice and cohort), Python and DuckDB | Data engineering |
+| [`data_profiles/`](data_profiles/) | The findings register's queries (`findings/queries/DF-*.sql`) and their runner and tests | Data quality |
+| [`back-end/`](back-end/README.md) | The only online runtime: the Cloudflare Worker, its D1 migrations and seeds. All SQL is in `src/store/d1.js` | The service |
+| [`front-end/`](front-end/README.md) | The Angular client, and the API response contracts in `contracts/` | The service |
+| [`intake_agent/`](intake_agent/) | The context card and the learned extractor, with its [development log](intake_agent/extractor/DEV_LOG.md) | AI engineering |
+| [`evals/`](evals/intake/README.md) | Decision-point cases, the frozen held-out set, the checklist baseline and the episode KPI scorer | Evaluation |
+| [`data_foundation/`](data_foundation/README.md) | Archived pre-pipeline scanner, and the reviewed Marketing/Product report hub | Historical evidence |
+| [`notebooks/`](notebooks/README.md), [`reports/`](reports/) | Exploration notebooks and dated reports. They are evidence of how we got here, not current results | Historical evidence |
+| [`scripts/`](scripts/) | Small repository tools, such as the Markdown link check CI runs | Maintainers |
+| `data/` | Ignored. Local DuckDB, Parquet, quality runs and generated seeds; never committed | Local runs only |
+
+The root keeps only what tools expect there: this README, [`AGENTS.md`](AGENTS.md) (the contract for coding agents), the [`Makefile`](Makefile), the `Dockerfile` and CI under [`.github/`](.github/).
 
 ## How it fits together
 
