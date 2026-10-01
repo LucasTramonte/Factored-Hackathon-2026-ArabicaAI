@@ -133,6 +133,27 @@ def update_watermark(con: duckdb.DuckDBPyConnection, table_name: str, loaded_dat
     )
 
 
+def _discover_partitions(con: duckdb.DuckDBPyConnection, base_path: str, table_name: str) -> dict:
+    """``{date: {partition directory, ...}}`` for every year=/month=/day= directory holding a .csv.
+
+    The directories are kept exactly as discovered, because the path contract has no zero-padding rule
+    (``day=1`` and ``day=01`` both parse); reads use them instead of rebuilding a padded path.
+    """
+    pattern = f"{base_path}/{table_name}/year=*/month=*/day=*/*.csv"
+    rows = con.execute(f"SELECT file FROM glob('{pattern}')").fetchall()
+    found: dict = {}
+    for (path,) in rows:
+        y = re.search(r"year=(\d+)", path)
+        m = re.search(r"month=(\d+)", path)
+        d = re.search(r"day=(\d+)", path)
+        if y and m and d:
+            try:
+                found.setdefault(date(int(y.group(1)), int(m.group(1)), int(d.group(1))), set()).add(path.rsplit("/", 1)[0])
+            except ValueError:
+                logger.warning("[%s] skipping unparseable partition path: %s", table_name, path)
+    return found
+
+
 def list_available_partition_dates(con: duckdb.DuckDBPyConnection, base_path: str, table_name: str) -> List[date]:
     """Lists year=/month=/day= partitions that actually contain a .csv file, via glob() -- this
     never reads file *contents*, so it's cheap in that sense even for huge tables. It is NOT
@@ -143,29 +164,18 @@ def list_available_partition_dates(con: duckdb.DuckDBPyConnection, base_path: st
     scales with the number of distinct partition dates, not with row count, so a small table can still
     be slow here if its date range is wide. Logged at DEBUG so a run that looks "stuck" is visibly
     still working, not hung."""
-    pattern = f"{base_path}/{table_name}/year=*/month=*/day=*/*.csv"
     logger.debug("[%s] discovering partitions via glob (this can take a while -- see docstring)...", table_name)
     t0 = time.monotonic()
-    rows = con.execute(f"SELECT file FROM glob('{pattern}')").fetchall()
-    logger.debug("[%s] glob returned %d file(s) in %.1fs", table_name, len(rows), time.monotonic() - t0)
-
-    partitions = set()
-    for (path,) in rows:
-        y = re.search(r"year=(\d+)", path)
-        m = re.search(r"month=(\d+)", path)
-        d = re.search(r"day=(\d+)", path)
-        if y and m and d:
-            try:
-                partitions.add(date(int(y.group(1)), int(m.group(1)), int(d.group(1))))
-            except ValueError:
-                logger.warning("[%s] skipping unparseable partition path: %s", table_name, path)
-    return sorted(partitions)
+    found = _discover_partitions(con, base_path, table_name)
+    logger.debug("[%s] glob found %d partition date(s) in %.1fs", table_name, len(found), time.monotonic() - t0)
+    return sorted(found)
 
 
-def _day_globs(base_path: str, table_name: str, days: List[date]) -> List[str]:
-    """One glob per day to load. A month-wide ``day=*`` glob would also reread, and overwrite, the
-    days Bronze already holds in that month, which would apply a source correction unreviewed."""
-    return [f"{base_path}/{table_name}/year={d:%Y}/month={d:%m}/day={d:%d}/*.csv" for d in days]
+def _day_globs(discovered: dict, days: List[date]) -> List[str]:
+    """One glob per discovered directory of each day to load. A month-wide ``day=*`` glob would also
+    reread, and overwrite, the days Bronze already holds in that month, which would apply a source
+    correction unreviewed; a rebuilt zero-padded path could miss an unpadded directory."""
+    return [f"{directory}/*.csv" for d in days for directory in sorted(discovered[d])]
 
 
 def _full_history_glob(base_path: str, table_name: str) -> str:
@@ -265,7 +275,8 @@ def ingest_fact(
             raise ValueError(f"Scoped ingestion requires an isolated DATA_DIR: {local_dir} already holds "
                              f"{len(other_days)} other partition(s)")
     else:
-        available = list_available_partition_dates(con, base_path, table_name)
+        discovered = _discover_partitions(con, base_path, table_name)
+        available = sorted(discovered)
 
     if not available:
         return IngestResult(table_name=table_name, kind="fact", rows=0, partitions_added=0,
@@ -331,7 +342,7 @@ def ingest_fact(
                         table_name, len(dates_to_load), len(batches))
             for i, ((year, month), month_dates) in enumerate(batches, start=1):
                 t0 = time.monotonic()
-                _copy_from(pattern if partition_date is not None else _day_globs(base_path, table_name, month_dates))
+                _copy_from(pattern if partition_date is not None else _day_globs(discovered, month_dates))
                 logger.debug("[%s] batch %d/%d (%04d-%02d, %d new date(s)) loaded in %.1fs",
                              table_name, i, len(batches), year, month, len(month_dates),
                              time.monotonic() - t0)

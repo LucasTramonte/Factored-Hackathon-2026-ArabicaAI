@@ -316,3 +316,18 @@ def test_scoped_load_never_replaces_a_parquet_history_it_does_not_own(con, tmp_p
     with pytest.raises(ValueError, match="isolated DATA_DIR"):
         ingest_fact(fresh, str(base), "transactions", partition_date=date(2026, 2, 26))
     assert sorted(p.relative_to(live).as_posix() for p in live.rglob("*.parquet")) == before
+
+
+def test_incremental_run_reads_partitions_whose_paths_are_not_zero_padded(con, tmp_path):
+    # The path contract is year=/month=/day= without a padding rule: discovery accepts day=1, so the
+    # incremental read must use the discovered directory, not a rebuilt day=01 that matches no file.
+    base = tmp_path / "source"
+    _write_csv(base / "transactions/year=2024/month=1/day=1/t.csv", "transaction_id,amount\nT1,100\n")
+    ingest_fact(con, str(base), "transactions")
+    _write_csv(base / "transactions/year=2024/month=1/day=2/t.csv", "transaction_id,amount\nT2,200\n")
+    _write_csv(base / "transactions/year=2024/month=1/day=15/t.csv", "transaction_id,amount\nT3,300\n")
+
+    result = ingest_fact(con, str(base), "transactions")
+
+    assert result.partitions_added == 2
+    assert result.rows == 3
