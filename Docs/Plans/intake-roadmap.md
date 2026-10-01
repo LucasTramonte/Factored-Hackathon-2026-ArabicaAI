@@ -44,7 +44,7 @@ Each phase is its own PR, with adversarial tests first and a merge only when its
 4. **Gold coverage.**
    - **Work:** multi-day, multi-customer slice fixtures that include zero and several matches; `slice_version` and coverage in the API response; filters.
    - **Exit:** the Gold and API tests assert coverage and version end to end.
-5. **Human review and ES/PT.**
+5. **Human review and display labels.**
    - **Work:** case detail and status history; an agent role gate; currency and time zone labels.
    - **Exit:** the Angular specs and integration tests cover the status transitions, and nothing can set a refund or verdict.
 6. **Instrumentation.**

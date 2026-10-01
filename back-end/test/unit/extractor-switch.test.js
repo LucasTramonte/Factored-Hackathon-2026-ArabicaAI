@@ -324,3 +324,21 @@ test('on: a shadow call that throws inside waitUntil never rejects the backgroun
   assert.equal(res.status, 201);
   await Promise.all(pending);
 });
+
+
+test('on: a customer who confirms before the shadow call finishes gets unknown usage, counted and never free', async t => {
+  const { store, events } = await setup(t);
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  const pending = [];
+  const env = { ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() };
+  const extractor = stubExtractor(async () => { await held; return { extracted: EXTRACTED, usage: USAGE }; });
+  const res = await startIntake(post('/intake/start', startBody()), env, store(), { waitUntil: work => pending.push(work) }, extractor);
+  const { episode_id } = await res.json();
+  const confirmed = await route(post('/intake/confirm', { episode_id, transaction_id: 'tx-ana', customer_confirmed: true, idempotency_key: crypto.randomUUID() }), env, store());
+  assert.equal(confirmed.status, 201);
+  release();
+  await Promise.all(pending);
+  const end = events().map(JSON.parse).find(e => e.event === 'intake_ended');
+  assert.deepEqual([end.llm_calls, end.input_tokens, end.output_tokens, end.usage_unavailable_calls], [1, null, null, 1]);
+});
