@@ -17,7 +17,7 @@ W9, 1 October 2026. This audit checks the Angular client against WCAG 2.2 AA, an
     - Disabled controls are exempt.
   - **Non-text contrast (1.4.11):** button fill or border, field borders and native radio/checkbox `accent-color`, each against what is behind them. The focus ring is the outline colour of every element reached by Tab, against the colour behind it.
   - **Target size (2.5.8):** every visible target under 24×24 CSS px, with the spacing exception (a 24 px circle on its centre must not reach another target). Inputs inside a clickable `<label>` are reported separately.
-  - **Focus not obscured (2.4.11):** the focused element counts as hidden when its centre and two corners are all covered by another element.
+  - **Focus not obscured (2.4.11):** a heuristic: the focused element counts as hidden when its centre and two corners are all covered by another element. Three sample points can miss partial overlap elsewhere on the element, so a 0 here means none was found at those points, not a proof that nothing is obscured.
   - **Reflow (1.4.10):** `scrollWidth` against `innerWidth`, plus any element extending past the viewport that isn't `position: fixed`.
   - **Language (3.1.1, 3.1.2):** `html[lang]` after each switch, and text in another language without an enclosing `lang`.
   - **Motion:** `prefers-reduced-motion: reduce` emulated. Any element still animating or transitioning is reported, and the intro words' opacity is sampled over time.
