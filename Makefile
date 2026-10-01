@@ -5,12 +5,13 @@ AWS_PROFILE ?= default
 DATA_DIR ?= $(CURDIR)/data
 SOURCE_DIR ?= $(CURDIR)/data
 DUCKDB_PATH ?= $(DATA_DIR)/latam_bank.duckdb
+GOLD_PATH ?= $(DATA_DIR)/latam_bank_gold.duckdb
 QUALITY_REPORT ?=
 REPORT_RUN ?= $(CURDIR)/data_foundation/runs/$(shell date -u +%Y%m%dT%H%M%SZ)
 
 export S3_BUCKET AWS_REGION AWS_PROFILE DATA_DIR
 
-.PHONY: setup test test-evaluation compile bronze bronze-full bronze-local-full silver quality findings pipeline pipeline-local docker-build docker-test docker-pipeline report
+.PHONY: setup test test-evaluation compile bronze bronze-full bronze-local-full silver quality findings gold pipeline pipeline-local pipeline-gold docker-build docker-test docker-pipeline report
 
 setup:
 	python3 -m venv .venv
@@ -43,6 +44,10 @@ quality:
 findings:
 	$(PYTHON) -m data_profiles.findings.run_findings --db "$(DUCKDB_PATH)"
 
+# Gold serving tables in their own DuckDB; Silver is attached read-only and its newest quality run gates the build.
+gold:
+	$(PYTHON) -m data_pipelines.gold.run_gold --silver-db "$(DUCKDB_PATH)" --gold-db "$(GOLD_PATH)"
+
 pipeline:
 	$(MAKE) bronze
 	$(MAKE) silver
@@ -52,6 +57,11 @@ pipeline-local:
 	$(MAKE) bronze-local-full
 	$(MAKE) silver
 	$(MAKE) quality
+
+# The pipeline, then the Gold tables gated on the quality run it just wrote.
+pipeline-gold:
+	$(MAKE) pipeline
+	$(MAKE) gold
 
 report:
 	@test -n "$(QUALITY_REPORT)" || (echo "Set QUALITY_REPORT to a full quality_results.json" && exit 1)
