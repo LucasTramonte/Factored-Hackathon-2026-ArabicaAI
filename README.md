@@ -4,7 +4,7 @@ A customer reports a card charge they don't recognize, confirms which of their o
 
 The data is a synthetic LATAM banking dataset. Descriptive counts from it are not measured bank outcomes.
 
-**Evaluators: start with [`SYSTEM_DESIGN.md`](Docs/deliverables/SYSTEM_DESIGN.md).** It tells the whole story in one narrative: the customer and the problem, what we built, how it works, how we know it works, what it costs, and what is missing. The [reading guide](Docs/README.md) then maps each point of the brief to the document that answers it.
+**Evaluators: start with [`SYSTEM_DESIGN.md`](Docs/deliverables/SYSTEM_DESIGN.md).** It tells the whole story in one narrative: the customer and the problem, what we built, how it works, how we know it works, what it costs, and what is missing. The [reading guide](Docs/README.md) then maps each point of the brief to the document that answers it, and the [judge feedback register](Docs/deliverables/JUDGE_FEEDBACK.md) maps each point raised at the 2026-10-01 checkpoint to what we decided and where.
 
 ![Current architecture on Cloudflare: browsers pass Cloudflare Access, the Basic gate, the router and the session cookie to the customer, intake and agent modules, whose SQL lives in store/d1.js over D1. Static assets skip the Worker; Workers AI is gated and offline only. An offline DuckDB batch goes from S3 to Bronze, Silver, the quality gate, the Gold slice and a reviewed seed loaded into D1](Docs/current_workflow_arabica_ai.png)
 
@@ -29,6 +29,7 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 | **Evaluation:** how the model is compared with a baseline, the test sets we built ourselves, how data leakage is prevented, and every option we considered | [`EVALUATION.md`](Docs/deliverables/EVALUATION.md) |
 | **Data quality:** every finding that changes or limits a decision, each with its query | [`DATA_QUALITY.md`](Docs/deliverables/DATA_QUALITY.md) |
 | **Data engineering:** contracts, the quality gate, lineage from S3 to the served row, the update and freshness policy with its test fixture, and the stack with its trade-offs | [`DATA_ENGINEERING.md`](Docs/deliverables/DATA_ENGINEERING.md) |
+| **Judge feedback:** each point from the 2026-10-01 checkpoint, what we decided, whether it is built, and the section that answers it | [`JUDGE_FEEDBACK.md`](Docs/deliverables/JUDGE_FEEDBACK.md) |
 | **Capacity and cost:** where each layer runs and why, the Cloudflare limits, and a priced AWS production target ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)) | [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) |
 
 ## Repository layout

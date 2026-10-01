@@ -2,7 +2,7 @@
 
 **Workflow:** transaction-dispute intake, narrowed to unrecognized card charges with a human handoff ([ADR-002](ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). A read-only recent-transactions view is **proposed** as the normal-resolution path; that decision is still a draft. The data is the supplied synthetic LATAM dataset, so descriptive counts are not measured bank outcomes.
 
-For the whole story in one narrative, read [`SYSTEM_DESIGN.md`](deliverables/SYSTEM_DESIGN.md) first. The sections below follow the six points of "What your solution should demonstrate" in the problem statement ([`sources/`](sources/README.md)).
+For the whole story in one narrative, read [`SYSTEM_DESIGN.md`](deliverables/SYSTEM_DESIGN.md) first. Each point the judges raised at the checkpoint is answered in [`JUDGE_FEEDBACK.md`](deliverables/JUDGE_FEEDBACK.md). The sections below follow the six points of "What your solution should demonstrate" in the problem statement ([`sources/`](sources/README.md)).
 
 | # | Brief asks for | Read |
 |---|---|---|

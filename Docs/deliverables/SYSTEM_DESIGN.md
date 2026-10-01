@@ -10,6 +10,8 @@ This document explains the whole solution in one place:
 - how it works and how we know it works;
 - what it costs to run, and what is still missing.
 
+If you raised a point at the 2026-10-01 checkpoint, [`JUDGE_FEEDBACK.md`](JUDGE_FEEDBACK.md) links it to the paragraph that answers it.
+
 It is written as a narrative so it can be read top to bottom in about fifteen minutes. The detail behind each claim lives in one other document, linked where it is used, so no number is maintained in two places.
 
 The data is the synthetic LATAM banking dataset supplied by the organizers: Mexico, Colombia and Argentina, June 2023 to June 2026. Counts from it describe that dataset, not a real bank.
