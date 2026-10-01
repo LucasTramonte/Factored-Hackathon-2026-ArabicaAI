@@ -5,7 +5,7 @@ The customer and agent views for the synthetic charge-intake demo. The client do
 | Path | Responsibility |
 |---|---|
 | `src/app/core/http/api.service.ts` | Same-origin JSON client. Maps each HTTP status to a user message and never shows server text. |
-| `src/app/features/customer/` | One connected screen under `/`: intro, sign-in and home as in-page steps (the Worker only serves documents at `/` and `/agent`). Choose one of your own charges, describe it and confirm. After a failure, a retry resends the frozen request with the same key. |
+| `src/app/features/customer/` | Two screens under `/` as in-page steps (the Worker only serves documents at `/` and `/agent`): sign-in, with the purpose and three explanation lines beside the identity picker, then home, with the charges and one Report button per row. The report panel opens from a row: describe what happened, confirm the charge or ask for review without one. After a failure, a retry resends the frozen request with the same key. Nothing animates and nothing waits on a timer. |
 | `src/app/features/agent/` | Separate simulated agent session and a read-only case queue. |
 | `src/app/shared/` | API models, `formatSourceTime` (source wall time, never shifted), `i18n/` (every interface string in ES, PT and EN; the `Strings` type makes a missing translation a compile error) and `mark/` (the disc-and-slit mark). |
 | `contracts/` | JSON Schema for API responses, validated by the back-end integration tests. |
@@ -22,7 +22,7 @@ For live development, run `npx wrangler dev --local` in `back-end/` (port 8787).
 
 ## Design system
 
-Tokens and components come from the ArabicaAI design system (graphite neutrals, one cobalt accent, status colours reserved for ok/warn/err, Geist and Geist Mono, radius 12/10/6/pill, no shadows). They are compiled into `src/styles.css`: `:root` holds the light values, `@media (prefers-color-scheme: dark)` and `[data-theme="dark"]` the dark ones. Component classes are prefixed `.ar-`; app layout classes are unprefixed, with breakpoints at 1180, 960 and 720 px. `prefers-reduced-motion` disables the disc travel and the intro word rotation.
+Tokens and components come from the ArabicaAI design system (graphite neutrals, one cobalt accent, status colours reserved for ok/warn/err, Geist and Geist Mono, radius 12/10/6/pill, no shadows). They are compiled into `src/styles.css`: `:root` holds the light values, `@media (prefers-color-scheme: dark)` and `[data-theme="dark"]` the dark ones. Component classes are prefixed `.ar-`; app layout classes are unprefixed, with breakpoints at 1180, 960 and 720 px. Nothing animates, so `prefers-reduced-motion` has nothing left to disable.
 
 The interface language comes from the visitor's choice (`localStorage` key `arabica.lang`), else `navigator.language`, never from the customer's country. Evidence (amounts, IDs, timestamps, currency codes) is never translated; amounts keep their source currency and totals are per currency, computed from the loaded charges only.
 
