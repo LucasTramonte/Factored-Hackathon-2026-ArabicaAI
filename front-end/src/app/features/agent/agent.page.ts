@@ -1,8 +1,9 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, effect, inject, signal } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { formatSourceTime } from '../../shared/format/source-time.util';
-import { LangService } from '../../shared/i18n/lang.service';
+import { LangService, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
 import { AgentCase } from '../../shared/models/intake.model';
@@ -23,6 +24,12 @@ export class AgentPage {
   readonly cases = signal<AgentCase[]>([]);
   readonly sourceTime = formatSourceTime;
 
+  constructor() {
+    // The route title is static, so the tab title follows the interface language here.
+    const title = inject(Title);
+    effect(() => title.setTitle(`ArabicaAI · ${this.t().agentTitle}`));
+  }
+
   /** Start an agent session, then load the queue. */
   async load(): Promise<void> {
     if (this.busy()) return;
@@ -35,7 +42,7 @@ export class AgentPage {
       this.cases.set(await this.service.cases());
       this.loaded.set(true);
     } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'Request failed.');
+      this.error.set(errorText(this.t(), e));
     } finally {
       this.busy.set(false);
     }
