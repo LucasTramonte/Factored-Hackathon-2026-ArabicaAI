@@ -105,6 +105,22 @@ describe('AgentPage', () => {
     expect(document.activeElement).toBe(el().querySelector('button.ar-btn'));
   });
 
+  it('keeps keyboard focus on the page after loading: the queue heading on success, the sign-in button on failure', async () => {
+    document.body.appendChild(el());
+    fixture.autoDetectChanges();
+    const signIn = () => el().querySelector<HTMLButtonElement>('button.ar-btn')!;
+    service.signIn.and.rejectWith(new ApiError(503, 'raw'));
+    signIn().focus();
+    signIn().click();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(signIn());
+    service.signIn.and.resolveTo();
+    signIn().click();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(el().querySelector('#intake-queue-title'));
+    el().remove();
+  });
+
   it('says so when there is no verified transaction', async () => {
     service.intakeDetail.and.resolveTo(detail(P1, { verified_evidence: { transaction: null }, history_has_more: true }));
     await loadAndOpen();

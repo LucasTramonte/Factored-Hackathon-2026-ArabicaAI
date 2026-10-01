@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, OnInit, Signal, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, NgZone, OnDestroy, OnInit, Signal, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -80,13 +80,20 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly identityLocked = computed(() => this.frozen() !== null || this.chatStep() === 'choose');
   readonly step = signal<Step>('intro');
   readonly booted = signal(false);
+  /** The intro words play once (from 2.6 s, three 1.4 s slots: under 5 s of motion, WCAG 2.2.2); then only the current language's word stays. */
+  readonly introDone = signal(false);
+  /** At the home-top breakpoint and below, the open chat panel covers page controls, so the page behind it is inert (WCAG 2.4.11). */
+  private readonly narrowQuery = typeof matchMedia === 'function' ? matchMedia('(max-width: 1180px)') : null;
+  readonly narrow = signal(this.narrowQuery?.matches ?? false);
   readonly sourceTime = formatSourceTime;
   identity = '';
   chatStatement = '';
   choice = '';
   chatConfirmed = false;
   private bootTimer: ReturnType<typeof setTimeout> | undefined;
+  private introTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly zone = inject(NgZone);
   private shownStep: Step = 'intro';
 
   /** On a step change (not the first render), move focus to the new step's heading so it doesn't fall to <body>. */
@@ -131,6 +138,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** Load the identity choices from the API; they come from the same config as the server allowlist. */
   async ngOnInit(): Promise<void> {
     this.bootTimer = setTimeout(() => this.booted.set(true), 2400);
+    if (this.narrowQuery) this.narrowQuery.onchange = e => this.narrow.set(e.matches);
+    // Outside the zone so the app (and tests) can be stable while it waits; the signal still schedules the render.
+    this.introTimer = this.zone.runOutsideAngular(() => setTimeout(() => this.introDone.set(true), 6800));
     if (this.client()) void this.resume();
     try {
       this.identities.set(await this.service.identities());
@@ -142,6 +152,8 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     clearTimeout(this.bootTimer);
+    clearTimeout(this.introTimer);
+    if (this.narrowQuery) this.narrowQuery.onchange = null;
   }
 
   start(): void {
@@ -246,9 +258,11 @@ export class CustomerPage implements OnInit, OnDestroy {
     await this.run();
   }
 
-  /** Customer-initiated only: a fresh report with a new start key. */
+  /** Customer-initiated only: a fresh report with a new start key. The button that called it is removed, so focus goes to the chat heading. */
   newReport(): void {
-    if (!this.busy() && !this.frozen()) this.clearChat();
+    if (this.busy() || this.frozen()) return;
+    this.clearChat();
+    this.chatPanel()?.nativeElement.focus();
   }
 
   private clearChat(): void {

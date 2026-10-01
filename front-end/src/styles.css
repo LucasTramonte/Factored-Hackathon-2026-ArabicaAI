@@ -196,7 +196,7 @@ body { min-height: 100%; }
 .disc .slit { transform-origin: 32px 32px; transform: rotate(30deg); transition: transform 1.1s cubic-bezier(.16, 1, .3, 1); }
 .disc--boot { transform: translate(calc(50vw - 128px), calc(50dvh - 160px)) scale(4); }
 .disc--top { transform: translate(calc(50vw - 32px), 36px) scale(1); }
-.disc--login { transform: translate(-220px, 140px) scale(9.5); }
+.disc--login { transform: translate(-220px, min(140px, calc(100dvh - 840px))) scale(9.5); } /* keeps the disc above the bottom-anchored promise text at any height (1.4.3) */
 .disc--login .slit { transform: rotate(120deg); }
 .disc--home { transform: translate(28px, 28px) scale(0.406); z-index: 3; }
 .step { position: relative; min-height: 100dvh; z-index: 2; animation: ar-rise .7s cubic-bezier(.16, 1, .3, 1) backwards; } /* backwards, not both: a retained transform would make the step the containing block of position: fixed children */
@@ -204,8 +204,9 @@ body { min-height: 100%; }
 /* Intro */
 .intro { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 64px 48px; }
 .intro-words { position: relative; width: 100%; height: 136px; }
-.intro-word { position: absolute; left: 0; right: 0; text-align: center; margin: 0; font: 600 128px/136px var(--font-sans); letter-spacing: -0.035em; opacity: 0; animation: ar-word 9s cubic-bezier(.16, 1, .3, 1) infinite both; }
-.intro-word { animation-delay: 2.6s; } .intro-word:nth-child(2) { animation-delay: 5.6s; } .intro-word:nth-child(3) { animation-delay: 8.6s; }
+.intro-word { position: absolute; left: 0; right: 0; text-align: center; margin: 0; font: 600 128px/136px var(--font-sans); letter-spacing: -0.035em; opacity: 0; animation: ar-word 4.2s cubic-bezier(.16, 1, .3, 1) both; } /* one pass, then .is-done shows the current word (2.2.2) */
+.intro-words.is-done .intro-word { display: none; } .intro-words.is-done .intro-word.is-current { display: block; opacity: 1; animation: none; }
+.intro-word { animation-delay: 2.6s; } .intro-word:nth-child(2) { animation-delay: 4s; } .intro-word:nth-child(3) { animation-delay: 5.4s; } /* 1.4 s slots (33% of 4.2 s); motion ends at 6.8 s */
 .intro-cta { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 48px; opacity: 0; visibility: hidden; animation: ar-rise .8s cubic-bezier(.16, 1, .3, 1) 4.4s both, ar-show 0s 4.4s forwards; }
 .intro-foot { position: absolute; bottom: 40px; left: 0; right: 0; text-align: center; margin: 0; font: 400 13px/20px var(--font-mono); color: var(--ink-muted); opacity: 0; visibility: hidden; animation: ar-rise .8s cubic-bezier(.16, 1, .3, 1) 4.8s both, ar-show 0s 4.8s forwards; }
 .lang-links { display: flex; gap: 20px; }

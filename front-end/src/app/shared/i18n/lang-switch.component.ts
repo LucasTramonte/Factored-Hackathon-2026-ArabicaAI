@@ -7,7 +7,7 @@ import { LangService } from './lang.service';
   template: `
     <div class="ar-seg" role="group" [attr.aria-label]="lang.t().language">
       @for (code of lang.all; track code) {
-        <button type="button" [attr.aria-pressed]="lang.lang() === code" (click)="lang.set(code)">{{ code.toUpperCase() }}</button>
+        <button type="button" [attr.lang]="code" [attr.aria-pressed]="lang.lang() === code" (click)="lang.set(code)">{{ code.toUpperCase() }}</button>
       }
     </div>`
 })

@@ -35,6 +35,7 @@ export class AgentPage {
   readonly sourceTime = formatSourceTime;
   private readonly detailHeading = viewChild<ElementRef<HTMLElement>>('detailHeading');
   private readonly signInButton = viewChild<ElementRef<HTMLButtonElement>>('signIn');
+  private readonly queueHeading = viewChild<ElementRef<HTMLElement>>('queueHeading');
   private trigger: HTMLElement | null = null;
 
   constructor() {
@@ -47,7 +48,7 @@ export class AgentPage {
     return this.t()[KIND_KEYS[kind]];
   }
 
-  /** Start an agent session, then load the intake queue and the legacy case list. */
+  /** Start an agent session, then load the intake queue and the legacy case list. The button is disabled while busy, which drops its focus: focus then goes to the queue, or back to the button on failure. */
   async load(): Promise<void> {
     if (this.busy()) return;
     this.busy.set(true);
@@ -63,6 +64,7 @@ export class AgentPage {
       this.fail(e);
     } finally {
       this.busy.set(false);
+      afterNextRender(() => (this.loaded() ? this.queueHeading() : this.signInButton())?.nativeElement.focus(), { injector: this.injector });
     }
   }
 
