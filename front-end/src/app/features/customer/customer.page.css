@@ -1,0 +1,17 @@
+/* Guided intake chat: a launcher and a non-modal panel, built from the global tokens. */
+.chat-toggle { position: fixed; right: 24px; bottom: 24px; z-index: 20; }
+.chat {
+  position: fixed; right: 24px; bottom: 84px; z-index: 20; width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 120px); max-height: calc(100dvh - 120px);
+  overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 20px;
+  background: var(--surface-raised); border: var(--hairline) solid var(--line-strong); border-radius: var(--radius-lg);
+}
+.chat-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.chat-log li { max-width: 85%; padding: 8px 12px; border-radius: var(--radius-md); overflow-wrap: anywhere; font: 400 14px/20px var(--font-sans); }
+.chat-bot { align-self: flex-start; background: var(--surface-sunken); }
+.chat-me { align-self: flex-end; background: var(--accent-soft); }
+.chat-form, .chat-lang { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+/* The step's main actions stay visible while the panel scrolls (small screens, long charge lists). */
+.chat-actions { position: sticky; bottom: -20px; padding: 8px 0 20px; background: var(--surface-raised); } /* -20px covers the panel padding */
+.chat-faq { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.products { list-style: none; margin: 0; padding: 0; font: 400 12px/16px var(--font-mono); opacity: .85; }
+@media (max-width: 640px) { .chat-toggle { right: 16px; bottom: 16px; } .chat { right: 16px; bottom: 72px; } }

@@ -11,7 +11,7 @@ authorized S3 CSV objects (read only)
   -> future Marketing/Product analyses after the deferred evidence gate
 ```
 
-Bronze is the sole production extraction path. It records `_source_file`, `_ingested_at` and `_source_table`; a watermark tracks the latest process partition. Full refresh writes a staged Parquet snapshot before replacing old local partitions, so corrected or removed partitions do not survive by accident. Missing source data is a failed ingestion. Silver rebuilds from local Bronze, parses text booleans and dates, canonicalizes known country spellings, keeps source vs FX-estimated USD amounts distinct and defensively deduplicates by primary key.
+Bronze is the sole production extraction path. It records `_source_file`, `_ingested_at` and `_source_table`; a watermark tracks the latest process partition. Full refresh writes a staged Parquet snapshot before replacing old local partitions, so corrected or removed partitions do not survive by accident. Missing source data is a failed ingestion. Silver rebuilds from local Bronze, parses text booleans and dates, canonicalizes known country spellings, keeps source vs FX-estimated USD amounts distinct and defensively deduplicates by primary key. Bronze primary-key duplicates still block quality readiness by design, so this dedup is defense-in-depth for runs that are not ready.
 
 ## Analytical contract
 
