@@ -49,7 +49,9 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 | [`scripts/`](scripts/) | Small repository tools, such as the Markdown link check CI runs | Maintainers |
 | `data/` | Ignored. Local DuckDB, Parquet, quality runs and generated seeds; never committed | Local runs only |
 
-The root keeps only what tools expect there: this README, [`AGENTS.md`](AGENTS.md) (the contract for coding agents), the [`Makefile`](Makefile), the `Dockerfile` and CI under [`.github/`](.github/).
+How changes are reviewed, versioned and released is in [`CONTRIBUTING.md`](CONTRIBUTING.md), and each release's PRs, decisions and deployed state are in the [release history](Docs/releases/README.md).
+
+The root keeps only what tools expect there: this README, [`CONTRIBUTING.md`](CONTRIBUTING.md), [`AGENTS.md`](AGENTS.md) (the contract for coding agents), the [`Makefile`](Makefile), the `Dockerfile` and CI under [`.github/`](.github/).
 
 ## How it fits together
 

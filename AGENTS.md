@@ -30,6 +30,7 @@
 - Use regression fixtures for schema, keys, partitions, joins, aggregations, and memory-sensitive changes. Progress through unit tests, controlled source files, a small Bronze/Silver build, then full S3 data. Long scans report table or file progress, not rows.
 - S3 input is read-only. Keep credentials out of source, logs, image layers and commits. Generated DuckDB, Parquet, quality runs and temporary files stay ignored. Reviewed aggregate reports are committed only after reconciliation.
 - Public functions and classes need concise docstrings explaining purpose and important invariants. Keep commits scoped and state the tests run.
+- Never rewrite shared history: no force-push, no amending or rebasing a branch someone has reviewed. Leave unrelated working-tree changes untouched. PR titles are Conventional Commits, and tags and releases follow [`CONTRIBUTING.md`](CONTRIBUTING.md); an agent never tags, publishes a release or deploys without a person's go-ahead.
 
 ## Intake service rules
 

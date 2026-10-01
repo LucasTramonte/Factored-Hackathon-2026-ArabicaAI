@@ -18,6 +18,7 @@ For the whole story in one narrative, read [`SYSTEM_DESIGN.md`](deliverables/SYS
 | Folder | Holds |
 |---|---|
 | [`deliverables/`](deliverables/) | The documents the brief asks for: system design, data engineering, data quality, evaluation, architecture, business outcomes, reproduction |
+| [`releases/`](releases/README.md) | Release history: each version's PRs, decisions, evidence and deployed state |
 | [`ADRs/`](ADRs/README.md) | Decisions: scope, runtime, cost and placement, evaluation, the learned component. Start here |
 | [`Costs/`](Costs/README.md) | Evidence cited by ADR-004 only: the calculator export and the Cloudflare workbook |
 | [`intake/`](intake/) | The workflow's contracts: customer and measurement contract, events, authored scenarios |
