@@ -119,10 +119,20 @@ describe('CustomerPage', () => {
       expect(service.startIntake.calls.mostRecent().args[0].language).toBe('pt');
     });
 
-    it('refuses a statement under 10 code points', async () => {
+    it('refuses a statement under 10 code points; the error names the language only when it is asked', async () => {
       page.chatStatement = '😀😀😀😀😀';
       await page.send();
       expect(service.startIntake).not.toHaveBeenCalled();
+      expect(page.chatError()).toBe(lang.t().chatValidationShort);
+      lang.set('pt');
+      await page.send();
+      expect(page.chatError()).toBe(lang.t().chatValidationShort);
+      lang.set('en');
+      await page.send();
+      expect(page.chatError()).toBe(lang.t().chatValidation);
+      page.chosenLang.set('pt');
+      await page.send();
+      expect(page.chatError()).toBe(lang.t().chatValidation);
     });
 
     it('freezes the start and resends the same body after a 503, even if the text changes', async () => {
@@ -406,12 +416,15 @@ describe('CustomerPage', () => {
       const area = el.querySelector<HTMLTextAreaElement>('#chat-statement')!;
       expect(area.required).toBeTrue();
       expect(area.getAttribute('aria-describedby')).toContain('chat-error');
-      expect(el.querySelector('#chat-error')?.textContent).toContain(p.t().chatValidation);
+      expect(el.querySelector('#chat-error')?.textContent).toContain(p.t().chatValidationShort);
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
       service.confirmIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
         accepted_at: 'x', replayed: false, next_step_code: 'await_human_review' });
       p.chatStatement = 'No reconozco este cargo.';
       await p.send();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(document.activeElement).toBe(el.querySelector('#chat-choose'));
       p.choice = 'demo-tx-001';
       p.chatConfirmed = true;
       await p.confirmCharge();

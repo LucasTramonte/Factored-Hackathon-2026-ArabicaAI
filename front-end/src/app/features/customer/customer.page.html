@@ -185,7 +185,7 @@
             @switch (chatStep()) {
               @case ('describe') {
                 <fieldset class="chat-form" [disabled]="busy() || !!frozen()">
-                  @if (!reportLang() || chosenLang()) {
+                  @if (askLang()) {
                     <fieldset class="chat-lang"><legend class="ar-field-label">{{ t().chatLangPrompt }}</legend>
                       <label class="ar-check"><input type="radio" name="report-lang" value="es" [checked]="chosenLang() === 'es'" (change)="chosenLang.set('es')" required> Español</label>
                       <label class="ar-check"><input type="radio" name="report-lang" value="pt" [checked]="chosenLang() === 'pt'" (change)="chosenLang.set('pt')" required> Português</label>
@@ -198,7 +198,7 @@
                 <div class="report-actions chat-actions"><button type="button" class="ar-btn" (click)="send()" [disabled]="busy()">{{ frozen() ? t().retry : t().chatSend }}</button></div>
               }
               @case ('choose') {
-                <fieldset class="chat-form" [disabled]="busy() || !!frozen()">
+                <fieldset class="chat-form" id="chat-choose" #chooseStep tabindex="-1" [disabled]="busy() || !!frozen()">
                   <legend class="sr-only">{{ t().charges }}</legend>
                   @for (tx of choosable(); track tx.transaction_id) {
                     <label class="ar-check"><input type="radio" name="chat-choice" [value]="tx.transaction_id" [(ngModel)]="choice" (ngModelChange)="chatConfirmed = false">
