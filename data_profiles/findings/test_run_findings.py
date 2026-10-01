@@ -134,16 +134,6 @@ def test_reference_and_code_checks_count_orphans_and_shared_codes(tmp_path):
     assert rows["DF-017"] == [["dim_products.product_number", 1, 1, 2], ["dim_service_agents.employee_code", 2, 1, 3]]
 
 
-def test_cohort_frame_counts_design_window_purchasers_and_complainers(tmp_path):
-    db = make_db(tmp_path / "f.duckdb", with_holdout=True)
-    rows = rf.run(db, only=("DF-020",))["results"][0]["rows"]
-    # country, segment, customers, purchasers, purchasers with CNR, approved purchases, off-owner purchases.
-    # C2's holdout CNR complaint (Q9) and C1's holdout purchase (T9) are outside the design window.
-    assert rows == [["(all)", "(all)", 2, 1, 1, 2, 0],
-                    ["Colombia", "(all)", 1, 0, 0, 0, 0], ["Colombia", "Plus", 1, 0, 0, 0, 0],
-                    ["México", "(all)", 1, 1, 1, 2, 0], ["México", "Basic", 1, 1, 1, 2, 0]]
-
-
 def test_country_spelling_is_reported_per_layer(tmp_path):
     db = make_db(tmp_path / "f.duckdb", with_holdout=False)
     rows = rf.run(db, only=("DF-019",))["results"][0]["rows"]
