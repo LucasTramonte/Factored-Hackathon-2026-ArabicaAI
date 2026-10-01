@@ -1,7 +1,7 @@
 <div class="agent-page">
   <div class="topbar">
     <a class="ar-lockup" routerLink="/"><app-mark [size]="28" /><span class="ar-wordmark">Arabica<b>AI</b></span></a>
-    <div style="display: flex; align-items: center; gap: 16px">
+    <div class="topbar-end">
       <a routerLink="/" class="ar-small" style="font-weight: 500; color: var(--link)">{{ t().customer }}</a>
       <app-lang-switch />
     </div>
@@ -15,7 +15,7 @@
   @if (error()) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
 
   <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
-    <button type="button" class="ar-btn" (click)="load()" [disabled]="busy()">{{ t().agentLoad }}</button>
+    <button #signIn type="button" class="ar-btn" (click)="load()" [disabled]="busy()">{{ t().agentLoad }}</button>
     @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
     <span class="ar-chip ar-chip-warn">{{ t().sandbox }}</span>
   </div>
@@ -28,7 +28,7 @@
           <ul class="intake-list">
             @for (item of intakes(); track item.protocol) {
               <li>
-                <button #row type="button" class="intake-row" [attr.aria-expanded]="openProtocol() === item.protocol" aria-controls="intake-detail" (click)="open(item.protocol, row)">
+                <button #row type="button" class="intake-row" [attr.aria-expanded]="openProtocol() === item.protocol" [attr.aria-controls]="openProtocol() === item.protocol && detail() ? 'intake-detail' : null" (click)="open(item.protocol, row)">
                   <span class="ar-chip" [class.ar-chip-ok]="item.kind === 'complete'" [class.ar-chip-err]="item.kind === 'technical'" [class.ar-chip-warn]="item.kind === 'incomplete'">{{ kindLabel(item.kind) }}</span>
                   <span class="ar-mono">{{ item.protocol }}</span>
                   <span class="ar-small">{{ item.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span>

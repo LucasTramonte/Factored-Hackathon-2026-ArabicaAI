@@ -87,6 +87,24 @@ describe('AgentPage', () => {
     expect(document.activeElement).toBe(button);
   });
 
+  it('points aria-controls at the detail only while it is rendered', async () => {
+    await page.load();
+    fixture.detectChanges();
+    expect(el().querySelector('[aria-controls]')).toBeNull();
+    service.intakeDetail.and.resolveTo(detail(P1));
+    const button = await loadAndOpen();
+    expect(button.getAttribute('aria-controls')).toBe('intake-detail');
+    expect(el().querySelector('#intake-detail')).not.toBeNull();
+  });
+
+  it('moves focus to the sign-in button when an expired session clears the page', async () => {
+    service.intakeDetail.and.rejectWith(new ApiError(401, 'raw'));
+    await loadAndOpen();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(el().querySelector('button.ar-btn'));
+  });
+
   it('says so when there is no verified transaction', async () => {
     service.intakeDetail.and.resolveTo(detail(P1, { verified_evidence: { transaction: null }, history_has_more: true }));
     await loadAndOpen();

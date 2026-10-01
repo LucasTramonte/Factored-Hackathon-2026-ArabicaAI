@@ -34,6 +34,7 @@ export class AgentPage {
   readonly openProtocol = signal<string | null>(null);
   readonly sourceTime = formatSourceTime;
   private readonly detailHeading = viewChild<ElementRef<HTMLElement>>('detailHeading');
+  private readonly signInButton = viewChild<ElementRef<HTMLButtonElement>>('signIn');
   private trigger: HTMLElement | null = null;
 
   constructor() {
@@ -104,7 +105,11 @@ export class AgentPage {
   /** An expired agent session drops everything shown, so nothing stale stays on screen. */
   private fail(e: unknown): void {
     const status = e instanceof ApiError ? e.status : -1;
-    if (status === 401) this.reset();
+    if (status === 401) {
+      this.reset();
+      // The focused row or detail is gone; keep keyboard users on the way back in.
+      afterNextRender(() => this.signInButton()?.nativeElement.focus(), { injector: this.injector });
+    }
     this.error.set(status === 401 ? this.t().agentErr401 : status === 404 ? this.t().agentErr404 : errorText(this.t(), e));
   }
 }

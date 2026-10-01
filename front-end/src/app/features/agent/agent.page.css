@@ -9,3 +9,5 @@
 .detail-meta dd { margin: 0; overflow-wrap: anywhere; }
 .history li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 6px 0; border-bottom: var(--hairline) solid var(--line); }
 code { font: 400 13px/20px var(--font-mono); overflow-wrap: anywhere; }
+.topbar { flex-wrap: wrap; }
+.topbar-end { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
