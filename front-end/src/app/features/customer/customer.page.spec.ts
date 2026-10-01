@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ApiError } from '../../core/http/api.service';
@@ -14,11 +15,11 @@ describe('CustomerPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake']);
+      'startIntake', 'confirmIntake', 'handoffIntake'], { client: signal(''), card: signal(null), receipts: signal([]) });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null });
-    service.transactions.and.resolveTo([tx]);
+    service.transactions.and.resolveTo({ items: [tx], has_more: false, coverage: 'fictitious_demo_data_only' });
     await TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] })
       .compileComponents();
     page = TestBed.createComponent(CustomerPage).componentInstance;
@@ -251,6 +252,35 @@ describe('CustomerPage', () => {
       expect(page.chatConfirmed).toBeFalse();
     });
 
+    it('keeps every receipt of the session after a new report; an accepted charge is not offered again', async () => {
+      await startEpisode();
+      service.confirmIntake.and.resolveTo(intakeReceipt);
+      page.choice = 'demo-tx-001';
+      page.chatConfirmed = true;
+      await page.confirmCharge();
+      page.newReport();
+      expect(page.receipts().length).toBe(1);
+      expect(page.reportedState('demo-tx-001')).toBe('accepted');
+      expect(page.choosable()).toEqual([]);
+      await startEpisode();
+      page.choice = 'demo-tx-001';
+      page.chatConfirmed = true;
+      await page.confirmCharge();
+      expect(service.confirmIntake).toHaveBeenCalledTimes(1);
+      service.handoffIntake.and.resolveTo({ ...intakeReceipt, protocol: '77777777-8888-4777-8666-555555555555', kind: 'incomplete' });
+      await page.cannotFind();
+      expect(page.receipts().map(r => [r.receipt.kind, r.transactionId])).toEqual([['complete', 'demo-tx-001'], ['incomplete', null]]);
+    });
+
+    it('marks a pending confirmation as not confirmed, never as accepted', async () => {
+      await startEpisode();
+      service.confirmIntake.and.rejectWith(new ApiError(503, 'x'));
+      page.choice = 'demo-tx-001';
+      page.chatConfirmed = true;
+      await page.confirmCharge();
+      expect(page.reportedState('demo-tx-001')).toBe('chipPending');
+    });
+
     it('answers FAQs from fixed translated text only', () => {
       page.ask('faqTimeQ');
       expect(page.log().slice(-2)).toEqual([{ from: 'me', key: 'faqTimeQ' }, { from: 'bot', key: 'faqTimeA' }]);
@@ -293,6 +323,55 @@ describe('CustomerPage', () => {
       const { el } = await home(null);
       expect(el.querySelector('h1')?.textContent).toContain('Ana (demo)');
       expect(el.querySelector('.products')).toBeNull();
+    });
+
+    it('while a request is pending the agent link is disabled, and receipts and the home survive in-app navigation', async () => {
+      const { fixture, p, el } = await home();
+      service.startIntake.and.rejectWith(new ApiError(503, 'x'));
+      p.chatStatement = 'No reconozco este cargo.';
+      await p.send();
+      fixture.detectChanges();
+      const link = () => el.querySelector<HTMLAnchorElement>('.ar-nav a[aria-label="' + p.t().agentView + '"]')!;
+      expect(link().hasAttribute('href')).toBeFalse();
+      expect(link().getAttribute('aria-disabled')).toBe('true');
+      p.frozen.set(null);
+      fixture.detectChanges();
+      expect(link().getAttribute('href')).toBe('/agent');
+      service.receipts.set([{ receipt: { episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555',
+        kind: 'incomplete', accepted_at: 'x', replayed: false, next_step_code: 'await_human_review' }, transactionId: null }]);
+      fixture.destroy();
+      const again = TestBed.createComponent(CustomerPage);
+      await again.componentInstance.ngOnInit();
+      await again.whenStable();
+      again.detectChanges();
+      const html = again.nativeElement as HTMLElement;
+      expect(again.componentInstance.step()).toBe('home');
+      expect(html.textContent).toContain('99999999-8888-4777-8666-555555555555');
+      expect(html.querySelector('.ar-count')?.textContent).toBe('1');
+      expect(html.textContent).toContain(p.t().inReview);
+      expect(html.querySelector('.stat .ar-chip-ok')).toBeNull();
+    });
+
+    it('says when more charges exist than are listed', async () => {
+      service.transactions.and.resolveTo({ items: [tx], has_more: true, coverage: 'fictitious_demo_data_only' });
+      const { el, p } = await home();
+      expect(el.textContent).toContain(p.t().moreCharges);
+    });
+
+    it('points aria-controls at the chat only while it exists, and does not repeat the choose prompt as the legend', async () => {
+      const { fixture, p, el } = await home();
+      const toggle = el.querySelector<HTMLButtonElement>('.chat-toggle')!;
+      expect(toggle.hasAttribute('aria-controls')).toBeFalse();
+      toggle.click();
+      fixture.detectChanges();
+      expect(toggle.getAttribute('aria-controls')).toBe('intake-chat');
+      expect(el.querySelector('#intake-chat')).not.toBeNull();
+      service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
+      p.chatStatement = 'No reconozco este cargo.';
+      await p.send();
+      fixture.detectChanges();
+      const panel = el.querySelector('#intake-chat')!;
+      expect(panel.textContent!.split(p.t().chatChoose).length - 1).toBe(1);
     });
 
     it('exposes the charges as table rows and cells', async () => {

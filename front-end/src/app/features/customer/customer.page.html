@@ -61,7 +61,7 @@
             <div class="ar-nav">
               <a href="#inicio" aria-current="page" [attr.aria-label]="t().home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"></path><path d="M5 10v10h14V10"></path></svg><span class="label">{{ t().home }}</span></a>
               <a href="#cargos" [attr.aria-label]="t().charges"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path></svg><span class="label">{{ t().charges }}</span></a>
-              <a routerLink="/agent" [attr.aria-label]="t().agentView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M8 9h8"></path><path d="M8 13h8"></path><path d="M8 17h5"></path></svg><span class="label">{{ t().agentView }}</span>@if (intakeReceipt()) { <span class="ar-count">1</span> }</a>
+              <a [routerLink]="frozen() ? null : '/agent'" [attr.aria-disabled]="frozen() ? true : null" [attr.aria-label]="t().agentView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M8 9h8"></path><path d="M8 13h8"></path><path d="M8 17h5"></path></svg><span class="label">{{ t().agentView }}</span>@if (receipts().length) { <span class="ar-count">{{ receipts().length }}</span> }</a>
             </div>
           </div>
           <div style="display: flex; flex-direction: column; gap: 16px">
@@ -104,7 +104,7 @@
               </div>
               <div class="agent-panel-foot">
                 <div class="agent-facts"><span>{{ lang.lang() }}</span><span>{{ client() }}</span><span>{{ transactions().length }} {{ t().count }}</span></div>
-                <button type="button" class="ar-btn" style="min-height: 40px; padding: 0 16px; font-size: 14px" (click)="openChat()" aria-controls="intake-chat">{{ t().report }}</button>
+                <button type="button" class="ar-btn" style="min-height: 40px; padding: 0 16px; font-size: 14px" (click)="openChat()" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null">{{ t().report }}</button>
               </div>
             </section>
             <div class="stats">
@@ -114,11 +114,12 @@
               </section>
               <section class="stat">
                 <span class="ar-caption">{{ t().openCases }}</span>
-                @if (intakeReceipt(); as r) {
-                  <span style="display: flex; align-items: baseline; gap: 10px"><span class="stat-value">1</span><span class="ar-chip ar-chip-ok">{{ t().accepted }}</span></span>
-                  <span class="ar-caption ar-mono" style="font-size: 12px">{{ r.protocol }}</span>
-                } @else if (frozen()) {
-                  <span style="display: flex; align-items: baseline; gap: 10px"><span class="stat-value">1</span><span class="ar-chip ar-chip-warn">{{ t().inReview }}</span></span>
+                @if (receipts().length || (frozen() && frozen()!.path !== 'start')) {
+                  <span style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap"><span class="stat-value">{{ receipts().length }}</span>
+                    @if (lastReceipt(); as last) { <span class="ar-chip" [class.ar-chip-ok]="last.receipt.kind === 'complete'">{{ t()[receiptChip[last.receipt.kind]] }}</span> }
+                    @if (frozen() && frozen()!.path !== 'start') { <span class="ar-chip ar-chip-warn">{{ t().chipPending }}</span> }
+                  </span>
+                  @if (lastReceipt(); as last) { <span class="ar-caption ar-mono" style="font-size: 12px">{{ last.receipt.protocol }}</span> }
                 } @else {
                   <span class="stat-value">0</span><span class="ar-caption">{{ t().none }}</span>
                 }
@@ -145,14 +146,15 @@
                         @else { {{ t().dateMissing }} }
                       </span>
                       <span role="cell" class="td td-state">
-                        @if (reportedState(tx.transaction_id); as state) { <span class="ar-chip ar-chip-warn">{{ t()[state] }}</span> }
-                        @else { <button type="button" class="link-btn" (click)="openChat(tx.transaction_id)" aria-controls="intake-chat" [disabled]="!!frozen() || chatStep() === 'receipt'">{{ t().notRecognized }}</button> }
+                        @if (reportedState(tx.transaction_id); as state) { <span class="ar-chip" [class.ar-chip-ok]="state === 'accepted'" [class.ar-chip-warn]="state === 'chipPending'">{{ t()[state] }}</span> }
+                        @else { <button type="button" class="link-btn" (click)="openChat(tx.transaction_id)" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null" [disabled]="!!frozen() || chatStep() === 'receipt'">{{ t().notRecognized }}</button> }
                       </span>
                       <span role="cell" class="td td-amount">{{ tx.amount }} {{ tx.currency }}</span>
                       </div>
                     }
                   </div>
                   <span class="ar-caption" style="display: block; margin-top: 12px">{{ t().coverage }}</span>
+                  @if (hasMore()) { <span class="ar-caption" style="display: block; margin-top: 4px">{{ t().moreCharges }}</span> }
                 } @else {
                   <div class="ar-empty"><p>{{ t().empty }}</p><span class="ar-caption">{{ t().emptyCaveat }}</span></div>
                 }
@@ -170,7 +172,7 @@
           </div>
         </main>
 
-        <button type="button" class="ar-btn chat-toggle" (click)="chatOpen.set(!chatOpen())" [attr.aria-expanded]="chatOpen()" aria-controls="intake-chat">{{ chatOpen() ? t().chatClose : t().chatOpen }}</button>
+        <button type="button" class="ar-btn chat-toggle" (click)="chatOpen.set(!chatOpen())" [attr.aria-expanded]="chatOpen()" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null">{{ chatOpen() ? t().chatClose : t().chatOpen }}</button>
         @if (chatOpen()) {
           <section class="chat" id="intake-chat" aria-labelledby="chat-title">
             <h2 class="ar-panel-title" id="chat-title" #chatPanel tabindex="-1">{{ t().guideTitle }}</h2>
@@ -197,8 +199,8 @@
               }
               @case ('choose') {
                 <fieldset class="chat-form" [disabled]="busy() || !!frozen()">
-                  <legend class="sr-only">{{ t().chatChoose }}</legend>
-                  @for (tx of transactions(); track tx.transaction_id) {
+                  <legend class="sr-only">{{ t().charges }}</legend>
+                  @for (tx of choosable(); track tx.transaction_id) {
                     <label class="ar-check"><input type="radio" name="chat-choice" [value]="tx.transaction_id" [(ngModel)]="choice" (ngModelChange)="chatConfirmed = false">
                       {{ tx.merchant_name || t().noMerchant }} · <span class="ar-mono">{{ tx.amount }} {{ tx.currency }}</span></label>
                   }

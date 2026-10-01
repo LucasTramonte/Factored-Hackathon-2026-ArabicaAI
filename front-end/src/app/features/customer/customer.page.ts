@@ -8,9 +8,9 @@ import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
-import { ContextCard, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
+import { Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
   Transaction } from '../../shared/models/intake.model';
-import { CustomerService } from './customer.service';
+import { CustomerService, ReceiptEntry } from './customer.service';
 
 /**
  * The customer flow as one connected screen: intro, sign-in, home. The disc is a single element that
@@ -36,6 +36,8 @@ export function intakeLanguage(ui: Lang): IntakeLang | null {
 export const FAQ = { faqNextQ: 'faqNextA', faqTimeQ: 'faqTimeA', faqMissingQ: 'faqMissingA' } as const;
 /** Provisional receipt copy per server-decided kind (Q4c). */
 const RECEIPT_TITLE = { complete: 'receiptComplete', incomplete: 'receiptIncomplete', technical: 'receiptTechnical' } as const;
+/** Provisional short status per kind, for the open-cases chip; only a complete report reads as accepted. */
+export const RECEIPT_CHIP = { complete: 'accepted', incomplete: 'inReview', technical: 'inReview' } as const;
 
 @Component({
   selector: 'app-customer-page',
@@ -49,10 +51,13 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly t = this.lang.t;
   readonly busy = signal(false);
   readonly error = signal('');
-  readonly client = signal('');
+  readonly client = this.service.client;
+  readonly card = this.service.card;
+  /** Every receipt from this tab's session, newest last; kept across new reports and in-app navigation. */
+  readonly receipts = this.service.receipts;
   readonly transactions = signal<Transaction[]>([]);
+  readonly hasMore = signal(false);
   readonly identities = signal<Identity[]>([]);
-  readonly card = signal<ContextCard | null>(null);
   readonly chatOpen = signal(false);
   readonly chosenLang = signal<IntakeLang | null>(null);
   readonly reportLang = computed(() => this.chosenLang() ?? intakeLanguage(this.lang.lang()));
@@ -65,6 +70,10 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly chatStep = computed<ChatStep>(() => this.intakeReceipt() ? 'receipt' : this.ended() ? 'ended' : this.episode() ? 'choose' : 'describe');
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
+  readonly receiptChip = RECEIPT_CHIP;
+  readonly lastReceipt = computed<ReceiptEntry | undefined>(() => this.receipts().at(-1));
+  /** Charges already accepted in this session are not offered again. */
+  readonly choosable = computed(() => this.transactions().filter(tx => !this.receipts().some(r => r.receipt.kind === 'complete' && r.transactionId === tx.transaction_id)));
   /** Locked while a request is frozen or a guided report is open: renewing must keep the same customer. */
   readonly identityLocked = computed(() => this.frozen() !== null || this.chatStep() === 'choose');
   readonly step = signal<Step>('intro');
@@ -118,6 +127,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** Load the identity choices from the API; they come from the same config as the server allowlist. */
   async ngOnInit(): Promise<void> {
     this.bootTimer = setTimeout(() => this.booted.set(true), 2400);
+    if (this.client()) void this.resume();
     try {
       this.identities.set(await this.service.identities());
       this.identity ||= this.identities()[0]?.customer_id ?? '';
@@ -141,17 +151,34 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.busy.set(true);
     this.error.set('');
     const identity = this.identityLocked() ? this.client() : this.identity;
-    if (!this.identityLocked()) this.reset();
+    if (!this.identityLocked() && identity !== this.client()) this.reset();
     try {
       this.card.set((await this.service.signIn(identity))?.context_card ?? null);
       this.client.set(identity);
-      this.transactions.set(await this.service.transactions());
+      await this.loadTransactions();
       this.step.set('home');
     } catch (e) {
       this.fail(e);
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /** Back from another in-app view in this tab: show the same customer's home again; the cookie still decides access. */
+  private async resume(): Promise<void> {
+    this.booted.set(true);
+    this.step.set('home');
+    try {
+      await this.loadTransactions();
+    } catch (e) {
+      this.fail(e);
+    }
+  }
+
+  private async loadTransactions(): Promise<void> {
+    const list = await this.service.transactions();
+    this.transactions.set(list.items);
+    this.hasMore.set(list.has_more);
   }
 
   /** Open the chat; from a charge row, that charge is preselected (the customer still confirms it). */
@@ -163,11 +190,11 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
-  /** The row chip: the charge confirmed by the receipt, or the one whose confirmation is still pending. */
-  reportedState(transactionId: string): 'accepted' | 'inReview' | null {
+  /** The row chip: accepted in this session, or a confirmation whose acceptance is not yet known. */
+  reportedState(transactionId: string): 'accepted' | 'chipPending' | null {
     const frozen = this.frozen();
-    if (frozen?.path === 'confirm' && frozen.body.transaction_id === transactionId) return 'inReview';
-    return this.intakeReceipt()?.kind === 'complete' && this.choice === transactionId ? 'accepted' : null;
+    if (frozen?.path === 'confirm' && frozen.body.transaction_id === transactionId) return 'chipPending';
+    return this.receipts().some(r => r.receipt.kind === 'complete' && r.transactionId === transactionId) ? 'accepted' : null;
   }
 
   /** Start the guided report: statement and report language only; no reference comes back. */
@@ -192,7 +219,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     const episode = this.episode();
     if (this.busy() || !episode || this.chatStep() !== 'choose' || this.frozen()?.path === 'handoff') return;
     if (!this.frozen()) {
-      const tx = this.transactions().find(t => t.transaction_id === this.choice);
+      const tx = this.choosable().find(t => t.transaction_id === this.choice);
       if (!tx || !this.chatConfirmed) {
         this.chatError.set(this.t().chatChooseValidation);
         return;
@@ -264,6 +291,7 @@ export class CustomerPage implements OnInit, OnDestroy {
         this.log.update(l => [...l, { from: 'bot', key: 'chatChoose' }]);
       } else {
         this.intakeReceipt.set(result as IntakeReceipt);
+        this.receipts.update(list => [...list, { receipt: result as IntakeReceipt, transactionId: frozen.path === 'confirm' ? frozen.body.transaction_id : null }]);
       }
     } catch (e) {
       if (e instanceof ApiError && DEFINITIVE.has(e.status)) {
@@ -288,7 +316,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   private reset(): void {
     this.client.set('');
     this.transactions.set([]);
+    this.hasMore.set(false);
     this.card.set(null);
+    this.receipts.set([]);
     this.chosenLang.set(null);
     this.clearChat();
   }

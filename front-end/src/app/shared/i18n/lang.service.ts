@@ -65,7 +65,8 @@ const es = {
     receiptComplete: 'Reporte aceptado en la demo',
     receiptIncomplete: 'Enviado a revisión humana sin un cargo confirmado',
     receiptTechnical: 'No pudimos verificar el cargo; enviado a revisión humana',
-    products: 'Productos', notListed: 'no consta'
+    products: 'Productos', notListed: 'no consta', chipPending: 'sin confirmar',
+    moreCharges: 'Hay más cargos que no se muestran aquí.'
 };
 
 /** The key set is the Spanish table; the other two must match it exactly. */
@@ -134,7 +135,8 @@ const STRINGS: Record<Lang, Strings> = {
     receiptComplete: 'Relato aceito na demo',
     receiptIncomplete: 'Enviado para análise humana sem uma cobrança confirmada',
     receiptTechnical: 'Não conseguimos verificar a cobrança; enviado para análise humana',
-    products: 'Produtos', notListed: 'não consta'
+    products: 'Produtos', notListed: 'não consta', chipPending: 'não confirmado',
+    moreCharges: 'Há mais cobranças que não aparecem aqui.'
   },
   en: {
     greeting: 'Hello', tagline: 'Report a charge you do not recognize.',
@@ -197,7 +199,8 @@ const STRINGS: Record<Lang, Strings> = {
     receiptComplete: 'Report accepted in the demo',
     receiptIncomplete: 'Sent for human review without a confirmed charge',
     receiptTechnical: 'We could not check the charge; sent for human review',
-    products: 'Products', notListed: 'not listed'
+    products: 'Products', notListed: 'not listed', chipPending: 'not confirmed',
+    moreCharges: 'There are more charges that are not shown here.'
   }
 };
 
