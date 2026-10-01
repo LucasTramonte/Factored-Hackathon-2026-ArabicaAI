@@ -116,7 +116,6 @@ button, input, select, textarea { font: inherit; }
 .ar-nav a { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 0 12px; border-radius: var(--radius-md); font: 500 15px/20px var(--font-sans); color: var(--ink); }
 .ar-nav a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
 .ar-nav svg { width: 18px; height: 18px; stroke-width: 1.75; }
-.ar-count { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--warn); font: 500 12px/20px var(--font-mono); text-align: center; }
 
 /* Segmented control (language) */
 .ar-seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--surface-sunken); border-radius: var(--radius-pill); }

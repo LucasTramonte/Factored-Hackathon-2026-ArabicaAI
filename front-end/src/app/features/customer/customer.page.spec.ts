@@ -397,7 +397,7 @@ describe('CustomerPage', () => {
       const html = again.nativeElement as HTMLElement;
       expect(again.componentInstance.step()).toBe('home');
       expect(html.textContent).toContain('99999999-8888-4777-8666-555555555555');
-      expect(html.querySelector('.ar-count')?.textContent).toBe('1');
+      expect(html.querySelector('.ar-count')).withContext('no receipt badge on the agent link: it read as a queue count').toBeNull();
       const reports = [...html.querySelectorAll('.your-reports li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim());
       expect(reports.length).toBe(1);
       expect(reports[0]).toContain(p.t().receiptIncomplete);
@@ -472,6 +472,10 @@ describe('CustomerPage', () => {
       const receiptEl = el.querySelector('#intake-receipt')!;
       expect(receiptEl.textContent).toContain('99999999-8888-4777-8666-555555555555');
       expect(document.activeElement).toBe(receiptEl);
+      // The sentence that says a person reviews the case and nothing was refunded comes right after the reference, before the checks.
+      const order = [...receiptEl.children].map(c => c.className || c.tagName);
+      expect(order.indexOf('next-step')).toBe(order.indexOf('ar-ref') + 1);
+      expect(order.indexOf('next-step')).toBeLessThan(order.indexOf('checks'));
       const checks = [...receiptEl.querySelectorAll('.checks li')].map(li => li.textContent?.trim());
       expect(checks).toEqual([p.t().check_owned_transaction_retrieved, p.t().check_customer_confirmation_recorded]);
       expect(receiptEl.querySelector('.open-questions')).toBeNull();
