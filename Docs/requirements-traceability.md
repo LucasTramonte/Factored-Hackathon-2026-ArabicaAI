@@ -49,7 +49,7 @@ Status: ✅ on `main` · 🟡 in an open PR · 🔵 planned with owner · ⚪ mi
 3. **F1/N2:** choose whether bank-grade identity is required for the hackathon demonstration; the current demo identity is intentionally simulated.
 4. **F5:** decide when a normal, safely automated resolution path is needed; #17/ADR-002 records zero such resolutions in V1.
 5. **N7:** choose a price table and measure actual usage before reporting cost per interaction.
-6. **Learned component:** the brief requires at least one learned component evaluated against a baseline. None exists yet. The ADR-002 trigger is met (checklist 15/25 on `v1_authored`), so a field extractor needs its own ADR and a frozen, independently authored ES/PT set.
+6. **Learned component:** the brief requires at least one learned component evaluated against a baseline. The ADR-002 trigger is met (checklist 15/25 on `v1_authored`). Extractor v1 ([ADR-006](ADRs/ADR-006-learned-extractor-workers-ai.md), Proposed) exists offline in `intake_agent/extractor/` and is scored against the checklist with `evals/intake/run.py` on the development split. It is not pre-registered or scored on `frozen_es_pt_v1`, and the Worker does not call it (ADR-002).
 7. **Submission:** submissions close on 2026-10-05 (kickoff deck, p. 6). The package is a public repository named `factored-hackathon-2026-[team name]`, the deployed link, 4–6 slides and a mandatory short demo and architecture video (p. 18).
 
 ## Evidence index
