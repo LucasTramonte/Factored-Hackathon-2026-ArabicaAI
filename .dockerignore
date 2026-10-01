@@ -6,6 +6,7 @@ data_foundation/**/__pycache__/
 .git/
 .venv/
 *.py[cod]
+**/.pytest_cache/
 .env
 .env.*
 front-end/node_modules/

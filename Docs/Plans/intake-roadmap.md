@@ -45,7 +45,7 @@ Each phase is its own PR, with adversarial tests first and a merge only when its
    - **Work:** multi-day, multi-customer slice fixtures that include zero and several matches; `slice_version` and coverage in the API response; filters.
    - **Exit:** the Gold and API tests assert coverage and version end to end.
 5. **Human review and ES/PT.**
-   - **Work:** case detail and status history; an agent role gate; ES/PT interface text.
+   - **Work:** case detail and status history; an agent role gate; currency and time zone labels.
    - **Exit:** the Angular specs and integration tests cover the status transitions, and nothing can set a refund or verdict.
 6. **Instrumentation.**
    - **Work:** the API emits the event contract, and scripted ES/PT episodes run end to end against the local Worker.
