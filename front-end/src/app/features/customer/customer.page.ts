@@ -8,14 +8,15 @@ import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
-import { CaseBody, ContextCard, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody, Receipt,
+import { ContextCard, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
   Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
 
 /**
  * The customer flow as one connected screen: intro, sign-in, home. The disc is a single element that
- * travels between the three steps. Sign in, pick one of your own charges, describe it and confirm.
- * A submitted payload and its idempotency key stay frozen until acceptance is known, so a retry
+ * travels between the three steps. Sign in, then the guided chat: describe the charge, choose and confirm
+ * one of your own charges, or ask for review without one. A submitted payload and its idempotency key
+ * stay frozen until acceptance is known, so a retry
  * can never create a second case or send edited content. A definitive rejection (404, 409, 413 or 422)
  * releases the form so the customer can correct it; that submission then gets a new key.
  */
@@ -50,8 +51,6 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly error = signal('');
   readonly client = signal('');
   readonly transactions = signal<Transaction[]>([]);
-  readonly receipt = signal<Receipt | null>(null);
-  readonly pending = signal<CaseBody | null>(null);
   readonly identities = signal<Identity[]>([]);
   readonly card = signal<ContextCard | null>(null);
   readonly chatOpen = signal(false);
@@ -67,14 +66,11 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
   /** Locked while a request is frozen or a guided report is open: renewing must keep the same customer. */
-  readonly identityLocked = computed(() => this.pending() !== null || this.frozen() !== null || this.chatStep() === 'choose');
+  readonly identityLocked = computed(() => this.frozen() !== null || this.chatStep() === 'choose');
   readonly step = signal<Step>('intro');
   readonly booted = signal(false);
   readonly sourceTime = formatSourceTime;
   identity = '';
-  selected = '';
-  statement = '';
-  confirmed = false;
   chatStatement = '';
   choice = '';
   chatConfirmed = false;
@@ -99,10 +95,6 @@ export class CustomerPage implements OnInit, OnDestroy {
   });
   readonly displayName = computed(() => this.identities().find(i => i.customer_id === this.client())?.display_name ?? this.client());
   readonly initials = computed(() => initialsOf(this.displayName()) || 'AA');
-  /** The charge being reported: the frozen one while a request is pending, else the one chosen in the list. A method, not a computed, because `selected` is a plain field. */
-  selectedTx(): Transaction | null {
-    return this.transactions().find(tx => tx.transaction_id === (this.pending()?.transaction_id ?? this.selected)) ?? null;
-  }
   /** Totals of the loaded charges, per source currency; never converted. */
   readonly totals = computed(() => {
     const sums = new Map<string, number>();
@@ -114,14 +106,12 @@ export class CustomerPage implements OnInit, OnDestroy {
   });
 
   constructor() {
-    // Move focus to the report panel, the receipts and the chat when each appears.
-    for (const name of ['reportPanel', 'legacyReceipt', 'intakeReceiptEl', 'chatPanel'] as const) {
+    // Move focus to the receipt and the chat when each appears.
+    for (const name of ['intakeReceiptEl', 'chatPanel'] as const) {
       const el: Signal<ElementRef<HTMLElement> | undefined> = this[name];
       effect(() => el()?.nativeElement.focus());
     }
   }
-  private readonly reportPanel = viewChild<ElementRef<HTMLElement>>('reportPanel');
-  private readonly legacyReceipt = viewChild<ElementRef<HTMLElement>>('legacyReceipt');
   private readonly intakeReceiptEl = viewChild<ElementRef<HTMLElement>>('intakeReceiptEl');
   private readonly chatPanel = viewChild<ElementRef<HTMLElement>>('chatPanel');
 
@@ -164,49 +154,20 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
-  /** Choose the charge to report; the report panel opens under the list. */
-  select(transactionId: string): void {
-    if (this.pending() || this.receipt()) return;
-    this.selected = transactionId;
-    this.confirmed = false;
-    this.error.set('');
-  }
-
-  cancel(): void {
-    if (this.pending()) return;
-    this.selected = '';
-    this.statement = '';
-    this.confirmed = false;
-    this.receipt.set(null);
-    this.error.set('');
-  }
-
-  /** Submit once; retries resend the frozen payload with the same key. */
-  async submit(): Promise<void> {
-    if (this.busy() || this.receipt()) return;
-    if (!this.pending()) {
-      if (!this.selected || !this.confirmed || [...this.statement.trim()].length < 10) {
-        this.error.set(this.t().validation);
-        return;
-      }
-      this.pending.set({ transaction_id: this.selected, customer_statement: this.statement.trim(),
-        customer_confirmed: true, idempotency_key: crypto.randomUUID() });
-    }
-    this.busy.set(true);
-    this.error.set('');
-    try {
-      this.receipt.set(await this.service.submitCase(this.pending()!));
-      this.pending.set(null);
-    } catch (e) {
-      if (e instanceof ApiError && DEFINITIVE.has(e.status)) this.pending.set(null);
-      this.fail(e);
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  openChat(): void {
+  /** Open the chat; from a charge row, that charge is preselected (the customer still confirms it). */
+  openChat(transactionId?: string): void {
     this.chatOpen.set(true);
+    if (transactionId && !this.frozen() && this.chatStep() !== 'receipt' && this.chatStep() !== 'ended') {
+      this.choice = transactionId;
+      this.chatConfirmed = false;
+    }
+  }
+
+  /** The row chip: the charge confirmed by the receipt, or the one whose confirmation is still pending. */
+  reportedState(transactionId: string): 'accepted' | 'inReview' | null {
+    const frozen = this.frozen();
+    if (frozen?.path === 'confirm' && frozen.body.transaction_id === transactionId) return 'inReview';
+    return this.intakeReceipt()?.kind === 'complete' && this.choice === transactionId ? 'accepted' : null;
   }
 
   /** Start the guided report: statement and report language only; no reference comes back. */
@@ -327,10 +288,6 @@ export class CustomerPage implements OnInit, OnDestroy {
   private reset(): void {
     this.client.set('');
     this.transactions.set([]);
-    this.selected = '';
-    this.statement = '';
-    this.confirmed = false;
-    this.receipt.set(null);
     this.card.set(null);
     this.chosenLang.set(null);
     this.clearChat();

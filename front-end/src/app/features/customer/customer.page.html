@@ -61,7 +61,7 @@
             <div class="ar-nav">
               <a href="#inicio" aria-current="page" [attr.aria-label]="t().home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"></path><path d="M5 10v10h14V10"></path></svg><span class="label">{{ t().home }}</span></a>
               <a href="#cargos" [attr.aria-label]="t().charges"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path></svg><span class="label">{{ t().charges }}</span></a>
-              <a routerLink="/agent" [attr.aria-label]="t().agentView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M8 9h8"></path><path d="M8 13h8"></path><path d="M8 17h5"></path></svg><span class="label">{{ t().agentView }}</span>@if (receipt()) { <span class="ar-count">1</span> }</a>
+              <a routerLink="/agent" [attr.aria-label]="t().agentView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M8 9h8"></path><path d="M8 13h8"></path><path d="M8 17h5"></path></svg><span class="label">{{ t().agentView }}</span>@if (intakeReceipt()) { <span class="ar-count">1</span> }</a>
             </div>
           </div>
           <div style="display: flex; flex-direction: column; gap: 16px">
@@ -79,7 +79,7 @@
             <app-lang-switch />
           </div>
 
-          @if (error() && !selected) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
+          @if (error()) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
 
           <div class="home-top">
             <div class="ar-card">
@@ -114,10 +114,10 @@
               </section>
               <section class="stat">
                 <span class="ar-caption">{{ t().openCases }}</span>
-                @if (receipt(); as r) {
+                @if (intakeReceipt(); as r) {
                   <span style="display: flex; align-items: baseline; gap: 10px"><span class="stat-value">1</span><span class="ar-chip ar-chip-ok">{{ t().accepted }}</span></span>
                   <span class="ar-caption ar-mono" style="font-size: 12px">{{ r.protocol }}</span>
-                } @else if (pending()) {
+                } @else if (frozen()) {
                   <span style="display: flex; align-items: baseline; gap: 10px"><span class="stat-value">1</span><span class="ar-chip ar-chip-warn">{{ t().inReview }}</span></span>
                 } @else {
                   <span class="stat-value">0</span><span class="ar-caption">{{ t().none }}</span>
@@ -145,9 +145,8 @@
                         @else { {{ t().dateMissing }} }
                       </span>
                       <span role="cell" class="td td-state">
-                        @if ((pending()?.transaction_id ?? receipt()?.transaction_id) === tx.transaction_id) { <span class="ar-chip ar-chip-warn">{{ receipt() ? t().accepted : t().inReview }}</span> }
-                        @else if (selected === tx.transaction_id) { <span class="ar-chip">{{ t().selected }}</span> }
-                        @else { <button type="button" class="link-btn" (click)="select(tx.transaction_id)" [disabled]="!!pending() || !!receipt()">{{ t().notRecognized }}</button> }
+                        @if (reportedState(tx.transaction_id); as state) { <span class="ar-chip ar-chip-warn">{{ t()[state] }}</span> }
+                        @else { <button type="button" class="link-btn" (click)="openChat(tx.transaction_id)" aria-controls="intake-chat" [disabled]="!!frozen() || chatStep() === 'receipt'">{{ t().notRecognized }}</button> }
                       </span>
                       <span role="cell" class="td td-amount">{{ tx.amount }} {{ tx.currency }}</span>
                       </div>
@@ -156,46 +155,6 @@
                   <span class="ar-caption" style="display: block; margin-top: 12px">{{ t().coverage }}</span>
                 } @else {
                   <div class="ar-empty"><p>{{ t().empty }}</p><span class="ar-caption">{{ t().emptyCaveat }}</span></div>
-                }
-
-                @if (selectedTx() || pending() || receipt()) {
-                  <div class="report" id="reportar" #reportPanel tabindex="-1">
-                    <div class="report-head">
-                      <h3 class="ar-panel-title" style="font-size: 16px; line-height: 24px">{{ t().reportTitle }}</h3>
-                      @if (!pending() && !receipt()) { <button type="button" class="link-btn" (click)="cancel()">{{ t().cancel }}</button> }
-                    </div>
-                    @if (selectedTx(); as tx) {
-                      <div class="ar-row ar-row-selected" style="cursor: default">
-                        <span class="ar-tile" aria-hidden="true">{{ tx.merchant_name ? merchantInitials(tx) : '' }}</span>
-                        <span class="ar-row-name">{{ tx.merchant_name || t().noMerchant }}</span>
-                        <span class="ar-amount">{{ tx.amount }} {{ tx.currency }}</span>
-                      </div>
-                    }
-                    @if (error() && selected) { <div class="ar-alert" role="alert" id="report-error"><p>{{ error() }}</p></div> }
-                    @if (!receipt()) {
-                      <fieldset class="ar-fieldset" style="border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px" [disabled]="busy() || identityLocked()">
-                        <label class="ar-field">
-                          <span class="ar-field-label">{{ t().describe }}</span>
-                          <textarea class="ar-textarea" [(ngModel)]="statement" name="statement" required [attr.aria-describedby]="error() && selected ? 'report-error' : null" (ngModelChange)="confirmed = false" rows="3" maxlength="2000" [placeholder]="t().placeholder"></textarea>
-                        </label>
-                        <label class="ar-check"><input type="checkbox" name="confirmed" [(ngModel)]="confirmed"> {{ t().confirm }}</label>
-                      </fieldset>
-                      <div class="report-actions">
-                        <button type="button" class="ar-btn" (click)="submit()" [disabled]="busy() || (!pending() && (!selected || !confirmed || !statement.trim()))">{{ pending() ? t().retry : t().submit }}</button>
-                        @if (pending()) { <button type="button" class="ar-btn ar-btn-secondary" (click)="login()" [disabled]="busy()">{{ t().renew }}</button> }
-                        @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
-                      </div>
-                      @if (pending()) { <div class="ar-panel ar-panel-warn" role="status"><p>{{ t().pending }}</p></div> }
-                    }
-                    @if (receipt(); as result) {
-                      <div class="ar-panel ar-panel-ok" role="status" #legacyReceipt tabindex="-1">
-                        <h3 class="ar-panel-title">{{ t().acceptedTitle }}</h3>
-                        <div class="ar-ref"><span class="ar-ref-label">{{ t().reference }}</span><span class="ar-ref-code">{{ result.protocol }}</span></div>
-                        <p>{{ t().nextStep }}</p>
-                        @if (result.replayed) { <p class="ar-small">{{ t().replayed }}</p> }
-                      </div>
-                    }
-                  </div>
                 }
               </div>
             </section>

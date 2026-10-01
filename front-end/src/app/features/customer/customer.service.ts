@@ -1,9 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from '../../core/http/api.service';
-import { CaseBody, CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeReceipt, IntakeStart, IntakeStartBody,
-  Receipt, Transaction, TransactionList } from '../../shared/models/intake.model';
+import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeReceipt, IntakeStart, IntakeStartBody,
+  Transaction, TransactionList } from '../../shared/models/intake.model';
 
-/** Customer calls: simulated sign-in, own charges, case submission and the guided intake. */
+/** Customer calls: simulated sign-in, own charges and the guided intake. */
 @Injectable({ providedIn: 'root' })
 export class CustomerService {
   private readonly api = inject(ApiService);
@@ -19,10 +19,6 @@ export class CustomerService {
 
   async transactions(): Promise<Transaction[]> {
     return (await this.api.request<TransactionList>('/transactions')).items;
-  }
-
-  submitCase(body: CaseBody): Promise<Receipt> {
-    return this.api.request<Receipt>('/cases', body);
   }
 
   startIntake(body: IntakeStartBody): Promise<IntakeStart> {
