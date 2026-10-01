@@ -1,6 +1,6 @@
 # Cost evidence
 
-Everything about cost, sizing and where each layer runs is decided and explained in **[ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)**. This folder only holds the evidence it cites.
+Everything about cost, sizing and where each layer runs is proposed and explained in **[ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)** (Proposed). This folder only holds the evidence it cites.
 
 | File | What it is |
 |---|---|
