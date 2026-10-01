@@ -6,8 +6,8 @@
   @switch (step()) {
     @case ('intro') {
       <section class="step intro" aria-label="ArabicaAI">
-        <div class="intro-words" aria-live="off">
-          <p class="intro-word" [class.is-current]="lang.lang() === 'es'">Hola</p><p class="intro-word" [class.is-current]="lang.lang() === 'pt'">Olá</p><p class="intro-word" [class.is-current]="lang.lang() === 'en'">Hello</p>
+        <div class="intro-words" aria-live="off" [class.is-done]="introDone()">
+          <p class="intro-word" lang="es" [class.is-current]="lang.lang() === 'es'">Hola</p><p class="intro-word" lang="pt" [class.is-current]="lang.lang() === 'pt'">Olá</p><p class="intro-word" lang="en" [class.is-current]="lang.lang() === 'en'">Hello</p>
         </div>
         <p class="sr-only">{{ t().tagline }} {{ t().promise }}</p>
         <div class="intro-cta">
@@ -15,9 +15,9 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5l7 7-7 7"></path></svg>
           </button>
           <div class="lang-links" role="group" [attr.aria-label]="t().language">
-            <button type="button" [attr.aria-pressed]="lang.lang() === 'es'" (click)="lang.set('es')">Español</button>
-            <button type="button" [attr.aria-pressed]="lang.lang() === 'pt'" (click)="lang.set('pt')">Português</button>
-            <button type="button" [attr.aria-pressed]="lang.lang() === 'en'" (click)="lang.set('en')">English</button>
+            <button type="button" lang="es" [attr.aria-pressed]="lang.lang() === 'es'" (click)="lang.set('es')">Español</button>
+            <button type="button" lang="pt" [attr.aria-pressed]="lang.lang() === 'pt'" (click)="lang.set('pt')">Português</button>
+            <button type="button" lang="en" [attr.aria-pressed]="lang.lang() === 'en'" (click)="lang.set('en')">English</button>
           </div>
         </div>
         <p class="intro-foot">ArabicaAI. {{ t().tagline }}</p>
@@ -55,7 +55,7 @@
 
     @case ('home') {
       <div class="step home">
-        <nav class="ar-sidebar" [attr.aria-label]="t().mainNav">
+        <nav class="ar-sidebar" [attr.aria-label]="t().mainNav" [inert]="chatOpen() && narrow()">
           <div style="display: flex; flex-direction: column; gap: 28px">
             <div style="padding: 0 8px"><span class="ar-lockup"><span class="sidebar-mark-slot"></span><span class="ar-wordmark" style="font-size: 20px">Arabica<b>AI</b></span></span></div>
             <div class="ar-nav">
@@ -70,7 +70,7 @@
           </div>
         </nav>
 
-        <main class="home-main" id="inicio">
+        <main class="home-main" id="inicio" [inert]="chatOpen() && narrow()">
           <div class="topbar">
             <div style="display: flex; flex-direction: column; gap: 4px">
               <h1 class="ar-h1" tabindex="-1" style="font-size: 28px; line-height: 36px">{{ t().hello }}, {{ card()?.first_name || displayName() }}</h1>
@@ -172,13 +172,17 @@
           </div>
         </main>
 
-        <button type="button" class="ar-btn chat-toggle" (click)="chatOpen.set(!chatOpen())" [attr.aria-expanded]="chatOpen()" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null">{{ chatOpen() ? t().chatClose : t().chatOpen }}</button>
+        <button type="button" class="ar-btn chat-toggle" #chatToggle (click)="chatOpen.set(!chatOpen())" [attr.aria-expanded]="chatOpen()" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null">{{ chatOpen() ? t().chatClose : t().chatOpen }}</button>
         @if (chatOpen()) {
-          <section class="chat" id="intake-chat" aria-labelledby="chat-title">
+          <!-- At narrow widths the page behind is inert, so the panel is a modal dialog there; Escape closes it at any width. -->
+          <section class="chat" id="intake-chat" aria-labelledby="chat-title" [attr.role]="narrow() ? 'dialog' : null"
+            [attr.aria-modal]="narrow() ? 'true' : null" (keydown.escape)="closeChat()">
             <h2 class="ar-panel-title" id="chat-title" #chatPanel tabindex="-1">{{ t().guideTitle }}</h2>
+            <!-- As a modal dialog the toggle outside is hidden from assistive tech, so the dialog carries its own close. -->
+            @if (narrow()) { <button type="button" class="ar-btn-secondary chat-close" (click)="closeChat()">{{ t().chatClose }}</button> }
             <ol class="chat-log" role="log" aria-live="polite">
               @for (line of log(); track $index) {
-                <li [class]="'chat-' + line.from"><span class="sr-only">{{ line.from === 'me' ? t().chatYou : t().chatGuide }}: </span>{{ 'key' in line ? t()[line.key] : line.text }}</li>
+                <li [class]="'chat-' + line.from" [attr.id]="$last && line.from === 'bot' ? 'chat-prompt' : null"><span class="sr-only">{{ line.from === 'me' ? t().chatYou : t().chatGuide }}: </span>{{ 'key' in line ? t()[line.key] : line.text }}</li>
               }
             </ol>
             @if (chatError()) { <div class="ar-alert" role="alert" id="chat-error"><p>{{ chatError() }}</p></div> }
@@ -187,8 +191,8 @@
                 <fieldset class="chat-form" [disabled]="busy() || !!frozen()">
                   @if (askLang()) {
                     <fieldset class="chat-lang"><legend class="ar-field-label">{{ t().chatLangPrompt }}</legend>
-                      <label class="ar-check"><input type="radio" name="report-lang" value="es" [checked]="chosenLang() === 'es'" (change)="chosenLang.set('es')" required> Español</label>
-                      <label class="ar-check"><input type="radio" name="report-lang" value="pt" [checked]="chosenLang() === 'pt'" (change)="chosenLang.set('pt')" required> Português</label>
+                      <label class="ar-check" lang="es"><input type="radio" name="report-lang" value="es" [checked]="chosenLang() === 'es'" (change)="chosenLang.set('es')" required> Español</label>
+                      <label class="ar-check" lang="pt"><input type="radio" name="report-lang" value="pt" [checked]="chosenLang() === 'pt'" (change)="chosenLang.set('pt')" required> Português</label>
                     </fieldset>
                   }
                   <label class="ar-field" for="chat-statement"><span class="ar-field-label">{{ t().describe }}</span></label>
@@ -198,7 +202,7 @@
                 <div class="report-actions chat-actions"><button type="button" class="ar-btn" (click)="send()" [disabled]="busy()">{{ frozen() ? t().retry : t().chatSend }}</button></div>
               }
               @case ('choose') {
-                <fieldset class="chat-form" id="chat-choose" #chooseStep tabindex="-1" [disabled]="busy() || !!frozen()">
+                <fieldset class="chat-form" id="chat-choose" #chooseStep tabindex="-1" [disabled]="busy() || !!frozen()" [attr.aria-describedby]="promptLast() ? 'chat-prompt' : null">
                   <legend class="sr-only">{{ t().charges }}</legend>
                   @for (tx of choosable(); track tx.transaction_id) {
                     <label class="ar-check"><input type="radio" name="chat-choice" [value]="tx.transaction_id" [(ngModel)]="choice" (ngModelChange)="chatConfirmed = false">

@@ -28,8 +28,8 @@ export const API_NAMESPACES = new Set(['/intake']);
 /** HTML documents go through the gate so the browser asks for the team credential once; hashed bundles do not. */
 export const DOCUMENT_PATHS = new Set(['/', '/index.html', '/agent']);
 
-/** Dispatch one request; ``store`` is the per-request D1 store. */
-export async function route(request, env, store) {
+/** Dispatch one request; ``store`` is the per-request D1 store and ``ctx`` the Worker context (for waitUntil). */
+export async function route(request, env, store, ctx) {
   const { pathname } = new URL(request.url);
   if (pathname === '/healthz') {
     if (request.method !== 'GET') return fail(405, 'Method not allowed', { Allow: 'GET' });
@@ -43,7 +43,7 @@ export async function route(request, env, store) {
     if (!methods) return fail(404, 'Not found');
     const handler = methods[request.method];
     if (!handler) return fail(405, 'Method not allowed', { Allow: Object.keys(methods).join(', ') });
-    return handler(request, env, store);
+    return handler(request, env, store, ctx);
   }
   if (request.method !== 'GET' && request.method !== 'HEAD') return fail(405, 'Method not allowed', { Allow: 'GET, HEAD' });
   if (DOCUMENT_PATHS.has(pathname)) {

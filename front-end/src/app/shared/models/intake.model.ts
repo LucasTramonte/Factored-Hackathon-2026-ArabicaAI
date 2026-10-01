@@ -54,7 +54,7 @@ export interface AgentCaseList {
   scope: 'synthetic_demo_only';
 }
 
-// Agent intake (W4 fe-agent-console): /agent/intakes and /agent/intake-detail.
+// Agent intake: /agent/intakes and /agent/intake-detail.
 export type IntakeKind = 'complete' | 'technical' | 'incomplete';
 
 export interface AgentIntake {

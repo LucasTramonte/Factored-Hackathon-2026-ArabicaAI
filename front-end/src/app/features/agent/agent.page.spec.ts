@@ -105,6 +105,22 @@ describe('AgentPage', () => {
     expect(document.activeElement).toBe(el().querySelector('button.ar-btn'));
   });
 
+  it('keeps keyboard focus on the page after loading: the queue heading on success, the sign-in button on failure', async () => {
+    document.body.appendChild(el());
+    fixture.autoDetectChanges();
+    const signIn = () => el().querySelector<HTMLButtonElement>('button.ar-btn')!;
+    service.signIn.and.rejectWith(new ApiError(503, 'raw'));
+    signIn().focus();
+    signIn().click();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(signIn());
+    service.signIn.and.resolveTo();
+    signIn().click();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(el().querySelector('#intake-queue-title'));
+    el().remove();
+  });
+
   it('says so when there is no verified transaction', async () => {
     service.intakeDetail.and.resolveTo(detail(P1, { verified_evidence: { transaction: null }, history_has_more: true }));
     await loadAndOpen();
@@ -161,4 +177,27 @@ describe('AgentPage', () => {
   });
 
   afterEach(() => TestBed.inject(LangService).set('es'));
+
+  it('keeps the latest detail request for a protocol even when an earlier one for the same protocol fails', async () => {
+    let rejectFirst!: (e: unknown) => void;
+    const first = new Promise<AgentIntakeDetail>((_, reject) => (rejectFirst = reject));
+    service.intakeDetail.and.returnValues(first, Promise.resolve(detail(P1)));
+    const row = document.createElement('button');
+    const earlier = page.open(P1, row);
+    await page.open(P1, row);
+    rejectFirst(new ApiError(503));
+    await earlier;
+    expect(page.detail()?.protocol).toBe(P1);
+    expect(page.error()).toBe('');
+    expect(page.openProtocol()).toBe(P1);
+  });
+
+  it('clears a shown detail when the latest request for it fails', async () => {
+    service.intakeDetail.and.returnValues(Promise.resolve(detail(P1)), Promise.reject(new ApiError(503)));
+    const row = document.createElement('button');
+    await page.open(P1, row);
+    await page.open(P1, row);
+    expect(page.detail()).toBeNull();
+    expect(page.error()).not.toBe('');
+  });
 });
