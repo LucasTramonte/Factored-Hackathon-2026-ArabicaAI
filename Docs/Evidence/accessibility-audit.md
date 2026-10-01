@@ -8,7 +8,7 @@ W9, 1 October 2026. This audit checks the Angular client against WCAG 2.2 AA, an
   - Angular production build, copied into the Worker by `back-end/scripts/prepare-assets.mjs`.
   - Served by `wrangler dev --local` with a local D1: migrations applied, and only `back-end/seeds/seed_fictitious.sql` loaded (`demo-ana` with two charges, `demo-bruno` with one).
   - Placeholder `.dev.vars` for the demo gate. Nothing remote and no deploy.
-- **Tool:** headless Google Chrome driven over the Chrome DevTools Protocol from a Node script, with no new dependencies. The script is a QA scratch harness and is not committed.
+- **Tool:** headless Google Chrome driven over the Chrome DevTools Protocol from a Node script, with no new dependencies. The script is a QA scratch harness and is not committed, so the ratios, clearances and obscured-control counts below are one-off measurements that can't be re-run from the repository.
   - **Keyboard:** `Input.dispatchKeyEvent` sends Tab, Enter and Space. Buttons are activated by keyboard, not by `element.click()`, so focus behaves as it does for a person.
   - **Names, roles, headings, landmarks and live regions:** `Accessibility.getFullAXTree`. Any interactive node without a name is reported.
   - **Text contrast (1.4.3):** WCAG 2.x relative luminance on computed colours.
@@ -25,7 +25,7 @@ W9, 1 October 2026. This audit checks the Angular client against WCAG 2.2 AA, an
   - Viewports and themes: 1440×900 light and dark, 1280×720 light, 320×640 light, and 320×640 dark with reduced motion.
   - For 2.4.11 the Tab walk also ran at 1440×900, 1440×800, 1366×768, 1280×720, 1181×800, 1180×800, 1024×768, 768×1024, 390×844 and 320×640.
   - All screenshots are 1× device pixel ratio.
-- **States, customer `/`:** intro, login (the picker filtered to "demo"), home, chat describe with a validation error, choose, receipt, and the chat in the English interface.
+- **States, customer `/`:** intro, login (the picker filtered to "demo", except in the `fix-a-*` screenshots, see the index), home, chat describe with a validation error, choose, receipt, and the chat in the English interface.
 - **States, agent `/agent`:** before sign-in, then the queue with a detail open and closed.
 
 ## Findings
@@ -38,10 +38,10 @@ W9, 1 October 2026. This audit checks the Angular client against WCAG 2.2 AA, an
 | 2 | 2.2.2 Pause, Stop, Hide | `/` intro | **Fail.** "Hola / Olá / Hello" looped on an infinite 9 s cycle with no pause control (`animation-iteration-count: infinite`). | **Pass.** One pass only. Motion runs from 2.6 s to 6.8 s, which is 4.2 s, under the 5 s limit. Samples: 3.2 s Hola, 4.6 s Olá, 6.0 s Hello, then from 7 s onward the current language's word (Hola in ES) is shown statically, with no animation. Reduced motion is unchanged: the current word is static from the start. **The timing changed visually** (1.4 s per word instead of 3 s), so the team should review it. | dc0282b (`styles.css`, `customer.page.ts`/`.html`). Screenshots `fix-f-*` |
 | 3 | 2.4.3 Focus Order | `/` chat, "Iniciar un nuevo reporte" (receipt and ended steps) | **Fail.** The button removes itself, so focus fell to `<body>`. | **Pass.** Focus goes to the chat heading. Spec: `customer.page.focus.spec.ts`. | dc0282b |
 | 4 | 2.4.3 Focus Order | `/agent` "Entrar como agente y actualizar casos" | **Fail.** The button disables itself while busy, so focus fell to `<body>` after loading. | **Pass.** Focus goes to the queue heading on success, and back to the button on failure. Spec: `agent.page.spec.ts`. | dc0282b |
-| 5 | 2.4.11 Focus Not Obscured (Minimum) | `/` home with the chat panel open, 1180 px wide and narrower | **Fail.** Tab reached page controls fully hidden behind the fixed chat panel: 6 at 320×640, 3 at 1024×768, 2 at 1180×800. At 1181 px and wider, 0. Screenshot `fix-2411-before-focus-hidden-1024.png`. | **Pass.** At 1180 px and below, the open panel makes `nav` and `main` inert. Tab cycles through the panel and its toggle only, and nothing is obscured at 320, 1024 or 1180. 1440 is unchanged: the whole page stays reachable and nothing is obscured. Closing with the toggle keeps focus on the toggle. Spec: inert only when narrow, never on the chat or its toggle. | dc0282b |
+| 5 | 2.4.11 Focus Not Obscured (Minimum) | `/` home with the chat panel open, 1180 px wide and narrower | **Fail.** Tab reached page controls fully hidden behind the fixed chat panel: 6 at 320×640, 3 at 1024×768, 2 at 1180×800. At 1181 px and wider, 0. Screenshot `fix-2411-before-focus-hidden-1024.png`. | **Pass.** At 1180 px and below, the open panel makes `nav` and `main` inert. Tab cycles through the panel and its toggle only, and nothing is obscured at 320, 1024 or 1180. 1440 is unchanged: the whole page stays reachable and nothing is obscured. Closing with the toggle keeps focus on the toggle. Spec: inert only when narrow, never on the chat or its toggle. **Missed at first, fixed after review:** wider than 1180 px, when the panel grew to its full height (choose and error states), its top reached about y=36 and covered the topbar's ES/PT/EN switch, which Tab still reaches there (`scenario-ambiguous-es.png`, `scenario-expired-manual-es.png`, partly `scenario-unauthorized-es.png`, all 1280×800, captured before the fix). Above 1180 px the panel's `max-height` is now `100dvh − 180px`, so its top stays at least 96 px down, below the topbar. This follow-up was not re-measured with the harness. | dc0282b, review follow-up |
 | 6 | 3.1.2 Language of Parts | `/` intro, chat (EN interface), language switch | **Fail.** "Español / Português / English", "Olá / Hello" and the report-language radios "Español / Português" had no `lang` (for example, in an ES page). | **Pass.** Each carries its own `lang`. The ES/PT/EN switch buttons carry `lang` too. | dc0282b |
 | 7 | 3.1.2 Language of Parts | `/agent` "Casos abiertos" list | **Fail.** `.case-statement` has no `lang`. A PT statement is read with the page language (screenshot `scenario-agent-handoff-es.png`, bottom). The intake detail does set `lang` from the report language. | **Open.** `AgentCase` has no language field in the model or the contract (`front-end/contracts/`), so a fix needs an additive API change. | open |
-| 8 | 1.4.11 Non-text Contrast | all | Pass | Buttons and fields are at least 3:1. The focus ring is at least 5.18:1 (light) and 6.11:1 (dark) on every element reached by Tab. Unpressed segmented-control buttons have no fill (1.03 to 1.06:1) and identity-row borders are 1.16 to 1.34:1. These controls are identified by their text or radio, so they aren't counted as failures. | — |
+| 8 | 1.4.11 Non-text Contrast | all | Pass | Buttons and fields are at least 3:1. The focus ring is at least 5.18:1 (light) and 6.11:1 (dark) on every element reached by Tab. Unpressed segmented-control buttons have no fill (1.03 to 1.06:1) and identity-row borders are 1.16 to 1.34:1. These controls are identified by their text or radio, so they aren't counted as failures. Not checked: whether the pressed and unpressed states of the segmented control differ from each other by 3:1. | — |
 | 9 | 1.4.3 (rest) | all | Pass | The lowest text ratio outside finding 1 is 4.58:1, the "aceptada" ok chip in light. Muted text is 5.54:1. Card text on accent is 4.87:1. | — |
 | 10 | 1.4.10 Reflow | `/`, `/agent`, 320 px | Pass | No horizontal scroll in any state. The off-screen disc is clipped by `.stage`. | — |
 | 11 | 2.5.8 Target Size (Minimum) | all | Pass | The 18 px-tall link buttons (FAQ, "No lo reconozco") pass by the spacing exception. Radios and checkboxes are 18 px but sit inside clickable labels. | — |
@@ -56,6 +56,7 @@ Advisories (not WCAG failures, not changed):
 - The intro step has no `h1`.
 - Intro, login and `/agent` have no `main` landmark.
 - The chat's describe-step fieldset is an unnamed group.
+- The 1180 px breakpoint lives in both `customer.page.ts` (`matchMedia`) and the stylesheets, and the 6.8 s `introDone` timer must match the intro animation delays in `styles.css`. Each place now carries a comment naming the other, but nothing enforces them.
 - At 1180 px and below, the language switch is unavailable while the chat is open: it sits in the inert `main`, so close the chat to switch.
 - The chat log's customer lines carry no `lang` when the typed language differs from the interface.
 
@@ -84,7 +85,7 @@ Each capture is one of two kinds:
 
 ## Screenshot index
 
-Files are in `Docs/Evidence/screenshots/`. All are PNG at 1×, each under 200 KB, with fictitious data only. The picker was filtered to "demo" wherever the login appears.
+Files are in `Docs/Evidence/screenshots/`. All are PNG at 1×, each under 200 KB. Only the fictitious seed was loaded, and the picker was filtered to "demo" wherever the login appears, except in the four `fix-a-*` captures. Those show the unfiltered list, which includes the one-day dataset identity committed in `identities.json`; its customer ID is covered by a grey bar.
 
 | File | Viewport / theme | Kind | Content |
 |---|---|---|---|
@@ -119,3 +120,17 @@ Files are in `Docs/Evidence/screenshots/`. All are PNG at 1×, each under 200 KB
 - `npm --prefix front-end test -- --watch=false --browsers=ChromeHeadless`: 68 of 68 pass. That includes the 3 new specs. The 2 focus specs were checked to fail with their fix removed.
 - `npm --prefix front-end run build`, then `node back-end/scripts/prepare-assets.mjs`: build succeeds.
 - `npm --prefix back-end test`: all three runs pass (84, 30 and 4 tests), covering the unit tests and the local-D1 integration tests.
+
+## Review follow-ups
+
+Made after the review, in the same PR, with specs written first (each failed before its fix, and failed again when the fix was reverted):
+
+- **Chat panel at wide widths (2.4.11).** It no longer grows over the topbar; see finding 5.
+- **Chat as a dialog at narrow widths (4.1.2).** At 1180 px and below, the page behind is inert, so the panel now has `role="dialog"` and `aria-modal="true"` there. At wider widths it stays a plain region. Escape closes it at any width and returns focus to the toggle.
+- **Choose step announced (#46 review).** When the choose step takes focus, its fieldset is described by the guide's latest line (`aria-describedby="chat-prompt"`), so a screen-reader user hears that the step changed. A spec also covers reopening the panel on the choose step, where the heading takes focus.
+- **Picker count (#41 review).** The visible count still updates on every keystroke. The live region (`role="status"`) now repeats it only once typing has paused for 500 ms, so a screen reader isn't interrupted per key.
+- **Agent detail (#38 review).** Each detail request is numbered, and only the latest may change the panel, even for the same protocol. A double click whose first request fails no longer hides the second request's detail, and a failed latest request clears the panel.
+- **Code hygiene.** Process labels (`W3`, `W4`, `W5`, `ponytail:`) were replaced with descriptive comments.
+
+`npm --prefix front-end test -- --watch=false --browsers=ChromeHeadless`: 74 of 74 pass. `ng build` succeeds.
+
