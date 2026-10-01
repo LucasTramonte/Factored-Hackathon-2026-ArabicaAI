@@ -54,6 +54,16 @@ CREATE SCHEMA bronze;
 CREATE TABLE bronze.transactions(transaction_country VARCHAR);
 INSERT INTO bronze.transactions VALUES ('Mexico'), ('USA'), ('USA'), ('Spain');
 INSERT INTO silver.fact_satisfaction_surveys VALUES ('Positive'), (NULL);
+CREATE TABLE silver.dim_marketing_campaigns(campaign_id VARCHAR);
+CREATE TABLE silver.fact_campaign_sends(send_id VARCHAR);
+CREATE TABLE silver.fact_digital_events(event_id VARCHAR);
+CREATE TABLE silver.dim_fx_rates(rate_date DATE);
+CREATE TABLE bronze.customers(customer_id VARCHAR); CREATE TABLE bronze.products(product_id VARCHAR);
+CREATE TABLE bronze.branches(branch_id VARCHAR); CREATE TABLE bronze.service_agents(agent_id VARCHAR);
+CREATE TABLE bronze.marketing_campaigns(campaign_id VARCHAR); CREATE TABLE bronze.call_center_interactions(interaction_id VARCHAR);
+CREATE TABLE bronze.call_transcripts(transcript_id VARCHAR); CREATE TABLE bronze.satisfaction_surveys(survey_id VARCHAR);
+CREATE TABLE bronze.digital_events(event_id VARCHAR); CREATE TABLE bronze.complaints(complaint_id VARCHAR);
+CREATE TABLE bronze.campaign_sends(send_id VARCHAR); CREATE TABLE bronze.daily_exchange_rates(rate_date VARCHAR);
 """
 
 HOLDOUT_ROWS = """
@@ -69,6 +79,9 @@ def make_db(path: Path, with_holdout: bool) -> Path:
         con.execute(DDL)
         if with_holdout:
             con.execute(HOLDOUT_ROWS)
+        # Added after the inserts above, which list the original nine complaint columns.
+        con.execute("ALTER TABLE silver.fact_complaints ADD COLUMN status VARCHAR; "
+                    "ALTER TABLE silver.fact_complaints ADD COLUMN resolution VARCHAR;")
     return path
 
 
@@ -163,8 +176,8 @@ def test_lookback_counts_purchases_before_each_unrecognized_charge_complaint(tmp
                     "('T6','2023-08-01 12:00:00','2023-08-01','P1','C1','Purchase','Approved',1,'USD',1,false,'Old','Food','México')")
         # Left-censored: a complaint before 2023-10-15 has truncated history and is excluded.
         con.execute("INSERT INTO silver.fact_complaints VALUES "
-                    "('Q3','2023-09-01 12:00:00','2023-09-01','C1','Cargo no reconocido','x',NULL,NULL,NULL),"
-                    "('Q4','2025-06-01 12:00:00','2025-06-01','C2','Cargo no reconocido','x',NULL,NULL,NULL)")
+                    "('Q3','2023-09-01 12:00:00','2023-09-01','C1','Cargo no reconocido','x',NULL,NULL,NULL,NULL,NULL),"
+                    "('Q4','2025-06-01 12:00:00','2025-06-01','C2','Cargo no reconocido','x',NULL,NULL,NULL,NULL,NULL)")
     rows = {r[0]: r for r in rf.run(db, only=("DF-021",))["results"][0]["rows"]}
     # country, complaints, n30/n45/n90/n120 quantiles (p50, p90, p95, p99), share with none in
     # 45 and 120 days, days since the last purchase (p50, p95, p99).
@@ -194,3 +207,37 @@ def test_currency_scale_compares_purchases_and_claimed_amounts_per_country(tmp_p
     # source, customer country, currency, rows, median amount, median amount in USD (purchases only)
     assert rows == [["purchases", "México", "USD", 2, 15.25, 15.25],
                     ["unrecognized_charge_claims", "México", "USD", 1, 10.5, None]]
+
+
+def test_amount_tiers_report_shares_the_top_quintile_and_claimed_amounts_apart(tmp_path):
+    db = make_db(tmp_path / "f.duckdb", with_holdout=True)
+    rows = {(r[0], r[1]): r[2:] for r in rf.run(db, only=("DF-024",))["results"][0]["rows"]}
+    # rows, row share, value share, min, p50, p90, p99, max. T3 is a withdrawal; T9 is in the holdout.
+    assert rows[("purchases_usd_tier", "1 under 50")] == [2, 1.0, 1.0, 10.5, None, None, None, 20.0]
+    assert rows[("purchases_usd_top_quintile", "top 20% by amount")] == [1, 0.5, 0.6557, 20.0, None, None, None, 20.0]
+    assert rows[("purchases_usd", "all")][:5] == [2, 1.0, 1.0, 10.5, 15.25]
+    # Claimed amounts stay in their source currency and are never mixed into the USD shares.
+    assert rows[("claimed_amount_source_currency", "Cargo no reconocido")][:4] == [1, None, None, 10.5]
+
+
+def test_dispute_outcomes_count_status_resolution_and_repeat_complainants(tmp_path):
+    db = make_db(tmp_path / "f.duckdb", with_holdout=True)
+    with duckdb.connect(str(db)) as con:
+        con.execute("UPDATE silver.fact_complaints SET status = 'Rechazado', resolution = 'Plantilla A'")
+        # C1 complains twice; C2 once. Q9 (holdout) and Q2 (another subcategory) are excluded.
+        con.execute("INSERT INTO silver.fact_complaints VALUES "
+                    "('Q5','2025-07-01 12:00:00','2025-07-01','C1','Cargo no reconocido','x',NULL,NULL,NULL,'Cerrado',NULL),"
+                    "('Q6','2025-08-01 12:00:00','2025-08-01','C2','Cargo no reconocido','x',NULL,NULL,NULL,'Cerrado',NULL)")
+    rows = rf.run(db, only=("DF-025",))["results"][0]["rows"]
+    # kind, label, complaints, customers
+    assert rows == [["complaints_per_customer", "2 or more", 2, 1], ["complaints_per_customer", "1", 1, 1],
+                    ["resolution", "(none)", 2, 2], ["resolution", "Plantilla A", 1, 1],
+                    ["status", "Cerrado", 2, 2], ["status", "Rechazado", 1, 1]]
+
+
+def test_dictionary_counts_are_compared_with_bronze_and_silver_rows(tmp_path):
+    db = make_db(tmp_path / "f.duckdb", with_holdout=False)
+    rows = rf.run(db, only=("DF-026",))["results"][0]["rows"]
+    assert len(rows) == 13 and rows[0][0] == "digital_events"
+    # table, dictionary rows, Bronze rows, Silver rows, Silver / dictionary, removed in Silver
+    assert ["transactions", 5000000, 4, 3, 0.0, 1] in rows

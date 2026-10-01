@@ -4,6 +4,13 @@ This is the team's single list of what we learned about the supplied LATAM Bank 
 
 Every number here comes from a query in [`data_profiles/findings/queries/`](../../data_profiles/findings/queries/) run by `make findings` on the full Silver build (quality run `20260929T113804Z`, ready, 0 errors) on 2026-09-29. DF-016 to DF-018 were added on 2026-09-30 from the same build (findings run `20260930T033230Z`), and DF-019 later that day (findings run `20260930T192858Z`). Results are aggregates only. The dataset is synthetic (dataset summary, p. 5), so "unrealistic" below means unlike a real bank, not wrong in the file.
 
+**How we treat a limitation in the data:**
+1. **Identify it.** The quality gate checks every build, and a findings query backs every claim.
+2. **Document it here,** with evidence, impact and status.
+3. **Handle it safely in the product.** Values are served as provided, uncertainty gets a label in the interface, and anything that can't be verified fails closed. We don't correct the source to fit an assumption.
+
+The key data risk for the intake service is currency ([DF-023](#df-023-amounts-share-one-usd-scale-and-claimed-currencies-ignore-the-customers-country)); [`DATA_ENGINEERING.md` section 9](DATA_ENGINEERING.md#9-currency-and-time-served-as-provided) says how the service handles it and the time zone.
+
 ## How to read it
 
 - **Scope** says which rows a query may read ([ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md)):
@@ -46,7 +53,10 @@ Every number here comes from a query in [`data_profiles/findings/queries/`](../.
 | [DF-020](#df-020-one-clock-for-every-country-no-daily-rhythm) | One clock for every country, no daily rhythm | design | Medium | Accepted limitation | Manoella |
 | [DF-021](#df-021-disputing-customers-have-few-recent-purchases) | Disputing customers have few recent purchases | design | High | Handled in the Gold cohort | Manoella |
 | [DF-022](#df-022-unrecognized-charge-customers-by-country-segment-and-accent) | Unrecognized-charge customers by country, segment and accent | design | Low | Supports the Gold cohort | Manoella |
-| [DF-023](#df-023-amounts-share-one-usd-scale-and-claimed-currencies-ignore-the-customers-country) | Amounts share one USD scale, and claimed currencies ignore the customer's country | design | Medium | Open | Manoella |
+| [DF-023](#df-023-amounts-share-one-usd-scale-and-claimed-currencies-ignore-the-customers-country) | **Key point.** Amounts share one USD scale, and claimed currencies ignore the customer's country | design | High | Handled at metric level; the free-text reply is planned | Manoella |
+| [DF-024](#df-024-purchase-amounts-are-almost-flat-up-to-usd-509-with-no-high-value-tail) | Purchase amounts are almost flat up to USD 509, with no high-value tail | design | Medium | Accepted limitation | Lucas |
+| [DF-025](#df-025-dispute-outcomes-cant-show-friendly-fraud) | Dispute outcomes can't show friendly fraud | design | Medium | Accepted limitation | Lucas |
+| [DF-026](#df-026-the-dictionarys-row-counts-are-approximate) | The dictionary's row counts are approximate | full | Low | Accepted limitation | Lucas |
 
 ## Findings
 
@@ -219,9 +229,62 @@ The [bronze profile findings](../../data_profiles/bronze_data_profile/bronze_pro
   - **The live guided flow:** none. The customer picks the charge from their own list, which shows each amount with its currency code.
   - **The written policy** (`evals/intake/frozen_es_pt_v1/POLICY.md`, `label_rules._currency`) maps "pesos" from a Mexican customer to a currency they don't hold. The answer is therefore "clarify, no candidates". That is faithful to this data, but "pesos" is how a Mexican customer naturally names an amount. Once the model reads free text online, every Mexican report that states pesos would ask the customer again, and Mexico is 48.7% of the served cohort. Ignoring the currency would not help, because the amounts are dollar-sized.
   - **The frozen evaluation** uses the same rule. Its fixtures mirror DF-005, so the cases that depend on it test this data, not real Mexican usage.
-- **Handling:** open.
-  - **Factored question:** is USD for Mexico intended?
-  - **Until then:** the policy stays unchanged, because changing it would change frozen labels and needs Manoella's approval. The online clarifying message should say which currency the customer's card uses, so the second answer can match.
+- **Factored's answer (2026-10-01):** don't correct the data based on assumptions about what the currency should be. Treat it as provided, document the inconsistency, and design the system to handle and communicate the uncertainty safely. They called this a key point.
+- **Handling:**
+  - **Built.** The data stays as provided: Gold serves the Bronze amount with its own currency code, every row shows both, and nothing converts or sums across currencies. The customer picks the charge from their own list, so a currency word can't pick the wrong one.
+  - **Planned, for when the model reads free text online:** the clarifying reply says which currency the customer's card uses and asks them to confirm, rather than matching on the word.
+  - **The written policy and the frozen labels stay unchanged.** Changing them needs Manoella's approval, and the evaluation reports the cases that depend on this rule (EVALUATION.md).
+
+### DF-024 Purchase amounts are almost flat up to USD 509, with no high-value tail
+
+- **Evidence** (design window, findings run `20261001T182840Z`, 842,103 approved purchases with a USD amount):
+  - **The range is narrow and almost uniform.** Purchases run from USD 5.00 to USD 509.41: p50 252.39, p90 450.29, p99 495.00.
+  - **By tier, under USD 50:** 9.1% of purchases and 1.0% of value. **50–200:** 30.3% and 15.0%. **200–500:** 60.6% and 84.0%. **Over 500:** 78 purchases, 0.0002 of value.
+  - **No Pareto tail.** The top 20% of purchases by amount hold 35.7% of the value. A long-tailed card book would put most of the value there.
+  - **Claimed amounts don't match purchases.** Unrecognized-charge complaints with a claimed amount (3,451) run from 55.06 to 4,999.90 in their own random currency (DF-023), with a median of 2,533.08. That is far above any purchase, and claims aren't linked to transactions (DF-003).
+- **Interpretation:** a USD 5,000 purchase doesn't exist in this data. So the data can't tell us where a "high-value" dispute starts, and it can't justify amount tiers fitted to it.
+- **Impact on the product:** CX feedback says a large unexpected charge causes panic and needs the fastest, surest path. Any tier must therefore be a stated policy, not a learned threshold.
+- **Handling:**
+  - The proposed policy, planned and not built: a charge that is high **relative to the customer's own purchases** (above their own p95), or above a fixed amount the bank sets, gets a priority handoff and a clear "call the bank to block your card" line.
+  - The assistant never blocks a card itself (ADR-002).
+  - The amounts above are USD (`amount_usd`); for Colombia and Argentina they are FX-derived and keep their estimated flag (DF-015).
+
+### DF-025 Dispute outcomes can't show friendly fraud
+
+- **Evidence** (design window, findings run `20261001T182840Z`, 10,370 `Cargo no reconocido` complaints):
+  - **Status:** In Process 4,114, Open 3,105, Resolved 2,117, Escalated 514, Closed 418, Rejected 102.
+  - **Resolution:** 7,963 have none. The rest carry one of five fixed sentences (453–508 each), such as "Se otorgó compensación al cliente por las molestias ocasionadas."
+  - **Repeat complainants:** 350 customers filed two or more (707 complaints); 9,663 filed one.
+  - **No link to a transaction.** A complaint names a product, not a transaction (DF-003), and those links often point to another customer (DF-002).
+- **Interpretation:** friendly fraud is a customer disputing a charge they made, to keep both the goods and the money. Measuring it would need disputes linked to transactions and an outcome that says "the customer made it". The data has neither. A "Rejected" status doesn't say why, and the resolutions are templates.
+- **Impact on the product:** we can't size friendly fraud or train anything to spot it. Deciding fraud is outside the V1 workflow in any case (ADR-002).
+- **Handling:** a scope decision, not a new workflow. Intake reduces it without judging the customer:
+  - **Built:** the merchant and time of each charge are shown before the report, the customer confirms the exact charge, and the agent sees the customer's own words and the evidence.
+  - **Planned:** an "I recognize it now" close, and the customer's prior reports from our own case history (not the dataset's `is_repeat_complainer` snapshot) shown to the agent.
+
+### DF-026 The dictionary's row counts are approximate
+
+- **Evidence** (full scope, findings run `20261001T182840Z`):
+
+  | Table | Dictionary | Supplied (Bronze = Silver) | Ratio |
+  |---|---|---|---|
+  | digital_events | 10,000,000 | 15,620,994 | 1.56 |
+  | transactions | 5,000,000 | 4,425,008 | 0.89 |
+  | campaign_sends | 2,000,000 | 1,746,801 | 0.87 |
+  | call_center_interactions | 800,000 | 686,296 | 0.86 |
+  | products | 400,000 | 400,000 | 1.00 |
+  | satisfaction_surveys | 250,000 | 212,759 | 0.85 |
+  | call_transcripts | 200,000 | 171,321 | 0.86 |
+  | customers | 150,000 | 150,000 | 1.00 |
+  | complaints | 80,000 | 67,095 | 0.84 |
+  | daily_exchange_rates | 3,000 | 13,164 | 4.39 |
+  | service_agents, branches, marketing_campaigns | 1,200, 350, 200 | 1,200, 350, 200 | 1.00 |
+
+  - **Totals:** 23,495,188 rows supplied, against a dictionary sum of 18,884,750 ("~19 million" in the dataset overview).
+  - **Duplicates:** Silver removed 0 rows in every table, against the dataset overview's "~2% duplicate records". Every day is present, and the raw files match ([`PARITY.md`](../../data_pipelines/quality/PARITY.md)).
+- **Interpretation:** customers, products, branches, agents and campaigns match the dictionary exactly. Most event tables are 11–16% smaller, digital events are 56% larger, and the exchange rates have 13,164 rows instead of 3,000. The dictionary describes the generator's targets, not this delivery.
+- **Factored's answer (2026-10-01):** the dictionary figures aren't ground truth for judging. Use the supplied data and document the differences.
+- **Handling:** every figure in our deliverables comes from the supplied data. The quality gate checks row counts between Bronze and Silver, never against the dictionary.
 
 ## Disclosure
 
