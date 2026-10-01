@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, OnDestroy, OnInit, afterRenderEffect, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -47,6 +47,16 @@ export class CustomerPage implements OnInit, OnDestroy {
   statement = '';
   confirmed = false;
   private bootTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private shownStep: Step = 'intro';
+
+  /** On a step change (not the first render), move focus to the new step's heading so it doesn't fall to <body>. */
+  private readonly focusStepHeading = afterRenderEffect(() => {
+    const step = this.step();
+    if (step === this.shownStep) return;
+    this.shownStep = step;
+    this.host.nativeElement.querySelector<HTMLElement>('.step h1')?.focus();
+  });
 
   /** Where the disc sits: boot centre, top dot, login form, sidebar mark. */
   readonly discClass = computed(() => {
