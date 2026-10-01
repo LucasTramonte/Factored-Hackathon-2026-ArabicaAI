@@ -99,7 +99,7 @@ make docker-pipeline AWS_PROFILE=default
 
 Both Docker targets build the image before running it. `docker-pipeline` mounts `data/` writable and your `~/.aws` directory read-only at runtime; credentials are never copied into the image.
 
-`make pipeline` runs **Bronze → Silver → quality**. On a fresh checkout, Bronze loads all available source partitions; later runs ingest only newer fact partitions and refresh the small dimensions. The bucket and region defaults are in the [Makefile](Makefile). Use `AWS_PROFILE=your-profile` if your credentials are under another profile.
+`make pipeline` runs **Bronze → Silver → quality**. On a fresh checkout, Bronze loads all available source partitions; later runs ingest newer fact partitions plus any never-loaded partition older than the watermark (without moving it back), and refresh the small dimensions. A correction to a partition already loaded needs `make bronze-full` ([DATA_ENGINEERING.md](DATA_ENGINEERING.md#5-update-and-freshness-policy)). The bucket and region defaults are in the [Makefile](Makefile). Use `AWS_PROFILE=your-profile` if your credentials are under another profile.
 
 Before a full run, you can check read access without printing credentials:
 
