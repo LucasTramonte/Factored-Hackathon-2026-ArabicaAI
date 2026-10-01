@@ -49,7 +49,23 @@ const es = {
     actionsTaken: 'Acciones realizadas', openQuestions: 'Preguntas abiertas', history: 'Historial',
     toolStatus: 'Estado de la consulta', destination: 'Destino', priority: 'Prioridad', close: 'Cerrar',
     statement: 'Relato del cliente', languageCode: 'Idioma del reporte',
-    agentErr401: 'La sesión de agente expiró. Vuelve a entrar como agente.', agentErr404: 'No se encontró el reporte.'
+    agentErr401: 'La sesión de agente expiró. Vuelve a entrar como agente.', agentErr404: 'No se encontró el reporte.',
+    // W5 fe-intake-chat. PROVISIONAL (pending team decision): chatHello, faq*, receipt*.
+    chatOpen: 'Abrir el reporte guiado', chatClose: 'Cerrar el reporte guiado', chatYou: 'Tú', chatGuide: 'Guía',
+    chatHello: 'Cuéntame qué pasó con el cargo que no reconoces. Después eliges el cargo y confirmas.',
+    chatLangPrompt: 'Idioma del reporte', chatSend: 'Enviar',
+    chatValidation: 'Elige el idioma del reporte y describe lo que pasó en al menos 10 caracteres.',
+    chatChoose: 'Elige el cargo entre tus cargos y confírmalo. Si no lo encuentras, pide revisión sin cargo.',
+    chatChooseValidation: 'Elige uno de tus cargos y marca la confirmación.', chatConfirmCharge: 'Confirmar este cargo',
+    chatCannotFind: 'No encuentro el cargo', chatNew: 'Iniciar un nuevo reporte', chatFaq: 'Preguntas frecuentes',
+    faqNextQ: '¿Qué pasa después de enviarlo?',
+    faqNextA: 'Una persona del equipo del banco revisa tu reporte. Solo ves una referencia cuando quedó guardado. Esta demo no reembolsa, no bloquea tarjetas ni decide sobre fraude.',
+    faqTimeQ: '¿Cuánto tarda?', faqTimeA: 'Esta demo no fija un plazo de revisión. Guarda tu referencia: identifica tu reporte.',
+    faqMissingQ: '¿Y si no encuentro el cargo?', faqMissingA: 'Elige «No encuentro el cargo» y una persona revisa tu reporte sin un cargo confirmado.',
+    receiptComplete: 'Reporte aceptado en la demo',
+    receiptIncomplete: 'Enviado a revisión humana sin un cargo confirmado',
+    receiptTechnical: 'No pudimos verificar el cargo; enviado a revisión humana',
+    products: 'Productos', notListed: 'no consta'
 };
 
 /** The key set is the Spanish table; the other two must match it exactly. */
@@ -102,7 +118,23 @@ const STRINGS: Record<Lang, Strings> = {
     actionsTaken: 'Ações realizadas', openQuestions: 'Perguntas em aberto', history: 'Histórico',
     toolStatus: 'Status da consulta', destination: 'Destino', priority: 'Prioridade', close: 'Fechar',
     statement: 'Relato do cliente', languageCode: 'Idioma do relato',
-    agentErr401: 'A sessão de agente expirou. Entre novamente como agente.', agentErr404: 'Relato não encontrado.'
+    agentErr401: 'A sessão de agente expirou. Entre novamente como agente.', agentErr404: 'Relato não encontrado.',
+    // W5 fe-intake-chat. PROVISIONAL (pending team decision): chatHello, faq*, receipt*.
+    chatOpen: 'Abrir o relato guiado', chatClose: 'Fechar o relato guiado', chatYou: 'Você', chatGuide: 'Guia',
+    chatHello: 'Conte o que aconteceu com a cobrança que você não reconhece. Depois você escolhe a cobrança e confirma.',
+    chatLangPrompt: 'Idioma do relato', chatSend: 'Enviar',
+    chatValidation: 'Escolha o idioma do relato e descreva o que aconteceu em pelo menos 10 caracteres.',
+    chatChoose: 'Escolha a cobrança entre as suas e confirme. Se não a encontrar, peça análise sem cobrança.',
+    chatChooseValidation: 'Escolha uma das suas cobranças e marque a confirmação.', chatConfirmCharge: 'Confirmar esta cobrança',
+    chatCannotFind: 'Não encontro a cobrança', chatNew: 'Iniciar um novo relato', chatFaq: 'Perguntas frequentes',
+    faqNextQ: 'O que acontece depois que eu enviar?',
+    faqNextA: 'Uma pessoa da equipe do banco analisa o seu relato. Você só vê uma referência quando ele foi salvo. Esta demo não reembolsa, não bloqueia cartões nem decide sobre fraude.',
+    faqTimeQ: 'Quanto tempo leva?', faqTimeA: 'Esta demo não define um prazo de análise. Guarde a sua referência: ela identifica o seu relato.',
+    faqMissingQ: 'E se eu não encontrar a cobrança?', faqMissingA: 'Escolha «Não encontro a cobrança» e uma pessoa analisa o seu relato sem uma cobrança confirmada.',
+    receiptComplete: 'Relato aceito na demo',
+    receiptIncomplete: 'Enviado para análise humana sem uma cobrança confirmada',
+    receiptTechnical: 'Não conseguimos verificar a cobrança; enviado para análise humana',
+    products: 'Produtos', notListed: 'não consta'
   },
   en: {
     greeting: 'Hello', tagline: 'Report a charge you do not recognize.',
@@ -149,7 +181,23 @@ const STRINGS: Record<Lang, Strings> = {
     actionsTaken: 'Actions taken', openQuestions: 'Open questions', history: 'History',
     toolStatus: 'Lookup status', destination: 'Destination', priority: 'Priority', close: 'Close',
     statement: 'Customer statement', languageCode: 'Report language',
-    agentErr401: 'The agent session expired. Sign in as an agent again.', agentErr404: 'Report not found.'
+    agentErr401: 'The agent session expired. Sign in as an agent again.', agentErr404: 'Report not found.',
+    // W5 fe-intake-chat. PROVISIONAL (pending team decision): chatHello, faq*, receipt*.
+    chatOpen: 'Open the guided report', chatClose: 'Close the guided report', chatYou: 'You', chatGuide: 'Guide',
+    chatHello: 'Tell me what happened with the charge you do not recognize. Then you choose the charge and confirm.',
+    chatLangPrompt: 'Report language', chatSend: 'Send',
+    chatValidation: 'Choose the report language and describe what happened in at least 10 characters.',
+    chatChoose: 'Choose the charge from your charges and confirm it. If you cannot find it, ask for review without a charge.',
+    chatChooseValidation: 'Choose one of your charges and tick the confirmation.', chatConfirmCharge: 'Confirm this charge',
+    chatCannotFind: 'I cannot find the charge', chatNew: 'Start a new report', chatFaq: 'Frequent questions',
+    faqNextQ: 'What happens after I send it?',
+    faqNextA: 'A person on the bank team reviews your report. You see a reference only once it is saved. This demo does not refund, block cards or decide fraud.',
+    faqTimeQ: 'How long does it take?', faqTimeA: 'This demo does not set a review time. Keep your reference; it identifies your report.',
+    faqMissingQ: 'What if I cannot find the charge?', faqMissingA: 'Choose “I cannot find the charge” and a person reviews your report without a confirmed charge.',
+    receiptComplete: 'Report accepted in the demo',
+    receiptIncomplete: 'Sent for human review without a confirmed charge',
+    receiptTechnical: 'We could not check the charge; sent for human review',
+    products: 'Products', notListed: 'not listed'
   }
 };
 

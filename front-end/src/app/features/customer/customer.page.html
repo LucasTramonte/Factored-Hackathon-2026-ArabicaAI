@@ -73,7 +73,7 @@
         <main class="home-main" id="inicio">
           <div class="topbar">
             <div style="display: flex; flex-direction: column; gap: 4px">
-              <h1 class="ar-h1" tabindex="-1" style="font-size: 28px; line-height: 36px">{{ t().hello }}, {{ displayName() }}</h1>
+              <h1 class="ar-h1" tabindex="-1" style="font-size: 28px; line-height: 36px">{{ t().hello }}, {{ card()?.first_name || displayName() }}</h1>
               <span class="ar-mono" style="color: var(--ink-muted)">{{ transactions().length }} {{ t().loaded }}</span>
             </div>
             <app-lang-switch />
@@ -85,6 +85,13 @@
             <div class="ar-card">
               <div class="ar-card-meta"><span>{{ t().demoAccount }}</span><span style="font-family: var(--font-mono)">{{ t().sandbox }}</span></div>
               <span class="ar-card-number">{{ displayName() }}</span>
+              @if (card()?.products?.length) {
+                <ul class="products" [attr.aria-label]="t().products">
+                  @for (p of card()!.products; track $index) {
+                    <li>{{ p.product_type ?? t().notListed }} ·· {{ p.last4 ?? t().notListed }} {{ p.currency ?? '' }}</li>
+                  }
+                </ul>
+              }
               <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 12px">
                 <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; line-height: 16px; opacity: .85">{{ t().loadedCharges }}</span><span class="ar-amount-lg">{{ transactions().length }}</span></span>
                 <span style="display: flex; flex-direction: column; gap: 2px; text-align: right"><span style="font-size: 12px; line-height: 16px; opacity: .85">{{ t().currencies }}</span><span class="ar-amount">@for (x of totals(); track x.currency) { <span>{{ x.currency }} </span> } @empty { <span>—</span> }</span></span>
@@ -97,7 +104,7 @@
               </div>
               <div class="agent-panel-foot">
                 <div class="agent-facts"><span>{{ lang.lang() }}</span><span>{{ client() }}</span><span>{{ transactions().length }} {{ t().count }}</span></div>
-                <a class="ar-btn" style="min-height: 40px; padding: 0 16px; font-size: 14px" href="#cargos">{{ t().report }}</a>
+                <button type="button" class="ar-btn" style="min-height: 40px; padding: 0 16px; font-size: 14px" (click)="openChat()" aria-controls="intake-chat">{{ t().report }}</button>
               </div>
             </section>
             <div class="stats">
@@ -125,23 +132,25 @@
               <div class="box-body">
                 @if (transactions().length) {
                   <div class="table" role="table">
-                    <span class="th">{{ t().merchant }}</span><span class="th th-date">{{ t().date }}</span><span class="th th-state">{{ t().state }}</span><span class="th right">{{ t().amount }}</span>
+                    <div role="row" style="display: contents"><span role="columnheader" class="th">{{ t().merchant }}</span><span role="columnheader" class="th th-date">{{ t().date }}</span><span role="columnheader" class="th th-state">{{ t().state }}</span><span role="columnheader" class="th right">{{ t().amount }}</span></div>
                     @for (tx of transactions(); track tx.transaction_id; let last = $last) {
-                      <span class="td td-merchant" [class.tr-last]="last">
+                      <div role="row" style="display: contents" [class.tr-last]="last">
+                      <span role="cell" class="td td-merchant">
                         @if (tx.merchant_name) { <span class="ar-tile" aria-hidden="true">{{ merchantInitials(tx) }}</span> } @else { <span class="ar-tile ar-tile-missing" aria-hidden="true"></span> }
                         <span style="display: flex; flex-direction: column; min-width: 0"><span class="name">{{ tx.merchant_name || t().noMerchant }}</span><span class="ar-mono" style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">{{ tx.transaction_id }}</span></span>
                       </span>
-                      <span class="td td-date">
+                      <span role="cell" class="td td-date">
                         @if (tx.source_occurred_at) { {{ sourceTime(tx.source_occurred_at) }} ({{ t().tzMissing }}) }
                         @else if (tx.occurred_at) { {{ tx.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }} }
                         @else { {{ t().dateMissing }} }
                       </span>
-                      <span class="td td-state">
+                      <span role="cell" class="td td-state">
                         @if ((pending()?.transaction_id ?? receipt()?.transaction_id) === tx.transaction_id) { <span class="ar-chip ar-chip-warn">{{ receipt() ? t().accepted : t().inReview }}</span> }
                         @else if (selected === tx.transaction_id) { <span class="ar-chip">{{ t().selected }}</span> }
                         @else { <button type="button" class="link-btn" (click)="select(tx.transaction_id)" [disabled]="!!pending() || !!receipt()">{{ t().notRecognized }}</button> }
                       </span>
-                      <span class="td td-amount">{{ tx.amount }} {{ tx.currency }}</span>
+                      <span role="cell" class="td td-amount">{{ tx.amount }} {{ tx.currency }}</span>
+                      </div>
                     }
                   </div>
                   <span class="ar-caption" style="display: block; margin-top: 12px">{{ t().coverage }}</span>
@@ -150,7 +159,7 @@
                 }
 
                 @if (selectedTx() || pending() || receipt()) {
-                  <div class="report" id="reportar">
+                  <div class="report" id="reportar" #reportPanel tabindex="-1">
                     <div class="report-head">
                       <h3 class="ar-panel-title" style="font-size: 16px; line-height: 24px">{{ t().reportTitle }}</h3>
                       @if (!pending() && !receipt()) { <button type="button" class="link-btn" (click)="cancel()">{{ t().cancel }}</button> }
@@ -162,12 +171,12 @@
                         <span class="ar-amount">{{ tx.amount }} {{ tx.currency }}</span>
                       </div>
                     }
-                    @if (error() && selected) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
+                    @if (error() && selected) { <div class="ar-alert" role="alert" id="report-error"><p>{{ error() }}</p></div> }
                     @if (!receipt()) {
                       <fieldset class="ar-fieldset" style="border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px" [disabled]="busy() || identityLocked()">
                         <label class="ar-field">
                           <span class="ar-field-label">{{ t().describe }}</span>
-                          <textarea class="ar-textarea" [(ngModel)]="statement" name="statement" (ngModelChange)="confirmed = false" rows="3" maxlength="2000" [placeholder]="t().placeholder"></textarea>
+                          <textarea class="ar-textarea" [(ngModel)]="statement" name="statement" required [attr.aria-describedby]="error() && selected ? 'report-error' : null" (ngModelChange)="confirmed = false" rows="3" maxlength="2000" [placeholder]="t().placeholder"></textarea>
                         </label>
                         <label class="ar-check"><input type="checkbox" name="confirmed" [(ngModel)]="confirmed"> {{ t().confirm }}</label>
                       </fieldset>
@@ -179,7 +188,7 @@
                       @if (pending()) { <div class="ar-panel ar-panel-warn" role="status"><p>{{ t().pending }}</p></div> }
                     }
                     @if (receipt(); as result) {
-                      <div class="ar-panel ar-panel-ok" role="status">
+                      <div class="ar-panel ar-panel-ok" role="status" #legacyReceipt tabindex="-1">
                         <h3 class="ar-panel-title">{{ t().acceptedTitle }}</h3>
                         <div class="ar-ref"><span class="ar-ref-label">{{ t().reference }}</span><span class="ar-ref-code">{{ result.protocol }}</span></div>
                         <p>{{ t().nextStep }}</p>
@@ -201,6 +210,71 @@
             </section>
           </div>
         </main>
+
+        <button type="button" class="ar-btn chat-toggle" (click)="chatOpen.set(!chatOpen())" [attr.aria-expanded]="chatOpen()" aria-controls="intake-chat">{{ chatOpen() ? t().chatClose : t().chatOpen }}</button>
+        @if (chatOpen()) {
+          <section class="chat" id="intake-chat" aria-labelledby="chat-title">
+            <h2 class="ar-panel-title" id="chat-title" #chatPanel tabindex="-1">{{ t().guideTitle }}</h2>
+            <ol class="chat-log" role="log" aria-live="polite">
+              @for (line of log(); track $index) {
+                <li [class]="'chat-' + line.from"><span class="sr-only">{{ line.from === 'me' ? t().chatYou : t().chatGuide }}: </span>{{ 'key' in line ? t()[line.key] : line.text }}</li>
+              }
+            </ol>
+            @if (chatError()) { <div class="ar-alert" role="alert" id="chat-error"><p>{{ chatError() }}</p></div> }
+            @switch (chatStep()) {
+              @case ('describe') {
+                <fieldset class="chat-form" [disabled]="busy() || !!frozen()">
+                  @if (!reportLang() || chosenLang()) {
+                    <fieldset class="chat-lang"><legend class="ar-field-label">{{ t().chatLangPrompt }}</legend>
+                      <label class="ar-check"><input type="radio" name="report-lang" value="es" [checked]="chosenLang() === 'es'" (change)="chosenLang.set('es')" required> Español</label>
+                      <label class="ar-check"><input type="radio" name="report-lang" value="pt" [checked]="chosenLang() === 'pt'" (change)="chosenLang.set('pt')" required> Português</label>
+                    </fieldset>
+                  }
+                  <label class="ar-field" for="chat-statement"><span class="ar-field-label">{{ t().describe }}</span></label>
+                  <textarea class="ar-textarea" id="chat-statement" [(ngModel)]="chatStatement" name="chat-statement" rows="3" maxlength="2000" required
+                    [placeholder]="t().placeholder" [attr.aria-describedby]="chatError() ? 'chat-error' : null" [attr.aria-invalid]="chatError() ? true : null"></textarea>
+                </fieldset>
+                <div class="report-actions"><button type="button" class="ar-btn" (click)="send()" [disabled]="busy()">{{ frozen() ? t().retry : t().chatSend }}</button></div>
+              }
+              @case ('choose') {
+                <fieldset class="chat-form" [disabled]="busy() || !!frozen()">
+                  <legend class="sr-only">{{ t().chatChoose }}</legend>
+                  @for (tx of transactions(); track tx.transaction_id) {
+                    <label class="ar-check"><input type="radio" name="chat-choice" [value]="tx.transaction_id" [(ngModel)]="choice" (ngModelChange)="chatConfirmed = false">
+                      {{ tx.merchant_name || t().noMerchant }} · <span class="ar-mono">{{ tx.amount }} {{ tx.currency }}</span></label>
+                  }
+                  <label class="ar-check"><input type="checkbox" name="chat-confirmed" [(ngModel)]="chatConfirmed" [disabled]="!choice"> {{ t().confirm }}</label>
+                </fieldset>
+                <div class="report-actions">
+                  <button type="button" class="ar-btn" (click)="frozen() ? run() : confirmCharge()" [disabled]="busy() || frozen()?.path === 'handoff'">{{ frozen()?.path === 'confirm' ? t().retry : t().chatConfirmCharge }}</button>
+                  <button type="button" class="ar-btn ar-btn-secondary" (click)="frozen() ? run() : cannotFind()" [disabled]="busy() || frozen()?.path === 'confirm'">{{ frozen()?.path === 'handoff' ? t().retry : t().chatCannotFind }}</button>
+                </div>
+              }
+              @case ('receipt') {
+                @if (intakeReceipt(); as r) {
+                  <div class="ar-panel ar-panel-ok" role="status" id="intake-receipt" #intakeReceiptEl tabindex="-1">
+                    <h3 class="ar-panel-title">{{ receiptTitle() }}</h3>
+                    <div class="ar-ref"><span class="ar-ref-label">{{ t().reference }}</span><span class="ar-ref-code">{{ r.protocol }}</span></div>
+                    <p>{{ t().nextStep }}</p>
+                    @if (r.replayed) { <p class="ar-small">{{ t().replayed }}</p> }
+                  </div>
+                }
+                <div class="report-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="newReport()">{{ t().chatNew }}</button></div>
+              }
+              @case ('ended') {
+                <div class="report-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="newReport()">{{ t().chatNew }}</button></div>
+              }
+            }
+            @if (frozen()) {
+              <div class="ar-panel ar-panel-warn" role="status"><p>{{ t().pending }}</p></div>
+              <div class="report-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="login()" [disabled]="busy()">{{ t().renew }}</button></div>
+            }
+            @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
+            <div class="chat-faq" role="group" [attr.aria-label]="t().chatFaq">
+              @for (q of faqs; track q) { <button type="button" class="link-btn" (click)="ask(q)">{{ t()[q] }}</button> }
+            </div>
+          </section>
+        }
       </div>
     }
   }
