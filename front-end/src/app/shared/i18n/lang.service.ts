@@ -41,6 +41,7 @@ const es = {
     pickerSearch: 'Buscar por nombre o ID', pickerCountry: 'País', pickerAllCountries: 'Todos los países',
     pickerNoCountry: 'Sin país indicado', pickerMatches: 'coincidencias', pickerNone: 'Ninguna identidad coincide.',
     pickerRefine: 'Solo se muestran las primeras coincidencias. Afina la búsqueda.',
+    pickerMatch: 'coincidencia',
     // W4 fe-agent-console
     intakeQueue: 'Cola de reportes guiados', intakeDetail: 'Detalle del reporte', noIntakes: 'No se devolvieron reportes guiados.',
     queueMore: 'Solo se muestran los 50 más recientes.', historyMore: 'Solo se muestran los primeros 100 eventos.',
@@ -67,7 +68,8 @@ const es = {
     receiptTechnical: 'No pudimos verificar el cargo; enviado a revisión humana',
     products: 'Productos', notListed: 'no consta', chipPending: 'sin confirmar',
     moreCharges: 'Hay más cargos que no se muestran aquí.',
-    err409Finish: 'Este reporte ya no se puede cambiar. Si no recibiste una referencia, inicia un nuevo reporte.'
+    err409Finish: 'Este reporte ya no se puede cambiar. Si no recibiste una referencia, inicia un nuevo reporte.',
+    chatValidationShort: 'Describe lo que pasó en al menos 10 caracteres.'
 };
 
 /** The key set is the Spanish table; the other two must match it exactly. */
@@ -112,6 +114,7 @@ const STRINGS: Record<Lang, Strings> = {
     pickerSearch: 'Buscar por nome ou ID', pickerCountry: 'País', pickerAllCountries: 'Todos os países',
     pickerNoCountry: 'Sem país informado', pickerMatches: 'resultados', pickerNone: 'Nenhuma identidade corresponde.',
     pickerRefine: 'Apenas os primeiros resultados são exibidos. Refine a busca.',
+    pickerMatch: 'resultado',
     // W4 fe-agent-console
     intakeQueue: 'Fila de relatos guiados', intakeDetail: 'Detalhe do relato', noIntakes: 'Nenhum relato guiado retornado.',
     queueMore: 'Apenas os 50 mais recentes são exibidos.', historyMore: 'Apenas os primeiros 100 eventos são exibidos.',
@@ -138,7 +141,8 @@ const STRINGS: Record<Lang, Strings> = {
     receiptTechnical: 'Não conseguimos verificar a cobrança; enviado para análise humana',
     products: 'Produtos', notListed: 'não consta', chipPending: 'não confirmado',
     moreCharges: 'Há mais cobranças que não aparecem aqui.',
-    err409Finish: 'Este relato não pode mais ser alterado. Se você não recebeu uma referência, inicie um novo relato.'
+    err409Finish: 'Este relato não pode mais ser alterado. Se você não recebeu uma referência, inicie um novo relato.',
+    chatValidationShort: 'Descreva o que aconteceu em pelo menos 10 caracteres.'
   },
   en: {
     greeting: 'Hello', tagline: 'Report a charge you do not recognize.',
@@ -177,6 +181,7 @@ const STRINGS: Record<Lang, Strings> = {
     pickerSearch: 'Search by name or ID', pickerCountry: 'Country', pickerAllCountries: 'All countries',
     pickerNoCountry: 'No country listed', pickerMatches: 'matches', pickerNone: 'No identity matches.',
     pickerRefine: 'Only the first matches are shown. Refine your search.',
+    pickerMatch: 'match',
     // W4 fe-agent-console
     intakeQueue: 'Guided report queue', intakeDetail: 'Report detail', noIntakes: 'No guided reports returned.',
     queueMore: 'Only the newest 50 are shown.', historyMore: 'Only the first 100 events are shown.',
@@ -203,7 +208,8 @@ const STRINGS: Record<Lang, Strings> = {
     receiptTechnical: 'We could not check the charge; sent for human review',
     products: 'Products', notListed: 'not listed', chipPending: 'not confirmed',
     moreCharges: 'There are more charges that are not shown here.',
-    err409Finish: 'This report can no longer be changed. If you did not receive a reference, start a new report.'
+    err409Finish: 'This report can no longer be changed. If you did not receive a reference, start a new report.',
+    chatValidationShort: 'Describe what happened in at least 10 characters.'
   }
 };
 
