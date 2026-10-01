@@ -231,6 +231,8 @@ def _bronze(change):
     ({"purchases": with_row(PURCHASES, 0, product_id="PX")}, "product_missing"),
     ({"purchases": PURCHASES + [("T5", "C3", "P3", "2025-04-01 10:00:00", "Cine", "Fun", 9.0, "USD", "México",
                                  "Purchase", "Approved")]}, "not_a_card_product"),
+    # NULL product_type: NOT IN alone would yield NULL and let the row pass.
+    ({"products": [("P1", "C1", None, "4111222233334444"), *PRODUCTS[1:]]}, "not_a_card_product"),
     ({"products": PRODUCTS + [("P9", "C9", "Tarjeta Débito", "5555")],
       "purchases": PURCHASES + [("T9", "C9", "P9", "2025-04-01 10:00:00", "Cine", "Fun", 9.0, "USD", "México",
                                  "Purchase", "Approved")]}, "customer_missing_from_gold_customers"),

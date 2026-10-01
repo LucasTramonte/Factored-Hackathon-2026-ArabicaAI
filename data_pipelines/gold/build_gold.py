@@ -284,7 +284,7 @@ def build_card_purchases(con: duckdb.DuckDBPyConnection, quality: dict) -> list[
           (SELECT count(transaction_id) - count(DISTINCT transaction_id) FROM gold.card_purchases),
           count(*) FILTER (WHERE NOT product_found),
           count(*) FILTER (WHERE product_found AND product_owner IS DISTINCT FROM customer_id),
-          count(*) FILTER (WHERE product_found AND card_type NOT IN {CARD_TYPES}),
+          count(*) FILTER (WHERE product_found AND (card_type IS NULL OR card_type NOT IN {CARD_TYPES})),
           (SELECT count(*) FROM card_purchases_stage s
             WHERE NOT EXISTS (SELECT 1 FROM gold.customers g WHERE g.customer_id = s.customer_id)),
           count(*) FILTER (WHERE bronze_rows <> 1),
