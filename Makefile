@@ -85,7 +85,7 @@ pipeline-with-labels:
 	$(MAKE) pipeline
 	$(MAKE) transcript-labels
 
-.PHONY: intake-setup intake-test intake-ui-build intake-sample-bronze intake-sample-silver intake-sample-quality intake-sample-slice intake-seed-local
+.PHONY: intake-setup intake-test intake-ui-build intake-sample-bronze intake-sample-silver intake-sample-quality intake-sample-slice intake-seed-local intake-cohort-slice intake-cohort-seed-local
 # One-day intake sample: a separate ignored DuckDB so the full analytical database is never replaced.
 INTAKE_DATA_DIR ?= $(CURDIR)/data/demo_s3
 INTAKE_DATE ?= 2026-02-26
@@ -122,6 +122,21 @@ intake-sample-slice:
 	$(PYTHON) -m data_pipelines.gold.run_intake_slice --db "$(INTAKE_DATA_DIR)/latam_bank.duckdb" \
 	--quality-report "$(INTAKE_DATA_DIR)/quality_runs/$(INTAKE_QUALITY_RUN)/quality_results.json" \
 	--business-date $(INTAKE_DATE) --seed-out "$(INTAKE_SEED)" --manifest-out "$(INTAKE_DATA_DIR)/intake_slice_manifest.json"
+
+COHORT_DB ?= data/full_local/latam_bank.duckdb
+COHORT_QUALITY ?= data/full_local/quality_runs/pr23-check/quality_results.json
+COHORT_AS_OF ?= 2026-06-17
+COHORT_OUT ?= data/gold_cohort/$(COHORT_AS_OF)
+
+intake-cohort-slice:
+	$(PYTHON) -m data_pipelines.gold.run_cohort build --db "$(COHORT_DB)" --quality-report "$(COHORT_QUALITY)" \
+	--as-of $(COHORT_AS_OF) --out "$(COHORT_OUT)"
+
+# Local only. The remote load is a reviewed, manual step: run_cohort load --target remote, one part per UTC day.
+intake-cohort-seed-local:
+	cd back-end && npx wrangler d1 migrations apply arabica-intake-demo --local
+	for part in "$(COHORT_OUT)"/part-*.sql; do n=$$(basename $$part .sql | sed 's/part-0*//'); \
+	$(PYTHON) -m data_pipelines.gold.run_cohort load --out "$(COHORT_OUT)" --part $$n --target local || exit 1; done
 
 intake-seed-local:
 	cd back-end && npx wrangler d1 migrations apply arabica-intake-demo --local

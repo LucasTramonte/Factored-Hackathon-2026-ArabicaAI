@@ -93,7 +93,7 @@ How the sets were built, every leakage control, what 60 cases can and can't show
 
 ## What it costs, and how far it scales
 
-**The prototype costs $0** on Cloudflare's free plan, and $5 a month on Workers Paid once the full data slice is loaded, because that load exceeds the free daily write quota. The only cloud spend so far is $0.21 on AWS, from an exploratory database that is deleted by 2026-10-20.
+**The prototype costs $0** on Cloudflare's free plan. It serves a cohort of 796 real dataset customers who disputed a charge, rather than the full data slice, so the load fits one day of the free write quota. The only cloud spend so far is $0.21 on AWS, from an exploratory database that is deleted by 2026-10-20.
 - **Capacity:** about 2,380 complete episodes a day, limited by database writes. The busiest day for unrecognized-charge complaints in 2025 had 23.
 - **The first limit to hit** is writes, and $5 a month removes it.
 

@@ -297,3 +297,24 @@ def test_the_manifest_reconciles_counts_per_country(tmp_path):
                                       "México": {"eligible": 1, "dense": 1, "selected": 1}}
     assert manifest["exclusions"]["customers_below_min_purchases"] == 1
     assert manifest["params"]["window_days"] == 120 and manifest["as_of"] == str(AS_OF)
+
+
+def test_no_cohort_customer_id_is_in_a_tracked_file():
+    """Dataset ids live only in ignored data/ and in D1. Skipped where no cohort was built."""
+    import subprocess
+    root = MIGRATIONS.parents[1]
+    manifests = sorted((root / "data/gold_cohort").glob("*/manifest.json"))
+    if not manifests:
+        pytest.skip("no local cohort manifest")
+    ids = {c["customer_id"] for m in manifests for c in json.loads(m.read_text())["customers"]}
+    tracked = subprocess.run(["git", "ls-files", "-z"], cwd=root, capture_output=True, check=True).stdout.split(b"\0")
+    # Pre-existing profile reports list sample source values (ids among them). Whether they may stay in the
+    # public repository is decided in that review, for the whole file; the cohort must not add any.
+    reviewed_elsewhere = {b"data_profiles/bronze_data_profile/bronze_profile.md"}
+    leaked = set()
+    for name in filter(lambda n: n and n not in reviewed_elsewhere, tracked):
+        path = root / name.decode()
+        if path.is_file() and path.stat().st_size < 5_000_000:
+            text = path.read_bytes().decode("utf-8", "ignore")
+            leaked |= {i for i in ids if i in text}
+    assert not leaked, f"{len(leaked)} cohort customer ids appear in tracked files"

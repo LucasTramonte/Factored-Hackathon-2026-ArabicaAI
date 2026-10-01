@@ -103,7 +103,12 @@ So the slice load plus S3-level traffic is a Workers Paid decision, and so is S4
 
 **Cost of the prototype:** $0 on Free, and $5 a month on Workers Paid, which covers every scenario. **Cost per attempted case** is $0 on Free and $5 ÷ episodes per month on Paid ($0.0098 at S1). **Cost per successful automated resolution** is `not defined` for intake, because V1 always ends in a handoff (ADR-002). It will be reported for the proposed recent-transactions path once that path is decided and measured.
 
-Loading every customer's approved purchases (about 1 M rows) into D1 would take more than 20 days of the Free write quota, because index writes count too. If the team loads the full serving slice, it upgrades to Workers Paid for that month ($5). That is cheaper than any other way past the limit.
+Loading every customer's approved purchases (about 1 M rows) into D1 would take more than 20 days of the Free write quota, because index writes count too. **The team loads a cohort instead, and stays on Free** (2026-10-01):
+- **Who and what** (DATA_QUALITY DF-020 to DF-022): customers with a design-window `Cargo no reconocido` complaint, excluding closed accounts, with their approved purchases that have a merchant in the 120 days before 2026-06-17, capped at 50 each. A customer is served only with at least 3 such purchases.
+- **Size** as of 2026-06-17: 796 customers (Mexico 388, Colombia 251, Argentina 157) and 2,906 purchases. That is one seed part of 20,620 expected writes (2 per customer, 2 per context card, 6 per transaction), so the load fits one day within the 70,000-write budget per part. That budget leaves about 30% of the daily quota for the demo.
+- **Exclusions,** reported in the manifest: 179 closed complainants, 351 window purchases without a merchant (D1 requires one) and 9,038 complainants with fewer than 3 purchases.
+- **Why not Workers Paid:** the cohort covers the workflow's own customers at no cost. More rows would add breadth the demo doesn't use (DF-021: most disputing customers have 0 recent purchases).
+- **Login reads D1 for the cohort.** `GET /demo/identities` now makes 1 query that reads every `customers` row: about 800 with the cohort, against a CI ceiling of 10 rows on the fixture. Per page load that adds about 800 rows read. At S3 (818 episodes a day) that is about 650,000 more reads a day, 13% of the Free 5 M, so rows written still bind first. Dataset IDs and names stay out of git, as the data terms require (`Docs/FACTORED_HACKATHON_2026.md`).
 
 ### 3. The production target on AWS, and what it costs
 
@@ -250,7 +255,7 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
 - **One ADR per cost decision.** It would scatter sizing across records. Rejected: this record stays the single source, and `Docs/Costs/` holds only its evidence.
 - **Size the AWS target for the whole database online.** The workflow reads only the serving slice (about 0.3 GB), and the full history belongs in the lake. Rejected: it would have meant a db.t4g.medium and 50 GB for no measured need.
 - **CloudFront flat-rate Pro plan.** It costs $15 against about $9.87 for pay-as-you-go plus WAF, and its advantage (no overage) is already covered. Kept as the option if traffic becomes unpredictable.
-- **Buy Workers Paid now.** The guided flow uses about 34% of the Free write quota at S3 (section 2). Rejected, unless the full serving slice is loaded or traffic reaches S4 (section 2).
+- **Buy Workers Paid now.** The guided flow uses about 34% of the Free write quota at S3 (section 2), and the cohort loads within one day's quota (section 2). Rejected, unless traffic reaches S4.
 
 ## Implementation notes
 
