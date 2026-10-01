@@ -40,7 +40,7 @@ Add a scope when it helps, for example `feat(intake): …`, `fix(front-end): …
 
 - **Keep a PR small and about one thing.** A PR that mixes a refactor, a feature and a data change is hard to review and hard to revert.
 - **Before opening a PR, set its label, assignee and reviewer.** All three are required ([`AGENTS.md`](AGENTS.md)):
-  - **label,** by branch prefix: `feat` → `enhancement`, `fix` → `bug`, `docs` → `documentation`, `eval` → `evaluation`, `data` → `data`, `chore` → `chore`, plus `accessibility` when it applies;
+  - **label,** by branch prefix: `feat` → `enhancement`, `fix` → `bug`, `docs` → `documentation`, `eval` → `evaluation`, `data` → `data`, `chore` → `chore`, plus `accessibility` when it applies. A branch without one of these prefixes (`claude/…`, `codex/…`) takes the label of what the PR actually does, read from its Conventional title type (`feat` → `enhancement`, and so on);
   - **assignee:** the PR's owner, normally its author;
   - **reviewer:** at least one other teammate.
 

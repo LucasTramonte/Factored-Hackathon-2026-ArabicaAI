@@ -32,7 +32,7 @@
 - Public functions and classes need concise docstrings explaining purpose and important invariants. Keep commits scoped and state the tests run.
 - Never rewrite shared history: no force-push, no amending or rebasing a branch someone has reviewed. Leave unrelated working-tree changes untouched. PR titles are Conventional Commits, and tags and releases follow [`CONTRIBUTING.md`](CONTRIBUTING.md); an agent never tags, publishes a release or deploys without a person's go-ahead.
 - **Every PR, before it is opened, gets a label, an assignee and a reviewer.** No PR is opened without all three:
-  - **label:** one type label matching the branch prefix (`feat` → `enhancement`, `fix` → `bug`, `docs` → `documentation`, `eval` → `evaluation`, `data` → `data`, `chore` → `chore`), plus `accessibility` when it applies;
+  - **label:** one type label matching the branch prefix (`feat` → `enhancement`, `fix` → `bug`, `docs` → `documentation`, `eval` → `evaluation`, `data` → `data`, `chore` → `chore`; a `claude/` or `codex/` branch takes the label of its title's type), plus `accessibility` when it applies;
   - **assignee:** the person who owns the PR, normally its author;
   - **reviewer:** at least one other teammate, chosen for the area (Manoella approves extractor behaviour and frozen labels).
 
