@@ -36,7 +36,11 @@ const es = {
     err404: 'No se encontró el cargo para esta sesión.',
     err409: 'Esta clave de solicitud ya se usó con otro contenido. No inicies otra solicitud; pide a un agente que revise el caso.',
     err413: 'La descripción es demasiado larga.', err422: 'Revisa los campos y confirma la solicitud.',
-    err503: 'Servicio no disponible. La aceptación no se confirmó. Reintenta la misma solicitud.', errOther: 'La solicitud falló.'
+    err503: 'Servicio no disponible. La aceptación no se confirmó. Reintenta la misma solicitud.', errOther: 'La solicitud falló.',
+    // W3 fe-customer-picker
+    pickerSearch: 'Buscar por nombre o ID', pickerCountry: 'País', pickerAllCountries: 'Todos los países',
+    pickerNoCountry: 'Sin país indicado', pickerMatches: 'coincidencias', pickerNone: 'Ninguna identidad coincide.',
+    pickerRefine: 'Solo se muestran las primeras coincidencias. Afina la búsqueda.'
 };
 
 /** The key set is the Spanish table; the other two must match it exactly. */
@@ -76,7 +80,11 @@ const STRINGS: Record<Lang, Strings> = {
     err404: 'Cobrança não encontrada para esta sessão.',
     err409: 'Esta chave de pedido já foi usada com outro conteúdo. Não inicie outro pedido; peça a um agente que verifique o caso.',
     err413: 'A descrição é longa demais.', err422: 'Revise os campos e confirme o pedido.',
-    err503: 'Serviço indisponível. A aceitação não foi confirmada. Tente o mesmo pedido novamente.', errOther: 'O pedido falhou.'
+    err503: 'Serviço indisponível. A aceitação não foi confirmada. Tente o mesmo pedido novamente.', errOther: 'O pedido falhou.',
+    // W3 fe-customer-picker
+    pickerSearch: 'Buscar por nome ou ID', pickerCountry: 'País', pickerAllCountries: 'Todos os países',
+    pickerNoCountry: 'Sem país informado', pickerMatches: 'resultados', pickerNone: 'Nenhuma identidade corresponde.',
+    pickerRefine: 'Apenas os primeiros resultados são exibidos. Refine a busca.'
   },
   en: {
     greeting: 'Hello', tagline: 'Report a charge you do not recognize.',
@@ -110,7 +118,11 @@ const STRINGS: Record<Lang, Strings> = {
     err404: 'Charge not found for this session.',
     err409: 'This request key was used for different content. Do not start another request; ask an agent to check the case.',
     err413: 'The description is too long.', err422: 'Check the fields and confirm the request.',
-    err503: 'Service unavailable. Acceptance was not confirmed. Retry the same request.', errOther: 'Request failed.'
+    err503: 'Service unavailable. Acceptance was not confirmed. Retry the same request.', errOther: 'Request failed.',
+    // W3 fe-customer-picker
+    pickerSearch: 'Search by name or ID', pickerCountry: 'Country', pickerAllCountries: 'All countries',
+    pickerNoCountry: 'No country listed', pickerMatches: 'matches', pickerNone: 'No identity matches.',
+    pickerRefine: 'Only the first matches are shown. Refine your search.'
   }
 };
 

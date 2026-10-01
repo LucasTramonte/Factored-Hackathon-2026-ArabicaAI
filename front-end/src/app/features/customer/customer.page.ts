@@ -6,6 +6,7 @@ import { formatSourceTime } from '../../shared/format/source-time.util';
 import { LangService, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
+import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
 import { CaseBody, Identity, Receipt, Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
@@ -23,7 +24,7 @@ export type Step = 'intro' | 'login' | 'home';
 
 @Component({
   selector: 'app-customer-page',
-  imports: [DatePipe, FormsModule, RouterLink, LangSwitch, Mark],
+  imports: [DatePipe, FormsModule, RouterLink, LangSwitch, Mark, CustomerPicker],
   templateUrl: './customer.page.html'
 })
 export class CustomerPage implements OnInit, OnDestroy {
