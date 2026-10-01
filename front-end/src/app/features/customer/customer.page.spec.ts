@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerPage, formatAmount } from './customer.page';
+import { LangService } from '../../shared/i18n/lang.service';
 import { CustomerService } from './customer.service';
 import { Receipt, Transaction } from '../../shared/models/intake.model';
 
@@ -55,7 +56,7 @@ describe('CustomerPage', () => {
     page.identity = 'demo-ana';
     await page.login();
     expect(page.step()).toBe('login');
-    expect(page.error()).toBe('unavailable');
+    expect(page.error()).toBe(TestBed.inject(LangService).t().err503);
   });
 
   it('refuses to submit without selection, confirmation and a 10-character statement', async () => {
@@ -150,7 +151,7 @@ describe('CustomerPage', () => {
     await page.submit();
     expect(page.pending()).toBeNull();
     expect(page.identityLocked()).toBeFalse();
-    expect(page.error()).toBe('Check the fields.');
+    expect(page.error()).toBe(TestBed.inject(LangService).t().err422);
     page.statement = 'A corrected description of the charge.';
     await page.submit();
     const [first, second] = service.submitCase.calls.allArgs().map(args => args[0]);

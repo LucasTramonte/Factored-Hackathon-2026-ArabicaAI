@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { formatSourceTime } from '../../shared/format/source-time.util';
-import { LangService } from '../../shared/i18n/lang.service';
+import { LangService, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
 import { ApiError } from '../../core/http/api.service';
@@ -164,7 +164,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   private fail(e: unknown): void {
-    this.error.set(e instanceof Error ? e.message : 'Request failed.');
+    this.error.set(errorText(this.t(), e));
   }
 }
 
