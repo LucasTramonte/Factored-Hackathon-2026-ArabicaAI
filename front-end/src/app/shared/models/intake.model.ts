@@ -2,6 +2,8 @@
 export interface Identity {
   customer_id: string;
   display_name: string;
+  /** Set for dataset customers loaded in D1; null for the committed fictitious identities. */
+  country?: string | null;
 }
 
 export interface Transaction {

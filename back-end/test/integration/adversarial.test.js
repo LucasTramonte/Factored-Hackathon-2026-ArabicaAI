@@ -104,6 +104,31 @@ test('login rejects identities outside the allowlist, including ones that exist 
   assert.equal((await c.call('/demo/session', '{bad json')).status, 422);
 });
 
+test('dataset customers are listed from D1 and log in; other D1 rows and unlisted ids are refused', async () => {
+  const ids = await client().call('/demo/identities');
+  assert.equal(ids.status, 200);
+  assertContract('identityList', ids.body);
+  const listed = new Map(ids.body.items.map(x => [x.customer_id, x]));
+  assert.deepEqual(listed.get('CLI-COHORT-1'), { customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' });
+  assert.equal(listed.get('demo-ana').country, null);
+  assert.ok(!listed.has('demo-hidden'), 'a fictitious D1 row that is not committed is never offered');
+  assert.equal((await client().call('/demo/session', { customer_id: 'demo-hidden' })).status, 422);
+  assert.equal((await client().call('/demo/session', { customer_id: 'CLI-COHORT-9' })).status, 422);
+  const zoe = await loggedIn('CLI-COHORT-1');
+  const rows = await zoe.call('/transactions');
+  assertContract('transactionList', rows.body);
+  assert.equal(rows.body.coverage, 'dataset_cohort');
+  assert.deepEqual(rows.body.items.map(x => x.transaction_id), ['cohort-tx-1']);
+  assert.equal((await loggedIn('demo-ana').then(c => c.call('/transactions'))).body.coverage, 'fictitious_demo_data_only');
+  // Another cohort customer's charge and a missing one look the same.
+  const make = transaction_id => ({ transaction_id, customer_statement: 'No reconozco este cargo.',
+    customer_confirmed: true, idempotency_key: uuid() });
+  const foreign = await zoe.call('/cases', make('cohort-tx-2'));
+  const missing = await zoe.call('/cases', make('cohort-tx-9'));
+  assert.equal(foreign.status, 404);
+  assert.deepEqual(foreign.body, missing.body);
+});
+
 test('isolation: a foreign transaction and a missing one look identical', async () => {
   const bruno = await loggedIn('demo-bruno');
   const make = transaction_id => ({ transaction_id, customer_statement: 'I do not recognize this charge.',

@@ -83,7 +83,7 @@ def test_seed_applies_to_the_real_schema_and_keeps_source_values(tmp_path):
     assert con.execute("SELECT transaction_id, customer_id, occurred_at, source_occurred_at, merchant_name, amount, currency "
                        "FROM transactions").fetchall() == [
         ("T1", CUSTOMER, None, "2026-02-26T13:21:51", "Shop", "29763.49", "ARS")]
-    assert con.execute("SELECT display_name FROM customers").fetchone() == ("Dataset customer (synthetic)",)
+    assert con.execute("SELECT display_name, source FROM customers").fetchone() == ("Dataset customer (synthetic)", "dataset")
     card = json.loads(con.execute("SELECT card_json FROM context_cards WHERE customer_id=?", [CUSTOMER]).fetchone()[0])
     assert card == {"first_name": "Ana", "locale_hint": "es-AR", "products": [
         {"currency": "ARS", "last4": "4444", "product_type": "Credit card"}]}

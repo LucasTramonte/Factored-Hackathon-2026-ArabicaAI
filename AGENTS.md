@@ -34,7 +34,7 @@
 ## Intake service rules
 
 - One online runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Don't add a second API implementation. Route handlers never build SQL, and new statements go in `back-end/src/store/d1.js`.
-- Identity comes from the session only, never from a request body or message text. Customer and agent sessions stay separate. Allowlisted identities live in `back-end/src/config/identities.json`, which the Worker and the Gold slice both read.
+- Identity comes from the session only, never from a request body or message text. Customer and agent sessions stay separate. Committed identities (fictitious, plus the one-day slice's customer) live in `back-end/src/config/identities.json`, which the Worker and the Gold slice both read. Dataset cohort customers are listed from D1 (`customers.source = 'dataset'`) and are never committed.
 - Schema changes go through `wrangler d1 migrations`, are additive, and are applied to local D1 in tests before `--remote`. Alembic is not used; ADR-003 explains why and what would change that.
 - The Worker never reads S3, DuckDB or Silver. Online data arrives only as a reviewed Gold slice seed. The slice keeps the Bronze source amount and currency and the timezone-free source timestamp.
 - Any API change comes with adversarial tests: the gate, method and path matrix; session swap, forgery and expiry; the isolation oracle; hostile input; concurrent idempotency; contract validation against `front-end/contracts/`; and the D1 budget ceilings. A budget increase must be justified in ADR-004.

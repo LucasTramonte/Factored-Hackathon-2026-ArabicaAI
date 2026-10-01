@@ -34,7 +34,11 @@ export function createStore(db) {
   return {
     metrics: () => ({ ...totals }),
     ping: () => all('SELECT 1 AS ok'),
-    customerExists: async customerId => Boolean(await first('SELECT 1 AS ok FROM customers WHERE customer_id=?', customerId)),
+    /** ``'fictitious'``, ``'dataset'`` or ``null`` when the customer isn't loaded (migration 0006). */
+    customerSource: async customerId => (await first('SELECT source FROM customers WHERE customer_id=?', customerId))?.source ?? null,
+    /** Dataset customers to offer at the simulated login; their ids and names live only in the reviewed seed. */
+    listDatasetIdentities: limit => all(
+      "SELECT customer_id, display_name, country FROM customers WHERE source='dataset' ORDER BY country, customer_id LIMIT ?", limit),
     findContextCard: customerId => first(
       'SELECT card_version, snapshot_at, card_json FROM context_cards WHERE customer_id=?', customerId),
 
