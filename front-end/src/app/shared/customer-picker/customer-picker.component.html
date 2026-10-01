@@ -16,7 +16,7 @@
     <div class="picker-pinned"><ng-container *ngTemplateOutlet="row; context: { $implicit: person, pinned: true }" /></div>
   }
   <p class="ar-small" role="status">
-    @if (matches().length) { {{ matches().length }} {{ t().pickerMatches }}@if (capped()) {. {{ t().pickerRefine }}} } @else { {{ t().pickerNone }} }
+    @if (matches().length) { {{ matches().length }} {{ matches().length === 1 ? t().pickerMatch : t().pickerMatches }}@if (capped()) {. {{ t().pickerRefine }}} } @else { {{ t().pickerNone }} }
   </p>
   <div class="picker-list">
     @for (person of shown(); track person.customer_id) { <ng-container *ngTemplateOutlet="row; context: { $implicit: person }" /> }
