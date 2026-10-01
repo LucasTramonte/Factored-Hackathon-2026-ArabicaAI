@@ -50,7 +50,7 @@ const es = {
     toolStatus: 'Estado de la consulta', destination: 'Destino', priority: 'Prioridad', close: 'Cerrar',
     statement: 'Relato del cliente', languageCode: 'Idioma del reporte',
     agentErr401: 'La sesión de agente expiró. Vuelve a entrar como agente.', agentErr404: 'No se encontró el reporte.',
-    // W5 fe-intake-chat. PROVISIONAL (pending team decision): chatHello, faq*, receipt*.
+    // W5 fe-intake-chat
     chatOpen: 'Abrir el reporte guiado', chatClose: 'Cerrar el reporte guiado', chatYou: 'Tú', chatGuide: 'Guía',
     chatHello: 'Cuéntame qué pasó con el cargo que no reconoces. Después eliges el cargo y confirmas.',
     chatLangPrompt: 'Idioma del reporte', chatSend: 'Enviar',
@@ -66,7 +66,8 @@ const es = {
     receiptIncomplete: 'Enviado a revisión humana sin un cargo confirmado',
     receiptTechnical: 'No pudimos verificar el cargo; enviado a revisión humana',
     products: 'Productos', notListed: 'no consta', chipPending: 'sin confirmar',
-    moreCharges: 'Hay más cargos que no se muestran aquí.'
+    moreCharges: 'Hay más cargos que no se muestran aquí.',
+    err409Finish: 'Este reporte ya no se puede cambiar. Si no recibiste una referencia, inicia un nuevo reporte.'
 };
 
 /** The key set is the Spanish table; the other two must match it exactly. */
@@ -120,7 +121,7 @@ const STRINGS: Record<Lang, Strings> = {
     toolStatus: 'Status da consulta', destination: 'Destino', priority: 'Prioridade', close: 'Fechar',
     statement: 'Relato do cliente', languageCode: 'Idioma do relato',
     agentErr401: 'A sessão de agente expirou. Entre novamente como agente.', agentErr404: 'Relato não encontrado.',
-    // W5 fe-intake-chat. PROVISIONAL (pending team decision): chatHello, faq*, receipt*.
+    // W5 fe-intake-chat
     chatOpen: 'Abrir o relato guiado', chatClose: 'Fechar o relato guiado', chatYou: 'Você', chatGuide: 'Guia',
     chatHello: 'Conte o que aconteceu com a cobrança que você não reconhece. Depois você escolhe a cobrança e confirma.',
     chatLangPrompt: 'Idioma do relato', chatSend: 'Enviar',
@@ -136,7 +137,8 @@ const STRINGS: Record<Lang, Strings> = {
     receiptIncomplete: 'Enviado para análise humana sem uma cobrança confirmada',
     receiptTechnical: 'Não conseguimos verificar a cobrança; enviado para análise humana',
     products: 'Produtos', notListed: 'não consta', chipPending: 'não confirmado',
-    moreCharges: 'Há mais cobranças que não aparecem aqui.'
+    moreCharges: 'Há mais cobranças que não aparecem aqui.',
+    err409Finish: 'Este relato não pode mais ser alterado. Se você não recebeu uma referência, inicie um novo relato.'
   },
   en: {
     greeting: 'Hello', tagline: 'Report a charge you do not recognize.',
@@ -184,23 +186,24 @@ const STRINGS: Record<Lang, Strings> = {
     toolStatus: 'Lookup status', destination: 'Destination', priority: 'Priority', close: 'Close',
     statement: 'Customer statement', languageCode: 'Report language',
     agentErr401: 'The agent session expired. Sign in as an agent again.', agentErr404: 'Report not found.',
-    // W5 fe-intake-chat. PROVISIONAL (pending team decision): chatHello, faq*, receipt*.
+    // W5 fe-intake-chat
     chatOpen: 'Open the guided report', chatClose: 'Close the guided report', chatYou: 'You', chatGuide: 'Guide',
     chatHello: 'Tell me what happened with the charge you do not recognize. Then you choose the charge and confirm.',
     chatLangPrompt: 'Report language', chatSend: 'Send',
     chatValidation: 'Choose the report language and describe what happened in at least 10 characters.',
-    chatChoose: 'Choose the charge from your charges and confirm it. If you cannot find it, ask for review without a charge.',
+    chatChoose: "Choose the charge from your charges and confirm it. If you can't find it, ask for review without a charge.",
     chatChooseValidation: 'Choose one of your charges and tick the confirmation.', chatConfirmCharge: 'Confirm this charge',
-    chatCannotFind: 'I cannot find the charge', chatNew: 'Start a new report', chatFaq: 'Frequent questions',
+    chatCannotFind: "I can't find the charge", chatNew: 'Start a new report', chatFaq: 'Frequent questions',
     faqNextQ: 'What happens after I send it?',
     faqNextA: 'A person on the bank team reviews your report. You see a reference only once it is saved. This demo does not refund, block cards or decide fraud.',
     faqTimeQ: 'How long does it take?', faqTimeA: 'This demo does not set a review time. Keep your reference; it identifies your report.',
-    faqMissingQ: 'What if I cannot find the charge?', faqMissingA: 'Choose “I cannot find the charge” and a person reviews your report without a confirmed charge.',
+    faqMissingQ: "What if I can't find the charge?", faqMissingA: "Choose 'I can't find the charge' and a person reviews your report without a confirmed charge.",
     receiptComplete: 'Report accepted in the demo',
     receiptIncomplete: 'Sent for human review without a confirmed charge',
     receiptTechnical: 'We could not check the charge; sent for human review',
     products: 'Products', notListed: 'not listed', chipPending: 'not confirmed',
-    moreCharges: 'There are more charges that are not shown here.'
+    moreCharges: 'There are more charges that are not shown here.',
+    err409Finish: 'This report can no longer be changed. If you did not receive a reference, start a new report.'
   }
 };
 

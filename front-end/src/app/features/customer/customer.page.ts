@@ -28,15 +28,15 @@ export type ChatStep = 'describe' | 'choose' | 'receipt' | 'ended';
 export type ChatLine = { from: 'bot' | 'me'; key: keyof Strings } | { from: 'me'; text: string };
 type Frozen = { path: 'start'; body: IntakeStartBody } | { path: 'confirm'; body: IntakeConfirmBody } | { path: 'handoff'; body: IntakeHandoffBody };
 
-/** Provisional (Q1, pending team decision): es and pt map to themselves; English has no report language, so the chat asks. */
+/** es and pt map to themselves; English has no report language, so the chat asks (no default). */
 export function intakeLanguage(ui: Lang): IntakeLang | null {
   return ui === 'en' ? null : ui;
 }
 /** FAQ question → fixed answer. Only the dispute process; nothing is answered from free text. */
 export const FAQ = { faqNextQ: 'faqNextA', faqTimeQ: 'faqTimeA', faqMissingQ: 'faqMissingA' } as const;
-/** Provisional receipt copy per server-decided kind (Q4c). */
+/** Receipt title per server-decided kind. */
 const RECEIPT_TITLE = { complete: 'receiptComplete', incomplete: 'receiptIncomplete', technical: 'receiptTechnical' } as const;
-/** Provisional short status per kind, for the open-cases chip; only a complete report reads as accepted. */
+/** Short status per kind, for the open-cases chip; only a complete report reads as accepted. */
 export const RECEIPT_CHIP = { complete: 'accepted', incomplete: 'inReview', technical: 'inReview' } as const;
 
 @Component({
@@ -296,10 +296,12 @@ export class CustomerPage implements OnInit, OnDestroy {
     } catch (e) {
       if (e instanceof ApiError && DEFINITIVE.has(e.status)) {
         this.frozen.set(null);
-        if (frozen.path !== 'start' && e.status === 409) this.ended.set(true);
         if (frozen.path !== 'start') this.chatConfirmed = false;
       }
-      this.chatError.set(errorText(this.t(), e));
+      // A finish 409 means the report is already submitted or closed: say so, and offer a new report.
+      const finish409 = frozen.path !== 'start' && e instanceof ApiError && e.status === 409;
+      if (finish409) this.ended.set(true);
+      this.chatError.set(finish409 ? this.t().err409Finish : errorText(this.t(), e));
     } finally {
       this.busy.set(false);
     }

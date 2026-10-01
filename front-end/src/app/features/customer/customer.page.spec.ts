@@ -210,12 +210,22 @@ describe('CustomerPage', () => {
       expect(second.idempotency_key).not.toBe(first.idempotency_key);
     });
 
+    it('a 409 on start keeps the generic message and lets the customer send again with a new key', async () => {
+      service.startIntake.and.rejectWith(new ApiError(409, 'x'));
+      page.chatStatement = 'No reconozco este cargo.';
+      await page.send();
+      expect(page.chatStep()).toBe('describe');
+      expect(page.frozen()).toBeNull();
+      expect(page.chatError()).toBe(lang.t().err409);
+    });
+
     it('a 409 on finish ends the episode and offers a customer-initiated new report', async () => {
       await startEpisode();
       service.handoffIntake.and.rejectWith(new ApiError(409, 'x'));
       await page.cannotFind();
       expect(page.chatStep()).toBe('ended');
-      expect(page.chatError()).toBe(lang.t().err409);
+      expect(page.chatError()).toBe(lang.t().err409Finish);
+      expect(lang.t().err409Finish).not.toBe(lang.t().err409);
       expect(service.startIntake).toHaveBeenCalledTimes(1);
       page.newReport();
       expect(page.chatStep()).toBe('describe');
