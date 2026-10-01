@@ -52,7 +52,7 @@ S3 (organizers, read-only) ─▶ Bronze (raw Parquet) ─▶ Silver (typed tabl
 - `make bronze-full` rebuilds the source history.
 - `make intake-cohort-slice` builds the Gold cohort.
 - `make test` runs the offline fixtures.
-- CI (`.github/workflows/quality.yml`) runs the tests on every push without any S3 credentials.
+- CI (`.github/workflows/quality.yml`) runs the tests on pushes to `main` and on every pull request, without any S3 credentials.
 
 ## 2. Contracts
 

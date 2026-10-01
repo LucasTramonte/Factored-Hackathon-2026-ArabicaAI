@@ -65,7 +65,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
   The frontend doesn't use these routes yet, and the AI extraction step is still gated.
 - It runs on the Cloudflare Free plan ($0). [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes the guided flow at about 2,380 complete episodes a day, against measured volumes of 17–818 a day. The same record prices a production target on AWS at $86.36 a month and explains each service choice.
 - **Not done yet:**
-  - frontend use of the guided routes and ES/PT interface text;
+  - frontend use of the guided routes;
   - automatic one / several / none classification of free text;
   - the recent-transactions resolution path (a draft proposal);
   - a remote run of the new routes;
