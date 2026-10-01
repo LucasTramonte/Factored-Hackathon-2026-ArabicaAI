@@ -6,7 +6,7 @@ The target workflow has three stages:
 - **Online service:** validate the session and scope; retrieve permitted candidates with coverage and version; classify the retrieval outcome (matches, none or incomplete, tool error); persist an idempotent case; verify it, then issue a reference; human review.
 - **Offline evaluation:** all attempts, not only saved cases.
 
-This page maps each box to what exists and what's next. The decisions behind it are in [ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md), [ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md) and [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md).
+This page maps each box to what exists and what's next. The decisions behind it are in [ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md) (Accepted), [ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md) and [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md) (Proposed).
 
 ## Gap map
 
