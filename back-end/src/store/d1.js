@@ -13,6 +13,10 @@ const EPISODE_CURSOR = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]
 /** Housekeeping may not close episodes at a cutoff more than this far past the server clock. */
 export const IDLE_CUTOFF_SKEW_MS = 60000;
 const IDLE_DUE = 'MIN(e.updated_at+600000,e.expires_at)';
+// Model usage of an episode for the sweep's end event: absent keys (the guided flow) are 0, and a total is null
+// while any call's usage is unknown.
+const USAGE = key => "COALESCE(json_extract(d.usage_json,'$." + key + "'),0)";
+const KNOWN = key => "CASE WHEN " + USAGE('usage_unavailable_calls') + '>0 THEN NULL ELSE ' + USAGE(key) + ' END';
 const IDLE_CANDIDATES = "FROM intake_episodes e WHERE e.state='selection_required' AND " + IDLE_DUE + '<=? '
   + 'AND NOT EXISTS(SELECT 1 FROM intake_handoffs h WHERE h.episode_id=e.episode_id)';
 
@@ -51,19 +55,25 @@ export function createStore(db) {
     findSession: (hash, actor, now) =>
       first('SELECT customer_id, expires_at FROM sessions WHERE token_hash=? AND actor=? AND expires_at>?', hash, actor, now),
 
-    /** Atomically store a start, its immutable turn receipt and one opaque event; conflicting keys never update state. */
-    startIntake: async ({ customerId, language, statement, key, now, expiresAt }) => {
+    /**
+     * Atomically store a start, its immutable turn receipt and one opaque event; conflicting keys never update state.
+     * ``producer`` (the extractor switch, on) labels the events and pre-records one call with unknown usage, so a
+     * crash during the call is never counted as free; absent, the row and event are the guided ones.
+     */
+    startIntake: async ({ customerId, language, statement, key, now, expiresAt, producer }) => {
       const episodeId = crypto.randomUUID();
       const sessionRef = crypto.randomUUID();
       const payloadHash = await tokenHash(JSON.stringify([language, statement]));
       const response = JSON.stringify({ episode_id: episodeId, state: 'selection_required', language, mode: 'guided' });
       const event = JSON.stringify({ event: 'intake_started', version: '2', case_id: episodeId,
-        ts: new Date(now).toISOString(), seq: 0, session_ref: sessionRef, language, model_version: 'guided-0.1' });
+        ts: new Date(now).toISOString(), seq: 0, session_ref: sessionRef, language, model_version: producer ?? 'guided-0.1' });
+      const usage = JSON.stringify(producer ? { tool_calls: 1, model_version: producer, llm_calls: 1, known_input_tokens: 0,
+        known_output_tokens: 0, usage_unavailable_calls: 1 } : { tool_calls: 1 });
       const results = await batch([
         ['INSERT INTO intake_episodes(episode_id,customer_id,session_ref,language,mode,state,customer_statement,'
-          + 'start_key,payload_hash,created_at,updated_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) '
+          + 'start_key,payload_hash,created_at,updated_at,expires_at,usage_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) '
           + 'ON CONFLICT(customer_id,start_key) DO NOTHING',
-          episodeId, customerId, sessionRef, language, 'guided', 'selection_required', statement, key, payloadHash, now, now, expiresAt],
+          episodeId, customerId, sessionRef, language, 'guided', 'selection_required', statement, key, payloadHash, now, now, expiresAt, usage],
         ['INSERT INTO intake_turns(episode_id,turn_key,payload_hash,response_json) '
           + 'SELECT episode_id,?,?,? FROM intake_episodes WHERE episode_id=?', key, payloadHash, response, episodeId],
         ['INSERT INTO intake_events(episode_id,seq,event_json) '
@@ -77,6 +87,13 @@ export function createStore(db) {
       if (episode && episode.payload_hash !== payloadHash) return { conflict: true };
       return { episode, replayed: episode?.episode_id !== episodeId };
     },
+    /** Replace the pre-recorded unknown call with the adapter's measured usage while the episode is still open. */
+    recordIntakeExtraction: ({ customerId, episodeId, producer, usage }) => batch([
+      ['UPDATE intake_episodes SET usage_json=json_patch(usage_json,?) WHERE customer_id=? AND episode_id=? '
+        + "AND state='selection_required' AND json_extract(usage_json,'$.model_version')=?",
+        JSON.stringify({ llm_calls: usage.llm_calls, known_input_tokens: usage.known_input_tokens,
+          known_output_tokens: usage.known_output_tokens, usage_unavailable_calls: usage.usage_unavailable_calls }), customerId, episodeId, producer]
+    ]),
     /** Read an episode only for its authenticated owner; a foreign id and a missing id are indistinguishable. */
     findIntake: (customerId, episodeId) => first(
       'SELECT * FROM intake_episodes WHERE customer_id=? AND episode_id=?', customerId, episodeId),
@@ -142,8 +159,10 @@ export function createStore(db) {
     finishIntakeHandoff: async ({ customerId, episode, receipt, sessionHash, now, operationDuration, toolCalls }) => {
       const authority = " AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=? AND expires_at>?)";
       const authorityParams = [sessionHash, customerId, now];
+      const model = JSON.parse(episode.usage_json ?? '{}');
+      const unknown = (model.usage_unavailable_calls ?? 0) > 0;
       const base = { version: '2', case_id: episode.episode_id, ts: new Date(now).toISOString(),
-        session_ref: episode.session_ref,language: episode.language,model_version:'guided-0.1' };
+        session_ref: episode.session_ref,language: episode.language,model_version:model.model_version ?? 'guided-0.1' };
       const reference = receipt.complete_case_id ?? receipt.handoff_id;
       const complete = receipt.kind === 'complete';
       const extras = [
@@ -151,7 +170,9 @@ export function createStore(db) {
         { event:'handoff_created',kind:receipt.kind,case_ref:reference,tool_status:receipt.tool_status },
         ...(complete ? [{ event:'handoff_accepted',case_ref:reference,accepted_by:receipt.destination }] : []),
         { event:'intake_ended',outcome:complete ? 'accepted' : receipt.kind === 'technical' ? 'technical_failure' : 'routed',safety:'not_assessed',
-          duration_ms:Math.max(0,now-episode.created_at),llm_calls:0,input_tokens:0,output_tokens:0,known_input_tokens:0,known_output_tokens:0,usage_unavailable_calls:0,
+          duration_ms:Math.max(0,now-episode.created_at),llm_calls:model.llm_calls ?? 0,input_tokens:unknown ? null : model.known_input_tokens ?? 0,
+          output_tokens:unknown ? null : model.known_output_tokens ?? 0,known_input_tokens:model.known_input_tokens ?? 0,
+          known_output_tokens:model.known_output_tokens ?? 0,usage_unavailable_calls:model.usage_unavailable_calls ?? 0,
           tool_calls:0 }
       ];
       const results = await batch([
@@ -199,13 +220,16 @@ export function createStore(db) {
       // instead of a NULL sequence that would roll back the whole page.
       const next = "COALESCE(json_extract(d.latest,'$.seq'),-1)+1";
       const results = await batch([
-        ['INSERT INTO intake_events(episode_id,seq,event_json) SELECT d.episode_id,' + next + ',json_patch(json_object('
+        ['INSERT INTO intake_events(episode_id,seq,event_json) SELECT d.episode_id,' + next + ',json_set(json_patch(json_object('
           + "'event','intake_ended','version','2','case_id',d.episode_id,"
           + "'ts',strftime('%Y-%m-%dT%H:%M:%S',d.due_at/1000,'unixepoch')||printf('.%03dZ',d.due_at%1000),"
-          + "'seq'," + next + ",'session_ref',d.session_ref,'language',d.language,'model_version','guided-0.1'),"
+          + "'seq'," + next + ",'session_ref',d.session_ref,'language',d.language,'model_version',COALESCE(json_extract(d.usage_json,'$.model_version'),'guided-0.1')),"
           + "json_object('outcome','abandoned','safety','not_assessed','duration_ms',MAX(0,d.due_at-d.created_at),"
-          + "'llm_calls',0,'input_tokens',0,'output_tokens',0,'known_input_tokens',0,'known_output_tokens',0,"
-          + "'usage_unavailable_calls',0,'tool_calls',json_extract(d.usage_json,'$.tool_calls'))) "
+          + "'llm_calls'," + USAGE('llm_calls') + ",'input_tokens',0,'output_tokens',0,"
+          + "'known_input_tokens'," + USAGE('known_input_tokens') + ",'known_output_tokens'," + USAGE('known_output_tokens') + ","
+          + "'usage_unavailable_calls'," + USAGE('usage_unavailable_calls') + ",'tool_calls',json_extract(d.usage_json,'$.tool_calls'))),"
+          // A merge patch drops null members, so the totals (null while any usage is unknown) are set in place after it.
+          + "'$.input_tokens'," + KNOWN('known_input_tokens') + ",'$.output_tokens'," + KNOWN('known_output_tokens') + ') '
           + 'FROM (SELECT e.episode_id,e.session_ref,e.language,e.created_at,e.usage_json,' + IDLE_DUE + ' AS due_at,' + latest + ' AS latest '
           + page + ") d WHERE json_extract(d.latest,'$.event') IS NOT 'intake_ended' ON CONFLICT(episode_id,seq) DO NOTHING", now, limit],
         ["UPDATE intake_episodes SET state='abandoned',updated_at=? WHERE episode_id IN (SELECT e.episode_id " + page + ') '
