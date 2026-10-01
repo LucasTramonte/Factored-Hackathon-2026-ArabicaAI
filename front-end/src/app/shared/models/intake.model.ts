@@ -97,3 +97,61 @@ export interface AgentIntakeDetail extends AgentIntake {
   history_has_more: boolean;
   scope: 'synthetic_demo_only';
 }
+
+// Guided intake (W5 fe-intake-chat): POST /demo/session context card and the /intake/* bodies and receipts.
+export interface ContextCard {
+  version: 1;
+  snapshot_at: string;
+  first_name: string | null;
+  locale_hint: string;
+  products: { product_type: string | null; last4: string | null; currency: string | null }[];
+}
+
+export interface CustomerSession {
+  customer_id: string;
+  mode: 'simulated_login';
+  context_card?: ContextCard | null;
+}
+
+/** The back-end accepts only these report languages. */
+export type IntakeLang = 'es' | 'pt';
+
+export interface IntakeStartBody {
+  customer_statement: string;
+  idempotency_key: string;
+  language: IntakeLang;
+  mode: 'guided';
+  report_type: 'unrecognized_charge';
+}
+
+/** A start never carries a reference; the customer must still choose the charge. */
+export interface IntakeStart {
+  episode_id: string;
+  state: 'selection_required';
+  language: IntakeLang;
+  mode: 'guided';
+  replayed: boolean;
+}
+
+export interface IntakeConfirmBody {
+  customer_confirmed: true;
+  episode_id: string;
+  idempotency_key: string;
+  transaction_id: string;
+}
+
+export interface IntakeHandoffBody {
+  episode_id: string;
+  idempotency_key: string;
+  kind: 'incomplete';
+}
+
+/** Returned only after the handoff has been read back; ``kind`` is decided by the server. */
+export interface IntakeReceipt {
+  episode_id: string;
+  protocol: string;
+  kind: 'complete' | 'technical' | 'incomplete';
+  accepted_at: string;
+  replayed: boolean;
+  next_step_code: 'await_human_review';
+}

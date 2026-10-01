@@ -50,6 +50,7 @@ The test counts above belong to the specific task revisions; they are not a gree
 - Actual agent routes: `GET /agent/intakes`; `GET /agent/intake-detail?protocol=<uuid>`. Queue contract is `agentIntakeList`, data field `items`; detail is `agentIntakeDetail`. Queue returns 50 and has_more; history returns 100 and history_has_more. Agent reads cannot mutate terminal usage/outcome.
 - Event export contains only opaque references and the strict existing event vocabulary; no statements, customer IDs, names, source transaction IDs or generated model text. v2 unknown model usage means null totals plus known subtotals/unavailable-call counts, never invented zero. Failed/pending episodes remain denominators.
 - Retain operational data through October 31; expired sessions still purge. Existing reset recipes must respect the new foreign keys.
+  > Superseded: [ADR-004](../../ADRs/ADR-004-intake-capacity-and-cost.md) (revised 2026-09-30) sets the shutdown after 2026-10-20.
 
 ## Finish Task 5 first
 
