@@ -1,4 +1,38 @@
-# Gold intake serving slice
+# Gold
+
+## Gold serving tables (`build_gold.py`, in progress)
+
+`make gold` (or `python -m data_pipelines.gold.run_gold`) builds Gold tables over the **whole population** into their own DuckDB file, `data/latam_bank_gold.duckdb`. Which rows reach D1 is decided later by a publish step, not by Gold. `build_gold.py` is the library; `run_gold.py` is the entry point:
+
+```bash
+python -m data_pipelines.gold.run_gold                          # build every Gold table
+python -m data_pipelines.gold.run_gold --tables customers       # build a subset (comma-separated)
+python -m data_pipelines.gold.run_gold --quality-report data/quality_runs/<run>/quality_results.json
+python -m data_pipelines.gold.run_gold --silver-db <file> --gold-db <file>
+python -m data_pipelines.gold.run_gold --list                   # list the Gold tables; build nothing
+python -m data_pipelines.gold.run_gold --last                   # show the last committed build; build nothing
+```
+
+Paths default to `DUCKDB_PATH` and `GOLD_DUCKDB_PATH`, or otherwise to files under `DATA_DIR`. The exit code is 0 only when the gate and every check pass.
+
+- **Gate.** The build needs a ready, error-free quality run of the same Silver file, taken after that file's last change. By default it uses the newest one under `data/quality_runs/`.
+- **Read-only Silver.** Silver is attached read-only as `lake`, so a Gold build never changes the Silver file and never invalidates its quality run. File names whose stem is `gold`, `silver` or `lake` are refused, because DuckDB would read `gold.x` as a catalog name rather than a schema.
+- **Atomic.** Each run rebuilds its tables and their checks in one transaction. If any check fails, everything rolls back and the previous tables stay. Passed checks go to `gold.reconciliation`, and the build itself (its Silver file and quality run) goes to `gold.builds`.
+- **`row_hash`** covers only the columns that are published to D1, so the publish step can send only changed rows.
+
+| Table | Grain | Columns | Checks |
+|---|---|---|---|
+| `gold.customers` | one row per `silver.dim_customers` customer (a current snapshot) | `customer_id`, `display_name` (provisional: first name and last initial), `country`, `segment`, `row_hash` | count equals Silver; no duplicate or null IDs; no blank display name; country and segment present; no Silver customer missing |
+
+| `gold.card_purchases` | one row per Silver `Purchase`/`Approved` transaction | Served: `transaction_id`, `customer_id`, `source_occurred_at` (the Bronze wall time in ISO form), `merchant_name`, `amount` (the Bronze string), `currency`. Kept in Gold only: `product_id`, `business_date`, `merchant_category`, `transaction_country`, `card_type`, `card_last4`, `source_file`, `row_hash` | count equals Silver; unique IDs; product exists and is owned by the buyer; product is a credit or debit card; buyer is in `gold.customers`; exactly one Bronze row; amount well formed, positive and equal to Silver; wall time equal to Silver; currency well formed; missing merchants kept as NULL (reported) |
+
+`country` and `segment` are not served. The publish step uses them to choose a scope, such as a cohort or a single country.
+
+`gold.card_purchases` checks ownership, card type and Bronze uniqueness rather than filtering on them, so an unexpected row fails the build instead of quietly disappearing. A missing merchant or category stays NULL and is never filled in (DF-006). The full build on 2026-10-01 had 996,168 rows, of which 49,810 had no merchant. D1's `transactions.merchant_name` is `NOT NULL`, so those rows can't be published until either the schema accepts a missing merchant (and shows the category instead), or the publish step excludes them and reports it in the manifest. Building only `card_purchases` needs `gold.customers` from an earlier build. The default builds both tables in one transaction.
+
+Memory model: DuckDB SQL only, with a 2 GB limit, 4 threads and disk spill in `data/duckdb_tmp/`. Only check aggregates reach Python. Tests: `pytest data_pipelines/gold/test_build_gold.py`.
+
+## One-day intake slice (`intake_slice.py`, current D1 seed)
 
 `python -m data_pipelines.gold.run_intake_slice` turns a focused, quality-gated Bronze/Silver DuckDB into the only data the online intake service serves: a D1 SQL seed and a JSON manifest. Run it through `make intake-sample-slice` after the one-day sample targets.
 
