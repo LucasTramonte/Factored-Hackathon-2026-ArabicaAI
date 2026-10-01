@@ -8,7 +8,7 @@ The brief asks for "repeatable data preparation with contracts, quality checks, 
 |---|---|---|
 | Repeatable preparation | One Make target per layer, a Docker image, and offline CI | [Section 1](#1-the-pipeline), [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md) |
 | Contracts | Typed Silver specs, schema checks that block the build, and API and D1 schema constraints | [Section 2](#2-contracts) |
-| Quality checks | 336 aggregate checks; any error blocks every later step | [Section 3](#3-the-quality-gate), [`PARITY.md`](data_pipelines/quality/PARITY.md) |
+| Quality checks | 336 aggregate checks; any error blocks every later step | [Section 3](#3-the-quality-gate), [`PARITY.md`](../../data_pipelines/quality/PARITY.md) |
 | Lineage | Every served row traces back to its S3 file | [Section 4](#4-lineage) |
 | Update/freshness policy | What each kind of delivery does, and how fresh each layer is | [Section 5](#5-update-and-freshness-policy) |
 | Update correctness on static data | A labelled fixture that drives the real code through each kind of delivery | [Section 6](#6-update-correctness) |
@@ -31,8 +31,8 @@ S3 (organizers, read-only) ─▶ Bronze (raw Parquet) ─▶ Silver (typed tabl
   - **USD amounts:** converted at the exact-date FX rate. A fallback conversion is flagged `amount_usd_is_estimated` (DF-015) and is never summed as real USD.
   - **Rebuilds:** Silver is always rebuilt in full. That takes seconds from local Parquet.
 - **The quality gate** (`data_pipelines/quality/`) runs read-only over Bronze and Silver and writes `quality_results.json` with the watermarks it checked ([section 3](#3-the-quality-gate)).
-- **Gold** (`data_pipelines/gold/`) cuts the serving data. It is either the one-day slice or the cohort of customers who disputed a charge (796 customers and 2,906 purchases as of 2026-06-17, [ADR-004 §2](Docs/ADRs/ADR-004-intake-capacity-and-cost.md)). The output is an idempotent SQL seed and a manifest.
-- **D1** receives the reviewed seed. The Worker never reads S3, DuckDB or Silver ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)).
+- **Gold** (`data_pipelines/gold/`) cuts the serving data. It is either the one-day slice or the cohort of customers who disputed a charge (796 customers and 2,906 purchases as of 2026-06-17, [ADR-004 §2](../ADRs/ADR-004-intake-capacity-and-cost.md)). The output is an idempotent SQL seed and a manifest.
+- **D1** receives the reviewed seed. The Worker never reads S3, DuckDB or Silver ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)).
 
 **Measured on the full data** (one laptop; the source reconciliation in `PARITY.md` ran on 2026-09-27, and the full build in ADR-004 on 2026-09-29):
 
@@ -82,9 +82,9 @@ On the full data the gate ran **336 aggregate checks, with 0 errors and 6 warnin
 
 Gold refuses to build unless its quality run is ready. That run must also be for the same DuckDB file, must have been generated after the last change to that file, and must have checked the watermark Gold serves (`check_quality_gate`).
 
-**Warnings stay visible** and are handled where a metric uses the data: orphan links, late-arrival signals, owner mismatches and domain violations. All six on the full data are source limitations recorded in [`DATA_QUALITY.md`](DATA_QUALITY.md) and [`PARITY.md`](data_pipelines/quality/PARITY.md). One example is DF-002: complaints cite other customers' products.
+**Warnings stay visible** and are handled where a metric uses the data: orphan links, late-arrival signals, owner mismatches and domain violations. All six on the full data are source limitations recorded in [`DATA_QUALITY.md`](DATA_QUALITY.md) and [`PARITY.md`](../../data_pipelines/quality/PARITY.md). One example is DF-002: complaints cite other customers' products.
 
-**Parity.** All 181 check numerators shared with the former CSV scanner match it ([`PARITY.md`](data_pipelines/quality/PARITY.md)).
+**Parity.** All 181 check numerators shared with the former CSV scanner match it ([`PARITY.md`](../../data_pipelines/quality/PARITY.md)).
 
 ## 4. Lineage
 
@@ -116,10 +116,10 @@ This policy describes how the pipeline handles a live feed, and the fixture in [
 | **Dimensions** | Rebuilt in full every run | They are flat exports and small |
 
 **How fresh each layer is:**
-- **Bronze and Silver:** as fresh as the last run. In production, one batch runs a day after the daily partition lands; the AWS target, which is designed but not deployed, would schedule it with EventBridge on Fargate ([ADR-004 §3](Docs/ADRs/ADR-004-intake-capacity-and-cost.md)).
+- **Bronze and Silver:** as fresh as the last run. In production, one batch runs a day after the daily partition lands; the AWS target, which is designed but not deployed, would schedule it with EventBridge on Fargate ([ADR-004 §3](../ADRs/ADR-004-intake-capacity-and-cost.md)).
 - **Gold and D1:** they change only through a reviewed seed with a new version. `seed_loads` records what is loaded, so the service shows data as of the manifest's `as_of` date and no fresher. The cohort's `as_of` is the last loaded partition, so once the cohort is loaded into remote D1 the demo will show data up to 2026-06-17.
 - **Event time vs. storage time:** `process_date` is the storage partition and is used only to prune reads. Every business filter uses the event timestamp. The two differ: early-hour events are filed under the previous day (DF-004), and the same clock applies to every country (DF-020).
-- **Retention:** demo activity is kept until judging ends and deleted after 2026-10-20 ([ADR-004 §7](Docs/ADRs/ADR-004-intake-capacity-and-cost.md)).
+- **Retention:** demo activity is kept until judging ends and deleted after 2026-10-20 ([ADR-004 §7](../ADRs/ADR-004-intake-capacity-and-cost.md)).
 
 **Who acts on what:**
 - **The batch operator** watches for a run that exits non-zero (any failed table) and for any `late_partitions` warning.

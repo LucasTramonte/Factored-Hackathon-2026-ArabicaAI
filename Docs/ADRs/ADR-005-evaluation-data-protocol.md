@@ -6,7 +6,7 @@
 
 ## Context
 
-The brief asks for valid labels, leakage prevention, appropriate evaluation splits and a learned component evaluated against a baseline on the same held-out workload (problem statement, Sound Data and ML Practice; kickoff p. 12). Three facts from the [data quality register](../../DATA_QUALITY.md) shape how we can meet that:
+The brief asks for valid labels, leakage prevention, appropriate evaluation splits and a learned component evaluated against a baseline on the same held-out workload (problem statement, Sound Data and ML Practice; kickoff p. 12). Three facts from the [data quality register](../deliverables/DATA_QUALITY.md) shape how we can meet that:
 
 - Source text is fixed templates (DF-001). No text model can be trained or tested on it, so the intake comparison needs authored cases.
 - `process_date` isn't an event date (DF-004). A split on it would mix periods.
@@ -64,6 +64,6 @@ So leakage can happen in two places: dataset statistics that reach design decisi
 
 ## Implementation notes
 
-- Register and queries: [`DATA_QUALITY.md`](../../DATA_QUALITY.md) and `data_profiles/findings/`. Run with `make findings`.
+- Register and queries: [`DATA_QUALITY.md`](../deliverables/DATA_QUALITY.md) and `data_profiles/findings/`. Run with `make findings`.
 - The disclosure in the register records the one full-period profiling that happened before this protocol.
 - The method, tooling and review status are in [`evals/intake/frozen_es_pt_v1/`](../../evals/intake/frozen_es_pt_v1/README.md). The case files are published, checked against `COMMITMENT.json` and tagged `eval-es-pt-v1` in a later PR, after the extractor is pre-registered and the Spanish review and the policy decisions are done. The manifest records the drafting model, the files the drafting session read, the reviewers, the audit error bounds and the assumptions (45-day lookback, fixture density).

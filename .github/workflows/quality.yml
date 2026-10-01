@@ -32,6 +32,9 @@ jobs:
       - name: Compile pipeline package
         run: python -m compileall -q data_pipelines data_foundation data_profiles/findings evals intake_agent
 
+      - name: Check relative Markdown links and anchors
+        run: python scripts/check_doc_links.py
+
   web:
     runs-on: ubuntu-latest
     steps:

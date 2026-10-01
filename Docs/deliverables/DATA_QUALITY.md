@@ -1,12 +1,12 @@
 # Data quality and findings register
 
-This is the team's single list of what we learned about the supplied LATAM Bank dataset that changes, limits or supports a decision. The automated gate in [`data_pipelines/quality/`](data_pipelines/quality/README.md) checks every build for readiness (tables, row counts, keys, domains, links). This register records what those checks and targeted queries *mean*: the evidence, the impact on metrics and on the intake service, and how each finding is handled.
+This is the team's single list of what we learned about the supplied LATAM Bank dataset that changes, limits or supports a decision. The automated gate in [`data_pipelines/quality/`](../../data_pipelines/quality/README.md) checks every build for readiness (tables, row counts, keys, domains, links). This register records what those checks and targeted queries *mean*: the evidence, the impact on metrics and on the intake service, and how each finding is handled.
 
-Every number here comes from a query in [`data_profiles/findings/queries/`](data_profiles/findings/queries/) run by `make findings` on the full Silver build (quality run `20260929T113804Z`, ready, 0 errors) on 2026-09-29. DF-016 to DF-018 were added on 2026-09-30 from the same build (findings run `20260930T033230Z`), and DF-019 later that day (findings run `20260930T192858Z`). Results are aggregates only. The dataset is synthetic (dataset summary, p. 5), so "unrealistic" below means unlike a real bank, not wrong in the file.
+Every number here comes from a query in [`data_profiles/findings/queries/`](../../data_profiles/findings/queries/) run by `make findings` on the full Silver build (quality run `20260929T113804Z`, ready, 0 errors) on 2026-09-29. DF-016 to DF-018 were added on 2026-09-30 from the same build (findings run `20260930T033230Z`), and DF-019 later that day (findings run `20260930T192858Z`). Results are aggregates only. The dataset is synthetic (dataset summary, p. 5), so "unrealistic" below means unlike a real bank, not wrong in the file.
 
 ## How to read it
 
-- **Scope** says which rows a query may read ([ADR-005](Docs/ADRs/ADR-005-evaluation-data-protocol.md)):
+- **Scope** says which rows a query may read ([ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md)):
   - `design` queries see only business timestamps before **2026-01-01**. Their results can inform the design of prompts, fixtures, thresholds and any learned component.
   - `full` queries check structural properties (schema, links, domains) over every row. They are not fitted to anything and apply the same way to every period.
   - Holdout rows (2026-01-01 → 2026-06-18) are never used to design anything.
@@ -55,14 +55,14 @@ Every number here comes from a query in [`data_profiles/findings/queries/`](data
 - **Evidence:** `fact_complaints.description` has 5 distinct values in 67,095 rows, one per subcategory (e.g. "Queja relacionada con transactions"). `fact_call_transcripts.customer_text` has 42 distinct values in 171,321 rows, all `es`. All 42 are used by more than one of the 6 contact reasons.
 - **Impact:** a model trained or validated on this text would learn a lookup, not language; complaint text *is* its label. No text model is trained on source text, source phrases can't serve as held-out cases, and dispute phrasing has to be authored.
 - **Handling:** the intake evaluation uses an authored, blind, frozen ES/PT set (ADR-005). Portuguese is synthetic in every case.
-- **Also documented in:** [bronze profile](data_profiles/bronze_data_profile/bronze_profile.md) (description domain); Andrés's viability notebook on branch `feat/Andres-NLP` (not merged).
+- **Also documented in:** [bronze profile](../../data_profiles/bronze_data_profile/bronze_profile.md) (description domain); Andrés's viability notebook on branch `feat/Andres-NLP` (not merged).
 
 ### DF-002 Complaint product links point to other customers
 
 - **Evidence:** every one of the 44,570 complaints with an `affected_product_id` points to a product owned by a different customer. The other 22,525 have no product. Transactions are clean: 4,425,008 of 4,425,008 product links match their owner.
 - **Impact:** a complaint can't be tied to a card, account or product type. Any join from complaints to products silently mixes customers.
-- **Handling:** suppressed at metric level, as recorded in the [quality parity record](data_pipelines/quality/PARITY.md), which also lists the same pattern for digital events (1,094,226 of 1,094,242). The quality gate reports it as `product_owner_mismatch` on every build.
-- **Cause (confirmed in Bronze):** the source fills `affected_product_id` and `digital_events.product_id` with a product drawn at random from the whole product table. The product-type mix of cited products matches the full table within a point, digital events match their owner 16 times in 1,094,242 (chance level), and 8,351 of the 44,570 cited products (18.7%) were opened after the complaint was filed. It is a generation artefact, not a pipeline bug. See the [follow-up report](data_profiles/data_deep_dive/reports/complaints_product_owner_mismatch_followup.md).
+- **Handling:** suppressed at metric level, as recorded in the [quality parity record](../../data_pipelines/quality/PARITY.md), which also lists the same pattern for digital events (1,094,226 of 1,094,242). The quality gate reports it as `product_owner_mismatch` on every build.
+- **Cause (confirmed in Bronze):** the source fills `affected_product_id` and `digital_events.product_id` with a product drawn at random from the whole product table. The product-type mix of cited products matches the full table within a point, digital events match their owner 16 times in 1,094,242 (chance level), and 8,351 of the 44,570 cited products (18.7%) were opened after the complaint was filed. It is a generation artefact, not a pipeline bug. See the [follow-up report](../../data_profiles/data_deep_dive/reports/complaints_product_owner_mismatch_followup.md).
 
 ### DF-003 Claimed amounts are not linked to transactions
 
@@ -137,18 +137,18 @@ Every number here comes from a query in [`data_profiles/findings/queries/`](data
 
 - **Evidence:** in the design window, 21.6% of approved purchases are dated before their card's `opening_date` and 27.1% after its `expiration_date`, at the same rates for credit and debit. All are on products whose current status is `Active`.
 - **Impact:** opening and expiration dates can't validate or filter transactions, and product dates in the snapshot don't describe the product's history.
-- **Corroborated:** over all 4,425,008 transactions (not just design-window purchases), 18.7% are dated before their product's `opening_date`, by 1 to 1,094 days (median 321). See the [quality warnings follow-up](data_profiles/data_deep_dive/reports/quality_report_warnings_followup.md).
+- **Corroborated:** over all 4,425,008 transactions (not just design-window purchases), 18.7% are dated before their product's `opening_date`, by 1 to 1,094 days (median 321). See the [quality warnings follow-up](../../data_profiles/data_deep_dive/reports/quality_report_warnings_followup.md).
 - **Handling:** no filter uses card validity.
 - **Next step:** check whether Bronze snapshots carry different dates per month.
 
 ### DF-015 Bronze-profile findings re-checked in Silver
 
-The [bronze profile findings](data_profiles/bronze_data_profile/bronze_profile_findings.md) were re-run against Silver:
+The [bronze profile findings](../../data_profiles/bronze_data_profile/bronze_profile_findings.md) were re-run against Silver:
 
 | Bronze finding | Silver result | Status |
 |---|---|---|
 | `México` / `Mexico` spelling split | 6 values: Argentina, Brazil, Colombia, México, Spain, USA | Handled in Silver |
-| `contact_reason` duplicates `reason_category` | Identical in all 686,296 interactions (confirmed row by row in the [call-center deep dive](data_profiles/data_deep_dive/reports/call_center_interactions_table_report.md)) | Open: keep one |
+| `contact_reason` duplicates `reason_category` | Identical in all 686,296 interactions (confirmed row by row in the [call-center deep dive](../../data_profiles/data_deep_dive/reports/call_center_interactions_table_report.md)) | Open: keep one |
 | Future-dated `customers.last_updated` | 9,316 customers after 2026-06-18, up to 2027-06-15 | Open |
 | `amount_usd` 57% null | 35 null; 99,442 of 4,425,008 (2.25%) estimated from FX and flagged | Handled in Silver; keep the flag |
 | `origin_interaction_id` 100% null | Column dropped | Handled in Silver (see DF-003) |
@@ -158,7 +158,7 @@ The [bronze profile findings](data_profiles/bronze_data_profile/bronze_profile_f
 
 - **Evidence:** `dim_customers.registration_branch_id` is populated for all 150,000 customers with 150,000 distinct values, and only 5 of them are real branches. `dim_service_agents.assigned_branch_id` is populated for 833 of 1,200 agents (833 distinct values), and 2 are real branches. The orphan values have the same shape as real branch IDs (`SUC-XXXXXXXX`). Every other branch or agent reference resolves.
 - **Impact:** neither column is a usable foreign key. A branch-level metric joined on them would drop or misattribute almost every row.
-- **Handling:** no metric joins on these columns. The quality gate reports both as `foreign_key_orphans` on every build, and the [Silver README](data_pipelines/silver/README.md) and the Silver schema diagram mark them.
+- **Handling:** no metric joins on these columns. The quality gate reports both as `foreign_key_orphans` on every build, and the [Silver README](../../data_pipelines/silver/README.md) and the Silver schema diagram mark them.
 
 ### DF-017 A few business codes are shared by two entities
 

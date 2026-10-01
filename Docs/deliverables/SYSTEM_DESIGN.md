@@ -39,7 +39,7 @@ The data shows where it hurts:
 
 The deeper problem is that **nothing ties a complaint to the disputed transaction.** No complaint points to a transaction (DF-003). The product a complaint cites belongs to a different customer in every one of 44,570 cases (DF-002). Only 33% of unrecognized-charge complaints record an amount. So today the agent starts each case by working out which charge the customer meant.
 
-That is the job we take on: **leave every dispute with the right transaction, confirmed by the customer, before a person picks it up.** The evidence for all of this is in [`DATA_QUALITY.md`](DATA_QUALITY.md). Why this workflow and not the other three the brief suggests is in [ADR-001](Docs/ADRs/ADR-001-workflow-prioritization.md).
+That is the job we take on: **leave every dispute with the right transaction, confirmed by the customer, before a person picks it up.** The evidence for all of this is in [`DATA_QUALITY.md`](DATA_QUALITY.md). Why this workflow and not the other three the brief suggests is in [ADR-001](../ADRs/ADR-001-workflow-prioritization.md).
 
 ## What we built
 
@@ -64,19 +64,19 @@ Requests it can't handle (another language, a recognized charge, a lost card, a 
 | Guided backend | Merged, tested locally, not deployed | Adds guided intake episodes, technical and incomplete handoffs, the agent's case detail and event export. It takes a structured report and does not read free text |
 | Reading free text | Evaluated offline, not wired online | The rule-based checklist and the model's fact extractor, run through the written policy in the evaluation harness. The model joins the live service only after the frozen comparison, behind a switch that falls back to the guided flow |
 
-The customer contract and the measurement contract are in [`Docs/intake/`](Docs/intake/customer-and-measurement-contract.md).
+The customer contract and the measurement contract are in [`Docs/intake/`](../intake/customer-and-measurement-contract.md).
 
 ## How it works
 
-**The data path is batch.** The organizers' S3 files are ingested into a raw layer (Bronze) and typed into Silver. They then pass a quality gate that stops the build on missing tables, schema errors or unexplained row changes. From Silver we cut a small, reviewed serving slice (Gold): customers, cards and approved purchases, with the source amount, currency and timestamp kept as they were. All of it runs on DuckDB in minutes; the full build took 11 minutes on a laptop. The pipeline is described in the [README](README.md#data-pipeline-start-here).
+**The data path is batch.** The organizers' S3 files are ingested into a raw layer (Bronze) and typed into Silver. They then pass a quality gate that stops the build on missing tables, schema errors or unexplained row changes. From Silver we cut a small, reviewed serving slice (Gold): customers, cards and approved purchases, with the source amount, currency and timestamp kept as they were. All of it runs on DuckDB in minutes; the full build took 11 minutes on a laptop. The pipeline is described in the [README](../../README.md#data-pipeline-start-here).
 
-**The online path is one service.** A Cloudflare Worker serves the Angular client and the API, with the case store in D1 (SQLite). The Worker never reads the raw data; it only sees the reviewed slice. All database statements live in one module, which is also the only thing that changes if the store moves. Why one runtime, and why Cloudflare, is in [ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md).
+**The online path is one service.** A Cloudflare Worker serves the Angular client and the API, with the case store in D1 (SQLite). The Worker never reads the raw data; it only sees the reviewed slice. All database statements live in one module, which is also the only thing that changes if the store moves. Why one runtime, and why Cloudflare, is in [ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md).
 
-**The learned component only reads, and it isn't online yet.** A pretrained model (gpt-oss-20b on Workers AI) turns the message into facts: amount, date, currency, merchant, card, country. The same written policy that drives the rule-based baseline then decides the action. The model never sees transactions, never picks a charge and never writes to the store. Today it runs in the evaluation harness only. It joins the service after the frozen comparison, behind a switch. Why this design, which model, and when to change it are in [ADR-006](Docs/ADRs/ADR-006-learned-extractor-workers-ai.md).
+**The learned component only reads, and it isn't online yet.** A pretrained model (gpt-oss-20b on Workers AI) turns the message into facts: amount, date, currency, merchant, card, country. The same written policy that drives the rule-based baseline then decides the action. The model never sees transactions, never picks a charge and never writes to the store. Today it runs in the evaluation harness only. It joins the service after the frozen comparison, behind a switch. Why this design, which model, and when to change it are in [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md).
 
 If a bank ran this workflow on AWS, the same design becomes the target below. We priced it, drew it and wrote it as a CloudFormation template, but did not deploy it.
 
-![AWS production target: CloudFront and WAF at the edge, HTTP API and Lambda in a two-AZ VPC with RDS PostgreSQL Multi-AZ and a Bedrock endpoint, a daily Fargate batch into an S3 lake](Docs/Costs/aws-target/architecture.png)
+![AWS production target: CloudFront and WAF at the edge, HTTP API and Lambda in a two-AZ VPC with RDS PostgreSQL Multi-AZ and a Bedrock endpoint, a daily Fargate batch into an S3 lake](../Costs/aws-target/architecture.png)
 
 ## How we know it works
 
@@ -104,7 +104,7 @@ How the sets were built, every leakage control, what 60 cases can and can't show
 
 **Reading one message with the model costs about $0.0005.** On Bedrock, with the same model, it costs about the same.
 
-The open question is speed, not cost. Each layer's choice, the alternatives we priced and rejected, and the triggers that would change them are in [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md).
+The open question is speed, not cost. Each layer's choice, the alternatives we priced and rejected, and the triggers that would change them are in [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md).
 
 ## Safety, privacy and operations
 
@@ -162,8 +162,8 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 | Data findings and their queries | [`DATA_QUALITY.md`](DATA_QUALITY.md) |
 | Pipeline, contracts, lineage, update policy and stack | [`DATA_ENGINEERING.md`](DATA_ENGINEERING.md) |
 | Evaluation, test sets and leakage controls | [`EVALUATION.md`](EVALUATION.md) |
-| Capacity, cost and layer placement | [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) |
-| Workflow choice and scope | [ADR-001](Docs/ADRs/ADR-001-workflow-prioritization.md), [ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md) |
-| Runtime and learned component | [ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md), [ADR-006](Docs/ADRs/ADR-006-learned-extractor-workers-ai.md) |
-| All decisions | [`Docs/ADRs/`](Docs/ADRs/README.md) |
-| How to run it | [README](README.md), [runbook](Docs/Plans/intake-demo.md) |
+| Capacity, cost and layer placement | [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md) |
+| Workflow choice and scope | [ADR-001](../ADRs/ADR-001-workflow-prioritization.md), [ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md) |
+| Runtime and learned component | [ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md), [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md) |
+| All decisions | [`Docs/ADRs/`](../ADRs/README.md) |
+| How to run it | [README](../../README.md), [runbook](../Plans/intake-demo.md) |
