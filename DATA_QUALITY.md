@@ -225,7 +225,7 @@ The [bronze profile findings](data_profiles/bronze_data_profile/bronze_profile_f
 
 ## Disclosure
 
-On 2026-09-29, before ADR-005 fixed the design window, Lucas and an AI assistant profiled several of these facts once over the full period. For every fact used in evaluation design, the full-period and design-window values agree to one decimal place, so nothing learned from the holdout window changed a design choice. From now on, evaluation design uses only the design-window results above.
+On 2026-09-29, before ADR-005 (Proposed) set the design window, Lucas and an AI assistant profiled several of these facts once over the full period. For every fact used in evaluation design, the full-period and design-window values agree to one decimal place, so nothing learned from the holdout window changed a design choice. From now on, evaluation design uses only the design-window results above.
 
 ## Adding or updating a finding
 

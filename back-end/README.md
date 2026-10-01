@@ -1,6 +1,6 @@
 # Intake API (Cloudflare Worker + D1)
 
-This is the only online implementation of the intake service ([ADR-003](../Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)).
+This is the only online implementation of the intake service ([ADR-003](../Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md), Proposed).
 
 - **Worker (JavaScript, ES modules):** serves the API.
 - **D1:** stores customers, charges, cases, sessions, and guided intake episodes, turns, events and handoffs.

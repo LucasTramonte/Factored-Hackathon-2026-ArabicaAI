@@ -112,7 +112,7 @@ Leakage can happen in two ways here. Statistics from the test period can shape d
 
 - **Paired comparison:** exact McNemar test on the cases where the two systems disagree, since both run on the same cases.
 - **Rates:** Wilson intervals. **Audit error:** an exact Clopper–Pearson upper bound.
-- **Latency:** p95 with a distribution-free order-statistic interval, which needs at least 72 calls to exist. The gate, fixed before any measurement ([ADR-006](Docs/ADRs/ADR-006-learned-extractor-workers-ai.md), amendment 1):
+- **Latency:** p95 with a distribution-free order-statistic interval, which needs at least 72 calls to exist. The gate, fixed before any measurement ([ADR-006](Docs/ADRs/ADR-006-learned-extractor-workers-ai.md), Proposed; amendment 1):
   - at least 150 model-calling executions on the development split, pooled across all repetitions into the runner's `repetition: "all"` summary row, each at its wall time with timeouts at their full duration;
   - the p95 of that pooled sample, with the equal-tailed 95% interval reported as `latency_p95_interval_ms`;
   - **pass only if the interval's upper bound is at most 3,000 ms.** Otherwise the latency trigger fires, and the response is a lower reasoning level, not a larger model.
