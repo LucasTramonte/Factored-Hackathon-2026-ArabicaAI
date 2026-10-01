@@ -22,4 +22,4 @@ The synthetic dataset supports descriptive exploration. It does not establish ra
 
 ## Release record
 
-The rebuilt [report hub](../../data_foundation/reports/index.html), [aggregate JSON](../../data_foundation/reports/aggregates.json) and [manifest](../../data_foundation/reports/manifest.json) come from one full Silver scan after the native-USD correction. The quality gate passed with six visible warnings. The customer-backward [decision brief](../Marketing-Product-PRFAQ.md) defines the controlled test needed before claiming benefit. The old PDF in a local untracked plans folder was not published.
+The rebuilt [report hub](../../../data_foundation/reports/index.html), [aggregate JSON](../../../data_foundation/reports/aggregates.json) and [manifest](../../../data_foundation/reports/manifest.json) come from one full Silver scan after the native-USD correction. The quality gate passed with six visible warnings. The customer-backward [decision brief](Marketing-Product-PRFAQ.md) defines the controlled test needed before claiming benefit. The old PDF in a local untracked plans folder was not published.

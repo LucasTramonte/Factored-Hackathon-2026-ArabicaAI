@@ -7,7 +7,6 @@ data_foundation/**/__pycache__/
 data/
 Docs/pdfs/
 Docs/.obsidian/
-Docs/Factored Hackathon - Arabica AI/.obsidian/
 
 # Secrets — never commit real credentials
 .env

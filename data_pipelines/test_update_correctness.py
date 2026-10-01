@@ -9,7 +9,7 @@ local CSV partitions shaped like the S3 layout, through the deliveries a product
 3. a late-arriving old day that was never delivered before (gap fill);
 4. a row re-delivered in a later partition with changed content (the latest copy wins in Silver);
 5. a corrected old partition, which an incremental run deliberately does not revisit and a full
-   refresh does (DATA_ENGINEERING.md, update policy).
+   refresh does (Docs/deliverables/DATA_ENGINEERING.md, update policy).
 """
 from __future__ import annotations
 

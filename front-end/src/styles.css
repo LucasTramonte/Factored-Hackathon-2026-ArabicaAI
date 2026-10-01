@@ -195,8 +195,8 @@ body { min-height: 100%; }
 /* Login: the purpose on the left, the identity picker on the right */
 .login { display: flex; }
 .welcome { flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px; padding: 40px 40px 48px 64px; }
-.welcome h1 { margin: 0; font: 600 96px/104px var(--font-sans); letter-spacing: -0.035em; }
-.purpose { margin: 0; font: 500 20px/28px var(--font-sans); }
+.welcome h1 { margin: 0; font: 500 28px/36px var(--font-sans); color: var(--ink-muted); }
+.purpose { margin: 0; font: 600 48px/56px var(--font-sans); letter-spacing: -0.03em; } /* the purpose, not the greeting, is the largest text on the first screen */
 .explain { margin: 0; padding-left: 20px; font: 400 16px/24px var(--font-sans); color: var(--ink-muted); }
 .login-form { flex: 0 0 720px; display: flex; flex-direction: column; justify-content: space-between; padding: 40px 64px 48px 40px; }
 .headline { margin: 0; font: 600 56px/60px var(--font-sans); letter-spacing: -0.03em; }
@@ -241,7 +241,7 @@ body { min-height: 100%; }
 }
 @media (max-width: 960px) {
   .login { flex-direction: column; }
-  .welcome { padding: 24px 24px 0; } .welcome h1 { font-size: 56px; line-height: 60px; }
+  .welcome { padding: 24px 24px 0; } .welcome h1 { font-size: 22px; line-height: 28px; } .purpose { font-size: 32px; line-height: 40px; }
   .login-form { flex-basis: auto; width: 100%; padding: 24px 24px 32px; }
   .headline { font-size: 40px; line-height: 44px; }
   .home { flex-direction: column; }

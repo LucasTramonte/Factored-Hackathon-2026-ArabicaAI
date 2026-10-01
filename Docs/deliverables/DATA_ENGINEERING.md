@@ -8,11 +8,14 @@ The brief asks for "repeatable data preparation with contracts, quality checks, 
 |---|---|---|
 | Repeatable preparation | One Make target per layer, a Docker image, and offline CI | [Section 1](#1-the-pipeline), [`REPRODUCIBILITY.md`](REPRODUCIBILITY.md) |
 | Contracts | Typed Silver specs, schema checks that block the build, and API and D1 schema constraints | [Section 2](#2-contracts) |
-| Quality checks | 336 aggregate checks; any error blocks every later step | [Section 3](#3-the-quality-gate), [`PARITY.md`](data_pipelines/quality/PARITY.md) |
+| Quality checks | 336 aggregate checks; any error blocks every later step | [Section 3](#3-the-quality-gate), [`PARITY.md`](../../data_pipelines/quality/PARITY.md) |
 | Lineage | Every served row traces back to its S3 file | [Section 4](#4-lineage) |
 | Update/freshness policy | What each kind of delivery does, and how fresh each layer is | [Section 5](#5-update-and-freshness-policy) |
 | Update correctness on static data | A labelled fixture that drives the real code through each kind of delivery | [Section 6](#6-update-correctness) |
 | Batch vs. streaming, and the stack | Batch on DuckDB, with what would change it | [Section 7](#7-stack-and-trade-offs) |
+| "If we give you data tomorrow, what works?" | The whole path from a new S3 delivery to what the demo shows: what is automatic, what a person does, and the three places it stops today | [Section 8](#8-if-new-data-arrives-tomorrow) |
+| Currency and time the source doesn't settle | Served as provided, never corrected, and the service says what it doesn't know | [Section 9](#9-currency-and-time-served-as-provided) |
+| Limitations | Every known limit in one list, with how we handle it | [Limitations](#limitations-and-how-we-handle-them) |
 
 ## 1. The pipeline
 
@@ -31,8 +34,8 @@ S3 (organizers, read-only) ─▶ Bronze (raw Parquet) ─▶ Silver (typed tabl
   - **USD amounts:** converted at the exact-date FX rate. A fallback conversion is flagged `amount_usd_is_estimated` (DF-015) and is never summed as real USD.
   - **Rebuilds:** Silver is always rebuilt in full. That takes seconds from local Parquet.
 - **The quality gate** (`data_pipelines/quality/`) runs read-only over Bronze and Silver and writes `quality_results.json` with the watermarks it checked ([section 3](#3-the-quality-gate)).
-- **Gold** (`data_pipelines/gold/`) cuts the serving data. It is either the one-day slice or the cohort of customers who disputed a charge (796 customers and 2,906 purchases as of 2026-06-17, [ADR-004 §2](Docs/ADRs/ADR-004-intake-capacity-and-cost.md)). The output is an idempotent SQL seed and a manifest.
-- **D1** receives the reviewed seed. The Worker never reads S3, DuckDB or Silver ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)).
+- **Gold** (`data_pipelines/gold/`) cuts the serving data. It is either the one-day slice or the cohort of customers who disputed a charge (796 customers and 2,906 purchases as of 2026-06-17, [ADR-004 §2](../ADRs/ADR-004-intake-capacity-and-cost.md)). The output is an idempotent SQL seed and a manifest.
+- **D1** receives the reviewed seed. The Worker never reads S3, DuckDB or Silver ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)).
 
 **Measured on the full data** (one laptop; the source reconciliation in `PARITY.md` ran on 2026-09-27, and the full build in ADR-004 on 2026-09-29):
 
@@ -82,9 +85,9 @@ On the full data the gate ran **336 aggregate checks, with 0 errors and 6 warnin
 
 Gold refuses to build unless its quality run is ready. That run must also be for the same DuckDB file, must have been generated after the last change to that file, and must have checked the watermark Gold serves (`check_quality_gate`).
 
-**Warnings stay visible** and are handled where a metric uses the data: orphan links, late-arrival signals, owner mismatches and domain violations. All six on the full data are source limitations recorded in [`DATA_QUALITY.md`](DATA_QUALITY.md) and [`PARITY.md`](data_pipelines/quality/PARITY.md). One example is DF-002: complaints cite other customers' products.
+**Warnings stay visible** and are handled where a metric uses the data: orphan links, late-arrival signals, owner mismatches and domain violations. All six on the full data are source limitations recorded in [`DATA_QUALITY.md`](DATA_QUALITY.md) and [`PARITY.md`](../../data_pipelines/quality/PARITY.md). One example is DF-002: complaints cite other customers' products.
 
-**Parity.** All 181 check numerators shared with the former CSV scanner match it ([`PARITY.md`](data_pipelines/quality/PARITY.md)).
+**Parity.** All 181 check numerators shared with the former CSV scanner match it ([`PARITY.md`](../../data_pipelines/quality/PARITY.md)).
 
 ## 4. Lineage
 
@@ -116,10 +119,10 @@ This policy describes how the pipeline handles a live feed, and the fixture in [
 | **Dimensions** | Rebuilt in full every run | They are flat exports and small |
 
 **How fresh each layer is:**
-- **Bronze and Silver:** as fresh as the last run. In production, one batch runs a day after the daily partition lands; the AWS target, which is designed but not deployed, would schedule it with EventBridge on Fargate ([ADR-004 §3](Docs/ADRs/ADR-004-intake-capacity-and-cost.md)).
+- **Bronze and Silver:** as fresh as the last run. In production, one batch runs a day after the daily partition lands; the AWS target, which is designed but not deployed, would schedule it with EventBridge on Fargate ([ADR-004 §3](../ADRs/ADR-004-intake-capacity-and-cost.md)).
 - **Gold and D1:** they change only through a reviewed seed with a new version. `seed_loads` records what is loaded, so the service shows data as of the manifest's `as_of` date and no fresher. The cohort's `as_of` is the last loaded partition, so once the cohort is loaded into remote D1 the demo will show data up to 2026-06-17.
 - **Event time vs. storage time:** `process_date` is the storage partition and is used only to prune reads. Every business filter uses the event timestamp. The two differ: early-hour events are filed under the previous day (DF-004), and the same clock applies to every country (DF-020).
-- **Retention:** demo activity is kept until judging ends and deleted after 2026-10-20 ([ADR-004 §7](Docs/ADRs/ADR-004-intake-capacity-and-cost.md)).
+- **Retention:** demo activity is kept until judging ends and deleted after 2026-10-20 ([ADR-004 §7](../ADRs/ADR-004-intake-capacity-and-cost.md)).
 
 **Who acts on what:**
 - **The batch operator** watches for a run that exits non-zero (any failed table) and for any `late_partitions` warning.
@@ -161,10 +164,86 @@ Each was fixed test-first, and reverting the fix makes its test fail. None of th
 | Lineage | **Columns and manifests**, carried all the way to D1 | OpenLineage with Marquez | One pipeline, and every served row already traces to its file | Several pipelines and consumers that need an impact graph |
 | Change detection | **A watermark plus late-day detection** | An S3 Inventory or ETag manifest | Catches new and late days with no extra service | Corrections delivered under the same file name: compare ETags per object (see Limitations) |
 
-## Limitations
+## 8. If new data arrives tomorrow
 
-- **An in-place correction is invisible to incremental runs.** If a file is replaced under the same name, only `make bronze-full` picks it up, and nothing tells the operator to run it. A per-object ETag manifest would detect that. We haven't built it, because the snapshot is static.
-- **Late-day detection reads the partition columns** of the Bronze table on every incremental run. That is one columnar read of three columns, and its cost grows with history.
-- **The pipeline has never run on a live feed.** The policy in section 5 is tested on fixtures and runs on the static snapshot, but no real daily delivery has exercised it.
-- **The DBML schema is documentation only.** The enforced contract is the code in `table_specs.py`.
-- **Freshness is bounded by the snapshot.** The demo can't show anything after 2026-06-17.
+The organizers confirmed that new data would arrive in the same storage pattern as the snapshot: daily `year=/month=/day=` partitions under the same S3 prefixes. This section is the whole path for that case, from S3 to what a customer sees, and it is honest about where it stops today.
+
+**What the solution needs in order to work (the inputs it assumes):**
+- **The same 13 tables and storage pattern.** A path whose date doesn't match `process_date` stops the run (`partition_date_mismatch`), and a missing expected column stops it (`schema_missing_columns`).
+- **A passing quality run on the same DuckDB file**, written after the database last changed. Gold refuses a quality run from another database or an older one (`check_quality_gate` in `data_pipelines/gold/intake_slice.py`).
+- **Disputes to serve:** customers with a `Cargo no reconocido` complaint and at least 3 approved purchases with a merchant in the 120 days before the cut-off (DF-021, DF-022).
+- **Room in D1's write quota.** A full cohort load is about 20,620 rows written against 100,000 a day on the free plan ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)).
+- **People:** someone to run the batch and watch for a non-zero exit, and the data owner to approve the new `as_of` and the remote load.
+- **Tools:** Python 3.10+, Node 22+, the read-only AWS profile, and Wrangler signed in to the Cloudflare account.
+
+**The path, step by step:**
+
+| Step | Command | Automatic or manual | Time | What happens |
+|---|---|---|---|---|
+| 1. Bronze | `make bronze` | Manual today; one daily job in production (EventBridge and Fargate on the AWS target) | An incremental Docker run took 660 s ([`PARITY.md`](../../data_pipelines/quality/PARITY.md)); a single new day hasn't been timed | Loads new and late days, moves the watermark, refreshes dimensions (section 5) |
+| 2. Silver | `make silver` | Runs after Bronze | Inside the 11-minute full build | Rebuilds typed tables; the latest copy of a key wins |
+| 3. Quality gate | `make quality` | Runs after Silver; a non-zero exit stops the run | Inside the full build | Any error blocks Gold. Warnings stay visible |
+| 4. Gold cohort | `make intake-cohort-slice COHORT_DB=… COHORT_QUALITY=… COHORT_AS_OF=<new watermark>` | Manual, with the data owner's approval of the new `as_of` | Not timed | Picks the cohort, writes versioned seed parts and a manifest with the expected writes |
+| 5. D1 load | `python -m data_pipelines.gold.run_cohort load --part N --target remote` | Manual, reviewed, at most one part per UTC day | Not timed; one Wrangler call per part | Skips a part whose version `seed_loads` already holds; fails if D1 wrote more rows than estimated |
+| 6. The demo | none | Automatic | Immediate | The new cohort's customers appear in the picker; each sees their newest 20 charges |
+
+**Where it stops today.** We checked each of these against the code, and reproduced the third in SQLite, which D1 runs on. In each case the build or the load stops with an error, and nothing that was already served changes. The new data doesn't reach the demo until someone acts. One caveat: a remote part is applied statement by statement and isn't atomic. A part that fails partway can leave its earlier statements applied, for example new customers added before the first stored customer that differs. The part is then not recorded in `seed_loads`, and because every statement is an idempotent upsert, it is loaded again once the cause is fixed (`run_cohort.py`).
+1. **Gold needs the new date passed by hand.** The Makefile defaults point at the snapshot's artifacts (`COHORT_DB`, `COHORT_QUALITY`, and `COHORT_AS_OF ?= 2026-06-17`). The quality gate requires `as_of` to equal the transactions watermark, so a default run against new data stops with "The selected Bronze date was not quality checked". It is safe, but manual.
+2. **New disputes don't enter the cohort.** Cohort membership is fixed to complaints created before 2026-01-01 (`DESIGN_END` in `data_pipelines/gold/cohort.py`), which keeps the evaluation's design window clean (ADR-005). New data only moves the 120-day purchase window of customers already in the cohort.
+3. **Reloading over the current D1 fails.** Every context card carries the quality run's timestamp as `snapshot_at`, and the seed's upserts reject any stored value that differs, by design ([section 2](#2-contracts)). A rebuilt cohort therefore fails on its first customer who is already loaded, with `NOT NULL constraint failed: context_cards.card_json`. A corrected amount, merchant or time fails the same way, and no seed deletes rows that left the cohort or the window.
+
+**The fix**, in a follow-up PR:
+- take `as_of` from the quality run instead of a default;
+- let cohort membership move with new complaints, while keeping the evaluation window fixed;
+- add a reviewed replace path for seed rows, in which a person approves the drift the guard now rejects, plus a delete for rows that left the cohort;
+- record a rehearsal on a labelled fixture, in the same way as [section 6](#6-update-correctness).
+
+Until then, the demo serves the snapshot as of 2026-06-17, and the manifest and `seed_loads` say so.
+
+**Schema changes.** We don't expect arbitrary schema changes, and the organizers agreed that handling them is a next step for us. What happens today:
+- **A missing or renamed column** in a table we use stops the build at the quality gate. That is deliberate.
+- **An added column never reaches Silver**, because each Silver spec selects its own columns. Whether Bronze's append accepts a new partition with an extra column hasn't been tested.
+
+The next step has three parts:
+- an additive Bronze contract (a new column is accepted and reported, never dropped silently);
+- a version on each Silver spec;
+- a fixture for an added column and a renamed column, next to the update-correctness tests.
+
+## 9. Currency and time: served as provided
+
+The source doesn't settle two things a dispute depends on: which currency an amount is in, and which time zone a timestamp is in. The organizers asked us not to correct either, but to treat the data as provided, document it, and handle the uncertainty safely. They called currency a key point.
+
+**Currency** ([DF-023](DATA_QUALITY.md#df-023-amounts-share-one-usd-scale-and-claimed-currencies-ignore-the-customers-country), [DF-005](DATA_QUALITY.md#df-005-mexican-customers-transact-only-in-usd)):
+- **What the data shows.** Every amount is on one USD scale, Mexican customers transact only in USD, and the currency on complaints looks random.
+- **What we do.**
+  - Gold keeps the Bronze amount and its currency code exactly as delivered, and the service shows them together on every row.
+  - Nothing converts or sums amounts across currencies. `amount_usd` is FX-derived, carries its estimated flag, and isn't served.
+- **What we don't do.** We never guess that an amount "should" be pesos.
+- **Where it shows up.** A Mexican customer will naturally say "pesos", which matches none of their charges.
+  - Today the customer picks the charge from their own list, so a currency word can't select the wrong one.
+  - Once free text is read online, the reply will state the card's currency and ask the customer to confirm, rather than match on the word (planned, DF-023).
+
+**Time** ([DF-020](DATA_QUALITY.md#df-020-one-clock-for-every-country-no-daily-rhythm), [DF-004](DATA_QUALITY.md)):
+- **What the data shows.** Timestamps carry no time zone, and every country shares one clock.
+- **What we do.** The service shows the source time as stored and labels it "source time zone not provided". Filters use the event timestamp, never `process_date`.
+- **What we don't claim.** We never claim local-time precision the data doesn't support.
+
+**Counts differ from the dictionary.** We treat the supplied data as the source of truth, and the dictionary's counts as approximate. The differences are recorded in [DF-026](DATA_QUALITY.md#df-026-the-dictionarys-row-counts-are-approximate).
+
+## Limitations and how we handle them
+
+This is the complete list. Each item says what it limits and how we handle it today. Fixes that need code are in the follow-up PR named in section 8.
+
+| Limitation | What it limits | How we handle it |
+|---|---|---|
+| **An in-place correction is invisible to incremental runs.** A file replaced under the same name is picked up only by `make bronze-full`, and nothing tells the operator to run it | Corrections | The data owner runs `bronze-full` deliberately. A per-object ETag manifest would detect it, but isn't built because the snapshot is static |
+| **Late-day detection reads Bronze's partition columns** on every incremental run | Run cost as history grows | One columnar read of three columns; acceptable at this size |
+| **The pipeline has never run on a live feed** | Confidence in section 5 | Every delivery case runs on the labelled fixture in section 6 |
+| **Gold and D1 don't refresh on their own** (section 8, items 1–3) | New data reaching the demo | Fail closed; manual `as_of`; the follow-up PR adds the replace path and a rehearsal |
+| **The cohort is fixed to complaints before 2026-01-01** | New disputes reaching the demo | Keeps the evaluation window clean (ADR-005); the follow-up lets membership move |
+| **The demo serves up to 1,000 cohort identities and each customer's newest 20 charges** (`COHORT_LIMIT`, `PAGE` in `back-end/src/modules/customer/routes.js`) | Breadth of the demo | The cohort has 796 customers, so the identity cap isn't reached; older charges sit behind `has_more` |
+| **The UI doesn't show the data's cut-off date** | The customer knowing how fresh the list is | The coverage line says "the most recent at the cutoff"; the manifest and `seed_loads` hold the date |
+| **Currency and time zone are uncertain in the source** | Matching a customer's words to a charge | Served as provided, with labels (section 9); never corrected |
+| **Schema changes aren't handled beyond stopping the build** | New or renamed columns | Missing columns stop the gate; the next step is in section 8 |
+| **The DBML schema is documentation only** | Readers trusting it as a contract | The enforced contract is `table_specs.py` |
+| **Freshness is bounded by the snapshot** | What the demo can show | The demo shows nothing after 2026-06-17 |
