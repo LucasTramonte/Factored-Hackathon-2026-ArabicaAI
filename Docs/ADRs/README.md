@@ -12,6 +12,7 @@ Technical and product-scope decisions for the ArabicaAI hackathon solution. Each
 | [004](ADR-004-intake-capacity-and-cost.md) | Capacity, cost and where each layer runs (the single record for cloud cost and sizing) | Proposed (revised 2026-09-30) |
 | [005](ADR-005-evaluation-data-protocol.md) | Evaluation data protocol: design and holdout windows, and a blind frozen set | Proposed (2026-09-29) |
 | [006](ADR-006-learned-extractor-workers-ai.md) | Learned component: a fact extractor on Workers AI, smallest model first | Proposed (2026-09-29) |
+| [007](ADR-007-disputable-movement-scope.md) | Which movements a customer can dispute in V1: approved card purchases now, card withdrawals and pending purchases next | Proposed (2026-09-30) |
 
 ## Format
 
