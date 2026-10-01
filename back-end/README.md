@@ -23,7 +23,7 @@ The service does not decide fraud, issue refunds or authenticate bank customers.
 | `src/modules/intake/` | Guided intake: start, confirm and incomplete handoff, with strict validation. No free-text classification. |
 | `src/modules/agent/` | Agent session, the read-only case view, and the read-only intake queue and detail. |
 | `src/store/d1.js` | Every SQL statement. This is the only module to replace if the store changes. Multi-statement writes run as one atomic `db.batch()`. |
-| `src/config/identities.json` | Allowlisted demo identities, shared with the Gold slice. |
+| `src/config/identities.json` | Committed demo identities (fictitious, plus the one-day slice's customer), shared with the Gold slice. Dataset cohort customers are listed from D1 instead. |
 | `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. 0004 (intake episodes, turns, events, handoffs) and 0005 (idle and queue indexes) have been applied to local D1 only. |
 | `scripts/intake-store.mjs` | Local D1 binding for the operator scripts, through Wrangler's `getPlatformProxy`. It uses the store in `src/store/d1.js`, so the scripts contain no SQL. |
 | `scripts/close-idle-intakes.mjs`, `scripts/export-intake-events.mjs` | Manual operator scripts: bounded idle closure and the privacy-checked event export (below). |
@@ -67,8 +67,8 @@ Every route except `GET /healthz` needs the team gate (HTTP Basic, below Cloudfl
 | Method and path | Session | Purpose | Main statuses |
 |---|---|---|---|
 | `GET /healthz` | none | Liveness; one D1 query | 200 |
-| `GET /demo/identities` | none | Allowlisted demo identities; no D1 | 200 |
-| `POST /demo/session` | none | Simulated customer login for an allowlisted id | 200, 422, 503 (identity not loaded) |
+| `GET /demo/identities` | none | Committed identities, then up to 1,000 dataset customers from D1, each with `country` (one query) | 200, 503 |
+| `POST /demo/session` | none | Simulated customer login for a committed identity or a D1 dataset customer; malformed ids are rejected before any query | 200, 422, 503 (committed identity not loaded) |
 | `GET /transactions` | customer | The customer's own charges, one page, with `has_more` | 200, 401 |
 | `POST /cases` | customer | Legacy one-step confirmed case | 201, 200 (replay), 401, 404, 409, 422, 503 |
 | `POST /intake/start` | customer | Start an explicit guided ES/PT unrecognized-charge report (10–2,000 code points, no U+0000, UUID key). No case reference is returned. A same-key replay returns the original, immutable start receipt (`state: selection_required`) even after the episode was abandoned or handed off, so it does not describe the current state | 201, 200 (same key and content), 401, 409 (same key, other content), 422, 503 (retry the same key) |

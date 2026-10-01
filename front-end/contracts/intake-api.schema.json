@@ -172,7 +172,8 @@
           "type": "boolean"
         },
         "coverage": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^(fictitious_demo_data_only|dataset_cohort)$"
         }
       }
     },
@@ -326,7 +327,8 @@
             "additionalProperties": false,
             "required": [
               "customer_id",
-              "display_name"
+              "display_name",
+              "country"
             ],
             "properties": {
               "customer_id": {
@@ -336,6 +338,9 @@
               "display_name": {
                 "type": "string",
                 "minLength": 1
+              },
+              "country": {
+                "type": ["string", "null"]
               }
             }
           }

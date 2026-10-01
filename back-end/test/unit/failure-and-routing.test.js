@@ -105,20 +105,70 @@ test('the body limit stops reading a stream without Content-Length', async () =>
   assert.ok(pulled <= 20, `read ${pulled} KB before stopping`);
 });
 
-test('identity list is served behind the gate from the shared config, without D1', async () => {
-  const store = { metrics: () => ({ queries: 0, rowsRead: 0, rowsWritten: 0 }) };
+test('identity list joins the committed fictitious identities with dataset customers loaded in D1', async () => {
+  let asked = null;
+  const store = { metrics: () => ({ queries: 0, rowsRead: 0, rowsWritten: 0 }),
+    listDatasetIdentities: async limit => { asked = limit; return [
+      { customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' },
+      { customer_id: 'demo-ana', display_name: 'Shadow of a committed identity', country: 'México' }]; } };
   const req = headers => new Request('https://d.example/demo/identities', { headers });
   assert.equal((await route(req({}), env, store)).status, 401);
   const res = await route(req({ Authorization: auth }), env, store);
   assert.equal(res.status, 200);
   const body = await res.json();
-  assert.deepEqual(body.items.map(x => x.customer_id), ['demo-ana', 'demo-bruno', 'CLI-U53R5AZVLET0']);
-  assert.ok(body.items.every(x => Object.keys(x).sort().join() === 'customer_id,display_name'));
+  assertContract('identityList', body);
+  assert.equal(asked, 1000);
+  // Committed identities come first and win over a D1 row with the same id; D1 rows add the cohort.
+  assert.deepEqual(body.items, [
+    { customer_id: 'demo-ana', display_name: 'Ana (demo)', country: null },
+    { customer_id: 'demo-bruno', display_name: 'Bruno (demo)', country: null },
+    { customer_id: 'CLI-U53R5AZVLET0', display_name: 'Dataset customer (synthetic)', country: null },
+    { customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' }]);
+});
+
+test('identity list fails closed when D1 cannot list the cohort', async () => {
+  const store = { metrics: () => ({ queries: 0, rowsRead: 0, rowsWritten: 0 }),
+    listDatasetIdentities: async () => { throw new Error('D1 down'); } };
+  const res = await route(new Request('https://d.example/demo/identities', { headers: { Authorization: auth } }), env, store);
+  assert.equal(res.status, 503);
+  assertContract('error', await res.json());
+});
+
+test('login accepts committed identities and D1 dataset customers only, checking the id before any query', async () => {
+  const sources = { 'demo-ana': 'fictitious', 'CLI-COHORT-1': 'dataset', 'demo-hidden': 'fictitious' };
+  let queried = [];
+  const store = { metrics: () => ({ queries: 0, rowsRead: 0, rowsWritten: 0 }), rotateSession: async () => {},
+    customerSource: async id => { queried.push(id); return sources[id] ?? null; }, findContextCard: async () => null };
+  const login = customer_id => route(post('/demo/session', { customer_id }, ''), env, store);
+  assert.equal((await login('demo-ana')).status, 200);
+  assert.equal((await login('CLI-COHORT-1')).status, 200, 'a dataset customer loaded in D1');
+  assert.equal((await login('demo-hidden')).status, 422, 'a D1 row that is neither committed nor dataset');
+  assert.equal((await login('CLI-NOT-LOADED')).status, 422);
+  assert.equal((await login('demo-bruno')).status, 503, 'a committed identity whose rows are not loaded');
+  queried = [];
+  for (const bad of ['', 'x'.repeat(65), "demo-ana' OR '1'='1", 'CLI-1;DROP', 'ána', null, 42, ['demo-ana']]) {
+    assert.equal((await login(bad)).status, 422, String(bad));
+  }
+  assert.deepEqual(queried, [], 'malformed ids never reach the store');
+});
+
+test('the transaction list says whether it shows fictitious or dataset rows', async () => {
+  for (const [customer_id, coverage] of [['demo-ana', 'fictitious_demo_data_only'], ['CLI-U53R5AZVLET0', 'dataset_cohort'],
+    ['CLI-COHORT-1', 'dataset_cohort']]) {
+    const hash = await tokenHash(token);
+    const store = { metrics: () => ({ queries: 0, rowsRead: 0, rowsWritten: 0 }), listTransactions: async () => [],
+      findSession: async (h, actor) => (h === hash && actor === 'customer' ? { customer_id } : null) };
+    const res = await route(new Request('https://d.example/transactions',
+      { headers: { Authorization: auth, Cookie: `demo_session=${token}` } }), env, store);
+    const payload = await res.json();
+    assertContract('transactionList', payload);
+    assert.equal(payload.coverage, coverage, customer_id);
+  }
 });
 
 test('a malformed stored context card degrades to null and login still works', async () => {
   const login = card_json => route(post('/demo/session', { customer_id: 'demo-ana' }, ''), env, {
-    customerExists: async () => true, rotateSession: async () => {},
+    customerSource: async () => 'fictitious', rotateSession: async () => {},
     findContextCard: async () => ({ card_version: 1, snapshot_at: '2026-09-29T00:00:00+00:00', card_json }),
     metrics: () => ({ queries: 0, rowsRead: 0, rowsWritten: 0 }) });
   const valid = { first_name: 'Ana', locale_hint: 'es-AR', products: [] };
