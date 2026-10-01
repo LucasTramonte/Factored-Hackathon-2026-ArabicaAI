@@ -14,7 +14,7 @@ import pytest
 
 from data_pipelines.gold import build_gold as gb
 
-# customer_id, first_name, last_name, country, segment[, detected_accent (default NULL)]
+# customer_id, first_name, last_name, country, segment[, detected_accent (default NULL), customer_status (default 'Active')]
 CUSTOMERS = [("C1", " Ana ", "gómez", "Argentina", "Basic"),
              ("C2", "Bruno", "Lima", "Colombia", "Plus"),
              ("C3", "Carla", "Ruiz", "México", "Student")]
@@ -27,6 +27,11 @@ PURCHASES = [("T1", "C1", "P1", "2025-03-01 03:00:00", "Uber", "Transport", 2976
              ("T2", "C2", "P2", "2026-02-26 13:21:51", None, "Food", 20.0, "USD", "USA", "Purchase", "Approved"),
              ("T3", "C1", "P1", "2025-03-02 10:00:00", "Uber", "Transport", 5.0, "ARS", "Argentina", "Purchase", "Declined"),
              ("T4", "C3", "P3", "2025-03-03 10:00:00", None, None, 7.0, "USD", "México", "Withdrawal", "Approved")]
+# complaint_id, customer_id, creation_date, category, subcategory
+COMPLAINTS = [("Q1", "C1", "2025-03-10 02:00:00", "Transactions", "Cargo no reconocido"),
+              ("Q2", "C1", "2026-02-02 09:00:00", "Transactions", "Cargo no reconocido"),  # holdout: kept, consumers bound it
+              ("Q3", "C2", "2025-04-10 12:00:00", "Fees", "Cobro indebido"),
+              ("Q4", "C2", "2025-05-01 12:00:00", "Transactions", None)]                  # no subcategory: own group
 
 
 def bronze_for(purchases):
@@ -36,7 +41,8 @@ def bronze_for(purchases):
             for p in purchases]
 
 
-def make_silver(tmp_path: Path, customers=CUSTOMERS, products=PRODUCTS, purchases=PURCHASES, bronze=None) -> Path:
+def make_silver(tmp_path: Path, customers=CUSTOMERS, products=PRODUCTS, purchases=PURCHASES, bronze=None,
+                complaints=COMPLAINTS) -> Path:
     """A tiny Bronze/Silver DuckDB with only the columns Gold projects."""
     path = tmp_path / "silver_fixture.duckdb"
     path.unlink(missing_ok=True)
@@ -44,16 +50,19 @@ def make_silver(tmp_path: Path, customers=CUSTOMERS, products=PRODUCTS, purchase
     with duckdb.connect(str(path)) as con:
         con.execute("CREATE SCHEMA silver; CREATE SCHEMA bronze")
         con.execute("CREATE TABLE silver.dim_customers(customer_id VARCHAR, first_name VARCHAR, last_name VARCHAR,"
-                    " country VARCHAR, segment VARCHAR, detected_accent VARCHAR DEFAULT NULL)")
+                    " country VARCHAR, segment VARCHAR, detected_accent VARCHAR DEFAULT NULL, customer_status VARCHAR DEFAULT 'Active')")
         con.execute("CREATE TABLE silver.dim_products(product_id VARCHAR, customer_id VARCHAR, product_type VARCHAR,"
                     " product_number VARCHAR, currency VARCHAR DEFAULT 'ARS', product_status VARCHAR DEFAULT 'Active')")
         con.execute("CREATE TABLE silver.fact_transactions(transaction_id VARCHAR, customer_id VARCHAR, product_id VARCHAR,"
                     " transaction_date TIMESTAMP, merchant_name VARCHAR, merchant_category VARCHAR, amount DOUBLE,"
                     " currency VARCHAR, transaction_country VARCHAR, transaction_type VARCHAR, transaction_status VARCHAR)")
+        con.execute("CREATE TABLE silver.fact_complaints(complaint_id VARCHAR, customer_id VARCHAR, creation_date TIMESTAMP,"
+                    " category VARCHAR, subcategory VARCHAR)")
         con.execute("CREATE TABLE bronze.transactions(transaction_id VARCHAR, amount VARCHAR, transaction_date VARCHAR,"
                     " _source_file VARCHAR)")
         for table, rows in (("silver.dim_customers", customers), ("silver.dim_products", products),
-                            ("silver.fact_transactions", purchases), ("bronze.transactions", bronze)):
+                            ("silver.fact_transactions", purchases), ("bronze.transactions", bronze),
+                            ("silver.fact_complaints", complaints)):
             columns = [r[0] for r in con.execute(f"DESCRIBE {table}").fetchall()]
             for width in sorted({len(r) for r in rows or []}):  # shorter rows take the column defaults
                 con.executemany(f"INSERT INTO {table} ({', '.join(columns[:width])}) VALUES ({', '.join('?' * width)})",
@@ -62,7 +71,7 @@ def make_silver(tmp_path: Path, customers=CUSTOMERS, products=PRODUCTS, purchase
 
 
 def make_quality(tmp_path: Path, silver: Path, name="quality_results.json", **override) -> Path:
-    meta = {"ready": True, "errors": 0, "tables": ["customers", "products", "transactions"],
+    meta = {"ready": True, "errors": 0, "tables": ["customers", "products", "transactions", "complaints"],
             "database": str(silver.resolve()),
             "generated_at_utc": (datetime.now(timezone.utc) + timedelta(seconds=5)).isoformat()}
     meta.update(override)
@@ -86,14 +95,14 @@ def gold_rows(tmp_path: Path, sql: str):
 def test_one_row_per_silver_customer_with_the_provisional_display_name(tmp_path):
     run(tmp_path, make_silver(tmp_path))
     assert gold_rows(tmp_path, "SELECT customer_id, display_name, country, segment FROM gold.customers ORDER BY 1") == [
-        ("C1", "Ana G.", "Argentina", "Basic"), ("C2", "Bruno L.", "Colombia", "Plus"), ("C3", "Carla R.", "México", "Student")]
+        ("C1", "Ana g.", "Argentina", "Basic"), ("C2", "Bruno L.", "Colombia", "Plus"), ("C3", "Carla R.", "México", "Student")]
 
 
 def test_every_check_is_recorded_with_its_build(tmp_path):
     build_id, checks = run(tmp_path, make_silver(tmp_path))
-    assert all(c.passed for c in checks) and len(checks) == 6
+    assert all(c.passed for c in checks) and len(checks) == 7
     assert gold_rows(tmp_path, "SELECT count(*), bool_and(passed) FROM gold.reconciliation WHERE build_id = "
-                     f"'{build_id}'") == [(6, True)]
+                     f"'{build_id}'") == [(7, True)]
     assert gold_rows(tmp_path, "SELECT build_id, tables FROM gold.builds") == [(build_id, ["customers"])]
     assert gold_rows(tmp_path, "SELECT actual FROM gold.reconciliation WHERE check_name = 'row_count_matches_silver'") == [(3,)]
 
@@ -102,19 +111,20 @@ def test_row_hash_changes_only_with_published_columns(tmp_path):
     silver = make_silver(tmp_path)
     run(tmp_path, silver)
     before = dict(gold_rows(tmp_path, "SELECT customer_id, row_hash FROM gold.customers"))
-    changed = [("C1", " Ana ", "gómez", "Colombia", "Premium"),   # scope columns only: same hash
-               ("C2", "Bruno", "Silva", "Colombia", "Plus"),      # display name changes: new hash
-               CUSTOMERS[2]]
+    changed = [("C1", " Ana ", "gómez", "Argentina", "Premium", None, "Closed"),  # segment, status: not in D1
+               ("C2", "Bruno", "Silva", "Colombia", "Plus"),                      # display name: written to D1
+               ("C3", "Carla", "Ruiz", "Colombia", "Student")]                    # country: written to D1 (0006)
     run(tmp_path, make_silver(tmp_path, changed))
     after = dict(gold_rows(tmp_path, "SELECT customer_id, row_hash FROM gold.customers"))
-    assert after["C1"] == before["C1"] and after["C3"] == before["C3"]
-    assert after["C2"] != before["C2"]
+    assert after["C1"] == before["C1"]
+    assert after["C2"] != before["C2"] and after["C3"] != before["C3"]
 
 
 @pytest.mark.parametrize(("customers", "failed"), [
     (CUSTOMERS + [("C1", "Ana", "Gómez", "Argentina", "Basic")], "duplicate_customer_id"),
     (CUSTOMERS + [(None, "Nadie", "X", "Colombia", "Basic")], "null_customer_id"),
-    (CUSTOMERS + [("C4", "Dora", None, "Colombia", "Basic")], "blank_display_name"),
+    (CUSTOMERS + [("C4", "  ", None, "Colombia", "Basic")], "blank_display_name"),
+    (CUSTOMERS + [("C4", "Dora", "Paz", "Colombia", "Basic", None, None)], "missing_customer_status"),
     (CUSTOMERS + [("C4", "Dora", "Paz", None, "Basic")], "missing_country_or_segment"),
 ])
 def test_a_failed_check_rolls_back_and_keeps_the_previous_gold(tmp_path, customers, failed):
@@ -325,3 +335,134 @@ def test_a_blank_first_name_fails_the_card_even_though_the_customer_row_passes(t
     with pytest.raises(gb.GoldCheckError) as err:
         run(tmp_path, card_silver(tmp_path, customers=customers), CARD_TABLES)
     assert {c.name for c in err.value.failed} == {"blank_first_name"}
+
+# ---- gold.customer_complaints, shared name rule, occurred_at, build log --------------------------
+
+from data_pipelines.gold.cohort import _display_name  # noqa: E402  (the rule D1 serves today)
+
+
+def test_complaints_are_counted_per_customer_and_type_with_first_and_last_times(tmp_path):
+    _, checks = run(tmp_path, make_silver(tmp_path), ("customers", "customer_complaints"))
+    rows = gold_rows(tmp_path, "SELECT customer_id, category, subcategory, complaints, first_created_at::VARCHAR,"
+                               " last_created_at::VARCHAR FROM gold.customer_complaints")
+    assert rows == [("C1", "Transactions", "Cargo no reconocido", 2, "2025-03-10 02:00:00", "2026-02-02 09:00:00"),
+                    ("C2", "Fees", "Cobro indebido", 1, "2025-04-10 12:00:00", "2025-04-10 12:00:00"),
+                    ("C2", "Transactions", None, 1, "2025-05-01 12:00:00", "2025-05-01 12:00:00")]
+    found = {c.name: (c.expected, c.actual) for c in checks if c.table == "customer_complaints"}
+    assert len(found) == 6 and all(e == a for e, a in found.values())
+    assert found["complaints_match_silver"] == (4, 4) and found["missing_subcategory_kept_as_null"] == (1, 1)
+
+
+def test_a_complaint_from_an_unknown_customer_rolls_the_build_back(tmp_path):
+    complaints = COMPLAINTS + [("Q9", "C9", "2025-06-01 10:00:00", "Fees", "Cobro indebido")]
+    with pytest.raises(gb.GoldCheckError) as err:
+        run(tmp_path, make_silver(tmp_path, complaints=complaints), ("customers", "customer_complaints"))
+    assert {c.name for c in err.value.failed} == {"customer_missing_from_gold_customers"}
+
+
+@pytest.mark.parametrize(("first", "last"), [
+    (" Ana ", "gómez"), ("Bruno", "Lima"), ("Dora", None), ("Dora", "  "), ("María José", "de la Cruz"),
+    ("Ñandú", "Ñúñez"), ("Zoë", "O'Brien"),
+    ("\tAna\n", "\tgómez "), ("Ana", "\n\t "), ("  Luis\r\n", "Paz\t"),  # whitespace Python strips and trim() kept
+])
+def test_the_display_name_matches_the_cohort_rule_served_in_d1(tmp_path, first, last):
+    customers = [("C1", first, last, "Argentina", "Basic")]
+    run(tmp_path, make_silver(tmp_path, customers=customers, products=[], purchases=[], complaints=[]))
+    assert gold_rows(tmp_path, "SELECT display_name FROM gold.customers") == [(_display_name(first, last),)]
+
+
+def test_customers_keep_todays_status_outside_the_row_hash(tmp_path):
+    customers = [CUSTOMERS[0] + (None, "Closed"), *CUSTOMERS[1:]]
+    run(tmp_path, make_silver(tmp_path))
+    before = dict(gold_rows(tmp_path, "SELECT customer_id, row_hash FROM gold.customers"))
+    run(tmp_path, make_silver(tmp_path, customers=customers))
+    assert gold_rows(tmp_path, "SELECT customer_status FROM gold.customers WHERE customer_id = 'C1'") == [("Closed",)]
+    assert dict(gold_rows(tmp_path, "SELECT customer_id, row_hash FROM gold.customers")) == before
+
+
+def test_card_purchases_carry_the_wall_time_as_a_timestamp_too(tmp_path):
+    run(tmp_path, make_silver(tmp_path), BOTH)
+    rows = gold_rows(tmp_path, "SELECT source_occurred_at, strftime(occurred_at, '%Y-%m-%dT%H:%M:%S'),"
+                               " typeof(occurred_at) FROM gold.card_purchases")
+    assert rows and all(served == typed and kind == "TIMESTAMP" for served, typed, kind in rows)
+
+
+def test_the_build_log_records_the_quality_report_and_its_watermarks(tmp_path):
+    silver = make_silver(tmp_path)
+    report = make_quality(tmp_path, silver, watermarks=[{"table": "transactions", "last_loaded_date": "2026-06-17"},
+                                                        {"table": "complaints", "last_loaded_date": "2026-06-17"}])
+    quality = gb.check_quality(silver, report, {"customers"})
+    with gb.connect(tmp_path / "gold_fixture.duckdb", silver) as con:
+        build_id, _ = gb.build(con, ("customers",), silver, quality, report)
+    (logged_report, watermarks), = gold_rows(tmp_path, "SELECT quality_report, watermarks FROM gold.builds")
+    assert logged_report == str(report.resolve())
+    assert json.loads(watermarks) == {"complaints": "2026-06-17", "transactions": "2026-06-17"}
+
+
+def test_a_gold_file_from_before_the_build_log_columns_is_upgraded_in_place(tmp_path):
+    gold = tmp_path / "gold_fixture.duckdb"
+    with duckdb.connect(str(gold)) as con:  # the gold.builds shape of the first committed version
+        con.execute("CREATE SCHEMA gold; CREATE TABLE gold.builds (build_id VARCHAR PRIMARY KEY,"
+                    " silver_database VARCHAR NOT NULL, quality_generated_at_utc VARCHAR NOT NULL, tables VARCHAR[] NOT NULL)")
+        con.execute("INSERT INTO gold.builds VALUES ('old', 's', 't', ['customers'])")
+    build_id, _ = run(tmp_path, make_silver(tmp_path))
+    assert gold_rows(tmp_path, "SELECT quality_report, watermarks FROM gold.builds WHERE build_id = 'old'") == [(None, None)]
+    assert gold_rows(tmp_path, f"SELECT watermarks FROM gold.builds WHERE build_id = '{build_id}'") == [("{}",)]
+
+# ---- review fixes: amounts, quality-run choice, hashes, table lineage, NULL-safe membership --------
+
+
+@pytest.mark.parametrize("text", ["12,50", "abc", ""])
+def test_a_malformed_bronze_amount_fails_its_check_instead_of_crashing(tmp_path, text):
+    bronze = [(b[0], text, *b[2:]) if b[0] == "T1" else b for b in bronze_for(PURCHASES)]
+    with pytest.raises(gb.GoldCheckError) as err:
+        run(tmp_path, make_silver(tmp_path, bronze=bronze), BOTH)
+    assert "amount_malformed_or_not_positive" in {c.name for c in err.value.failed}
+
+
+def test_the_newest_quality_run_is_chosen_by_its_timestamp_not_its_folder_name(tmp_path):
+    silver = make_silver(tmp_path)
+    runs = tmp_path / "quality_runs"
+    make_quality(runs, silver, name="20260929T000000Z/quality_results.json", generated_at_utc="2026-09-29T00:00:00+00:00")
+    make_quality(runs, silver, name="pr23-check/quality_results.json", generated_at_utc="2026-09-01T00:00:00+00:00")
+    make_quality(runs, silver, name="naive/quality_results.json", generated_at_utc="2026-12-31T00:00:00")
+    make_quality(runs, tmp_path / "other.duckdb", name="20261001T000000Z/quality_results.json",
+                 generated_at_utc="2026-10-01T00:00:00+00:00")
+    (runs / "broken").mkdir()
+    (runs / "broken" / "quality_results.json").write_text("{not json", encoding="utf-8")
+    assert gb.latest_quality_report(silver, runs) == runs / "20260929T000000Z/quality_results.json"
+
+
+def test_card_purchase_hash_covers_the_provenance_written_to_d1(tmp_path):
+    run(tmp_path, make_silver(tmp_path), BOTH)
+    before = dict(gold_rows(tmp_path, "SELECT transaction_id, row_hash FROM gold.card_purchases"))
+    moved = [(*b[:3], b[3].replace("day=01", "day=02")) if b[0] == "T1" else b for b in bronze_for(PURCHASES)]
+    run(tmp_path, make_silver(tmp_path, bronze=moved), BOTH)
+    after = dict(gold_rows(tmp_path, "SELECT transaction_id, row_hash FROM gold.card_purchases"))
+    assert after["T1"] != before["T1"] and after["T2"] == before["T2"]
+
+
+def test_each_table_records_the_build_it_comes_from(tmp_path):
+    silver = make_silver(tmp_path)
+    first, _ = run(tmp_path, silver, ("customers", "card_purchases"))
+    second, _ = run(tmp_path, silver, ("card_purchases",))
+    assert dict(gold_rows(tmp_path, "SELECT table_name, build_id FROM gold.table_builds")) == {
+        "customers": first, "card_purchases": second}
+    with pytest.raises(gb.GoldCheckError):  # a rolled-back build leaves the lineage as it was
+        run(tmp_path, make_silver(tmp_path, products=with_row(PRODUCTS, 0, owner="C2")), ("card_purchases",))
+    assert dict(gold_rows(tmp_path, "SELECT table_name, build_id FROM gold.table_builds"))["card_purchases"] == second
+
+
+@pytest.mark.parametrize(("table", "silver_kwargs"), [
+    ("card_purchases", {"products": PRODUCTS + [("P9", "C9", "Tarjeta Débito", "5555")],
+                        "purchases": PURCHASES + [("T9", "C9", "P9", "2025-04-01 10:00:00", "Cine", "Fun", 9.0, "USD",
+                                                   "México", "Purchase", "Approved")]}),
+    ("customer_complaints", {"complaints": COMPLAINTS + [("Q9", "C9", "2025-06-01 10:00:00", "Fees", "Cobro indebido")]}),
+])
+def test_a_null_id_in_gold_customers_cannot_hide_a_missing_customer(tmp_path, table, silver_kwargs):
+    run(tmp_path, make_silver(tmp_path))
+    with duckdb.connect(str(tmp_path / "gold_fixture.duckdb")) as con:  # NOT IN (... NULL ...) would count 0
+        con.execute("INSERT INTO gold.customers (customer_id, display_name) VALUES (NULL, 'ghost')")
+    with pytest.raises(gb.GoldCheckError) as err:
+        run(tmp_path, make_silver(tmp_path, **silver_kwargs), (table,))
+    assert "customer_missing_from_gold_customers" in {c.name for c in err.value.failed}

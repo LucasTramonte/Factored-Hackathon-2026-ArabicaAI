@@ -90,16 +90,22 @@ def print_last(gold_db: Path) -> int:
         logger.error("No Gold DuckDB at %s -- run a build first.", gold_db)
         return 1
     with duckdb.connect(str(gold_db), read_only=True) as con:
-        last = con.execute("SELECT build_id, silver_database, quality_generated_at_utc, tables FROM gold.builds "
-                           "ORDER BY build_id DESC LIMIT 1").fetchone()
+        last = con.execute("SELECT build_id, silver_database, quality_generated_at_utc, tables, quality_report, "
+                           "watermarks FROM gold.builds ORDER BY build_id DESC LIMIT 1").fetchone()
         if last is None:
             logger.error("No committed Gold build in %s.", gold_db)
             return 1
-        build_id, silver, quality_at, tables = last
-        print(f"build_id={build_id}\nsilver={silver}\nquality_generated_at_utc={quality_at}")
+        build_id, silver, quality_at, tables, report, watermarks = last
+        print(f"build_id={build_id}\nsilver={silver}\nquality_report={report}\n"
+              f"quality_generated_at_utc={quality_at}\nwatermarks={watermarks}")
         print_summary(con, tables, con.execute(
             "SELECT table_name, check_name, expected, actual FROM gold.reconciliation WHERE build_id = ? "
             "ORDER BY table_name, check_name", [build_id]).fetchall(), verbose=True)
+        # A --tables run rebuilds only some tables; say which build each one comes from now.
+        print(f"\n{'table':20s} {'from build':28s} quality_generated_at_utc")
+        for name, built_by, quality in con.execute(
+                "SELECT table_name, build_id, quality_generated_at_utc FROM gold.table_builds ORDER BY table_name").fetchall():
+            print(f"{name:20s} {built_by:28s} {quality}")
     return 0
 
 
@@ -127,7 +133,7 @@ def run(silver_db: Path, gold_db: Path, tables: tuple[str, ...], quality_report:
     logger.info("silver=%s gold=%s quality_report=%s tables=%s", silver_db, gold_db, report, ",".join(tables))
     quality = gb.check_quality(silver_db, report, needed)
     with gb.connect(gold_db, silver_db) as con:
-        build_id, checks = gb.build(con, tables, silver_db, quality)
+        build_id, checks = gb.build(con, tables, silver_db, quality, report)
         logger.info("committed build %s", build_id)
         print_summary(con, tables, [(c.table, c.name, c.expected, c.actual) for c in checks])
     return 0

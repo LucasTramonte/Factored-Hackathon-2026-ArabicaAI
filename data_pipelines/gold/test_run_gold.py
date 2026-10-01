@@ -35,9 +35,9 @@ def test_default_builds_every_table_with_the_newest_quality_run(paths, capsys):
     silver, gold = paths
     assert cli(silver, gold) == 0
     out = capsys.readouterr().out
-    assert "customers" in out and "card_purchases" in out and "context_cards" in out
-    assert "6/6" in out and "12/12" in out and "9/9" in out
-    assert {"customers", "card_purchases", "context_cards", "builds", "reconciliation"} <= tables_in(gold)
+    assert "customers" in out and "customer_complaints" in out and "card_purchases" in out and "context_cards" in out
+    assert "7/7" in out and "6/6" in out and "12/12" in out and "9/9" in out
+    assert {"customers", "customer_complaints", "card_purchases", "context_cards", "builds", "reconciliation"} <= tables_in(gold)
 
 
 def test_tables_option_builds_only_the_requested_tables(paths):
@@ -103,6 +103,7 @@ def test_last_shows_the_newest_committed_build(paths, capsys, caplog):
     assert cli(silver, gold, "--last") == 0
     out = capsys.readouterr().out
     assert "card_purchases" in out and "row_count_matches_silver" in out and "missing_merchant_kept_as_null" in out
+    assert "from build" in out and "quality_generated_at_utc" in out
 
 
 def test_list_and_last_are_mutually_exclusive(paths):
