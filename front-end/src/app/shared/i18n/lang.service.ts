@@ -25,7 +25,7 @@ const es = {
     confirm: 'No reconozco el cargo seleccionado y quiero enviar una solicitud de revisión.',
     submit: 'Confirmar y enviar', retry: 'Reintentar la misma solicitud', cancel: 'Cancelar',
     pending: 'La aceptación no está confirmada. Mantén esta pestaña abierta y reintenta; los datos de la solicitud no cambian.',
-    acceptedTitle: 'Solicitud aceptada en la demo', reference: 'Referencia', nextStep: 'Siguiente paso: un agente revisa este caso. No se ha iniciado ningún reembolso.',
+    acceptedTitle: 'Solicitud aceptada en la demo', reference: 'Referencia', caseId: 'ID del caso', nextStep: 'Siguiente paso: un agente revisa este caso. No se ha iniciado ningún reembolso.',
     replayed: 'Se recuperó la solicitud existente; no se creó un caso nuevo.', working: 'Procesando…',
     count: 'cargos',
     agentTitle: 'Vista de agente', agentIntro: 'Acceso de agente simulado y separado. Muestra los 50 reportes guiados más recientes.',
@@ -76,7 +76,8 @@ const es = {
     check_customer_confirmation_recorded: 'Confirmación del cargo registrada',
     check_transaction_lookup_failed: 'La búsqueda del cargo falló',
     check_matching_transaction: 'Cargo sin identificar', check_customer_confirmation: 'Confirmación del cargo pendiente',
-    yourReports: 'Tus reportes'
+    yourReports: 'Tus reportes',
+    sessionRenewed: 'Tu sesión había expirado. La renovamos con la misma identidad y reenviamos la misma solicitud.'
 };
 
 /** The key set is the Spanish table; the other two must match it exactly. */
@@ -105,7 +106,7 @@ const STRINGS: Record<Lang, Strings> = {
     confirm: 'Não reconheço a cobrança selecionada e quero enviar um pedido de revisão.',
     submit: 'Confirmar e enviar', retry: 'Tentar o mesmo pedido novamente', cancel: 'Cancelar',
     pending: 'A aceitação não está confirmada. Mantenha esta aba aberta e tente novamente; os dados do pedido não mudam.',
-    acceptedTitle: 'Pedido aceito na demo', reference: 'Referência', nextStep: 'Próximo passo: um agente analisa este caso. Nenhum reembolso foi iniciado.',
+    acceptedTitle: 'Pedido aceito na demo', reference: 'Referência', caseId: 'ID do caso', nextStep: 'Próximo passo: um agente analisa este caso. Nenhum reembolso foi iniciado.',
     replayed: 'Pedido existente recuperado; nenhum caso novo foi criado.', working: 'Processando…',
     count: 'cobranças',
     agentTitle: 'Visão do agente', agentIntro: 'Acesso de agente simulado e separado. Mostra os 50 relatos guiados mais recentes.',
@@ -156,7 +157,8 @@ const STRINGS: Record<Lang, Strings> = {
     check_customer_confirmation_recorded: 'Confirmação da cobrança registrada',
     check_transaction_lookup_failed: 'A busca da cobrança falhou',
     check_matching_transaction: 'Cobrança não identificada', check_customer_confirmation: 'Confirmação da cobrança pendente',
-    yourReports: 'Seus relatos'
+    yourReports: 'Seus relatos',
+    sessionRenewed: 'Sua sessão tinha expirado. Nós a renovamos com a mesma identidade e reenviamos o mesmo pedido.'
   },
   en: {
     greeting: 'Hello', tagline: 'Report a charge you do not recognize.',
@@ -179,7 +181,7 @@ const STRINGS: Record<Lang, Strings> = {
     confirm: 'I do not recognize the selected charge and want to submit a review request.',
     submit: 'Confirm and submit', retry: 'Retry the same request', cancel: 'Cancel',
     pending: 'Acceptance is not confirmed. Keep this tab open and retry; the request details are unchanged.',
-    acceptedTitle: 'Request accepted in the demo', reference: 'Reference', nextStep: 'Next step: an agent reviews this case. No refund has been initiated.',
+    acceptedTitle: 'Request accepted in the demo', reference: 'Reference', caseId: 'Case ID', nextStep: 'Next step: an agent reviews this case. No refund has been initiated.',
     replayed: 'Existing request retrieved; no new case was created.', working: 'Working…',
     count: 'charges',
     agentTitle: 'Agent view', agentIntro: 'Separate simulated agent access. Shows the 50 most recent guided reports.',
@@ -230,7 +232,8 @@ const STRINGS: Record<Lang, Strings> = {
     check_customer_confirmation_recorded: 'Charge confirmation recorded',
     check_transaction_lookup_failed: 'Charge lookup failed',
     check_matching_transaction: 'Charge not identified', check_customer_confirmation: 'Charge confirmation pending',
-    yourReports: 'Your reports'
+    yourReports: 'Your reports',
+    sessionRenewed: 'Your session had expired. We renewed it with the same identity and resent the same request.'
   }
 };
 

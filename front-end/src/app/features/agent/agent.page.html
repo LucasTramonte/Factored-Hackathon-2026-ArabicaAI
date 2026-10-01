@@ -28,9 +28,9 @@
           <ul class="intake-list">
             @for (item of intakes(); track item.protocol) {
               <li>
-                <button #row type="button" class="intake-row" [attr.aria-expanded]="openProtocol() === item.protocol" [attr.aria-controls]="openProtocol() === item.protocol && detail() ? 'intake-detail' : null" (click)="open(item.protocol, row)">
+                <button #row type="button" class="intake-row" [attr.data-protocol]="item.protocol" [attr.aria-expanded]="openProtocol() === item.protocol" [attr.aria-controls]="openProtocol() === item.protocol && detail() ? 'intake-detail' : null" (click)="open(item.protocol, row)">
                   <span class="ar-chip" [class.ar-chip-ok]="item.kind === 'complete'" [class.ar-chip-err]="item.kind === 'technical'" [class.ar-chip-warn]="item.kind === 'incomplete'">{{ kindLabel(item.kind) }}</span>
-                  <span class="ar-mono">{{ item.protocol }}</span>
+                  <span class="ar-mono">{{ item.reference_short ?? item.protocol }}</span>
                   <span class="ar-small">{{ item.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span>
                   <span class="ar-small">{{ t().toolStatus }}: <code>{{ item.tool_status }}</code></span>
                 </button>
@@ -50,7 +50,8 @@
         </div>
         <div class="box-body detail">
           <dl class="detail-meta">
-            <div><dt>{{ t().reference }}</dt><dd class="ar-mono">{{ d.protocol }}</dd></div>
+            <div><dt>{{ t().reference }}</dt><dd class="ar-mono">{{ d.reference_short ?? d.protocol }}</dd></div>
+            @if (d.reference_short) { <div><dt>{{ t().caseId }}</dt><dd class="ar-mono">{{ d.protocol }}</dd></div> }
             <div><dt>{{ t().acceptedAt }}</dt><dd>{{ d.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</dd></div>
             <div><dt>{{ t().toolStatus }}</dt><dd><code>{{ d.tool_status }}</code></dd></div>
             <div><dt>{{ t().destination }}</dt><dd><code>{{ d.destination }}</code></dd></div>

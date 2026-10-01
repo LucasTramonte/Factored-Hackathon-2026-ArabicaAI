@@ -20,7 +20,21 @@ const KNOWN = key => "CASE WHEN " + USAGE('usage_unavailable_calls') + '>0 THEN 
 const IDLE_CANDIDATES = "FROM intake_episodes e WHERE e.state='selection_required' AND " + IDLE_DUE + '<=? '
   + 'AND NOT EXISTS(SELECT 1 FROM intake_handoffs h WHERE h.episode_id=e.episode_id)';
 
-export function createStore(db) {
+/** Crockford base32: no I, L, O or U, so a code read over the phone can't be misheard as another. */
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+/** The shape of a short human reference; the migration's CHECK enforces the same in SQL. */
+export const SHORT_REFERENCE = /^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$/;
+/** A fresh short reference from 40 CSPRNG bits (256 is a multiple of 32, so ``& 31`` is uniform); never derived from a UUID. */
+export function newShortReference() {
+  const code = [...crypto.getRandomValues(new Uint8Array(8))].map(byte => CROCKFORD[byte & 31]).join('');
+  return `AR-${code.slice(0, 4)}-${code.slice(4)}`;
+}
+/** Fresh codes tried when the unique index rejects one; at 40 bits a single retry is already vanishingly rare. */
+const SHORT_REFERENCE_ATTEMPTS = 3;
+const shortReferenceTaken = error => /UNIQUE/i.test(String(error?.message)) && /reference_short/i.test(String(error?.message));
+
+/** ``shortReference`` is injectable so tests can force collisions. */
+export function createStore(db, { shortReference = newShortReference } = {}) {
   const totals = { queries: 0, rowsRead: 0, rowsWritten: 0, roundTrips: 0 };
   const track = result => {
     totals.queries += 1;
@@ -35,6 +49,39 @@ export function createStore(db) {
     return (await db.batch(statements.map(([sql, ...params]) => db.prepare(sql).bind(...params)))).map(track);
   };
 
+  /** Reserve one immutable handoff and optional confirmed case in one atomic batch; SQL revalidates live session and ownership. */
+  const reserveIntakeHandoff = async ({ customerId, episodeId, turnKey, payloadHash, sessionHash, completeCase, kind, evidence, actions, questions, usage, now, referenceShort }) => {
+    const handoffId = crypto.randomUUID();
+    const caseId = kind === 'complete' ? crypto.randomUUID() : null;
+    const eligible = "e.customer_id=? AND e.episode_id=? AND e.state='selection_required' "
+      + "AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=e.customer_id AND expires_at>?) "
+      + 'AND NOT EXISTS(SELECT 1 FROM intake_handoffs WHERE episode_id=e.episode_id)';
+    const params = [customerId, episodeId, sessionHash, now];
+    const result = await batch([
+      ...(kind === 'complete' ? [[
+        'INSERT INTO cases(case_id,customer_id,transaction_id,idempotency_key,customer_statement,customer_confirmed) '
+        + 'SELECT ?,e.customer_id,t.transaction_id,?,e.customer_statement,1 FROM intake_episodes e '
+        + 'JOIN transactions t ON t.customer_id=e.customer_id AND t.transaction_id=? WHERE ' + eligible,
+        caseId, 'intake:' + episodeId, completeCase?.transaction_id ?? '', ...params
+      ]] : []),
+      ['INSERT INTO intake_handoffs(handoff_id,episode_id,complete_case_id,turn_key,payload_hash,kind,tool_status,'
+        + 'evidence_json,actions_json,questions_json,destination,priority,accepted_at,usage_json,reference_short) '
+        + "SELECT ?,e.episode_id,?,?,?,?,?,?,?,?,?,?,?,json_set(?,'$.tool_calls',json_extract(e.usage_json,'$.tool_calls'),'$.operation_duration_ms',COALESCE(json_extract(e.usage_json,'$.operation_duration_ms'),0)),? FROM intake_episodes e WHERE " + eligible
+        + (kind === 'complete' ? ' AND EXISTS(SELECT 1 FROM cases WHERE case_id=?)' : ''),
+        handoffId,caseId,turnKey,payloadHash,kind,kind === 'technical' ? 'failed' : 'ok',
+        JSON.stringify(evidence),JSON.stringify(actions),JSON.stringify(questions),'case_service','normal',new Date(now).toISOString(),JSON.stringify(usage),referenceShort,
+        ...params,...(kind === 'complete' ? [caseId] : [])],
+      ['INSERT INTO intake_turns(episode_id,turn_key,payload_hash,response_json) '
+        + 'SELECT episode_id,turn_key,payload_hash,? FROM intake_handoffs WHERE handoff_id=?',
+        JSON.stringify({ handoff_id: handoffId }),handoffId],
+      ["UPDATE intake_episodes SET state='handoff_pending',updated_at=? WHERE episode_id=? "
+        + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=?)',now,episodeId,handoffId],
+      ['SELECT h.* FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.episode_id=?',customerId,episodeId]
+    ]);
+    const handoff = result.at(-1).results[0] ?? null;
+    if (handoff && (handoff.turn_key !== turnKey || handoff.payload_hash !== payloadHash)) return { conflict: true };
+    return { handoff, replayed: handoff?.handoff_id !== handoffId };
+  };
   return {
     metrics: () => ({ ...totals }),
     ping: () => all('SELECT 1 AS ok'),
@@ -106,37 +153,12 @@ export function createStore(db) {
     findOwnedIntakeHandoff: (customerId, episodeId) => first(
       'SELECT h.* FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.episode_id=?', customerId, episodeId),
     /** Atomically reserve one immutable handoff and optional confirmed case; SQL revalidates live session and ownership. */
-    persistIntakeHandoff: async ({ customerId, episodeId, turnKey, payloadHash, sessionHash, completeCase, kind, evidence, actions, questions, usage, now }) => {
-      const handoffId = crypto.randomUUID();
-      const caseId = kind === 'complete' ? crypto.randomUUID() : null;
-      const eligible = "e.customer_id=? AND e.episode_id=? AND e.state='selection_required' "
-        + "AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=e.customer_id AND expires_at>?) "
-        + 'AND NOT EXISTS(SELECT 1 FROM intake_handoffs WHERE episode_id=e.episode_id)';
-      const params = [customerId, episodeId, sessionHash, now];
-      const result = await batch([
-        ...(kind === 'complete' ? [[
-          'INSERT INTO cases(case_id,customer_id,transaction_id,idempotency_key,customer_statement,customer_confirmed) '
-          + 'SELECT ?,e.customer_id,t.transaction_id,?,e.customer_statement,1 FROM intake_episodes e '
-          + 'JOIN transactions t ON t.customer_id=e.customer_id AND t.transaction_id=? WHERE ' + eligible,
-          caseId, 'intake:' + episodeId, completeCase?.transaction_id ?? '', ...params
-        ]] : []),
-        ['INSERT INTO intake_handoffs(handoff_id,episode_id,complete_case_id,turn_key,payload_hash,kind,tool_status,'
-          + 'evidence_json,actions_json,questions_json,destination,priority,accepted_at,usage_json) '
-          + "SELECT ?,e.episode_id,?,?,?,?,?,?,?,?,?,?,?,json_set(?,'$.tool_calls',json_extract(e.usage_json,'$.tool_calls'),'$.operation_duration_ms',COALESCE(json_extract(e.usage_json,'$.operation_duration_ms'),0)) FROM intake_episodes e WHERE " + eligible
-          + (kind === 'complete' ? ' AND EXISTS(SELECT 1 FROM cases WHERE case_id=?)' : ''),
-          handoffId,caseId,turnKey,payloadHash,kind,kind === 'technical' ? 'failed' : 'ok',
-          JSON.stringify(evidence),JSON.stringify(actions),JSON.stringify(questions),'case_service','normal',new Date(now).toISOString(),JSON.stringify(usage),
-          ...params,...(kind === 'complete' ? [caseId] : [])],
-        ['INSERT INTO intake_turns(episode_id,turn_key,payload_hash,response_json) '
-          + 'SELECT episode_id,turn_key,payload_hash,? FROM intake_handoffs WHERE handoff_id=?',
-          JSON.stringify({ handoff_id: handoffId }),handoffId],
-        ["UPDATE intake_episodes SET state='handoff_pending',updated_at=? WHERE episode_id=? "
-          + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=?)',now,episodeId,handoffId],
-        ['SELECT h.* FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.episode_id=?',customerId,episodeId]
-      ]);
-      const handoff = result.at(-1).results[0] ?? null;
-      if (handoff && (handoff.turn_key !== turnKey || handoff.payload_hash !== payloadHash)) return { conflict: true };
-      return { handoff, replayed: handoff?.handoff_id !== handoffId };
+    persistIntakeHandoff: async args => {
+      // A collision on the short reference rolls the whole batch back, so retrying with a fresh code is safe.
+      for (let attempt = 1; ; attempt++) {
+        try { return await reserveIntakeHandoff({ ...args, referenceShort: shortReference() }); }
+        catch (error) { if (attempt >= SHORT_REFERENCE_ATTEMPTS || !shortReferenceTaken(error)) throw error; }
+      }
     },
     /** A complete receipt requires reading back the confirmed owned case, never just the reservation. */
     readIntakeReceipt: (customerId, episodeId, { sessionHash, now }) => first(
@@ -281,12 +303,12 @@ export function createStore(db) {
     /** One handoff per episode; only acknowledged terminal rows enter this bounded queue. */
     listIntakeHandoffs: limit => all(
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
-      + 'h.destination,h.priority,h.accepted_at FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+      + 'h.destination,h.priority,h.accepted_at,h.reference_short FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
       + "WHERE e.state=h.kind||'_handoff' ORDER BY h.accepted_at DESC,protocol LIMIT ?", Math.min(limit, 51)),
     /** Optional complete evidence is one-to-one and owner-scoped; missing evidence never drops a handoff. */
     findIntakeHandoff: protocol => first(
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
-      + 'h.destination,h.priority,h.accepted_at,h.evidence_json,h.actions_json,h.questions_json,'
+      + 'h.destination,h.priority,h.accepted_at,h.reference_short,h.evidence_json,h.actions_json,h.questions_json,'
       + 'e.customer_statement,e.language,t.transaction_id AS verified_transaction_id '
       + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
       + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
