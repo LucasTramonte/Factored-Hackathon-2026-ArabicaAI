@@ -25,14 +25,21 @@ describe('CustomerPage', () => {
     page = TestBed.createComponent(CustomerPage).componentInstance;
   });
 
-  it('starts on the intro, moves to sign-in on start, and to the home once charges are loaded', async () => {
-    expect(page.step()).toBe('intro');
-    page.start();
-    expect(page.step()).toBe('login');
-    page.identity = 'demo-ana';
-    await page.login();
-    expect(page.step()).toBe('home');
-    expect(page.discClass()).toBe('disc disc--home');
+  it('opens on sign-in with the purpose and the three explanation lines, then goes home once charges are loaded', async () => {
+    const fixture = TestBed.createComponent(CustomerPage);
+    const p = fixture.componentInstance;
+    await p.ngOnInit();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(p.step()).toBe('login');
+    expect(el.querySelector('h1')?.textContent?.trim()).toBe(p.t().greeting);
+    expect(el.querySelector('.purpose')?.textContent?.trim()).toBe(p.t().tagline);
+    expect([...el.querySelectorAll('.explain li')].map(li => li.textContent?.trim()))
+      .toEqual([p.t().explain1, p.t().explain2, p.t().explain3]);
+    expect(el.querySelector('.intro')).toBeNull();
+    p.identity = 'demo-ana';
+    await p.login();
+    expect(p.step()).toBe('home');
   });
 
   it('signs in and lists only what the API returns', async () => {
@@ -44,7 +51,6 @@ describe('CustomerPage', () => {
   });
 
   it('stays on sign-in and shows the mapped error when sign-in fails', async () => {
-    page.start();
     service.signIn.and.rejectWith(new ApiError(503, 'unavailable'));
     page.identity = 'demo-ana';
     await page.login();
@@ -55,7 +61,6 @@ describe('CustomerPage', () => {
   it('loads the identity choices from the API instead of a hard-coded list', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     await fixture.componentInstance.ngOnInit();
-    fixture.componentInstance.start();
     fixture.detectChanges();
     const rows = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.ar-row-name')].map(o => o.textContent?.trim());
     expect(rows).toEqual(['Ana (demo)', 'Bruno (demo)']);
@@ -465,22 +470,6 @@ describe('CustomerPage', () => {
       fixture.detectChanges();
       expect(p.chatOpen()).toBeTrue();
       expect(p.choice).toBe('demo-tx-001');
-    });
-
-    it('states the purpose on the first screen and lets the intro be skipped', async () => {
-      const fixture = TestBed.createComponent(CustomerPage);
-      const p = fixture.componentInstance;
-      await p.ngOnInit();
-      fixture.detectChanges();
-      const el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelector('.intro-purpose')?.textContent?.trim()).toBe(p.t().tagline);
-      expect(p.introDone()).toBeFalse();
-      el.querySelector<HTMLButtonElement>('.intro-skip')!.click();
-      fixture.detectChanges();
-      await fixture.whenStable();
-      expect(p.introDone()).toBeTrue();
-      expect(el.querySelector('.intro-skip')).toBeNull();
-      expect(document.activeElement).toBe(el.querySelector('.intro-cta .ar-btn'));
     });
   });
 });
