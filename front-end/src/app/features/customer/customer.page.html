@@ -36,7 +36,7 @@
           </div>
           <div class="stack">
             <div style="display: flex; flex-direction: column; gap: 10px">
-              <h1 class="headline">{{ t().whoAreYou }}</h1>
+              <h1 class="headline" tabindex="-1">{{ t().whoAreYou }}</h1>
             </div>
             @if (error()) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
             <app-customer-picker [identities]="identities()" [disabled]="busy() || identityLocked()" [(value)]="identity" />
@@ -73,7 +73,7 @@
         <main class="home-main" id="inicio">
           <div class="topbar">
             <div style="display: flex; flex-direction: column; gap: 4px">
-              <h1 class="ar-h1" style="font-size: 28px; line-height: 36px">{{ t().hello }}, {{ displayName() }}</h1>
+              <h1 class="ar-h1" tabindex="-1" style="font-size: 28px; line-height: 36px">{{ t().hello }}, {{ displayName() }}</h1>
               <span class="ar-mono" style="color: var(--ink-muted)">{{ transactions().length }} {{ t().loaded }}</span>
             </div>
             <app-lang-switch />
