@@ -214,6 +214,26 @@ def provenance_statement(transaction_id: str, product_id: str, source_file: str,
             "THEN sample_provenance.product_id ELSE NULL END;")
 
 
+def dataset_customer_statement(customer_id: str, display_name: str, country: str) -> str:
+    """Idempotent upsert of a dataset customer; a different stored name, source or country fails the rerun."""
+    return ("INSERT INTO customers(customer_id,display_name,source,country) VALUES "
+            f"({quote(customer_id)},{quote(display_name)},'dataset',{quote(country)}) "
+            "ON CONFLICT(customer_id) DO UPDATE SET display_name=CASE WHEN "
+            "customers.display_name=excluded.display_name AND customers.source=excluded.source AND "
+            "customers.country IS excluded.country THEN customers.display_name ELSE NULL END;")
+
+
+def context_card_statement(customer_id: str, card: dict, snapshot_at: str) -> str:
+    """Idempotent context-card upsert; any stored difference makes the rerun fail."""
+    payload = json.dumps(card, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    return ('INSERT INTO context_cards(customer_id,card_version,snapshot_at,card_json) VALUES '
+            f'({quote(customer_id)},{CARD_VERSION},{quote(snapshot_at)},{quote(payload)}) '
+            'ON CONFLICT(customer_id) DO UPDATE SET card_json=CASE WHEN '
+            'context_cards.card_version=excluded.card_version AND '
+            'context_cards.snapshot_at=excluded.snapshot_at AND '
+            'context_cards.card_json=excluded.card_json THEN context_cards.card_json ELSE NULL END;')
+
+
 def with_header(body: str, first_line: str) -> str:
     """Prefix a seed body with its header; the version covers only the body."""
     return f"-- {first_line}; slice_version: {content_version(body)}\n" + \
@@ -227,14 +247,7 @@ def render_seed(rows: list[SliceRow], business_date: date, display_names: dict[s
     lines += [transaction_statement(r.transaction_id, r.customer_id, None, r.source_occurred_at, r.merchant_name,
                                     r.amount, r.currency) for r in rows]
     lines += [provenance_statement(r.transaction_id, r.product_id, r.source_file, business_date) for r in rows]
-    for customer_id, card in sorted(cards.items()):
-        payload = json.dumps(card, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
-        lines.append('INSERT INTO context_cards(customer_id,card_version,snapshot_at,card_json) VALUES '
-                     f'({quote(customer_id)},{CARD_VERSION},{quote(snapshot_at)},{quote(payload)}) '
-                     'ON CONFLICT(customer_id) DO UPDATE SET card_json=CASE WHEN '
-                     'context_cards.card_version=excluded.card_version AND '
-                     'context_cards.snapshot_at=excluded.snapshot_at AND '
-                     'context_cards.card_json=excluded.card_json THEN context_cards.card_json ELSE NULL END;')
+    lines += [context_card_statement(customer_id, card, snapshot_at) for customer_id, card in sorted(cards.items())]
     return with_header("\n".join(lines) + "\n", f"Gold intake slice for {business_date} from a quality-gated Silver sample")
 
 
