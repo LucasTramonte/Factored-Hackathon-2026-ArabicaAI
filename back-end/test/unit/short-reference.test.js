@@ -124,6 +124,14 @@ test('agents see the same code in the queue and the detail; it is not a lookup k
   const detail = await agent('/agent/intake-detail?protocol=' + receipt.protocol);
   assert.equal(detail.status, 200); assertContract('agentIntakeDetail', detail.body);
   assert.equal(detail.body.reference_short, receipt.reference_short);
+  for (const [schema, body] of [['intakeReceipt', receipt], ['agentIntake', queue.body.items[0]], ['agentIntakeDetail', detail.body]]) {
+    assertContract(schema, { ...body, reference_short: null });
+    for (const reference_short of ['AR-AAAA-AAA', 'AR-AAAA-AAAI', 'ar-aaaa-aaaa', 123]) {
+      assert.throws(() => assertContract(schema, { ...body, reference_short }), /reference_short/);
+    }
+    const { reference_short, ...missing } = body;
+    assert.throws(() => assertContract(schema, missing), /missing reference_short/);
+  }
   assert.equal((await agent('/agent/intake-detail?protocol=' + receipt.reference_short)).status, 422);
   const bruno = await customer(actor, 'demo-bruno');
   const foreign = await bruno('/intake/confirm', { episode_id: receipt.episode_id, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: crypto.randomUUID() });
