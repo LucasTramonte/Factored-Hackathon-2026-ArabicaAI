@@ -10,7 +10,7 @@ import { CustomerPicker } from '../../shared/customer-picker/customer-picker.com
 import { ApiError } from '../../core/http/api.service';
 import { Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
   Transaction } from '../../shared/models/intake.model';
-import { CustomerService, ReceiptEntry } from './customer.service';
+import { CustomerService } from './customer.service';
 
 /**
  * The customer flow: sign-in (with the purpose stated on the same screen), then home. Nothing animates and
@@ -36,8 +36,6 @@ export function intakeLanguage(ui: Lang): IntakeLang | null {
 export const FAQ = { faqNextQ: 'faqNextA', faqTimeQ: 'faqTimeA', faqMissingQ: 'faqMissingA' } as const;
 /** Receipt title per server-decided kind. */
 const RECEIPT_TITLE = { complete: 'receiptComplete', incomplete: 'receiptIncomplete', technical: 'receiptTechnical' } as const;
-/** Short status per kind, for the open-cases chip; only a complete report reads as accepted. */
-export const RECEIPT_CHIP = { complete: 'accepted', incomplete: 'inReview', technical: 'inReview' } as const;
 
 @Component({
   selector: 'app-customer-page',
@@ -74,8 +72,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly chatStep = computed<ChatStep>(() => this.intakeReceipt() ? 'receipt' : this.ended() ? 'ended' : this.episode() ? 'choose' : 'describe');
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
-  readonly receiptChip = RECEIPT_CHIP;
-  readonly lastReceipt = computed<ReceiptEntry | undefined>(() => this.receipts().at(-1));
+  readonly receiptTitleKey = RECEIPT_TITLE;
   /** Charges already accepted in this session are not offered again. */
   readonly choosable = computed(() => this.transactions().filter(tx => !this.receipts().some(r => r.receipt.kind === 'complete' && r.transactionId === tx.transaction_id)));
   /** Locked while a request is frozen or a guided report is open: renewing must keep the same customer. */
@@ -104,15 +101,6 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   readonly displayName = computed(() => this.identities().find(i => i.customer_id === this.client())?.display_name ?? this.client());
   readonly initials = computed(() => initialsOf(this.displayName()) || 'AA');
-  /** Totals of the loaded charges, per source currency; never converted. */
-  readonly totals = computed(() => {
-    const sums = new Map<string, number>();
-    for (const tx of this.transactions()) {
-      const n = Number(tx.amount);
-      if (Number.isFinite(n)) sums.set(tx.currency, (sums.get(tx.currency) ?? 0) + n);
-    }
-    return [...sums.entries()].map(([currency, total]) => ({ currency, total: formatAmount(total) }));
-  });
 
   constructor() {
     // Move focus to the receipt, the choose step (it replaces the focused Send button) and the chat heading when each appears;
@@ -124,12 +112,13 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
   private readonly intakeReceiptEl = viewChild<ElementRef<HTMLElement>>('intakeReceiptEl');
   private readonly chatPanel = viewChild<ElementRef<HTMLElement>>('chatPanel');
-  private readonly chatToggle = viewChild<ElementRef<HTMLElement>>('chatToggle');
+  /** The control that opened the panel (a charge row's Report button), so closing can return focus to it. */
+  private opener: HTMLElement | null = null;
 
-  /** Close the guided chat and return focus to its toggle (Escape inside the panel). */
+  /** Close the guided chat and return focus to the control that opened it, else to the page heading. */
   closeChat(): void {
     this.chatOpen.set(false);
-    afterNextRender(() => this.chatToggle()?.nativeElement.focus(), { injector: this.injector });
+    afterNextRender(() => (this.opener?.isConnected ? this.opener : this.host.nativeElement.querySelector<HTMLElement>('.step h1'))?.focus(), { injector: this.injector });
   }
   private readonly chooseStep = viewChild<ElementRef<HTMLElement>>('chooseStep');
 
@@ -191,6 +180,7 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Open the chat; from a charge row, that charge is preselected (the customer still confirms it). */
   openChat(transactionId?: string): void {
+    this.opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     this.chatOpen.set(true);
     if (transactionId && !this.frozen() && this.chatStep() !== 'receipt' && this.chatStep() !== 'ended') {
       this.choice = transactionId;
@@ -340,11 +330,6 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 }
 
-/** 1234567.5 → "1 234 567.50": thin-space grouping, always two decimals, the currency code goes beside it. */
-export function formatAmount(n: number): string {
-  const [int, dec] = n.toFixed(2).split('.');
-  return int.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + dec;
-}
 
 /** Up to two initials from the words that start with a Unicode letter: "Ana (demo)" → "A", "José da Silva" → "JD". */
 export function initialsOf(name: string): string {

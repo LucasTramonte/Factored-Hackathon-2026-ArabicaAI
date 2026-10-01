@@ -1,6 +1,5 @@
-/* Guided intake chat: a launcher and a panel, built from the global tokens. The panel is a modal dialog at 1180px and
+/* Guided intake chat: a panel opened from a charge row, built from the global tokens. The panel is a modal dialog at 1180px and
    below (the page behind is inert) and a non-modal region above that. */
-.chat-toggle { position: fixed; right: 24px; bottom: 24px; z-index: 20; }
 .chat {
   position: fixed; right: 24px; bottom: 84px; z-index: 20; width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 120px); max-height: calc(100dvh - 120px);
   overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 20px;
@@ -20,5 +19,5 @@
    language switch (WCAG 2.4.11): its top stays at least 96px down (84px bottom + 180px - 84px). Keep the breakpoint in
    sync with `narrowQuery` in customer.page.ts and the 1180px rule in styles.css. */
 @media (width > 1180px) { .chat { max-height: calc(100vh - 180px); max-height: calc(100dvh - 180px); } } /* range syntax: no gap at fractional widths */
-@media (max-width: 640px) { .chat-toggle { right: 16px; bottom: 16px; } .chat { right: 16px; bottom: 72px; } }
+@media (max-width: 640px) { .chat { right: 16px; bottom: 72px; } }
 .report-btn { min-height: 36px; padding: 0 14px; font-size: 14px; }

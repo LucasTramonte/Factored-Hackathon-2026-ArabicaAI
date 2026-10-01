@@ -12,10 +12,9 @@ const es = {
     noMoney: 'Datos sintéticos. Nadie mueve tu dinero.',
     whoAreYou: '¿Quién eres?', chooseIdentity: 'Elige una identidad de demostración. El inicio de sesión es simulado.',
     renew: 'Renovar la misma sesión',
-    hello: 'Hola', loaded: 'cargos cargados', home: 'Inicio', charges: 'Cargos', agentView: 'Vista de agente',
-    demoAccount: 'Cuenta de demostración', loadedCharges: 'Cargos cargados', currencies: 'Monedas',
-    guideTitle: 'Reporte guiado', guideBlurb: 'Eliges el cargo, cuentas qué pasó y confirmas. Una persona revisa el caso.',
-    report: 'Reportar un cargo', openCases: 'Casos abiertos', inReview: 'en revisión', accepted: 'aceptada', none: 'ninguno',
+    hello: 'Hola', charges: 'Cargos', agentView: 'Vista de agente',
+    guideTitle: 'Reporte guiado',
+    openCases: 'Casos abiertos', accepted: 'aceptada', none: 'ninguno',
     recent: 'Cargos recientes', merchant: 'Comercio', date: 'Fecha', state: 'Estado', amount: 'Monto',
     selected: 'seleccionado', noMerchant: 'Comercio: no consta en la fuente',
     tzMissing: 'zona horaria no indicada', dateMissing: 'fecha no disponible', utc: 'UTC',
@@ -27,7 +26,7 @@ const es = {
     pending: 'La aceptación no está confirmada. Mantén esta pestaña abierta y reintenta; los datos de la solicitud no cambian.',
     acceptedTitle: 'Solicitud aceptada en la demo', reference: 'Referencia', nextStep: 'Siguiente paso: un agente revisa este caso. No se ha iniciado ningún reembolso.',
     replayed: 'Se recuperó la solicitud existente; no se creó un caso nuevo.', working: 'Procesando…',
-    byCurrency: 'Por moneda', total: 'Total de los cargos cargados', count: 'cargos',
+    count: 'cargos',
     agentTitle: 'Vista de agente', agentIntro: 'Acceso de agente simulado y separado. Muestra los 50 casos más recientes.',
     agentLoad: 'Entrar como agente y actualizar casos', noCases: 'No se devolvieron casos.', customer: 'Cliente', acceptedAt: 'Aceptada en la demo',
     validation: 'Selecciona un cargo, describe el problema en al menos 10 caracteres y confirma.',
@@ -52,7 +51,7 @@ const es = {
     statement: 'Relato del cliente', languageCode: 'Idioma del reporte',
     agentErr401: 'La sesión de agente expiró. Vuelve a entrar como agente.', agentErr404: 'No se encontró el reporte.',
     // Guided intake chat
-    chatOpen: 'Abrir el reporte guiado', chatClose: 'Cerrar el reporte guiado', chatYou: 'Tú', chatGuide: 'Guía',
+    chatClose: 'Cerrar el reporte guiado', chatYou: 'Tú', chatGuide: 'Guía',
     chatHello: 'Cuéntame qué pasó con el cargo que no reconoces. Después eliges el cargo y confirmas.',
     chatLangPrompt: 'Idioma del reporte', chatSend: 'Enviar',
     chatValidation: 'Elige el idioma del reporte y describe lo que pasó en al menos 10 caracteres.',
@@ -75,7 +74,8 @@ const es = {
     check_owned_transaction_retrieved: 'Cargo encontrado entre los cargos de la cuenta',
     check_customer_confirmation_recorded: 'Confirmación del cargo registrada',
     check_transaction_lookup_failed: 'La búsqueda del cargo falló',
-    check_matching_transaction: 'Cargo sin identificar', check_customer_confirmation: 'Confirmación del cargo pendiente'
+    check_matching_transaction: 'Cargo sin identificar', check_customer_confirmation: 'Confirmación del cargo pendiente',
+    yourReports: 'Tus reportes'
 };
 
 /** The key set is the Spanish table; the other two must match it exactly. */
@@ -91,10 +91,9 @@ const STRINGS: Record<Lang, Strings> = {
     noMoney: 'Dados sintéticos. Ninguém mexe no seu dinheiro.',
     whoAreYou: 'Quem é você?', chooseIdentity: 'Escolha uma identidade de demonstração. O login é simulado.',
     renew: 'Renovar a mesma sessão',
-    hello: 'Olá', loaded: 'cobranças carregadas', home: 'Início', charges: 'Cobranças', agentView: 'Visão do agente',
-    demoAccount: 'Conta de demonstração', loadedCharges: 'Cobranças carregadas', currencies: 'Moedas',
-    guideTitle: 'Relato guiado', guideBlurb: 'Você escolhe a cobrança, conta o que aconteceu e confirma. Uma pessoa analisa o caso.',
-    report: 'Reportar uma cobrança', openCases: 'Casos abertos', inReview: 'em análise', accepted: 'aceito', none: 'nenhum',
+    hello: 'Olá', charges: 'Cobranças', agentView: 'Visão do agente',
+    guideTitle: 'Relato guiado',
+    openCases: 'Casos abertos', accepted: 'aceito', none: 'nenhum',
     recent: 'Cobranças recentes', merchant: 'Estabelecimento', date: 'Data', state: 'Estado', amount: 'Valor',
     selected: 'selecionado', noMerchant: 'Estabelecimento: não consta na fonte',
     tzMissing: 'fuso horário não informado', dateMissing: 'data indisponível', utc: 'UTC',
@@ -106,7 +105,7 @@ const STRINGS: Record<Lang, Strings> = {
     pending: 'A aceitação não está confirmada. Mantenha esta aba aberta e tente novamente; os dados do pedido não mudam.',
     acceptedTitle: 'Pedido aceito na demo', reference: 'Referência', nextStep: 'Próximo passo: um agente analisa este caso. Nenhum reembolso foi iniciado.',
     replayed: 'Pedido existente recuperado; nenhum caso novo foi criado.', working: 'Processando…',
-    byCurrency: 'Por moeda', total: 'Total das cobranças carregadas', count: 'cobranças',
+    count: 'cobranças',
     agentTitle: 'Visão do agente', agentIntro: 'Acesso de agente simulado e separado. Mostra os 50 casos mais recentes.',
     agentLoad: 'Entrar como agente e atualizar casos', noCases: 'Nenhum caso retornado.', customer: 'Cliente', acceptedAt: 'Aceito na demo',
     validation: 'Selecione uma cobrança, descreva o problema em pelo menos 10 caracteres e confirme.',
@@ -131,7 +130,7 @@ const STRINGS: Record<Lang, Strings> = {
     statement: 'Relato do cliente', languageCode: 'Idioma do relato',
     agentErr401: 'A sessão de agente expirou. Entre novamente como agente.', agentErr404: 'Relato não encontrado.',
     // Guided intake chat
-    chatOpen: 'Abrir o relato guiado', chatClose: 'Fechar o relato guiado', chatYou: 'Você', chatGuide: 'Guia',
+    chatClose: 'Fechar o relato guiado', chatYou: 'Você', chatGuide: 'Guia',
     chatHello: 'Conte o que aconteceu com a cobrança que você não reconhece. Depois você escolhe a cobrança e confirma.',
     chatLangPrompt: 'Idioma do relato', chatSend: 'Enviar',
     chatValidation: 'Escolha o idioma do relato e descreva o que aconteceu em pelo menos 10 caracteres.',
@@ -154,7 +153,8 @@ const STRINGS: Record<Lang, Strings> = {
     check_owned_transaction_retrieved: 'Cobrança encontrada entre as cobranças da conta',
     check_customer_confirmation_recorded: 'Confirmação da cobrança registrada',
     check_transaction_lookup_failed: 'A busca da cobrança falhou',
-    check_matching_transaction: 'Cobrança não identificada', check_customer_confirmation: 'Confirmação da cobrança pendente'
+    check_matching_transaction: 'Cobrança não identificada', check_customer_confirmation: 'Confirmação da cobrança pendente',
+    yourReports: 'Seus relatos'
   },
   en: {
     greeting: 'Hello', tagline: 'Report a charge you do not recognize.',
@@ -164,10 +164,9 @@ const STRINGS: Record<Lang, Strings> = {
     noMoney: 'Synthetic data. Nobody moves your money.',
     whoAreYou: 'Who are you?', chooseIdentity: 'Choose a demo identity. Sign-in is simulated.',
     renew: 'Renew the same session',
-    hello: 'Hi', loaded: 'charges loaded', home: 'Home', charges: 'Charges', agentView: 'Agent view',
-    demoAccount: 'Demo account', loadedCharges: 'Charges loaded', currencies: 'Currencies',
-    guideTitle: 'Guided report', guideBlurb: 'You pick the charge, say what happened and confirm. A person reviews the case.',
-    report: 'Report a charge', openCases: 'Open cases', inReview: 'in review', accepted: 'accepted', none: 'none',
+    hello: 'Hi', charges: 'Charges', agentView: 'Agent view',
+    guideTitle: 'Guided report',
+    openCases: 'Open cases', accepted: 'accepted', none: 'none',
     recent: 'Recent charges', merchant: 'Merchant', date: 'Date', state: 'State', amount: 'Amount',
     selected: 'selected', noMerchant: 'Merchant: not in source',
     tzMissing: 'source timezone not provided', dateMissing: 'date unavailable', utc: 'UTC',
@@ -179,7 +178,7 @@ const STRINGS: Record<Lang, Strings> = {
     pending: 'Acceptance is not confirmed. Keep this tab open and retry; the request details are unchanged.',
     acceptedTitle: 'Request accepted in the demo', reference: 'Reference', nextStep: 'Next step: an agent reviews this case. No refund has been initiated.',
     replayed: 'Existing request retrieved; no new case was created.', working: 'Working…',
-    byCurrency: 'By currency', total: 'Total of the loaded charges', count: 'charges',
+    count: 'charges',
     agentTitle: 'Agent view', agentIntro: 'Separate simulated agent access. Shows the 50 most recent cases.',
     agentLoad: 'Sign in as an agent and refresh cases', noCases: 'No cases returned.', customer: 'Customer', acceptedAt: 'Accepted in demo',
     validation: 'Select a charge, describe the issue in at least 10 characters, and confirm.',
@@ -204,7 +203,7 @@ const STRINGS: Record<Lang, Strings> = {
     statement: 'Customer statement', languageCode: 'Report language',
     agentErr401: 'The agent session expired. Sign in as an agent again.', agentErr404: 'Report not found.',
     // Guided intake chat
-    chatOpen: 'Open the guided report', chatClose: 'Close the guided report', chatYou: 'You', chatGuide: 'Guide',
+    chatClose: 'Close the guided report', chatYou: 'You', chatGuide: 'Guide',
     chatHello: 'Tell me what happened with the charge you do not recognize. Then you choose the charge and confirm.',
     chatLangPrompt: 'Report language', chatSend: 'Send',
     chatValidation: 'Choose the report language and describe what happened in at least 10 characters.',
@@ -227,7 +226,8 @@ const STRINGS: Record<Lang, Strings> = {
     check_owned_transaction_retrieved: "Charge found among the account's own charges",
     check_customer_confirmation_recorded: 'Charge confirmation recorded',
     check_transaction_lookup_failed: 'Charge lookup failed',
-    check_matching_transaction: 'Charge not identified', check_customer_confirmation: 'Charge confirmation pending'
+    check_matching_transaction: 'Charge not identified', check_customer_confirmation: 'Charge confirmation pending',
+    yourReports: 'Your reports'
   }
 };
 

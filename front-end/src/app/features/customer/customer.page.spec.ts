@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ApiError } from '../../core/http/api.service';
-import { CustomerPage, formatAmount, initialsOf } from './customer.page';
+import { CustomerPage, initialsOf } from './customer.page';
 import { LangService } from '../../shared/i18n/lang.service';
 import { CustomerService } from './customer.service';
 import { IntakeReceipt, IntakeStart, Transaction } from '../../shared/models/intake.model';
@@ -47,7 +47,6 @@ describe('CustomerPage', () => {
     await page.login();
     expect(service.signIn).toHaveBeenCalledWith('demo-ana');
     expect(page.transactions()).toEqual([tx]);
-    expect(page.totals()).toEqual([{ currency: 'BRL', total: '125.50' }]);
   });
 
   it('stays on sign-in and shows the mapped error when sign-in fails', async () => {
@@ -71,11 +70,6 @@ describe('CustomerPage', () => {
     expect(initialsOf('Ana (demo)')).toBe('A');
     expect(initialsOf('Ángela Núñez (demo)')).toBe('ÁN');
     expect(initialsOf('(demo) 7-Eleven')).toBe('');
-  });
-
-  it('formats totals with thin-space grouping and two decimals, never a currency symbol', () => {
-    expect(formatAmount(1234567.5)).toBe('1 234 567.50');
-    expect(formatAmount(89.9)).toBe('89.90');
   });
 
   describe('guided intake chat', () => {
@@ -375,8 +369,19 @@ describe('CustomerPage', () => {
       expect(again.componentInstance.step()).toBe('home');
       expect(html.textContent).toContain('99999999-8888-4777-8666-555555555555');
       expect(html.querySelector('.ar-count')?.textContent).toBe('1');
-      expect(html.textContent).toContain(p.t().inReview);
-      expect(html.querySelector('.stat .ar-chip-ok')).toBeNull();
+      const reports = [...html.querySelectorAll('.your-reports li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim());
+      expect(reports.length).toBe(1);
+      expect(reports[0]).toContain(p.t().receiptIncomplete);
+      expect(reports[0]).toContain('99999999-8888-4777-8666-555555555555');
+    });
+
+    it('shows only the greeting, the charges and the report panel; no hero, stats, currency box or floating toggle', async () => {
+      const { el } = await home();
+      expect(el.querySelector('h1')).not.toBeNull();
+      expect(el.querySelector('#cargos')).not.toBeNull();
+      for (const gone of ['.ar-card', '.agent-panel', '.stats', '.chat-toggle', '.home-top', '.your-reports']) expect(el.querySelector(gone)).withContext(gone).toBeNull(); // the hero is .ar-card; there is no .hero class
+      expect(el.querySelectorAll('.box').length).toBe(1);
+      expect(el.querySelectorAll('.report-btn').length).toBe(1);
     });
 
     it('says when more charges exist than are listed', async () => {
@@ -387,11 +392,11 @@ describe('CustomerPage', () => {
 
     it('points aria-controls at the chat only while it exists, and does not repeat the choose prompt as the legend', async () => {
       const { fixture, p, el } = await home();
-      const toggle = el.querySelector<HTMLButtonElement>('.chat-toggle')!;
-      expect(toggle.hasAttribute('aria-controls')).toBeFalse();
-      toggle.click();
+      const button = el.querySelector<HTMLButtonElement>('.report-btn')!;
+      expect(button.hasAttribute('aria-controls')).toBeFalse();
+      button.click();
       fixture.detectChanges();
-      expect(toggle.getAttribute('aria-controls')).toBe('intake-chat');
+      expect(button.getAttribute('aria-controls')).toBe('intake-chat');
       expect(el.querySelector('#intake-chat')).not.toBeNull();
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
       p.chatStatement = 'No reconozco este cargo.';
@@ -410,13 +415,11 @@ describe('CustomerPage', () => {
       expect(table.querySelectorAll(':scope > :not([role="row"])').length).toBe(0);
     });
 
-    it('opens the chat from a toggle, links the textarea to its error, and focuses the receipt', async () => {
+    it('opens the chat from a charge row, links the textarea to its error, and focuses the receipt', async () => {
       const { fixture, p, el } = await home();
-      const toggle = el.querySelector<HTMLButtonElement>('.chat-toggle')!;
-      expect(toggle.getAttribute('aria-expanded')).toBe('false');
-      toggle.click();
+      el.querySelector<HTMLButtonElement>('.report-btn')!.click();
       fixture.detectChanges();
-      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+      expect(p.choice).toBe('demo-tx-001');
       p.chatStatement = 'short';
       await p.send();
       fixture.detectChanges();

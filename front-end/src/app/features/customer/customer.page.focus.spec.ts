@@ -52,7 +52,7 @@ describe('CustomerPage focus', () => {
     fixture.nativeElement.remove();
   });
 
-  it('makes the page behind the open chat inert only at narrow widths, never the chat or its toggle', async () => {
+  it('makes the page behind the open chat inert only at narrow widths, never the chat itself', async () => {
     const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions'], { client: signal(''), card: signal(null), receipts: signal([]) });
     service.identities.and.resolveTo([]);
     service.signIn.and.resolveTo();
@@ -64,16 +64,16 @@ describe('CustomerPage focus', () => {
     const el = fixture.nativeElement as HTMLElement;
     page.identity = 'demo-ana';
     await page.login();
-    const inert = () => ['nav', 'main', '.chat-toggle', '#intake-chat'].map(sel => el.querySelector<HTMLElement>(sel)?.inert ?? null);
+    const inert = () => ['nav', 'main', '#intake-chat'].map(sel => el.querySelector<HTMLElement>(sel)?.inert ?? null);
     page.narrow.set(true);
     await fixture.whenStable();
-    expect(inert()).toEqual([false, false, false, null]);
+    expect(inert()).toEqual([false, false, null]);
     page.chatOpen.set(true);
     await fixture.whenStable();
-    expect(inert()).toEqual([true, true, false, false]);
+    expect(inert()).toEqual([true, true, false]);
     page.narrow.set(false);
     await fixture.whenStable();
-    expect(inert()).toEqual([false, false, false, false]);
+    expect(inert()).toEqual([false, false, false]);
   });
 
   async function home() {
@@ -91,7 +91,7 @@ describe('CustomerPage focus', () => {
     return { fixture, page, el: fixture.nativeElement as HTMLElement };
   }
 
-  it('acts as a modal dialog only at narrow widths, and Escape closes it back to the toggle', async () => {
+  it('acts as a modal dialog only at narrow widths, and Escape closes it back to the page heading when nothing opened it', async () => {
     const { fixture, page, el } = await home();
     page.chatOpen.set(true);
     page.narrow.set(false);
@@ -106,7 +106,7 @@ describe('CustomerPage focus', () => {
     chat()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await fixture.whenStable();
     expect(page.chatOpen()).toBeFalse();
-    expect(document.activeElement).toBe(el.querySelector('.chat-toggle'));
+    expect(document.activeElement).toBe(el.querySelector('.step h1'));
     fixture.nativeElement.remove();
   });
 
@@ -136,7 +136,7 @@ describe('CustomerPage focus', () => {
     fixture.nativeElement.remove();
   });
 
-  it('gives the narrow-width dialog its own close button, so touch and screen-reader users can leave it', async () => {
+  it('gives the panel its own close button at every width, so touch and screen-reader users can leave it', async () => {
     const { fixture, page, el } = await home();
     page.narrow.set(true);
     page.chatOpen.set(true);
@@ -147,11 +147,36 @@ describe('CustomerPage focus', () => {
     close!.click();
     await fixture.whenStable();
     expect(page.chatOpen()).toBeFalse();
-    expect(document.activeElement).toBe(el.querySelector('.chat-toggle'));
+    expect(document.activeElement).toBe(el.querySelector('.step h1'));
     page.narrow.set(false);
     page.chatOpen.set(true);
     await fixture.whenStable();
-    expect(el.querySelector('#intake-chat .chat-close')).withContext('wide: the toggle next to the panel closes it').toBeNull();
+    expect(el.querySelector('#intake-chat .chat-close')).withContext('wide: the panel still carries its own close').not.toBeNull();
+    fixture.nativeElement.remove();
+  });
+
+  it('returns focus to the charge row button that opened the panel', async () => {
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions'], { client: signal(''), card: signal(null), receipts: signal([]) });
+    service.identities.and.resolveTo([]);
+    service.signIn.and.resolveTo();
+    service.transactions.and.resolveTo({ items: [{ transaction_id: 'demo-tx-001', merchant_name: 'Mercado', occurred_at: null, source_occurred_at: '2026-02-26T13:21:51', amount: '125.50', currency: 'BRL' }], has_more: false, coverage: 'fictitious_demo_data_only' });
+    TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] });
+    const fixture = TestBed.createComponent(CustomerPage);
+    document.body.appendChild(fixture.nativeElement);
+    fixture.autoDetectChanges();
+    const page = fixture.componentInstance;
+    page.identity = 'demo-ana';
+    await page.login();
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const button = el.querySelector<HTMLButtonElement>('.report-btn')!;
+    button.focus();
+    button.click();
+    await fixture.whenStable();
+    expect(page.chatOpen()).toBeTrue();
+    page.closeChat();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(button);
     fixture.nativeElement.remove();
   });
 });
