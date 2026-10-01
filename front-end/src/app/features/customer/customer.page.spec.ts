@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ApiError } from '../../core/http/api.service';
-import { CustomerPage, formatAmount } from './customer.page';
+import { CustomerPage, formatAmount, initialsOf } from './customer.page';
 import { LangService } from '../../shared/i18n/lang.service';
 import { CustomerService } from './customer.service';
 import { IntakeReceipt, IntakeStart, Receipt, Transaction } from '../../shared/models/intake.model';
@@ -158,6 +158,12 @@ describe('CustomerPage', () => {
     const [first, second] = service.submitCase.calls.allArgs().map(args => args[0]);
     expect(second.idempotency_key).not.toBe(first.idempotency_key);
     expect(second.customer_statement).toBe('A corrected description of the charge.');
+  });
+
+  it('takes initials only from words that start with a letter', () => {
+    expect(initialsOf('Ana (demo)')).toBe('A');
+    expect(initialsOf('Ángela Núñez (demo)')).toBe('ÁN');
+    expect(initialsOf('(demo) 7-Eleven')).toBe('');
   });
 
   it('formats totals with thin-space grouping and two decimals, never a currency symbol', () => {

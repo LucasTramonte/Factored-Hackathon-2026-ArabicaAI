@@ -98,7 +98,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     return this.booted() ? 'disc disc--top' : 'disc disc--boot';
   });
   readonly displayName = computed(() => this.identities().find(i => i.customer_id === this.client())?.display_name ?? this.client());
-  readonly initials = computed(() => this.displayName().split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || 'AA');
+  readonly initials = computed(() => initialsOf(this.displayName()) || 'AA');
   /** The charge being reported: the frozen one while a request is pending, else the one chosen in the list. A method, not a computed, because `selected` is a plain field. */
   selectedTx(): Transaction | null {
     return this.transactions().find(tx => tx.transaction_id === (this.pending()?.transaction_id ?? this.selected)) ?? null;
@@ -321,7 +321,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   merchantInitials(tx: Transaction): string {
-    return tx.merchant_name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+    return initialsOf(tx.merchant_name);
   }
 
   private reset(): void {
@@ -345,4 +345,9 @@ export class CustomerPage implements OnInit, OnDestroy {
 export function formatAmount(n: number): string {
   const [int, dec] = n.toFixed(2).split('.');
   return int.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + dec;
+}
+
+/** Up to two initials from the words that start with a Unicode letter: "Ana (demo)" → "A", "José da Silva" → "JD". */
+export function initialsOf(name: string): string {
+  return name.split(/\s+/).filter(w => /^\p{L}/u.test(w)).slice(0, 2).map(w => w[0].toUpperCase()).join('');
 }
