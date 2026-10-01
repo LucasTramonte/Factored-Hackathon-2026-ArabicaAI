@@ -178,6 +178,8 @@
           <section class="chat" id="intake-chat" aria-labelledby="chat-title" [attr.role]="narrow() ? 'dialog' : null"
             [attr.aria-modal]="narrow() ? 'true' : null" (keydown.escape)="closeChat()">
             <h2 class="ar-panel-title" id="chat-title" #chatPanel tabindex="-1">{{ t().guideTitle }}</h2>
+            <!-- As a modal dialog the toggle outside is hidden from assistive tech, so the dialog carries its own close. -->
+            @if (narrow()) { <button type="button" class="ar-btn-secondary chat-close" (click)="closeChat()">{{ t().chatClose }}</button> }
             <ol class="chat-log" role="log" aria-live="polite">
               @for (line of log(); track $index) {
                 <li [class]="'chat-' + line.from" [attr.id]="$last && line.from === 'bot' ? 'chat-prompt' : null"><span class="sr-only">{{ line.from === 'me' ? t().chatYou : t().chatGuide }}: </span>{{ 'key' in line ? t()[line.key] : line.text }}</li>

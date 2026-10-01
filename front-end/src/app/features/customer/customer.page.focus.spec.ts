@@ -139,4 +139,23 @@ describe('CustomerPage focus', () => {
     expect(document.activeElement).toBe(el.querySelector('#chat-title'));
     fixture.nativeElement.remove();
   });
+
+  it('gives the narrow-width dialog its own close button, so touch and screen-reader users can leave it', async () => {
+    const { fixture, page, el } = await home();
+    page.narrow.set(true);
+    page.chatOpen.set(true);
+    await fixture.whenStable();
+    const close = el.querySelector<HTMLButtonElement>('#intake-chat .chat-close');
+    expect(close).withContext('a close control inside the dialog').not.toBeNull();
+    expect(close!.textContent!.trim()).toBe(page.t().chatClose);
+    close!.click();
+    await fixture.whenStable();
+    expect(page.chatOpen()).toBeFalse();
+    expect(document.activeElement).toBe(el.querySelector('.chat-toggle'));
+    page.narrow.set(false);
+    page.chatOpen.set(true);
+    await fixture.whenStable();
+    expect(el.querySelector('#intake-chat .chat-close')).withContext('wide: the toggle next to the panel closes it').toBeNull();
+    fixture.nativeElement.remove();
+  });
 });

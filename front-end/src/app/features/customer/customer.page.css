@@ -1,10 +1,12 @@
-/* Guided intake chat: a launcher and a non-modal panel, built from the global tokens. */
+/* Guided intake chat: a launcher and a panel, built from the global tokens. The panel is a modal dialog at 1180px and
+   below (the page behind is inert) and a non-modal region above that. */
 .chat-toggle { position: fixed; right: 24px; bottom: 24px; z-index: 20; }
 .chat {
   position: fixed; right: 24px; bottom: 84px; z-index: 20; width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 120px); max-height: calc(100dvh - 120px);
   overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 20px;
   background: var(--surface-raised); border: var(--hairline) solid var(--line-strong); border-radius: var(--radius-lg);
 }
+.chat-close { align-self: flex-end; }
 .chat-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .chat-log li { max-width: 85%; padding: 8px 12px; border-radius: var(--radius-md); overflow-wrap: anywhere; font: 400 14px/20px var(--font-sans); }
 .chat-bot { align-self: flex-start; background: var(--surface-sunken); }
@@ -17,5 +19,5 @@
 /* Wider than the 1180px breakpoint the page behind stays usable, so the panel must not grow over the topbar and its
    language switch (WCAG 2.4.11): its top stays at least 96px down (84px bottom + 180px - 84px). Keep the breakpoint in
    sync with `narrowQuery` in customer.page.ts and the 1180px rule in styles.css. */
-@media (min-width: 1181px) { .chat { max-height: calc(100vh - 180px); max-height: calc(100dvh - 180px); } }
+@media (width > 1180px) { .chat { max-height: calc(100vh - 180px); max-height: calc(100dvh - 180px); } } /* range syntax: no gap at fractional widths */
 @media (max-width: 640px) { .chat-toggle { right: 16px; bottom: 16px; } .chat { right: 16px; bottom: 72px; } }
