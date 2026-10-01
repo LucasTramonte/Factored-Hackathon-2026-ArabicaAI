@@ -140,3 +140,51 @@ def test_country_spelling_is_reported_per_layer(tmp_path):
     # layer, stored country, rows: Bronze keeps the raw spellings, Silver the canonical ones.
     assert rows == [["bronze", "USA", 2], ["bronze", "Mexico", 1], ["bronze", "Spain", 1],
                     ["silver", "Colombia", 1], ["silver", "México", 1], ["silver", "USA", 1]]
+
+
+def test_event_clock_reports_hour_shape_and_partition_rollover_per_country(tmp_path):
+    db = make_db(tmp_path / "f.duckdb", with_holdout=True)
+    rows = rf.run(db, only=("DF-020",))["results"][0]["rows"]
+    # fact, country, events, min/max hour ratio, busiest hour, last hour filed under the previous
+    # partition, first hour filed under its own day, rows filed under the previous partition.
+    assert rows == [["fact_complaints", "Colombia", 1, 1.0, 12, None, 12, 0],
+                    ["fact_complaints", "México", 1, 1.0, 2, 2, None, 1],
+                    ["fact_transactions", "Colombia", 1, 1.0, 12, None, 12, 0],
+                    ["fact_transactions", "México", 2, 1.0, 3, 3, 12, 1]]
+
+
+def test_lookback_counts_purchases_before_each_unrecognized_charge_complaint(tmp_path):
+    db = make_db(tmp_path / "f.duckdb", with_holdout=True)
+    with duckdb.connect(str(db)) as con:
+        # Exactly 30 days before Q1 is outside the 30-day window (c - W, c] but inside the 45-day one.
+        con.execute("INSERT INTO silver.fact_transactions VALUES "
+                    "('T4','2025-02-08 02:00:00','2025-02-08','P1','C1','Purchase','Approved',1,'USD',1,false,'Cafe','Food','México'),"
+                    "('T5','2025-02-07 12:00:00','2025-02-07','P1','C1','Purchase','Declined',1,'USD',1,false,'Cafe','Food','México'),"
+                    "('T6','2023-08-01 12:00:00','2023-08-01','P1','C1','Purchase','Approved',1,'USD',1,false,'Old','Food','México')")
+        # Left-censored: a complaint before 2023-10-15 has truncated history and is excluded.
+        con.execute("INSERT INTO silver.fact_complaints VALUES "
+                    "('Q3','2023-09-01 12:00:00','2023-09-01','C1','Cargo no reconocido','x',NULL,NULL,NULL),"
+                    "('Q4','2025-06-01 12:00:00','2025-06-01','C2','Cargo no reconocido','x',NULL,NULL,NULL)")
+    rows = {r[0]: r for r in rf.run(db, only=("DF-021",))["results"][0]["rows"]}
+    # country, complaints, n30/n45/n90/n120 quantiles (p50, p90, p95, p99), share with none in
+    # 45 and 120 days, days since the last purchase (p50, p95, p99).
+    assert rows["México"][:6] == ["México", 1, [2.0] * 4, [3.0] * 4, [3.0] * 4, [3.0] * 4]
+    assert rows["México"][6:] == [0.0, 0.0, [7.0] * 3]
+    assert rows["Colombia"][1:] == [1, [0.0] * 4, [0.0] * 4, [0.0] * 4, [0.0] * 4, 1.0, 1.0, None]  # no purchase: no age to measure
+    assert rows[None][1] == 2
+
+
+def test_cohort_strata_count_design_window_unrecognized_charge_customers(tmp_path):
+    db = make_db(tmp_path / "f.duckdb", with_holdout=True)
+    rows = rf.run(db, only=("DF-022",))["results"][0]["rows"]
+    # country, segment, accent, customers, share of all such customers (C2's complaint is in the holdout).
+    assert rows == [["México", "Basic", "mexican", 1, 1.0], ["México", "Basic", None, 1, 1.0],
+                    ["México", None, None, 1, 1.0], [None, None, None, 1, 1.0]]
+
+
+def test_cohort_strata_label_missing_values_apart_from_rollup_subtotals(tmp_path):
+    db = make_db(tmp_path / "f.duckdb", with_holdout=False)
+    with duckdb.connect(str(db)) as con:
+        con.execute("UPDATE silver.dim_customers SET detected_accent = NULL WHERE customer_id = 'C1'")
+    rows = rf.run(db, only=("DF-022",))["results"][0]["rows"]
+    assert ["México", "Basic", "(none)", 1, 1.0] in rows
