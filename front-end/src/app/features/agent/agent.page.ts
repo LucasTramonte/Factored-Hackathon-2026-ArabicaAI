@@ -4,7 +4,7 @@ import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ApiError } from '../../core/http/api.service';
 import { formatSourceTime } from '../../shared/format/source-time.util';
-import { LangService, Strings, errorText } from '../../shared/i18n/lang.service';
+import { LangService, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
 import { AgentCase, AgentIntake, AgentIntakeDetail, IntakeKind } from '../../shared/models/intake.model';
@@ -43,6 +43,11 @@ export class AgentPage {
     // The route title is static, so the tab title follows the interface language here.
     const title = inject(Title);
     effect(() => title.setTitle(`ArabicaAI · ${this.t().agentTitle}`));
+  }
+
+  /** A server check or open-question code in the interface language; the raw code stays visible beside it. */
+  check(code: string): string {
+    return checkText(this.t(), code);
   }
 
   kindLabel(kind: IntakeKind): string {

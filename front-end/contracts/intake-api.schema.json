@@ -18,13 +18,15 @@
     },
     "intakeReceipt": {
       "type": "object", "additionalProperties": false,
-      "required": ["episode_id", "protocol", "kind", "accepted_at", "replayed", "next_step_code"],
+      "required": ["episode_id", "protocol", "kind", "accepted_at", "replayed", "actions_taken", "unresolved_questions", "next_step_code"],
       "properties": {
         "episode_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
         "protocol": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
         "kind": { "type": "string", "pattern": "^(complete|technical|incomplete)$" },
         "accepted_at": { "type": "string", "minLength": 1 },
         "replayed": { "type": "boolean" },
+        "actions_taken": { "type": "array", "items": { "type": "string", "pattern": "^(owned_transaction_retrieved|customer_confirmation_recorded|transaction_lookup_failed)$" } },
+        "unresolved_questions": { "type": "array", "items": { "type": "string", "pattern": "^(matching_transaction|customer_confirmation)$" } },
         "next_step_code": { "const": "await_human_review" }
       }
     },

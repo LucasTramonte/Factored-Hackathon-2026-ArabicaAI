@@ -75,13 +75,14 @@
             </dl>
           } @else { <p class="status-line">{{ t().noEvidence }}</p> }
 
-          <h3>{{ t().actionsTaken }}</h3>
-          @if (d.actions_taken.length) { <ul>@for (a of d.actions_taken; track $index) { <li><code>{{ a }}</code></li> }</ul> }
-          @else { <p class="status-line">{{ t().none }}</p> }
-
-          <h3>{{ t().openQuestions }}</h3>
-          @if (d.unresolved_questions.length) { <ul>@for (q of d.unresolved_questions; track $index) { <li><code>{{ q }}</code></li> }</ul> }
-          @else { <p class="status-line">{{ t().none }}</p> }
+          <section id="intake-checks" class="ar-panel">
+            <h3>{{ t().whatWeChecked }}</h3>
+            @if (d.actions_taken.length) { <ul>@for (a of d.actions_taken; track $index) { <li>{{ check(a) }} <code>{{ a }}</code></li> }</ul> }
+            @else { <p class="status-line">{{ t().none }}</p> }
+            <h3>{{ t().openQuestions }}</h3>
+            @if (d.unresolved_questions.length) { <ul>@for (q of d.unresolved_questions; track $index) { <li>{{ check(q) }} <code>{{ q }}</code></li> }</ul> }
+            @else { <p class="status-line">{{ t().none }}</p> }
+          </section>
 
           <h3>{{ t().history }}</h3>
           <ol class="history">

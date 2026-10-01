@@ -99,6 +99,8 @@ async function finishIntake(request, store, complete) {
     }
     return json({ episode_id: episodeId, protocol: receipt.complete_case_id ?? receipt.handoff_id,
       kind: receipt.kind, accepted_at: receipt.accepted_at, replayed: result.replayed,
+      // From the read-back row, so the customer sees only what was durably recorded.
+      actions_taken: JSON.parse(receipt.actions_json), unresolved_questions: JSON.parse(receipt.questions_json),
       next_step_code: 'await_human_review' }, result.replayed ? 200 : 201);
   } catch {
     try { await store.recordIntakeAttempt({ customerId, episodeId, toolCalls, operationDuration: Math.floor(performance.now() - started) }); } catch { /* Persistence may also be unavailable; never promise a receipt. */ }
