@@ -222,7 +222,7 @@ Before implementing an agent or a major analytical workflow, score each candidat
 | Evaluation | Can the outcome be measured on held-out cases? |
 | Scope | Can the workflow be demonstrated without solving the entire bank? |
 
-The current hypothesis is to investigate transaction-dispute intake first, using transactional/account inquiries as a lower-risk comparison path and digital/marketing analysis as supporting context. This remains a hypothesis until the contact-demand scorecard validates it.
+The V1 workflow is unrecognized-charge intake with human handoff, accepted in [ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md) (2026-09-29). Its value remains a hypothesis to measure; the choice of workflow is decided.
 
 ## Open Questions
 

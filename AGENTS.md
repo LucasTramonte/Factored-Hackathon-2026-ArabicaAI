@@ -9,7 +9,7 @@
 | `front-end/` | Angular client; API response contracts in `front-end/contracts/`. |
 | `SYSTEM_DESIGN.md` | The narrative deliverable: customer, problem, solution, architecture, results, cost and risks. It links to the documents below rather than repeating them. |
 | `evals/intake/`, `EVALUATION.md` | Decision-point cases, checklist baseline, episode KPI scorer; `EVALUATION.md` is the evaluation deliverable (test sets, leakage controls, options considered). |
-| `DATA_QUALITY.md`, `data_profiles/findings/` | Data quality and findings register; each finding has a query. Design-scope facts come from the design window only (ADR-005). |
+| `DATA_QUALITY.md`, `data_profiles/findings/` | Data quality and findings register; each finding has a query. Design-scope facts come from the design window only (ADR-005, Proposed). |
 | `Docs/ADRs/` | Decision records (format and index in `Docs/ADRs/README.md`). Read ADR-002 to ADR-004 before changing intake scope, runtime or capacity. |
 | `Docs/Plans/` | Runbooks and roadmaps (`intake-demo.md`, `intake-roadmap.md`). |
 
@@ -33,7 +33,7 @@
 
 ## Intake service rules
 
-- One online runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Don't add a second API implementation. Route handlers never build SQL, and new statements go in `back-end/src/store/d1.js`.
+- One online runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md), Proposed). Don't add a second API implementation. Route handlers never build SQL, and new statements go in `back-end/src/store/d1.js`.
 - Identity comes from the session only, never from a request body or message text. Customer and agent sessions stay separate. Committed identities (fictitious, plus the one-day slice's customer) live in `back-end/src/config/identities.json`, which the Worker and the Gold slice both read. Dataset cohort customers are listed from D1 (`customers.source = 'dataset'`) and are never committed.
 - Schema changes go through `wrangler d1 migrations`, are additive, and are applied to local D1 in tests before `--remote`. Alembic is not used; ADR-003 explains why and what would change that.
 - The Worker never reads S3, DuckDB or Silver. Online data arrives only as a reviewed Gold slice seed. The slice keeps the Bronze source amount and currency and the timezone-free source timestamp.
@@ -52,7 +52,7 @@
 - `make intake-setup` / `make intake-test`: install and run the intake suites (Gold slice, Angular specs, Worker unit and local-D1 integration tests).
 - `make intake-sample-{bronze,silver,quality,slice}`, `make intake-seed-local`: the bounded one-day sample → reviewed D1 seed → local D1.
 
-See `ARCHITECTURE.md`, `REPRODUCIBILITY.md` and `.github/skills/` for further procedures. `Docs/Plans/marketing-product-trust.md` records the deferred report rebuild; old HTML metrics are withdrawn until that gate passes.
+See `ARCHITECTURE.md`, `REPRODUCIBILITY.md` and `.github/skills/` for further procedures. The Marketing/Product HTML, intake decision page and aggregates were rebuilt from one verified Silver run and passed the gate in `Docs/Plans/marketing-product-trust.md` (release record); they are in `data_foundation/reports/`.
 
 ## Mandatory Session Startup: Hackathon Context
 

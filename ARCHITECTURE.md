@@ -23,7 +23,7 @@ The quality gate queries Bronze and Silver in DuckDB. It reports table/schema pr
 
 Python keeps only contracts and aggregate counters. DuckDB limits memory and uses ignored `data/duckdb_tmp` for external joins and grouping. Bronze and Silver share the ignored local database; S3 input is never modified. AWS credentials come from the runtime profile via DuckDB's credential chain and are not embedded in code or Docker images.
 
-The previous CSV baseline was retired only after its check semantics were compared on the same controlled source snapshot; [the parity record](data_pipelines/quality/PARITY.md) also reconciles the full S3 Bronze run with the installed CSV inventory. The prior Marketing/Product HTML and intake dashboard were withdrawn because their source and links did not meet the new evidence gate. The rebuild plan is in `Docs/Plans/marketing-product-trust.md`.
+The previous CSV baseline was retired only after its check semantics were compared on the same controlled source snapshot; [the parity record](data_pipelines/quality/PARITY.md) also reconciles the full S3 Bronze run with the installed CSV inventory. The Marketing/Product HTML, intake decision page and aggregates were rebuilt from one verified Silver run and passed the gate in `Docs/Plans/marketing-product-trust.md` (release record); they are in `data_foundation/reports/`.
 
 ## Optional transcript-intent enrichment
 

@@ -17,3 +17,16 @@ atualizar_datas_demo.py
 criar_interface.py
 output.md
 front-end/.angular/
+# Withheld frozen-evaluation material (evals/intake/preregistration/make_clean_checkout.py); never in an image
+evals/intake/frozen_es_pt_v1/draft.json
+evals/intake/frozen_es_pt_v1/build_phase1.py
+evals/intake/frozen_es_pt_v1/verifier_input.jsonl
+evals/intake/frozen_es_pt_v1/verifier_output.jsonl
+evals/intake/frozen_es_pt_v1/queues.json
+evals/intake/frozen_es_pt_v1/reviews/
+evals/intake/frozen_es_pt_v1/review_state.json
+evals/intake/frozen_es_pt_v1/review_state_es.json
+evals/intake/frozen_es_pt_v1/session_record.json
+evals/intake/frozen_es_pt_v1.json
+evals/intake/frozen_es_pt_v1.candidate.json
+evals/intake/frozen_es_pt_v1.manifest.draft.json
