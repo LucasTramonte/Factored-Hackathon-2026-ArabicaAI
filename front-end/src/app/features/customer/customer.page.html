@@ -1,36 +1,15 @@
 <div class="stage">
-  <div [class]="discClass()" aria-hidden="true">
-    <svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="var(--accent)"></circle><g class="slit"><rect x="29" y="12" width="6" height="40" rx="3" fill="var(--surface)"></rect></g></svg>
-  </div>
 
   @switch (step()) {
-    @case ('intro') {
-      <section class="step intro" aria-label="ArabicaAI" [class.is-done]="introDone()">
-        @if (!introDone()) { <button type="button" class="link-btn intro-skip" (click)="skipIntro()">{{ t().skipIntro }}</button> }
-        <div class="intro-words" aria-live="off" [class.is-done]="introDone()">
-          <p class="intro-word" lang="es" [class.is-current]="lang.lang() === 'es'">Hola</p><p class="intro-word" lang="pt" [class.is-current]="lang.lang() === 'pt'">Olá</p><p class="intro-word" lang="en" [class.is-current]="lang.lang() === 'en'">Hello</p>
-        </div>
-        <p class="intro-purpose">{{ t().tagline }}</p>
-        <p class="sr-only">{{ t().promise }}</p>
-        <div class="intro-cta">
-          <button type="button" class="ar-btn" (click)="start()">{{ t().start }}
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5l7 7-7 7"></path></svg>
-          </button>
-          <div class="lang-links" role="group" [attr.aria-label]="t().language">
-            <button type="button" lang="es" [attr.aria-pressed]="lang.lang() === 'es'" (click)="lang.set('es')">Español</button>
-            <button type="button" lang="pt" [attr.aria-pressed]="lang.lang() === 'pt'" (click)="lang.set('pt')">Português</button>
-            <button type="button" lang="en" [attr.aria-pressed]="lang.lang() === 'en'" (click)="lang.set('en')">English</button>
-          </div>
-        </div>
-        <p class="intro-foot">ArabicaAI</p>
-      </section>
-    }
-
     @case ('login') {
       <section class="step login">
-        <div class="login-promise" aria-hidden="true">
-          <p>{{ t().promise1 }}</p><p>{{ t().promise2 }}</p><p>{{ t().promise3 }}</p>
-        </div>
+        <header class="welcome">
+          <h1 tabindex="-1" [attr.lang]="lang.lang()">{{ t().greeting }}</h1>
+          <p class="purpose">{{ t().tagline }}</p>
+          <ul class="explain">
+            <li>{{ t().explain1 }}</li><li>{{ t().explain2 }}</li><li>{{ t().explain3 }}</li>
+          </ul>
+        </header>
         <div class="login-form">
           <div class="topbar">
             <span class="ar-wordmark">Arabica<b>AI</b></span>
@@ -38,9 +17,10 @@
           </div>
           <div class="stack">
             <div style="display: flex; flex-direction: column; gap: 10px">
-              <h1 class="headline" tabindex="-1">{{ t().whoAreYou }}</h1>
+              <h2 class="headline">{{ t().whoAreYou }}</h2>
             </div>
             @if (error()) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
+            @if (identitiesLoading()) { <p id="identities-loading" class="status-line" role="status">{{ t().working }}</p> }
             <app-customer-picker [identities]="identities()" [disabled]="busy() || identityLocked()" [(value)]="identity" />
             <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
               <button type="button" class="ar-btn" (click)="login()" [disabled]="busy() || !identity">
@@ -50,7 +30,7 @@
               @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
             </div>
           </div>
-          <p class="ar-small" style="display: flex; align-items: center; gap: 10px"><span class="ar-chip ar-chip-warn">{{ t().sandbox }}</span>{{ t().synthetic }} {{ t().onlyYours }}</p>
+          <p class="ar-small" style="display: flex; align-items: center; gap: 10px"><span class="ar-chip ar-chip-warn">{{ t().sandbox }}</span>{{ t().synthetic }}</p>
         </div>
       </section>
     }
@@ -59,10 +39,8 @@
       <div class="step home">
         <nav class="ar-sidebar" [attr.aria-label]="t().mainNav" [inert]="chatOpen() && narrow()">
           <div style="display: flex; flex-direction: column; gap: 28px">
-            <div style="padding: 0 8px"><span class="ar-lockup"><span class="sidebar-mark-slot"></span><span class="ar-wordmark" style="font-size: 20px">Arabica<b>AI</b></span></span></div>
+            <div style="padding: 0 8px"><span class="ar-lockup"><app-mark [size]="26" /><span class="ar-wordmark" style="font-size: 20px">Arabica<b>AI</b></span></span></div>
             <div class="ar-nav">
-              <a href="#inicio" aria-current="page" [attr.aria-label]="t().home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"></path><path d="M5 10v10h14V10"></path></svg><span class="label">{{ t().home }}</span></a>
-              <a href="#cargos" [attr.aria-label]="t().charges"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path></svg><span class="label">{{ t().charges }}</span></a>
               <a [routerLink]="frozen() ? null : '/agent'" [attr.aria-disabled]="frozen() ? true : null" [attr.aria-label]="t().agentView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M8 9h8"></path><path d="M8 13h8"></path><path d="M8 17h5"></path></svg><span class="label">{{ t().agentView }}</span>@if (receipts().length) { <span class="ar-count">{{ receipts().length }}</span> }</a>
             </div>
           </div>
@@ -76,17 +54,6 @@
           <div class="topbar">
             <div style="display: flex; flex-direction: column; gap: 4px">
               <h1 class="ar-h1" tabindex="-1" style="font-size: 28px; line-height: 36px">{{ t().hello }}, {{ card()?.first_name || displayName() }}</h1>
-              <span class="ar-mono" style="color: var(--ink-muted)">{{ transactions().length }} {{ t().loaded }}</span>
-            </div>
-            <app-lang-switch />
-          </div>
-
-          @if (error()) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
-
-          <div class="home-top">
-            <div class="ar-card">
-              <div class="ar-card-meta"><span>{{ t().demoAccount }}</span><span style="font-family: var(--font-mono)">{{ t().sandbox }}</span></div>
-              <span class="ar-card-number">{{ displayName() }}</span>
               @if (card()?.products?.length) {
                 <ul class="products" [attr.aria-label]="t().products">
                   @for (p of card()!.products; track $index) {
@@ -94,40 +61,11 @@
                   }
                 </ul>
               }
-              <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 12px">
-                <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; line-height: 16px; opacity: .85">{{ t().loadedCharges }}</span><span class="ar-amount-lg">{{ transactions().length }}</span></span>
-                <span style="display: flex; flex-direction: column; gap: 2px; text-align: right"><span style="font-size: 12px; line-height: 16px; opacity: .85">{{ t().currencies }}</span><span class="ar-amount">@for (x of totals(); track x.currency) { <span>{{ x.currency }} </span> } @empty { <span>—</span> }</span></span>
-              </div>
             </div>
-            <section class="agent-panel">
-              <div class="agent-panel-head">
-                <app-mark [size]="40" slit="var(--accent-soft)" />
-                <div style="display: flex; flex-direction: column; gap: 4px"><span class="ar-tile-title">{{ t().guideTitle }}</span><span class="ar-small" style="font-size: 14px; line-height: 20px">{{ t().guideBlurb }}</span></div>
-              </div>
-              <div class="agent-panel-foot">
-                <div class="agent-facts"><span>{{ lang.lang() }}</span><span>{{ client() }}</span><span>{{ transactions().length }} {{ t().count }}</span></div>
-                <button type="button" class="ar-btn" style="min-height: 40px; padding: 0 16px; font-size: 14px" (click)="openChat()" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null">{{ t().report }}</button>
-              </div>
-            </section>
-            <div class="stats">
-              <section class="stat">
-                <span class="ar-caption">{{ t().total }}</span>
-                @for (x of totals(); track x.currency) { <span class="stat-value">{{ x.total }} {{ x.currency }}</span> } @empty { <span class="stat-value">—</span> }
-              </section>
-              <section class="stat">
-                <span class="ar-caption">{{ t().openCases }}</span>
-                @if (receipts().length || (frozen() && frozen()!.path !== 'start')) {
-                  <span style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap"><span class="stat-value">{{ receipts().length }}</span>
-                    @if (lastReceipt(); as last) { <span class="ar-chip" [class.ar-chip-ok]="last.receipt.kind === 'complete'">{{ t()[receiptChip[last.receipt.kind]] }}</span> }
-                    @if (frozen() && frozen()!.path !== 'start') { <span class="ar-chip ar-chip-warn">{{ t().chipPending }}</span> }
-                  </span>
-                  @if (lastReceipt(); as last) { <span class="ar-caption ar-mono" style="font-size: 12px">{{ last.receipt.protocol }}</span> }
-                } @else {
-                  <span class="stat-value">0</span><span class="ar-caption">{{ t().none }}</span>
-                }
-              </section>
-            </div>
+            <app-lang-switch />
           </div>
+
+          @if (error()) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
 
           <div class="home-grid">
             <section class="box" id="cargos">
@@ -163,25 +101,21 @@
               </div>
             </section>
 
-            <section class="box">
-              <div class="box-head"><h2>{{ t().byCurrency }}</h2></div>
-              <div class="box-body" style="padding-top: 4px; padding-bottom: 8px">
-                @for (x of totals(); track x.currency) {
-                  <div class="cat"><span class="n">{{ x.currency }}</span><span class="a">{{ x.total }} {{ x.currency }}</span></div>
-                } @empty { <p class="ar-caption" style="padding: 10px 0">{{ t().empty }}</p> }
-              </div>
-            </section>
+            @if (receipts().length) {
+              <section class="your-reports" aria-labelledby="your-reports-title">
+                <h3 id="your-reports-title">{{ t().yourReports }}</h3>
+                <ul>@for (r of receipts(); track r.receipt.protocol) { <li>{{ t()[receiptTitleKey[r.receipt.kind]] }} <span class="ar-mono">{{ r.receipt.protocol }}</span></li> }</ul>
+              </section>
+            }
           </div>
         </main>
 
-        <button type="button" class="ar-btn chat-toggle" #chatToggle (click)="chatOpen.set(!chatOpen())" [attr.aria-expanded]="chatOpen()" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null">{{ chatOpen() ? t().chatClose : t().chatOpen }}</button>
         @if (chatOpen()) {
           <!-- At narrow widths the page behind is inert, so the panel is a modal dialog there; Escape closes it at any width. -->
           <section class="chat" id="intake-chat" aria-labelledby="chat-title" [attr.role]="narrow() ? 'dialog' : null"
             [attr.aria-modal]="narrow() ? 'true' : null" (keydown.escape)="closeChat()">
             <h2 class="ar-panel-title" id="chat-title" #chatPanel tabindex="-1">{{ t().guideTitle }}</h2>
-            <!-- As a modal dialog the toggle outside is hidden from assistive tech, so the dialog carries its own close. -->
-            @if (narrow()) { <button type="button" class="ar-btn-secondary chat-close" (click)="closeChat()">{{ t().chatClose }}</button> }
+            <button type="button" class="ar-btn-secondary chat-close" (click)="closeChat()">{{ t().chatClose }}</button>
             <ol class="chat-log" role="log" aria-live="polite">
               @for (line of log(); track $index) {
                 <li [class]="'chat-' + line.from" [attr.id]="$last && line.from === 'bot' ? 'chat-prompt' : null"><span class="sr-only">{{ line.from === 'me' ? t().chatYou : t().chatGuide }}: </span>{{ 'key' in line ? t()[line.key] : line.text }}</li>

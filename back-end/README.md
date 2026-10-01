@@ -81,7 +81,7 @@ Every route except `GET /healthz` needs the team gate (HTTP Basic, below Cloudfl
 
 Agent routes are read-only; nothing changes status, refunds, blocks a card or decides fraud. A customer session never opens an agent route and an agent session never opens a customer route.
 
-`GET /agent/intakes` is the authoritative queue for guided reports. The legacy `GET /agent/cases` is unchanged: it lists every confirmed case row, including a guided complete case whose reservation is still `handoff_pending` after a lost read-back. In that case the customer got 503 and no reference, and a same-owner retry with the same key completes it. Until then the episode counts as pending in the event export.
+`GET /agent/intakes` is the authoritative queue for guided reports. The legacy `GET /agent/cases` is unchanged and the client no longer calls it: it lists every confirmed case row, including a guided complete case whose reservation is still `handoff_pending` after a lost read-back. In that case the customer got 503 and no reference, and a same-owner retry with the same key completes it. Until then the episode counts as pending in the event export.
 
 ## Operator scripts: idle closure and event export
 

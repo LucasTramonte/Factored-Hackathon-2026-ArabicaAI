@@ -26,9 +26,8 @@ describe('AgentPage', () => {
   const el = () => fixture.nativeElement as HTMLElement;
 
   beforeEach(async () => {
-    service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'cases', 'intakes', 'intakeDetail']);
+    service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'intakes', 'intakeDetail']);
     service.signIn.and.resolveTo();
-    service.cases.and.resolveTo([]);
     service.intakes.and.resolveTo({ items: [intake(P1), intake(P2, 'technical')], has_more: true, scope: 'synthetic_demo_only' });
     await TestBed.configureTestingModule({ imports: [AgentPage], providers: [{ provide: AgentService, useValue: service }, provideRouter([])] })
       .compileComponents();
@@ -50,26 +49,31 @@ describe('AgentPage', () => {
     return button;
   }
 
-  it('loads cases and intakes only after starting an agent session', async () => {
+  it('shows the intake queue only before a detail is opened; no legacy case list', async () => {
+    await page.load();
+    fixture.detectChanges();
+    expect(el().querySelectorAll('section.box').length).toBe(1);
+  });
+
+  it('loads the intake queue only after starting an agent session', async () => {
     const order: string[] = [];
     service.signIn.and.callFake(async () => { order.push('session'); });
-    service.cases.and.callFake(async () => { order.push('cases'); return []; });
+    service.intakes.and.callFake(async () => { order.push('intakes'); return { items: [], has_more: false, scope: 'synthetic_demo_only' as const }; });
     await page.load();
-    expect(order).toEqual(['session', 'cases']);
+    expect(order).toEqual(['session', 'intakes']);
     expect(service.intakes).toHaveBeenCalledTimes(1);
     expect(page.loaded()).toBeTrue();
   });
 
   it('shows translated kinds, the has_more note and no hard-coded TX label', async () => {
-    service.cases.and.resolveTo([{ ...detail(P1).verified_evidence.transaction!, protocol: P1, customer_id: 'c', display_name: 'Ana', customer_statement: 'x'.repeat(10), customer_confirmed: true, status: 'accepted', accepted_at: '2026-09-30T12:00:00.000Z' }]);
-    await page.load();
-    fixture.detectChanges();
+    service.intakeDetail.and.resolveTo(detail(P1));
+    await loadAndOpen();
     const text = el().textContent!;
     expect(text).toContain(t().kindComplete);
     expect(text).toContain(t().kindTechnical);
     expect(text).toContain(t().queueMore);
-    expect(text).toContain(t().transactionId);
-    expect(el().querySelector('.case-meta b')!.textContent).toBe(t().transactionId);
+    expect([...el().querySelectorAll('.detail-meta dt')].map(d => d.textContent)).toContain(t().transactionId);
+    expect(text).not.toMatch(/\bTX\b/);
   });
 
   it('opens a detail, moves focus to its heading and returns focus on close', async () => {
@@ -161,11 +165,11 @@ describe('AgentPage', () => {
     expect(page.intakes().length).toBe(2);
   });
 
-  it('shows the mapped error and no stale cases when sign-in fails', async () => {
+  it('shows the mapped error and no stale intakes when sign-in fails', async () => {
     service.signIn.and.rejectWith(new ApiError(401, 'Session expired.'));
     await page.load();
     expect(page.error()).toBe(t().agentErr401);
-    expect(page.cases()).toEqual([]);
+    expect(page.intakes()).toEqual([]);
     expect(page.loaded()).toBeFalse();
   });
 

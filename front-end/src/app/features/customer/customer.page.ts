@@ -1,4 +1,4 @@
-import { Component, ElementRef, Injector, NgZone, OnDestroy, OnInit, Signal, afterNextRender, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, Injector, OnDestroy, OnInit, Signal, afterNextRender, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -10,11 +10,11 @@ import { CustomerPicker } from '../../shared/customer-picker/customer-picker.com
 import { ApiError } from '../../core/http/api.service';
 import { Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
   Transaction } from '../../shared/models/intake.model';
-import { CustomerService, ReceiptEntry } from './customer.service';
+import { CustomerService } from './customer.service';
 
 /**
- * The customer flow as one connected screen: intro, sign-in, home. The disc is a single element that
- * travels between the three steps. Sign in, then the guided chat: describe the charge, choose and confirm
+ * The customer flow: sign-in (with the purpose stated on the same screen), then home. Nothing animates and
+ * nothing waits on a timer. Sign in, then the guided chat: describe the charge, choose and confirm
  * one of your own charges, or ask for review without one. A submitted payload and its idempotency key
  * stay frozen until acceptance is known, so a retry
  * can never create a second case or send edited content. A definitive rejection (404, 409, 413 or 422)
@@ -22,7 +22,7 @@ import { CustomerService, ReceiptEntry } from './customer.service';
  */
 /** Rejections that retrying can't fix; 401, 503 and network failures keep the frozen retry. */
 const DEFINITIVE = new Set([404, 409, 413, 422]);
-export type Step = 'intro' | 'login' | 'home';
+export type Step = 'login' | 'home';
 export type ChatStep = 'describe' | 'choose' | 'receipt' | 'ended';
 /** A chat line. Guide lines and FAQ questions are i18n keys, so they follow the interface language; the customer's own words are kept as typed. */
 export type ChatLine = { from: 'bot' | 'me'; key: keyof Strings } | { from: 'me'; text: string };
@@ -36,8 +36,6 @@ export function intakeLanguage(ui: Lang): IntakeLang | null {
 export const FAQ = { faqNextQ: 'faqNextA', faqTimeQ: 'faqTimeA', faqMissingQ: 'faqMissingA' } as const;
 /** Receipt title per server-decided kind. */
 const RECEIPT_TITLE = { complete: 'receiptComplete', incomplete: 'receiptIncomplete', technical: 'receiptTechnical' } as const;
-/** Short status per kind, for the open-cases chip; only a complete report reads as accepted. */
-export const RECEIPT_CHIP = { complete: 'accepted', incomplete: 'inReview', technical: 'inReview' } as const;
 
 @Component({
   selector: 'app-customer-page',
@@ -58,6 +56,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly transactions = signal<Transaction[]>([]);
   readonly hasMore = signal(false);
   readonly identities = signal<Identity[]>([]);
+  /** True while the identity list is on its way, so the sign-in screen never looks stuck. */
+  readonly identitiesLoading = signal(false);
   readonly chatOpen = signal(false);
   readonly chosenLang = signal<IntakeLang | null>(null);
   readonly reportLang = computed(() => this.chosenLang() ?? intakeLanguage(this.lang.lang()));
@@ -74,16 +74,12 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly chatStep = computed<ChatStep>(() => this.intakeReceipt() ? 'receipt' : this.ended() ? 'ended' : this.episode() ? 'choose' : 'describe');
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
-  readonly receiptChip = RECEIPT_CHIP;
-  readonly lastReceipt = computed<ReceiptEntry | undefined>(() => this.receipts().at(-1));
+  readonly receiptTitleKey = RECEIPT_TITLE;
   /** Charges already accepted in this session are not offered again. */
   readonly choosable = computed(() => this.transactions().filter(tx => !this.receipts().some(r => r.receipt.kind === 'complete' && r.transactionId === tx.transaction_id)));
   /** Locked while a request is frozen or a guided report is open: renewing must keep the same customer. */
   readonly identityLocked = computed(() => this.frozen() !== null || this.chatStep() === 'choose');
-  readonly step = signal<Step>('intro');
-  readonly booted = signal(false);
-  /** The intro words play once (from 2.6 s, three 1.4 s slots: under 5 s of motion, WCAG 2.2.2); then only the current language's word stays. */
-  readonly introDone = signal(false);
+  readonly step = signal<Step>('login');
   /** At the home-top breakpoint and below, the open chat panel covers page controls, so the page behind it is inert (WCAG 2.4.11). */
   // Keep 1180px in sync with the @media rules in styles.css and customer.page.css.
   private readonly narrowQuery = typeof matchMedia === 'function' ? matchMedia('(max-width: 1180px)') : null;
@@ -93,12 +89,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   chatStatement = '';
   choice = '';
   chatConfirmed = false;
-  private bootTimer: ReturnType<typeof setTimeout> | undefined;
-  private introTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly zone = inject(NgZone);
   private readonly injector = inject(Injector);
-  private shownStep: Step = 'intro';
+  private shownStep: Step = 'login';
 
   /** On a step change (not the first render), move focus to the new step's heading so it doesn't fall to <body>. */
   private readonly focusStepHeading = afterRenderEffect(() => {
@@ -108,24 +101,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.host.nativeElement.querySelector<HTMLElement>('.step h1')?.focus();
   });
 
-  /** Where the disc sits: boot centre, top dot, login form, sidebar mark. */
-  readonly discClass = computed(() => {
-    const step = this.step();
-    if (step === 'login') return 'disc disc--login';
-    if (step === 'home') return 'disc disc--home';
-    return this.booted() ? 'disc disc--top' : 'disc disc--boot';
-  });
   readonly displayName = computed(() => this.identities().find(i => i.customer_id === this.client())?.display_name ?? this.client());
   readonly initials = computed(() => initialsOf(this.displayName()) || 'AA');
-  /** Totals of the loaded charges, per source currency; never converted. */
-  readonly totals = computed(() => {
-    const sums = new Map<string, number>();
-    for (const tx of this.transactions()) {
-      const n = Number(tx.amount);
-      if (Number.isFinite(n)) sums.set(tx.currency, (sums.get(tx.currency) ?? 0) + n);
-    }
-    return [...sums.entries()].map(([currency, total]) => ({ currency, total: formatAmount(total) }));
-  });
 
   constructor() {
     // Move focus to the receipt, the choose step (it replaces the focused Send button) and the chat heading when each appears;
@@ -137,47 +114,33 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
   private readonly intakeReceiptEl = viewChild<ElementRef<HTMLElement>>('intakeReceiptEl');
   private readonly chatPanel = viewChild<ElementRef<HTMLElement>>('chatPanel');
-  private readonly chatToggle = viewChild<ElementRef<HTMLElement>>('chatToggle');
+  /** The control that opened the panel (a charge row's Report button), so closing can return focus to it. */
+  private opener: HTMLElement | null = null;
 
-  /** Close the guided chat and return focus to its toggle (Escape inside the panel). */
+  /** Close the guided chat and return focus to the control that opened it, else to the page heading. */
   closeChat(): void {
     this.chatOpen.set(false);
-    afterNextRender(() => this.chatToggle()?.nativeElement.focus(), { injector: this.injector });
+    afterNextRender(() => (this.opener?.isConnected ? this.opener : this.host.nativeElement.querySelector<HTMLElement>('.step h1'))?.focus(), { injector: this.injector });
   }
   private readonly chooseStep = viewChild<ElementRef<HTMLElement>>('chooseStep');
 
   /** Load the identity choices from the API; they come from the same config as the server allowlist. */
   async ngOnInit(): Promise<void> {
-    this.bootTimer = setTimeout(() => this.booted.set(true), 2400);
     if (this.narrowQuery) this.narrowQuery.onchange = e => this.narrow.set(e.matches);
-    // Outside the zone so the app (and tests) can be stable while it waits; the signal still schedules the render.
-    this.introTimer = this.zone.runOutsideAngular(() => setTimeout(() => this.introDone.set(true), 6800)); // must outlast the intro word animation delays in styles.css
     if (this.client()) void this.resume();
+    this.identitiesLoading.set(true);
     try {
       this.identities.set(await this.service.identities());
       this.identity ||= this.identities()[0]?.customer_id ?? '';
     } catch (e) {
       this.fail(e);
+    } finally {
+      this.identitiesLoading.set(false);
     }
   }
 
   ngOnDestroy(): void {
-    clearTimeout(this.bootTimer);
-    clearTimeout(this.introTimer);
     if (this.narrowQuery) this.narrowQuery.onchange = null;
-  }
-
-  start(): void {
-    this.booted.set(true);
-    this.step.set('login');
-  }
-
-  /** End the intro now: the words stop on the current language and Start is shown and focused. */
-  skipIntro(): void {
-    clearTimeout(this.introTimer);
-    this.booted.set(true);
-    this.introDone.set(true);
-    afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('.intro-cta .ar-btn')?.focus(), { injector: this.injector });
   }
 
   /** A server check or open-question code in the interface language. */
@@ -206,7 +169,6 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Back from another in-app view in this tab: show the same customer's home again; the cookie still decides access. */
   private async resume(): Promise<void> {
-    this.booted.set(true);
     this.step.set('home');
     try {
       await this.loadTransactions();
@@ -223,6 +185,7 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Open the chat; from a charge row, that charge is preselected (the customer still confirms it). */
   openChat(transactionId?: string): void {
+    this.opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     this.chatOpen.set(true);
     if (transactionId && !this.frozen() && this.chatStep() !== 'receipt' && this.chatStep() !== 'ended') {
       this.choice = transactionId;
@@ -372,11 +335,6 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 }
 
-/** 1234567.5 → "1 234 567.50": thin-space grouping, always two decimals, the currency code goes beside it. */
-export function formatAmount(n: number): string {
-  const [int, dec] = n.toFixed(2).split('.');
-  return int.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + '.' + dec;
-}
 
 /** Up to two initials from the words that start with a Unicode letter: "Ana (demo)" → "A", "José da Silva" → "JD". */
 export function initialsOf(name: string): string {

@@ -104,28 +104,5 @@
         </div>
       </section>
     } @else if (openProtocol()) { <p class="status-line" role="status">{{ t().working }}</p> }
-
-    <section class="box">
-      <div class="box-head"><h2>{{ t().openCases }}</h2><span class="ar-caption">{{ cases().length }}</span></div>
-      <div class="box-body" style="padding-top: 0">
-        @for (item of cases(); track item.protocol) {
-          <article class="case">
-            <div class="case-head"><h3 class="case-name">{{ item.display_name }}</h3><span class="ar-amount">{{ item.amount }} {{ item.currency }}</span><span class="ar-small">{{ item.merchant_name || t().noMerchant }}</span></div>
-            <span class="ar-chip ar-chip-ok" style="align-self: start">{{ t().accepted }}</span>
-            <p class="case-statement">{{ item.customer_statement }}</p>
-            <div class="case-meta">
-              <span><b>{{ t().transactionId }}</b> {{ item.transaction_id }}</span>
-              <span><b>{{ t().date }}</b>
-                @if (item.source_occurred_at) { {{ sourceTime(item.source_occurred_at) }} ({{ t().tzMissing }}) }
-                @else if (item.occurred_at) { {{ item.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }} }
-                @else { {{ t().dateMissing }} }
-              </span>
-              <span><b>{{ t().reference }}</b> {{ item.protocol }}</span>
-              <span><b>{{ t().acceptedAt }}</b> {{ item.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span>
-            </div>
-          </article>
-        } @empty { <div class="ar-empty" style="margin-top: 12px"><p>{{ t().noCases }}</p></div> }
-      </div>
-    </section>
   }
 </div>

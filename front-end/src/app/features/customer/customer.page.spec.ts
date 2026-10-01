@@ -2,10 +2,10 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ApiError } from '../../core/http/api.service';
-import { CustomerPage, formatAmount, initialsOf } from './customer.page';
+import { CustomerPage, initialsOf } from './customer.page';
 import { LangService } from '../../shared/i18n/lang.service';
 import { CustomerService } from './customer.service';
-import { IntakeReceipt, IntakeStart, Transaction } from '../../shared/models/intake.model';
+import { Identity, IntakeReceipt, IntakeStart, Transaction } from '../../shared/models/intake.model';
 
 describe('CustomerPage', () => {
   let service: jasmine.SpyObj<CustomerService>;
@@ -25,14 +25,21 @@ describe('CustomerPage', () => {
     page = TestBed.createComponent(CustomerPage).componentInstance;
   });
 
-  it('starts on the intro, moves to sign-in on start, and to the home once charges are loaded', async () => {
-    expect(page.step()).toBe('intro');
-    page.start();
-    expect(page.step()).toBe('login');
-    page.identity = 'demo-ana';
-    await page.login();
-    expect(page.step()).toBe('home');
-    expect(page.discClass()).toBe('disc disc--home');
+  it('opens on sign-in with the purpose and the three explanation lines, then goes home once charges are loaded', async () => {
+    const fixture = TestBed.createComponent(CustomerPage);
+    const p = fixture.componentInstance;
+    await p.ngOnInit();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(p.step()).toBe('login');
+    expect(el.querySelector('h1')?.textContent?.trim()).toBe(p.t().greeting);
+    expect(el.querySelector('.purpose')?.textContent?.trim()).toBe(p.t().tagline);
+    expect([...el.querySelectorAll('.explain li')].map(li => li.textContent?.trim()))
+      .toEqual([p.t().explain1, p.t().explain2, p.t().explain3]);
+    expect(el.querySelector('.intro')).toBeNull();
+    p.identity = 'demo-ana';
+    await p.login();
+    expect(p.step()).toBe('home');
   });
 
   it('signs in and lists only what the API returns', async () => {
@@ -40,11 +47,9 @@ describe('CustomerPage', () => {
     await page.login();
     expect(service.signIn).toHaveBeenCalledWith('demo-ana');
     expect(page.transactions()).toEqual([tx]);
-    expect(page.totals()).toEqual([{ currency: 'BRL', total: '125.50' }]);
   });
 
   it('stays on sign-in and shows the mapped error when sign-in fails', async () => {
-    page.start();
     service.signIn.and.rejectWith(new ApiError(503, 'unavailable'));
     page.identity = 'demo-ana';
     await page.login();
@@ -52,10 +57,24 @@ describe('CustomerPage', () => {
     expect(page.error()).toBe(TestBed.inject(LangService).t().err503);
   });
 
+  it('shows a loading line until the identities arrive, then the picker', async () => {
+    let resolve!: (v: Identity[]) => void;
+    service.identities.and.returnValue(new Promise<Identity[]>(r => { resolve = r; }));
+    const fixture = TestBed.createComponent(CustomerPage);
+    const init = fixture.componentInstance.ngOnInit();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('#identities-loading')?.textContent).toContain(fixture.componentInstance.t().working);
+    resolve([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' }]);
+    await init;
+    fixture.detectChanges();
+    expect(el.querySelector('#identities-loading')).toBeNull();
+    expect(el.querySelector('app-customer-picker')).not.toBeNull();
+  });
+
   it('loads the identity choices from the API instead of a hard-coded list', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     await fixture.componentInstance.ngOnInit();
-    fixture.componentInstance.start();
     fixture.detectChanges();
     const rows = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.ar-row-name')].map(o => o.textContent?.trim());
     expect(rows).toEqual(['Ana (demo)', 'Bruno (demo)']);
@@ -66,11 +85,6 @@ describe('CustomerPage', () => {
     expect(initialsOf('Ana (demo)')).toBe('A');
     expect(initialsOf('Ángela Núñez (demo)')).toBe('ÁN');
     expect(initialsOf('(demo) 7-Eleven')).toBe('');
-  });
-
-  it('formats totals with thin-space grouping and two decimals, never a currency symbol', () => {
-    expect(formatAmount(1234567.5)).toBe('1 234 567.50');
-    expect(formatAmount(89.9)).toBe('89.90');
   });
 
   describe('guided intake chat', () => {
@@ -370,8 +384,19 @@ describe('CustomerPage', () => {
       expect(again.componentInstance.step()).toBe('home');
       expect(html.textContent).toContain('99999999-8888-4777-8666-555555555555');
       expect(html.querySelector('.ar-count')?.textContent).toBe('1');
-      expect(html.textContent).toContain(p.t().inReview);
-      expect(html.querySelector('.stat .ar-chip-ok')).toBeNull();
+      const reports = [...html.querySelectorAll('.your-reports li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim());
+      expect(reports.length).toBe(1);
+      expect(reports[0]).toContain(p.t().receiptIncomplete);
+      expect(reports[0]).toContain('99999999-8888-4777-8666-555555555555');
+    });
+
+    it('shows only the greeting, the charges and the report panel; no hero, stats, currency box or floating toggle', async () => {
+      const { el } = await home();
+      expect(el.querySelector('h1')).not.toBeNull();
+      expect(el.querySelector('#cargos')).not.toBeNull();
+      for (const gone of ['.ar-card', '.agent-panel', '.stats', '.chat-toggle', '.home-top', '.your-reports']) expect(el.querySelector(gone)).withContext(gone).toBeNull(); // the hero is .ar-card; there is no .hero class
+      expect(el.querySelectorAll('.box').length).toBe(1);
+      expect(el.querySelectorAll('.report-btn').length).toBe(1);
     });
 
     it('says when more charges exist than are listed', async () => {
@@ -382,11 +407,11 @@ describe('CustomerPage', () => {
 
     it('points aria-controls at the chat only while it exists, and does not repeat the choose prompt as the legend', async () => {
       const { fixture, p, el } = await home();
-      const toggle = el.querySelector<HTMLButtonElement>('.chat-toggle')!;
-      expect(toggle.hasAttribute('aria-controls')).toBeFalse();
-      toggle.click();
+      const button = el.querySelector<HTMLButtonElement>('.report-btn')!;
+      expect(button.hasAttribute('aria-controls')).toBeFalse();
+      button.click();
       fixture.detectChanges();
-      expect(toggle.getAttribute('aria-controls')).toBe('intake-chat');
+      expect(button.getAttribute('aria-controls')).toBe('intake-chat');
       expect(el.querySelector('#intake-chat')).not.toBeNull();
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
       p.chatStatement = 'No reconozco este cargo.';
@@ -405,13 +430,11 @@ describe('CustomerPage', () => {
       expect(table.querySelectorAll(':scope > :not([role="row"])').length).toBe(0);
     });
 
-    it('opens the chat from a toggle, links the textarea to its error, and focuses the receipt', async () => {
+    it('opens the chat from a charge row, links the textarea to its error, and focuses the receipt', async () => {
       const { fixture, p, el } = await home();
-      const toggle = el.querySelector<HTMLButtonElement>('.chat-toggle')!;
-      expect(toggle.getAttribute('aria-expanded')).toBe('false');
-      toggle.click();
+      el.querySelector<HTMLButtonElement>('.report-btn')!.click();
       fixture.detectChanges();
-      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+      expect(p.choice).toBe('demo-tx-001');
       p.chatStatement = 'short';
       await p.send();
       fixture.detectChanges();
@@ -465,22 +488,6 @@ describe('CustomerPage', () => {
       fixture.detectChanges();
       expect(p.chatOpen()).toBeTrue();
       expect(p.choice).toBe('demo-tx-001');
-    });
-
-    it('states the purpose on the first screen and lets the intro be skipped', async () => {
-      const fixture = TestBed.createComponent(CustomerPage);
-      const p = fixture.componentInstance;
-      await p.ngOnInit();
-      fixture.detectChanges();
-      const el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelector('.intro-purpose')?.textContent?.trim()).toBe(p.t().tagline);
-      expect(p.introDone()).toBeFalse();
-      el.querySelector<HTMLButtonElement>('.intro-skip')!.click();
-      fixture.detectChanges();
-      await fixture.whenStable();
-      expect(p.introDone()).toBeTrue();
-      expect(el.querySelector('.intro-skip')).toBeNull();
-      expect(document.activeElement).toBe(el.querySelector('.intro-cta .ar-btn'));
     });
   });
 });
