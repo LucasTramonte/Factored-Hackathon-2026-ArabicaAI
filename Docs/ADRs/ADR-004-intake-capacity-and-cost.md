@@ -70,7 +70,7 @@ Other measured inputs used below:
 | Layer | Open-source or low-cost choice | AWS alternative | What the data says | Decision | Trigger to move |
 |---|---|---|---|---|---|
 | Batch: Bronze → Silver → Gold | Parquet + DuckDB | Glue, EMR, Athena | 2.86 GB builds in about 11 minutes on one machine | DuckDB, wherever it runs | Over ~100 GB, a build over 1 h, or several concurrent jobs |
-| Online store | SQLite (D1) | RDS PostgreSQL, Aurora, DynamoDB | 318 reads and 42 writes per complete guided episode at the CI ceilings; the serving slice is about 0.3 GB | D1 in the prototype, PostgreSQL in the AWS target | A database over 5 GB (ADR-003's exit trigger; Paid caps at 10 GB), write p95 over 200 ms, cross-customer online queries, or a row-level security requirement |
+| Online store | SQLite (D1) | RDS PostgreSQL, Aurora, DynamoDB | 318 reads and 43 writes per complete guided episode at the CI ceilings; the serving slice is about 0.3 GB | D1 in the prototype, PostgreSQL in the AWS target | A database over 5 GB (ADR-003's exit trigger; Paid caps at 10 GB), write p95 over 200 ms, cross-customer online queries, or a row-level security requirement |
 | API | Cloudflare Worker | API Gateway + Lambda, ECS Fargate | 9 requests per complete guided episode, CPU 0–4 ms (legacy flow, measured in production) | Worker in the prototype, Lambda in the AWS target | Section 4 |
 | AI extraction | Workers AI gpt-oss-20b ($0.0005 per call, measured) | Bedrock, SageMaker endpoint | 18/18 on development with the corrected labels (16/18 before; ADR-006 amendment 3), p95 3.25 s | Workers AI for development and the frozen evaluation only. The live service calls it after the frozen run, behind a switch that falls back to the deterministic flow (ADR-006, decision 6). The same model runs on Bedrock in the AWS target | The extractor fails the frozen test on quality → the next ADR-006 rung |
 | Observability | Workers logs and analytics | CloudWatch, X-Ray | About 29 log events per legacy episode (guided not measured) | Workers logs now, CloudWatch in the target | Moving the runtime |
@@ -81,8 +81,8 @@ The pattern is deliberate. Processing stays open source (DuckDB, SQLite, the sam
 
 Capacity is sized on the **guided flow** (`/intake/start` → `/intake/confirm`), which replaces the legacy one-step `/cases` flow. Its budgets were measured in the budget suite on local D1, using D1's own counters and `dbstat` for storage (method and per-request figures under Implementation notes).
 
-- **Per complete episode, with one agent look:** 9 Worker requests, 318 rows read and **42 rows written** at the CI ceilings (285 and 39 measured).
-- **Daily bound:** rows written binds, so the daily quotas allow **about 2,380 complete episodes a day** (2,564 on measured values). The legacy flow wrote 10 rows and allowed 10,000.
+- **Per complete episode, with one agent look:** 9 Worker requests, 318 rows read and **43 rows written** at the CI ceilings (285 and 40 measured; one write per handoff is the unique index on the short reference, migration 0008).
+- **Daily bound:** rows written binds, so the daily quotas allow **about 2,325 complete episodes a day** (2,500 on measured values; 2,380 and 2,564 before migration 0008). The legacy flow wrote 10 rows and allowed 10,000.
 - **Storage per complete episode:** about 5.0 KB with a typical statement, 12.5 KB at 2,000 ASCII characters, and 21.3 KB at the 4-byte worst case. The CI bounds are 5.5, 13.8 and 23.4 KB, and the table below uses them.
 
 | Scenario | Rows written/day (share of Free) | Storage over the window, 22 days to 2026-10-20 (typical / 2,000 ASCII / 4-byte max) | Verdict |
@@ -283,7 +283,7 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
   - SageMaker ml.g6.xlarge hosting $1.1267/h.
 - **Budget ceilings in CI** (per request, queries / rows read / rows written / round trips), as committed in `back-end/test/integration/budget.test.js`:
   - legacy flow: login 5/10/6/3, list 2/25/0/2, create 4/12/6/4, agent login 3/6/6/1, agent list 2/250/0/2;
-  - guided flow: a complete customer episode 30/72/36/15, and an incomplete one 26/56/28/14 (per-request ceilings in the next note).
+  - guided flow: a complete customer episode 30/72/37/15, and an incomplete one 26/56/29/14 (per-request ceilings in the next note).
 - **Measured in production, 2026-09-29** (one manual episode, so a sample rather than a load test):
   - **Placement:** the Worker ran in GRU (São Paulo), and the D1 primary is in ENAM.
   - **CPU and D1:** CPU was 0–4 ms per request. D1 round trips took 136–186 ms (median 148 ms), so latency is dominated by distance to D1, not by compute.
@@ -297,6 +297,8 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
   >
   > **Effect of the edit.** Rows written fell for start (13 → 11), start replay (3 → 2), confirm (25 → 22), incomplete (17 → 14) and each abandoned episode in the idle page (4 → 3). The CHECKs added one counted read to each statement that writes an episode row: start 6 → 7, replay 4 → 5, confirm 54 → 56, incomplete 38 → 40 (checked by applying the old and new 0004 to separate scratch D1s). `EXPLAIN QUERY PLAN` over the 38 distinct statements a full flow runs shows no new scan. Every statement is a `SEARCH`, except the two newest-first lists (`/agent/cases`, `/agent/intakes`), which walk their ordering index under `LIMIT` as before.
   >
+  > **Dated note (migration 0008, short reference, 2026-10-02).** `intake_handoffs.reference_short` (issue #52) carries a unique index, so every handoff insert writes one more index row: confirm 22 → 23, incomplete 14 → 15, a complete episode 36 → 37 and an incomplete one 28 → 29. These are the only ceilings raised, by that one row each, and the daily bound moves from about 2,380 to about 2,325 complete episodes. Reads, queries and round trips are unchanged: the receipt and the agent views read the column from rows they already read. The column's CHECK uses one short GLOB per four-character group plus `NOT GLOB '*[ILOU]*'` for the excluded letters, instead of one eight-class pattern: D1 caps a GLOB pattern's length and rejected the long pattern at insert time ("LIKE or GLOB pattern too complex"), which Node's SQLite accepts, so unit tests passed while the local-D1 suite failed.
+  >
   > **Local databases.** Anyone who applied the pre-merge 0004 to a local D1 must recreate it: delete `back-end/.wrangler/state`, then reapply migrations and seeds. Local state is ignored and disposable. The figures below are for the final schema; earlier values are kept in the dated notes.
 
   *Method.* `back-end/test/integration/budget.test.js` reads D1's own counters (`X-D1-Metrics`) on local D1 (Miniflare, Wrangler 4.143.0) through the real Worker. `run-local.mjs` runs it after every other integration suite, so it measures against their retained rows, and its fixtures can't affect them. To separate per-statement costs, a scratch harness (not committed) called the same route handlers against a fresh local D1, read each statement's D1 `meta`, and ran `EXPLAIN QUERY PLAN`. It did this on the seed alone, after a second round, and after bulk fixtures of 5,004 and then 25,006 episodes (60,124 events, 15,006 handoffs, 25,006 sessions, 5,003 cases). Storage comes from SQLite `dbstat` over the Worker's migrations (`back-end/test/unit/intake-storage.test.js`).
@@ -307,9 +309,9 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
   |---|---|---|---|
   | `POST /intake/start` | 6 / 7 / 11 / 2 | 6 / 6 / 13 / 2 | 6 / 8 / 11 / 2 |
   | start replay (same key) | 6 / 5 / 2 / 2 | 6 / 4 / 3 / 2 | 6 / 6 / 2 / 2 |
-  | `POST /intake/confirm` | 18 / 56 / 22 / 8 | 18 / 54 / 25 / 8 | 18 / 60 / 22 / 8 |
+  | `POST /intake/confirm` | 18 / 56 / 23 / 8 | 18 / 54 / 25 / 8 | 18 / 60 / 23 / 8 |
   | confirm replay | 17 / 42 / 0 / 7 | same | 17 / 45 / 0 / 7 |
-  | `POST /intake/handoff` (incomplete) | 14 / 40 / 14 / 7 | 14 / 38 / 17 / 7 | 14 / 42 / 14 / 7 |
+  | `POST /intake/handoff` (incomplete) | 14 / 40 / 15 / 7 | 14 / 38 / 17 / 7 | 14 / 42 / 15 / 7 |
   | incomplete replay | 14 / 33 / 0 / 7 | same | 14 / 36 / 0 / 7 |
   | `GET /agent/intakes`, 50 rows behind 50 tied pending reservations | 2 / 203 / 0 / 2 | same | 2 / 225 / 0 / 2 |
   | `GET /agent/intake-detail`, complete | 3 / 12 / 0 / 3 | same | 3 / 15 / 0 / 3 |

@@ -98,7 +98,7 @@ async function finishIntake(request, store, complete) {
       return fail(401, 'Session expired; renew the same customer session and retry with the same idempotency key');
     }
     return json({ episode_id: episodeId, protocol: receipt.complete_case_id ?? receipt.handoff_id,
-      kind: receipt.kind, accepted_at: receipt.accepted_at, replayed: result.replayed,
+      reference_short: receipt.reference_short ?? null, kind: receipt.kind, accepted_at: receipt.accepted_at, replayed: result.replayed,
       // From the read-back row, so the customer sees only what was durably recorded.
       actions_taken: JSON.parse(receipt.actions_json), unresolved_questions: JSON.parse(receipt.questions_json),
       next_step_code: 'await_human_review' }, result.replayed ? 200 : 201);

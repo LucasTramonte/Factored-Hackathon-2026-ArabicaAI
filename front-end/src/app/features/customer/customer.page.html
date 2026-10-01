@@ -104,7 +104,7 @@
             @if (receipts().length) {
               <section class="your-reports" aria-labelledby="your-reports-title">
                 <h3 id="your-reports-title">{{ t().yourReports }}</h3>
-                <ul>@for (r of receipts(); track r.receipt.protocol) { <li>{{ t()[receiptTitleKey[r.receipt.kind]] }} <span class="ar-mono">{{ r.receipt.protocol }}</span></li> }</ul>
+                <ul>@for (r of receipts(); track r.receipt.protocol) { <li>{{ t()[receiptTitleKey[r.receipt.kind]] }} <span class="ar-mono">{{ r.receipt.reference_short ?? r.receipt.protocol }}</span></li> }</ul>
               </section>
             }
           </div>
@@ -155,8 +155,9 @@
                 @if (intakeReceipt(); as r) {
                   <div class="ar-panel ar-panel-ok" role="status" id="intake-receipt" #intakeReceiptEl tabindex="-1">
                     <h3 class="ar-panel-title">{{ receiptTitle() }}</h3>
-                    <div class="ar-ref"><span class="ar-ref-label">{{ t().reference }}</span><span class="ar-ref-code">{{ r.protocol }}</span></div>
+                    <div class="ar-ref"><span class="ar-ref-label">{{ t().reference }}</span><span class="ar-ref-code">{{ r.reference_short ?? r.protocol }}</span></div>
                     <p class="next-step">{{ t().nextStep }}</p>
+                    @if (r.reference_short) { <p class="ar-small case-id">{{ t().caseId }}: <span class="ar-mono">{{ r.protocol }}</span></p> }
                     <h4>{{ t().whatWeChecked }}</h4>
                     <ul class="checks">@for (a of r.actions_taken; track $index) { <li>{{ check(a) }}</li> } @empty { <li>{{ t().none }}</li> }</ul>
                     @if (r.unresolved_questions.length) {

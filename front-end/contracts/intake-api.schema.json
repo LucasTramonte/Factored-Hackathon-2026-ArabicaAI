@@ -18,8 +18,9 @@
     },
     "intakeReceipt": {
       "type": "object", "additionalProperties": false,
-      "required": ["episode_id", "protocol", "kind", "accepted_at", "replayed", "actions_taken", "unresolved_questions", "next_step_code"],
+      "required": ["reference_short", "episode_id", "protocol", "kind", "accepted_at", "replayed", "actions_taken", "unresolved_questions", "next_step_code"],
       "properties": {
+        "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "episode_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
         "protocol": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
         "kind": { "type": "string", "pattern": "^(complete|technical|incomplete)$" },
@@ -351,8 +352,9 @@
     },
     "agentIntake": {
       "type": "object", "additionalProperties": false,
-      "required": ["protocol", "episode_id", "kind", "tool_status", "destination", "priority", "accepted_at"],
+      "required": ["reference_short", "protocol", "episode_id", "kind", "tool_status", "destination", "priority", "accepted_at"],
       "properties": {
+        "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
         "episode_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
         "kind": {"type": "string", "pattern": "^(complete|technical|incomplete)$"},
@@ -389,8 +391,9 @@
     },
     "agentIntakeDetail": {
       "type": "object", "additionalProperties": false,
-      "required": ["protocol", "episode_id", "kind", "tool_status", "destination", "priority", "accepted_at", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "scope"],
+      "required": ["reference_short", "protocol", "episode_id", "kind", "tool_status", "destination", "priority", "accepted_at", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "scope"],
       "properties": {
+        "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
         "episode_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
         "kind": {"type": "string", "pattern": "^(complete|technical|incomplete)$"},
