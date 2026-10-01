@@ -47,7 +47,7 @@ Add a scope when it helps, for example `feat(intake): …`, `fix(front-end): …
   For example: `gh pr create --label documentation --assignee @me --reviewer Robertzu43 --fill`.
 - **Fill in the [PR template](.github/pull_request_template.md):**
   - what changed and why;
-  - the evidence (ADR, finding, evaluation, or judge-feedback ID from [`JUDGE_FEEDBACK.md`](Docs/deliverables/JUDGE_FEEDBACK.md));
+  - the evidence (ADR, finding, evaluation run, issue or review comment);
   - how it was validated;
   - the risk and the rollback;
   - any D1 or data impact.

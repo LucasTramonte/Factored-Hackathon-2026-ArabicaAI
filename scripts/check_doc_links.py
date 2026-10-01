@@ -1,6 +1,6 @@
 """Check that relative links and images in the repository's Markdown resolve.
 
-Reads every Markdown file Git tracks (outside ``Docs/superpowers/`` and ``Docs/sources/``, which are
+Reads every Markdown file Git tracks (outside ``Docs/archive/`` and ``Docs/sources/``, which are
 dated working notes and verbatim organizer material) and checks that each relative link target
 is a tracked file or directory, for inline links, images and reference definitions
 (``[label]: target``). A ``#anchor`` on a Markdown target must match one of that file's
@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
-SKIP_PREFIXES = ("Docs/superpowers/", "Docs/sources/")
+SKIP_PREFIXES = ("Docs/archive/", "Docs/sources/")
 LINK = re.compile(r"!?\[(?:[^\[\]]|\[[^\]]*\])*\]\((<[^>]+>|[^)\s]+)(?:\s+\"[^\"]*\")?\)")
 # A reference definition, ``[label]: target``, used by ``[text][label]`` and ``![alt][label]``.
 REFERENCE = re.compile(r"^ {0,3}\[[^\]]+\]:\s*(<[^>]+>|\S+)")

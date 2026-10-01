@@ -2,7 +2,7 @@
 
 **Workflow:** transaction-dispute intake, narrowed to unrecognized card charges with a human handoff ([ADR-002](ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). A read-only recent-transactions view is **proposed** as the normal-resolution path; that decision is still a draft. The data is the supplied synthetic LATAM dataset, so descriptive counts are not measured bank outcomes.
 
-For the whole story in one narrative, read [`SYSTEM_DESIGN.md`](deliverables/SYSTEM_DESIGN.md) first. Each point the judges raised at the checkpoint is answered in [`JUDGE_FEEDBACK.md`](deliverables/JUDGE_FEEDBACK.md). The sections below follow the six points of "What your solution should demonstrate" in the problem statement ([`sources/`](sources/README.md)).
+For the whole story in one narrative, read [`SYSTEM_DESIGN.md`](deliverables/SYSTEM_DESIGN.md) first. The sections below follow the six points of "What your solution should demonstrate" in the problem statement ([`sources/`](sources/README.md)).
 
 | # | Brief asks for | Read |
 |---|---|---|
@@ -22,9 +22,9 @@ For the whole story in one narrative, read [`SYSTEM_DESIGN.md`](deliverables/SYS
 | [`ADRs/`](ADRs/README.md) | Decisions: scope, runtime, cost and placement, evaluation, the learned component. Start here |
 | [`Costs/`](Costs/README.md) | Evidence cited by ADR-004 only: the calculator export and the Cloudflare workbook |
 | [`intake/`](intake/) | The workflow's contracts: customer and measurement contract, events, authored scenarios |
-| [`Plans/`](Plans/) | Runbook, roadmap and data plans |
-| [`Reviews/`](Reviews/) | Dated review material, such as the 2026-10-01 checkpoint brief for Factored |
-| [`superpowers/`](superpowers/) | Detailed design specs and implementation plans behind the ADRs |
+| [`Plans/`](Plans/) | The runbook, the roadmap and the draft recent-transactions proposal |
+| [`Evidence/`](Evidence/) | The accessibility audit and its screenshots, the contrast script, and the architecture diagrams (`diagrams/`, with the editable Excalidraw source) |
+| [`archive/`](archive/) | Dated working notes kept as history, not current guidance: early design specs and plans, agent handoffs, the 2026-09-26 team review, the first architecture note, the requirements map, the checkpoint brief, and the Marketing/Product material from before V1 was chosen |
 | [`sources/`](sources/README.md) | The organizers' original documents |
 
-Data definitions are in [`LATAM_BANK_DATA_DICTIONARY.md`](LATAM_BANK_DATA_DICTIONARY.md) and [`LATAM_BANK_DATASET.md`](LATAM_BANK_DATASET.md).
+The challenge inputs sit at the top of this folder: the data dictionary ([`LATAM_BANK_DATA_DICTIONARY.md`](LATAM_BANK_DATA_DICTIONARY.md)), the dataset overview ([`LATAM_BANK_DATASET.md`](LATAM_BANK_DATASET.md)) and the problem statement ([`FACTORED_HACKATHON_2026.md`](FACTORED_HACKATHON_2026.md)), all transcribed from the originals in `sources/`.

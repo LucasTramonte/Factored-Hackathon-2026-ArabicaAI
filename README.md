@@ -4,11 +4,11 @@ A customer reports a card charge they don't recognize, confirms which of their o
 
 The data is a synthetic LATAM banking dataset. Descriptive counts from it are not measured bank outcomes.
 
-**Evaluators: start with [`SYSTEM_DESIGN.md`](Docs/deliverables/SYSTEM_DESIGN.md).** It tells the whole story in one narrative: the customer and the problem, what we built, how it works, how we know it works, what it costs, and what is missing. The [reading guide](Docs/README.md) then maps each point of the brief to the document that answers it, and the [judge feedback register](Docs/deliverables/JUDGE_FEEDBACK.md) maps each point raised at the 2026-10-01 checkpoint to what we decided and where.
+**Evaluators: start with [`SYSTEM_DESIGN.md`](Docs/deliverables/SYSTEM_DESIGN.md).** It tells the whole story in one narrative: the customer and the problem, what we built, how it works, how we know it works, what it costs, and what is missing. The [reading guide](Docs/README.md) then maps each point of the brief to the document that answers it.
 
-![Current architecture on Cloudflare: browsers pass Cloudflare Access, the Basic gate, the router and the session cookie to the customer, intake and agent modules, whose SQL lives in store/d1.js over D1. Static assets skip the Worker; Workers AI is gated and offline only. An offline DuckDB batch goes from S3 to Bronze, Silver, the quality gate, the Gold slice and a reviewed seed loaded into D1](Docs/current_workflow_arabica_ai.png)
+![Current architecture on Cloudflare: browsers pass Cloudflare Access, the Basic gate, the router and the session cookie to the customer, intake and agent modules, whose SQL lives in store/d1.js over D1. Static assets skip the Worker; Workers AI is gated and offline only. An offline DuckDB batch goes from S3 to Bronze, Silver, the quality gate, the Gold slice and a reviewed seed loaded into D1](Docs/Evidence/diagrams/current_workflow_arabica_ai.png)
 
-*What runs today, on Cloudflare (solid: live, dashed: planned). The editable source is [`Workflow - Cloudflare intake.excalidraw`](<Docs/Factored Hackathon - Arabica AI/Workflow - Cloudflare intake.excalidraw>). The priced AWS production target is in the [appendix](#appendix-aws-production-target).*
+*What runs today, on Cloudflare (solid: live, dashed: planned). The editable source is [`Workflow - Cloudflare intake.excalidraw`](<Docs/Evidence/diagrams/Workflow - Cloudflare intake.excalidraw>). The priced AWS production target is in the [appendix](#appendix-aws-production-target).*
 
 ## Contents
 
@@ -30,7 +30,6 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 | **Evaluation:** how the model is compared with a baseline, the test sets we built ourselves, how data leakage is prevented, and every option we considered | [`EVALUATION.md`](Docs/deliverables/EVALUATION.md) |
 | **Data quality:** every finding that changes or limits a decision, each with its query | [`DATA_QUALITY.md`](Docs/deliverables/DATA_QUALITY.md) |
 | **Data engineering:** contracts, the quality gate, lineage from S3 to the served row, the update and freshness policy with its test fixture, and the stack with its trade-offs | [`DATA_ENGINEERING.md`](Docs/deliverables/DATA_ENGINEERING.md) |
-| **Judge feedback:** each point from the 2026-10-01 checkpoint, what we decided, whether it is built, and the section that answers it | [`JUDGE_FEEDBACK.md`](Docs/deliverables/JUDGE_FEEDBACK.md) |
 | **Capacity and cost:** where each layer runs and why, the Cloudflare limits, and a priced AWS production target ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)) | [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) |
 
 ## Repository layout
@@ -38,7 +37,7 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 | Folder | What it holds | Who needs it |
 |---|---|---|
 | [`Docs/deliverables/`](Docs/deliverables/) | The documents the brief asks for: system design, data engineering, data quality, evaluation, plus architecture, business outcomes and reproduction | Evaluators, first |
-| [`Docs/`](Docs/README.md) | Decisions ([`ADRs/`](Docs/ADRs/README.md)), workflow contracts ([`intake/`](Docs/intake/)), runbooks and roadmaps ([`Plans/`](Docs/Plans/)), cost evidence ([`Costs/`](Docs/Costs/README.md)), accessibility and screenshot evidence ([`Evidence/`](Docs/Evidence/)), the organizers' originals ([`sources/`](Docs/sources/README.md)) and dated design notes ([`superpowers/`](Docs/superpowers/)) | Anyone checking why a decision was made |
+| [`Docs/`](Docs/README.md) | Decisions ([`ADRs/`](Docs/ADRs/README.md)), workflow contracts ([`intake/`](Docs/intake/)), runbooks and roadmaps ([`Plans/`](Docs/Plans/)), cost evidence ([`Costs/`](Docs/Costs/README.md)), accessibility evidence and diagrams ([`Evidence/`](Docs/Evidence/)), release history ([`releases/`](Docs/releases/README.md)), the organizers' originals ([`sources/`](Docs/sources/README.md)) and dated working notes ([`archive/`](Docs/archive/)) | Anyone checking why a decision was made |
 | [`data_pipelines/`](data_pipelines/) | The batch path: S3 → `bronze/` → `silver/` → `quality/` → `gold/` (the reviewed serving slice and cohort), Python and DuckDB | Data engineering |
 | [`data_profiles/`](data_profiles/) | The findings register's queries (`findings/queries/DF-*.sql`) and their runner and tests | Data quality |
 | [`back-end/`](back-end/README.md) | The only online runtime: the Cloudflare Worker, its D1 migrations and seeds. All SQL is in `src/store/d1.js` | The service |
@@ -164,8 +163,8 @@ Docker reuses cached build layers on later runs. For a smaller first S3 check, f
 - [Data quality and findings register](Docs/deliverables/DATA_QUALITY.md): what the data can and can't support, each finding backed by a reproducible query, and the evaluation data protocol ([ADR-005](Docs/ADRs/ADR-005-evaluation-data-protocol.md)).
 - [Quality parity record](data_pipelines/quality/PARITY.md): the 13-table audit, observed warnings, and comparison with the former CSV scanner.
 - [Decision records](Docs/ADRs/README.md): workflow scope, runtime, and capacity and cost, with their limitations.
-- [Silver transcript verification](Docs/intake/silver-transcript-verification.md): the current transcript reconciliation. `notebooks/07_silver_transcript_verification.ipynb` has a network-free readout. Older notebooks and reports are dated historical evidence.
-- [Marketing/Product evidence](data_foundation/reports/README.md) and [offline report hub](data_foundation/reports/index.html): reviewed aggregates, limits and reproducible source. The [customer-backward brief](Docs/Marketing-Product-PRFAQ.md) frames the proposed test.
+- [Silver transcript verification](Docs/archive/2026-09-27-silver-transcript-verification.md): the dated record of the 2026-09-27 transcript reconciliation. `notebooks/07_silver_transcript_verification.ipynb` has a network-free readout. Older notebooks and reports are dated historical evidence.
+- [Marketing/Product evidence](data_foundation/reports/README.md) and [offline report hub](data_foundation/reports/index.html): reviewed aggregates, limits and reproducible source. This work predates the V1 intake choice; its [customer-backward brief](Docs/archive/marketing/Marketing-Product-PRFAQ.md) is archived.
 
 The dataset is synthetic. Descriptive counts from it should not be presented as measured bank outcomes or causal effects.
 

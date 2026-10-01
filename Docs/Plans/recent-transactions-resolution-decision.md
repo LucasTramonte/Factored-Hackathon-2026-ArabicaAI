@@ -3,7 +3,7 @@
 - **Status:** Draft proposal. It is not an ADR, has not been accepted, and has no ADR number.
 - **Date:** 2026-09-30
 - **Deciders when it is proposed as an ADR:** Lucas Tramonte, Roberto Z, Manoella R
-- **Related:** [ADR-001](../ADRs/ADR-001-workflow-prioritization.md), [ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md), [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md), [intake events](../intake/intake-events.md), [online completion design](../superpowers/specs/2026-09-29-intake-online-completion-design.md)
+- **Related:** [ADR-001](../ADRs/ADR-001-workflow-prioritization.md), [ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md), [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md), [intake events](../intake/intake-events.md), [online completion design](../archive/superpowers/specs/2026-09-29-intake-online-completion-design.md)
 
 This is the scope, coverage and measurement proposal that ADR-002 says the normal resolution path needs before it counts as one. It describes no new implementation and records no team decision.
 

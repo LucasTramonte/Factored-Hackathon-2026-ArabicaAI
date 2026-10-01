@@ -7,7 +7,7 @@
 | `data_pipelines/` | Batch data: S3 → `bronze/` → `silver/` → `quality/` → `gold/` (intake serving slice). Python + DuckDB. |
 | `back-end/` | The only online runtime: Cloudflare Worker (JavaScript) + D1. All SQL is in `src/store/d1.js`. |
 | `front-end/` | Angular client; API response contracts in `front-end/contracts/`. |
-| `Docs/deliverables/` | The deliverables. `SYSTEM_DESIGN.md` is the narrative (customer, problem, solution, architecture, results, cost and risks) and links to the others rather than repeating them: `DATA_ENGINEERING.md`, `DATA_QUALITY.md`, `EVALUATION.md`, `ARCHITECTURE.md`, `BUSINESS_OUTCOMES.md`, `REPRODUCIBILITY.md`. `JUDGE_FEEDBACK.md` maps each judge comment to its decision and the section that answers it; keep it current when a decision changes. |
+| `Docs/deliverables/` | The deliverables. `SYSTEM_DESIGN.md` is the narrative (customer, problem, solution, architecture, results, cost and risks) and links to the others rather than repeating them: `DATA_ENGINEERING.md`, `DATA_QUALITY.md`, `EVALUATION.md`, `ARCHITECTURE.md`, `BUSINESS_OUTCOMES.md`, `REPRODUCIBILITY.md`. |
 | `evals/intake/`, `Docs/deliverables/EVALUATION.md` | Decision-point cases, checklist baseline, episode KPI scorer; `EVALUATION.md` is the evaluation deliverable (test sets, leakage controls, options considered). |
 | `Docs/deliverables/DATA_QUALITY.md`, `data_profiles/findings/` | Data quality and findings register; each finding has a query. Design-scope facts come from the design window only (ADR-005, Proposed). |
 | `Docs/ADRs/` | Decision records (format and index in `Docs/ADRs/README.md`). Read ADR-002 to ADR-004 before changing intake scope, runtime or capacity. |
@@ -59,7 +59,7 @@
 - `make intake-setup` / `make intake-test`: install and run the intake suites (Gold slice, Angular specs, Worker unit and local-D1 integration tests).
 - `make intake-sample-{bronze,silver,quality,slice}`, `make intake-seed-local`: the bounded one-day sample → reviewed D1 seed → local D1.
 
-See `Docs/deliverables/ARCHITECTURE.md`, `Docs/deliverables/REPRODUCIBILITY.md` and `.github/skills/` for further procedures. The Marketing/Product HTML, intake decision page and aggregates were rebuilt from one verified Silver run and passed the gate in `Docs/Plans/marketing-product-trust.md` (release record); they are in `data_foundation/reports/`.
+See `Docs/deliverables/ARCHITECTURE.md`, `Docs/deliverables/REPRODUCIBILITY.md` and `.github/skills/` for further procedures. The Marketing/Product HTML, intake decision page and aggregates were rebuilt from one verified Silver run and passed the gate in `Docs/archive/marketing/marketing-product-trust.md` (release record); they are in `data_foundation/reports/`.
 
 ## Mandatory Session Startup: Hackathon Context
 

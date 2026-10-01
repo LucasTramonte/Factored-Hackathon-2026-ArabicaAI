@@ -1,6 +1,6 @@
 # Current analysis: Silver first
 
-`07_silver_transcript_verification.ipynb` is the current transcript-label reconciliation readout. It consumes the fresh S3 → Bronze → Silver audit after the scoped quality gate passes. Run commands and scope are in `Docs/intake/silver-transcript-verification.md`.
+`07_silver_transcript_verification.ipynb` is the current transcript-label reconciliation readout. It consumes the fresh S3 → Bronze → Silver audit after the scoped quality gate passes. Run commands and scope are in `Docs/archive/2026-09-27-silver-transcript-verification.md`.
 
 Notebooks 01–06 and their CSV/SQLite reports below are **historical evidence**. Do not use their old ingestion instructions for new analysis. Their cached results remain available for comparison; they are not a substitute for the current Silver quality gate. Jev predictions remain unadjudicated.
 

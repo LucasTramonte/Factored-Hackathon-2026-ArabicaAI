@@ -2,7 +2,7 @@
 
 Start with the [customer and measurement contract](../../Docs/intake/customer-and-measurement-contract.md), then the [baseline notebook](../../notebooks/02_suspicious_charge_intake_baselines.ipynb).
 
-The next [team review package](../../Docs/intake/team-review.md) includes `review-candidates.json`: 24 additional ES/PT messages with proposed labels and blank human-review fields. They remain unscored and are not loaded by the default runner or notebook. They were authored with implementation knowledge, so they are not a blinded holdout.
+The next [team review package](../../Docs/archive/2026-09-26-team-review.md) includes `review-candidates.json`: 24 additional ES/PT messages with proposed labels and blank human-review fields. They remain unscored and are not loaded by the default runner or notebook. They were authored with implementation knowledge, so they are not a blinded holdout.
 
 From the repository root:
 

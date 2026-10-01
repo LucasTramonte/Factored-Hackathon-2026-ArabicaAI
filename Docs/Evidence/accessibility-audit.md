@@ -117,7 +117,7 @@ Files are in `Docs/Evidence/screenshots/`. All are PNG at 1×, each under 200 KB
 
 ## Direct client (2026-10-02)
 
-The client changed after this audit was written (plan `Docs/superpowers/plans/2026-10-01-factored-feedback-response.md`, Tasks 1–3): the intro step, its word animation, the travelling disc and both timers were removed, so the first render is the sign-in screen; the home shows the greeting, the charges table with one Report button per row and the report panel, which opens only from a row and carries its own close button at every width. The findings above are kept as the record of the earlier client. What they mean now:
+The client changed after this audit was written (plan `Docs/archive/superpowers/plans/2026-10-01-factored-feedback-response.md`, Tasks 1–3): the intro step, its word animation, the travelling disc and both timers were removed, so the first render is the sign-in screen; the home shows the greeting, the charges table with one Report button per row and the report panel, which opens only from a row and carries its own close button at every width. The findings above are kept as the record of the earlier client. What they mean now:
 
 - Finding 2 (2.2.2), finding 16 and the intro notes in finding 12 are moot: nothing animates and no control is hidden for a time.
 - Finding 5 (2.4.11): the inert behaviour at 1180 px and below is unchanged. The "toggle" it mentions no longer exists; the panel's own close button closes it at every width, and closing returns focus to the row button that opened the panel, or to the page heading when nothing did.

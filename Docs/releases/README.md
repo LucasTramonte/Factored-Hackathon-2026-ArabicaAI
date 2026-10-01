@@ -22,7 +22,7 @@ This is a proposal; nothing has been tagged. It becomes the first row once a mai
   - the agent queue and detail;
   - the extractor wired behind a switch that is off;
   - the evaluation harness and the frozen set (the comparison not yet run);
-  - the deliverables in `Docs/deliverables/`, including the judge feedback register.
+  - the deliverables in `Docs/deliverables/`.
 - **Decisions:** ADR-002 (scope, accepted), ADR-003 (runtime), ADR-004 (capacity and cost), ADR-005 (evaluation data protocol), ADR-006 (learned extractor).
 - **Deployed state to record:**
   - the Worker version that is live when the tag is cut (`77f72eb4` on 2026-10-01; confirm with `wrangler deployments list`);

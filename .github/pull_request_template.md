@@ -7,7 +7,7 @@
 
 ## Evidence
 
-<!-- ADR, finding (DF-0NN), evaluation run, issue, or judge-feedback ID (Docs/deliverables/JUDGE_FEEDBACK.md). "None" is an answer. -->
+<!-- ADR, finding (DF-0NN), evaluation run, issue or review comment. "None" is an answer. -->
 
 ## Validation
 
