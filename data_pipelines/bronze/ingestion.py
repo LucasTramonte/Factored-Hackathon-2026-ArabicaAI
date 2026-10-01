@@ -56,6 +56,7 @@ class IngestResult:
     kind: str
     rows: int
     partitions_added: Optional[int] = None  # facts only
+    late_partitions: int = 0  # facts only: days older than the watermark, never loaded before, now loaded
     status: str = "ok"
     error: Optional[str] = None
 
@@ -272,7 +273,15 @@ def ingest_fact(
         dates_to_load = available
         mode = "full refresh"
     else:
-        dates_to_load = [d for d in available if d > last_loaded]
+        # A day at or before the watermark that Bronze has never held is a late arrival, not a
+        # correction: load it. A day Bronze already holds is only revisited by --full-refresh.
+        loaded_days = {date(int(y), int(m), int(d)) for y, m, d in con.execute(
+            f"SELECT DISTINCT year, month, day FROM bronze.{table_name}").fetchall()}
+        late = [d for d in available if d <= last_loaded and d not in loaded_days]
+        if late:
+            logger.warning("[%s] %d late partition(s) older than the watermark %s: %s..%s",
+                           table_name, len(late), last_loaded, min(late), max(late))
+        dates_to_load = sorted(late + [d for d in available if d > last_loaded])
         mode = "incremental"
 
     if not dates_to_load:
@@ -335,7 +344,8 @@ def ingest_fact(
                     os.replace(backup_dir, local_dir)
                 raise
         _rebuild_fact_table(con, table_name, local_dir)
-        update_watermark(con, table_name, max(dates_to_load))
+        # Late days never move the watermark back.
+        update_watermark(con, table_name, max([*dates_to_load, *([last_loaded] if last_loaded else [])]))
         if staging_dir and had_live:
             shutil.rmtree(backup_dir)
     finally:
@@ -348,4 +358,5 @@ def ingest_fact(
         table_name, f"{count:,}", table_name, mode, len(dates_to_load),
         min(dates_to_load), max(dates_to_load),
     )
-    return IngestResult(table_name=table_name, kind="fact", rows=count, partitions_added=len(dates_to_load))
+    return IngestResult(table_name=table_name, kind="fact", rows=count, partitions_added=len(dates_to_load),
+                        late_partitions=len(late) if mode == "incremental" else 0)
