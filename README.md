@@ -27,6 +27,7 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 | **System design:** customer, problem, solution, architecture, results, cost and risks, in one narrative | [`SYSTEM_DESIGN.md`](SYSTEM_DESIGN.md) |
 | **Evaluation:** how the model is compared with a baseline, the test sets we built ourselves, how data leakage is prevented, and every option we considered | [`EVALUATION.md`](EVALUATION.md) |
 | **Data quality:** every finding that changes or limits a decision, each with its query | [`DATA_QUALITY.md`](DATA_QUALITY.md) |
+| **Data engineering:** contracts, the quality gate, lineage from S3 to the served row, the update and freshness policy with its test fixture, and the stack with its trade-offs | [`DATA_ENGINEERING.md`](DATA_ENGINEERING.md) |
 | **Capacity and cost:** where each layer runs and why, the Cloudflare limits, and a priced AWS production target ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)) | [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) |
 
 ## How it fits together
@@ -64,7 +65,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
   The frontend doesn't use these routes yet, and the AI extraction step is still gated.
 - It runs on the Cloudflare Free plan ($0). [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes the guided flow at about 2,380 complete episodes a day, against measured volumes of 17–818 a day. The same record prices a production target on AWS at $86.36 a month and explains each service choice.
 - **Not done yet:**
-  - frontend use of the guided routes and ES/PT interface text;
+  - frontend use of the guided routes;
   - automatic one / several / none classification of free text;
   - the recent-transactions resolution path (a draft proposal);
   - a remote run of the new routes;
@@ -98,7 +99,7 @@ make docker-pipeline AWS_PROFILE=default
 
 Both Docker targets build the image before running it. `docker-pipeline` mounts `data/` writable and your `~/.aws` directory read-only at runtime; credentials are never copied into the image.
 
-`make pipeline` runs **Bronze → Silver → quality**. On a fresh checkout, Bronze loads all available source partitions; later runs ingest only newer fact partitions and refresh the small dimensions. The bucket and region defaults are in the [Makefile](Makefile). Use `AWS_PROFILE=your-profile` if your credentials are under another profile.
+`make pipeline` runs **Bronze → Silver → quality**. On a fresh checkout, Bronze loads all available source partitions; later runs ingest newer fact partitions plus any never-loaded partition older than the watermark (without moving it back), and refresh the small dimensions. A correction to a partition already loaded needs `make bronze-full` ([DATA_ENGINEERING.md](DATA_ENGINEERING.md#5-update-and-freshness-policy)). The bucket and region defaults are in the [Makefile](Makefile). Use `AWS_PROFILE=your-profile` if your credentials are under another profile.
 
 Before a full run, you can check read access without printing credentials:
 

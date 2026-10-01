@@ -188,3 +188,9 @@ def test_cohort_strata_label_missing_values_apart_from_rollup_subtotals(tmp_path
         con.execute("UPDATE silver.dim_customers SET detected_accent = NULL WHERE customer_id = 'C1'")
     rows = rf.run(db, only=("DF-022",))["results"][0]["rows"]
     assert ["México", "Basic", "(none)", 1, 1.0] in rows
+def test_currency_scale_compares_purchases_and_claimed_amounts_per_country(tmp_path):
+    db = make_db(tmp_path / "f.duckdb", with_holdout=True)
+    rows = rf.run(db, only=("DF-023",))["results"][0]["rows"]
+    # source, customer country, currency, rows, median amount, median amount in USD (purchases only)
+    assert rows == [["purchases", "México", "USD", 2, 15.25, 15.25],
+                    ["unrecognized_charge_claims", "México", "USD", 1, 10.5, None]]

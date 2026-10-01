@@ -316,3 +316,53 @@ def test_scoped_load_never_replaces_a_parquet_history_it_does_not_own(con, tmp_p
     with pytest.raises(ValueError, match="isolated DATA_DIR"):
         ingest_fact(fresh, str(base), "transactions", partition_date=date(2026, 2, 26))
     assert sorted(p.relative_to(live).as_posix() for p in live.rglob("*.parquet")) == before
+
+
+def test_incremental_run_reads_partitions_whose_paths_are_not_zero_padded(con, tmp_path):
+    # The path contract is year=/month=/day= without a padding rule: discovery accepts day=1, so the
+    # incremental read must use the discovered directory, not a rebuilt day=01 that matches no file.
+    base = tmp_path / "source"
+    _write_csv(base / "transactions/year=2024/month=1/day=1/t.csv", "transaction_id,amount\nT1,100\n")
+    ingest_fact(con, str(base), "transactions")
+    _write_csv(base / "transactions/year=2024/month=1/day=2/t.csv", "transaction_id,amount\nT2,200\n")
+    _write_csv(base / "transactions/year=2024/month=1/day=15/t.csv", "transaction_id,amount\nT3,300\n")
+
+    result = ingest_fact(con, str(base), "transactions")
+
+    assert result.partitions_added == 2
+    assert result.rows == 3
+
+
+def test_paths_with_an_apostrophe_are_escaped_in_every_generated_sql_literal(con, tmp_path):
+    # Discovered directories (and the source base) become SQL string literals; an apostrophe must not
+    # end the literal early or change the statement (CWE-89).
+    base = tmp_path / "source'; DROP TABLE x; --"
+    _write_csv(base / "transactions/year=2024/month=01/day=01/t.csv", "transaction_id,amount\nT1,100\n")
+    assert ingest_fact(con, str(base), "transactions").rows == 1
+    _write_csv(base / "transactions/year=2024/month=01/day=02/t.csv", "transaction_id,amount\nT2,200\n")
+    result = ingest_fact(con, str(base), "transactions")
+    assert result.partitions_added == 1 and result.rows == 2
+
+
+def test_full_refresh_refuses_a_source_with_an_invalid_partition_directory_before_writing(con, tmp_path):
+    # Discovery skips day=32 and day=xx, but a full refresh reads one history-wide glob. Importing them
+    # would store partition values that the next run cannot turn into dates, so it fails closed instead.
+    base = tmp_path / "source"
+    _write_csv(base / "transactions/year=2024/month=01/day=01/t.csv", "transaction_id,amount\nT1,100\n")
+    _write_csv(base / "transactions/year=2024/month=01/day=32/t.csv", "transaction_id,amount\nBAD,1\n")
+    _write_csv(base / "transactions/year=2024/month=01/day=xx/t.csv", "transaction_id,amount\nBAD2,1\n")
+    with pytest.raises(ValueError, match="2 invalid partition"):
+        ingest_fact(con, str(base), "transactions")
+    assert con.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema='bronze' AND table_name='transactions'").fetchone()[0] == 0
+    assert not (tmp_path / "data/bronze/transactions").exists() or not any((tmp_path / "data/bronze/transactions").rglob("*.parquet"))
+
+
+def test_incremental_run_reads_only_valid_directories_when_an_invalid_one_appears(con, tmp_path):
+    base = tmp_path / "source"
+    _write_csv(base / "transactions/year=2024/month=01/day=01/t.csv", "transaction_id,amount\nT1,100\n")
+    ingest_fact(con, str(base), "transactions")
+    _write_csv(base / "transactions/year=2024/month=01/day=32/t.csv", "transaction_id,amount\nBAD,1\n")
+    _write_csv(base / "transactions/year=2024/month=01/day=02/t.csv", "transaction_id,amount\nT2,200\n")
+    result = ingest_fact(con, str(base), "transactions")
+    assert result.partitions_added == 1 and result.rows == 2
+    assert ingest_fact(con, str(base), "transactions").partitions_added == 0  # still readable afterwards

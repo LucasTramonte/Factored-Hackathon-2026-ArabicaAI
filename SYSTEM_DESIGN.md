@@ -160,6 +160,7 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 | Topic | Document |
 |---|---|
 | Data findings and their queries | [`DATA_QUALITY.md`](DATA_QUALITY.md) |
+| Pipeline, contracts, lineage, update policy and stack | [`DATA_ENGINEERING.md`](DATA_ENGINEERING.md) |
 | Evaluation, test sets and leakage controls | [`EVALUATION.md`](EVALUATION.md) |
 | Capacity, cost and layer placement | [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) |
 | Workflow choice and scope | [ADR-001](Docs/ADRs/ADR-001-workflow-prioritization.md), [ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md) |
