@@ -53,3 +53,47 @@ export interface AgentCaseList {
   has_more: boolean;
   scope: 'synthetic_demo_only';
 }
+
+// Agent intake (W4 fe-agent-console): /agent/intakes and /agent/intake-detail.
+export type IntakeKind = 'complete' | 'technical' | 'incomplete';
+
+export interface AgentIntake {
+  protocol: string;
+  episode_id: string;
+  kind: IntakeKind;
+  tool_status: 'ok' | 'failed' | 'timeout';
+  destination: string;
+  priority: string;
+  accepted_at: string;
+}
+
+export interface AgentIntakeList {
+  items: AgentIntake[];
+  has_more: boolean;
+  scope: 'synthetic_demo_only';
+}
+
+/** One recorded service event; optional fields appear only on the events that carry them. */
+export interface IntakeTransition {
+  seq: number;
+  event: string;
+  ts: string;
+  transaction_ref?: string;
+  case_ref?: string;
+  kind?: IntakeKind;
+  tool_status?: string;
+  accepted_by?: string;
+  outcome?: string;
+  missing?: string[];
+}
+
+export interface AgentIntakeDetail extends AgentIntake {
+  language: 'es' | 'pt';
+  customer_statement: string;
+  verified_evidence: { transaction: Transaction | null };
+  actions_taken: string[];
+  unresolved_questions: string[];
+  history: IntakeTransition[];
+  history_has_more: boolean;
+  scope: 'synthetic_demo_only';
+}

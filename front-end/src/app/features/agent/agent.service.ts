@@ -1,8 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from '../../core/http/api.service';
-import { AgentCase, AgentCaseList } from '../../shared/models/intake.model';
+import { AgentCase, AgentCaseList, AgentIntakeDetail, AgentIntakeList } from '../../shared/models/intake.model';
 
-/** Agent calls: a separate simulated session and the read-only case list. */
+/** Agent calls: a separate simulated session and read-only views. Nothing here changes a case. */
 @Injectable({ providedIn: 'root' })
 export class AgentService {
   private readonly api = inject(ApiService);
@@ -11,7 +11,17 @@ export class AgentService {
     await this.api.request('/demo/agent-session', {});
   }
 
+  /** Legacy confirmed-case list (`POST /cases` flow). */
   async cases(): Promise<AgentCase[]> {
     return (await this.api.request<AgentCaseList>('/agent/cases')).items;
+  }
+
+  /** Newest 50 acknowledged guided handoffs; ``has_more`` says more exist (the API has no cursor). */
+  intakes(): Promise<AgentIntakeList> {
+    return this.api.request<AgentIntakeList>('/agent/intakes');
+  }
+
+  intakeDetail(protocol: string): Promise<AgentIntakeDetail> {
+    return this.api.request<AgentIntakeDetail>('/agent/intake-detail?protocol=' + encodeURIComponent(protocol));
   }
 }
