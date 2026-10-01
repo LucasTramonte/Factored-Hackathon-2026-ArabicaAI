@@ -40,7 +40,16 @@ const es = {
     // W3 fe-customer-picker
     pickerSearch: 'Buscar por nombre o ID', pickerCountry: 'País', pickerAllCountries: 'Todos los países',
     pickerNoCountry: 'Sin país indicado', pickerMatches: 'coincidencias', pickerNone: 'Ninguna identidad coincide.',
-    pickerRefine: 'Solo se muestran las primeras coincidencias. Afina la búsqueda.'
+    pickerRefine: 'Solo se muestran las primeras coincidencias. Afina la búsqueda.',
+    // W4 fe-agent-console
+    intakeQueue: 'Cola de reportes guiados', intakeDetail: 'Detalle del reporte', noIntakes: 'No se devolvieron reportes guiados.',
+    queueMore: 'Solo se muestran los 50 más recientes.', historyMore: 'Solo se muestran los primeros 100 eventos.',
+    kindComplete: 'Completo', kindTechnical: 'Falla técnica', kindIncomplete: 'Incompleto',
+    transactionId: 'ID de transacción', evidence: 'Evidencia verificada', noEvidence: 'Sin transacción verificada.',
+    actionsTaken: 'Acciones realizadas', openQuestions: 'Preguntas abiertas', history: 'Historial',
+    toolStatus: 'Estado de la consulta', destination: 'Destino', priority: 'Prioridad', close: 'Cerrar',
+    statement: 'Relato del cliente', languageCode: 'Idioma del reporte',
+    agentErr401: 'La sesión de agente expiró. Vuelve a entrar como agente.', agentErr404: 'No se encontró el reporte.'
 };
 
 /** The key set is the Spanish table; the other two must match it exactly. */
@@ -84,7 +93,16 @@ const STRINGS: Record<Lang, Strings> = {
     // W3 fe-customer-picker
     pickerSearch: 'Buscar por nome ou ID', pickerCountry: 'País', pickerAllCountries: 'Todos os países',
     pickerNoCountry: 'Sem país informado', pickerMatches: 'resultados', pickerNone: 'Nenhuma identidade corresponde.',
-    pickerRefine: 'Apenas os primeiros resultados são exibidos. Refine a busca.'
+    pickerRefine: 'Apenas os primeiros resultados são exibidos. Refine a busca.',
+    // W4 fe-agent-console
+    intakeQueue: 'Fila de relatos guiados', intakeDetail: 'Detalhe do relato', noIntakes: 'Nenhum relato guiado retornado.',
+    queueMore: 'Apenas os 50 mais recentes são exibidos.', historyMore: 'Apenas os primeiros 100 eventos são exibidos.',
+    kindComplete: 'Completo', kindTechnical: 'Falha técnica', kindIncomplete: 'Incompleto',
+    transactionId: 'ID da transação', evidence: 'Evidência verificada', noEvidence: 'Sem transação verificada.',
+    actionsTaken: 'Ações realizadas', openQuestions: 'Perguntas em aberto', history: 'Histórico',
+    toolStatus: 'Status da consulta', destination: 'Destino', priority: 'Prioridade', close: 'Fechar',
+    statement: 'Relato do cliente', languageCode: 'Idioma do relato',
+    agentErr401: 'A sessão de agente expirou. Entre novamente como agente.', agentErr404: 'Relato não encontrado.'
   },
   en: {
     greeting: 'Hello', tagline: 'Report a charge you do not recognize.',
@@ -122,7 +140,16 @@ const STRINGS: Record<Lang, Strings> = {
     // W3 fe-customer-picker
     pickerSearch: 'Search by name or ID', pickerCountry: 'Country', pickerAllCountries: 'All countries',
     pickerNoCountry: 'No country listed', pickerMatches: 'matches', pickerNone: 'No identity matches.',
-    pickerRefine: 'Only the first matches are shown. Refine your search.'
+    pickerRefine: 'Only the first matches are shown. Refine your search.',
+    // W4 fe-agent-console
+    intakeQueue: 'Guided report queue', intakeDetail: 'Report detail', noIntakes: 'No guided reports returned.',
+    queueMore: 'Only the newest 50 are shown.', historyMore: 'Only the first 100 events are shown.',
+    kindComplete: 'Complete', kindTechnical: 'Technical failure', kindIncomplete: 'Incomplete',
+    transactionId: 'Transaction ID', evidence: 'Verified evidence', noEvidence: 'No verified transaction.',
+    actionsTaken: 'Actions taken', openQuestions: 'Open questions', history: 'History',
+    toolStatus: 'Lookup status', destination: 'Destination', priority: 'Priority', close: 'Close',
+    statement: 'Customer statement', languageCode: 'Report language',
+    agentErr401: 'The agent session expired. Sign in as an agent again.', agentErr404: 'Report not found.'
   }
 };
 
