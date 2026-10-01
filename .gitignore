@@ -6,8 +6,7 @@ data_foundation/runs/
 data_foundation/**/__pycache__/
 data/
 Docs/pdfs/
-Docs/Factored Hackathon - Arabica AI/.obsidian/
-Docs/Factored Hackathon - Arabica AI/latam-bank-architecture-en.excalidraw.md
+Docs/.obsidian/
 
 # Secrets — never commit real credentials
 .env
@@ -42,3 +41,6 @@ back-end/.dev.vars*
 # Files of Hackathon
 /files/
 .ipynb_checkpoints/
+
+# Local Claude Code state and worktrees
+.claude/

@@ -9,12 +9,13 @@ import { parseArgs } from 'node:util';
 import { execFileSync } from 'node:child_process';
 import { quietThirdPartyDiagnostics, withIntakeStore } from './intake-store.mjs';
 import { scorerPython } from './scorer-python.mjs';
+import { producers as reviewedProducers } from '../src/modules/intake/ai-transport.js';
 
 const ROOT = resolve(import.meta.dirname, '../..');
 export const MAX_EXPORT_PAGES = 100;
 const BASE = ['event','version','case_id','ts','seq','session_ref','language','model_version'];
-// Fields the reviewed guided-0.1 producer writes. It never writes ``scenario`` (an evaluation-run label), so an
-// injected one fails the export instead of reaching analytics.
+// Fields the reviewed producers (guided-0.1 and, once registered, the extractor) write. They never write
+// ``scenario`` (an evaluation-run label), so an injected one fails the export instead of reaching analytics.
 const FIELDS = {
   intake_started: [], clarification_requested: ['missing'], transaction_confirmed: ['transaction_ref'],
   handoff_created: ['kind','case_ref','tool_status'], handoff_accepted: ['case_ref','accepted_by'],
@@ -23,11 +24,11 @@ const FIELDS = {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /** Reject injection instead of silently cleaning; the scorer owns value, sequence and usage validation. */
-function checkedEvent(event, episodeId) {
+function checkedEvent(event, episodeId, producers) {
   const extra = FIELDS[event?.event];
   if (!extra || event.version !== '2' || event.case_id !== episodeId || Object.keys(event).some(k => ![...BASE,...extra].includes(k))) throw new Error('Invalid event');
   for (const key of ['case_id','session_ref','transaction_ref','case_ref']) if (key in event && !UUID.test(event[key])) throw new Error('Invalid reference');
-  if (event.model_version !== 'guided-0.1' || ('accepted_by' in event && event.accepted_by !== 'case_service')) throw new Error('Unreviewed producer');
+  if (!producers.has(event.model_version) || ('accepted_by' in event && event.accepted_by !== 'case_service')) throw new Error('Unreviewed producer');
   return Object.fromEntries([...BASE,...extra].filter(k => k in event).map(k => [k,event[k]]));
 }
 
@@ -64,11 +65,12 @@ async function checkedDestination(output, dataDir, repository) {
  * published. Each page is one statement, so every episode group is internally consistent as of its page read;
  * ``started_at`` labels when the run began and is not a data bound. Failures throw ``Error('Export failed')``
  * with the internal reason as ``cause`` for in-process callers; the CLI never prints it. ``repository`` and
- * ``dataDir`` are test seams for the destination boundary.
+ * ``dataDir`` are test seams for the destination boundary; ``producers`` (the allowed ``model_version`` values,
+ * exactly guided-0.1 plus the registered extractor) is one for the producer allowlist.
  */
 export async function exportIntakeEvents(store, { limit = 100, maxPages = MAX_EXPORT_PAGES,
   output = resolve(ROOT, 'data/intake-events/events.jsonl'), dataDir = resolve(ROOT, 'data'), repository = ROOT,
-  python = scorerPython() } = {}) {
+  python = scorerPython(), producers = reviewedProducers() } = {}) {
   let temporary;
   let file;
   try {
@@ -90,7 +92,7 @@ export async function exportIntakeEvents(store, { limit = 100, maxPages = MAX_EX
       const lines = page.flatMap(row => {
         const group = JSON.parse(row.events_json);
         if (!Array.isArray(group) || !group.length || group.length > 101) throw new Error('Invalid group');
-        return group.map(event => JSON.stringify(checkedEvent(event, row.episode_id)) + '\n');
+        return group.map(event => JSON.stringify(checkedEvent(event, row.episode_id, producers)) + '\n');
       });
       if (lines.length) await file.writeFile(lines.join(''));
       episodes += page.length;

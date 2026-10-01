@@ -7,9 +7,9 @@
 | `data_pipelines/` | Batch data: S3 → `bronze/` → `silver/` → `quality/` → `gold/` (intake serving slice). Python + DuckDB. |
 | `back-end/` | The only online runtime: Cloudflare Worker (JavaScript) + D1. All SQL is in `src/store/d1.js`. |
 | `front-end/` | Angular client; API response contracts in `front-end/contracts/`. |
-| `SYSTEM_DESIGN.md` | The narrative deliverable: customer, problem, solution, architecture, results, cost and risks. It links to the documents below rather than repeating them. |
-| `evals/intake/`, `EVALUATION.md` | Decision-point cases, checklist baseline, episode KPI scorer; `EVALUATION.md` is the evaluation deliverable (test sets, leakage controls, options considered). |
-| `DATA_QUALITY.md`, `data_profiles/findings/` | Data quality and findings register; each finding has a query. Design-scope facts come from the design window only (ADR-005). |
+| `Docs/deliverables/` | The deliverables. `SYSTEM_DESIGN.md` is the narrative (customer, problem, solution, architecture, results, cost and risks) and links to the others rather than repeating them: `DATA_ENGINEERING.md`, `DATA_QUALITY.md`, `EVALUATION.md`, `ARCHITECTURE.md`, `BUSINESS_OUTCOMES.md`, `REPRODUCIBILITY.md`. |
+| `evals/intake/`, `Docs/deliverables/EVALUATION.md` | Decision-point cases, checklist baseline, episode KPI scorer; `EVALUATION.md` is the evaluation deliverable (test sets, leakage controls, options considered). |
+| `Docs/deliverables/DATA_QUALITY.md`, `data_profiles/findings/` | Data quality and findings register; each finding has a query. Design-scope facts come from the design window only (ADR-005, Proposed). |
 | `Docs/ADRs/` | Decision records (format and index in `Docs/ADRs/README.md`). Read ADR-002 to ADR-004 before changing intake scope, runtime or capacity. |
 | `Docs/Plans/` | Runbooks and roadmaps (`intake-demo.md`, `intake-roadmap.md`). |
 
@@ -30,11 +30,18 @@
 - Use regression fixtures for schema, keys, partitions, joins, aggregations, and memory-sensitive changes. Progress through unit tests, controlled source files, a small Bronze/Silver build, then full S3 data. Long scans report table or file progress, not rows.
 - S3 input is read-only. Keep credentials out of source, logs, image layers and commits. Generated DuckDB, Parquet, quality runs and temporary files stay ignored. Reviewed aggregate reports are committed only after reconciliation.
 - Public functions and classes need concise docstrings explaining purpose and important invariants. Keep commits scoped and state the tests run.
+- Never rewrite shared history: no force-push, no amending or rebasing a branch someone has reviewed. Leave unrelated working-tree changes untouched. PR titles are Conventional Commits, and tags and releases follow [`CONTRIBUTING.md`](CONTRIBUTING.md); an agent never tags, publishes a release or deploys without a person's go-ahead.
+- **Every PR, before it is opened, gets a label, an assignee and a reviewer.** No PR is opened without all three:
+  - **label:** one type label matching the branch prefix (`feat` → `enhancement`, `fix` → `bug`, `docs` → `documentation`, `eval` → `evaluation`, `data` → `data`, `chore` → `chore`; a `claude/` or `codex/` branch takes the label of its title's type), plus `accessibility` when it applies;
+  - **assignee:** the person who owns the PR, normally its author;
+  - **reviewer:** at least one other teammate, chosen for the area (Manoella approves extractor behaviour and frozen labels).
+
+  Pass them when opening, for example `gh pr create --label documentation --assignee @me --reviewer Robertzu43`; `CONTRIBUTING.md` lists the labels.
 
 ## Intake service rules
 
-- One online runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Don't add a second API implementation. Route handlers never build SQL, and new statements go in `back-end/src/store/d1.js`.
-- Identity comes from the session only, never from a request body or message text. Customer and agent sessions stay separate. Allowlisted identities live in `back-end/src/config/identities.json`, which the Worker and the Gold slice both read.
+- One online runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md), Proposed). Don't add a second API implementation. Route handlers never build SQL, and new statements go in `back-end/src/store/d1.js`.
+- Identity comes from the session only, never from a request body or message text. Customer and agent sessions stay separate. Committed identities (fictitious, plus the one-day slice's customer) live in `back-end/src/config/identities.json`, which the Worker and the Gold slice both read. Dataset cohort customers are listed from D1 (`customers.source = 'dataset'`) and are never committed.
 - Schema changes go through `wrangler d1 migrations`, are additive, and are applied to local D1 in tests before `--remote`. Alembic is not used; ADR-003 explains why and what would change that.
 - The Worker never reads S3, DuckDB or Silver. Online data arrives only as a reviewed Gold slice seed. The slice keeps the Bronze source amount and currency and the timezone-free source timestamp.
 - Any API change comes with adversarial tests: the gate, method and path matrix; session swap, forgery and expiry; the isolation oracle; hostile input; concurrent idempotency; contract validation against `front-end/contracts/`; and the D1 budget ceilings. A budget increase must be justified in ADR-004.
@@ -52,7 +59,7 @@
 - `make intake-setup` / `make intake-test`: install and run the intake suites (Gold slice, Angular specs, Worker unit and local-D1 integration tests).
 - `make intake-sample-{bronze,silver,quality,slice}`, `make intake-seed-local`: the bounded one-day sample → reviewed D1 seed → local D1.
 
-See `ARCHITECTURE.md`, `REPRODUCIBILITY.md` and `.github/skills/` for further procedures. `Docs/Plans/marketing-product-trust.md` records the deferred report rebuild; old HTML metrics are withdrawn until that gate passes.
+See `Docs/deliverables/ARCHITECTURE.md`, `Docs/deliverables/REPRODUCIBILITY.md` and `.github/skills/` for further procedures. The Marketing/Product HTML, intake decision page and aggregates were rebuilt from one verified Silver run and passed the gate in `Docs/archive/marketing/marketing-product-trust.md` (release record); they are in `data_foundation/reports/`.
 
 ## Mandatory Session Startup: Hackathon Context
 
@@ -60,7 +67,7 @@ At the start of every new session working in this repository, before planning, a
 
 1. Use the project agent `hackathon-context` defined in `.codex/agents/hackathon-context.toml` to read the challenge sources and return a task-specific briefing. While it reads, the main agent may inspect Git status and relevant code, but must receive the briefing before making challenge-dependent decisions. This instruction requests that delegation. If custom agents or delegation are unavailable, perform the same reading in the main session; do not skip it.
 2. Read `Docs/sources/README.md` and **all four original challenge PDFs indexed there, in full**, including the complete data dictionary. Also read any additional official challenge documents subsequently added to that index. Extract all pages and visually inspect image-only pages, tables or diagrams that extraction misses. Existing Markdown summaries do not replace the PDFs.
-3. Read `BUSINESS_OUTCOMES.md`, `ARCHITECTURE.md`, and `REPRODUCIBILITY.md` to distinguish challenge requirements, team hypotheses, implementation status, and setup. Use the source index’s newer-dictionary comparison; the original schema PDF is credential-free and the verified schema is unchanged. Never load AWS credential files just to build context.
+3. Read `BUSINESS_OUTCOMES.md`, `ARCHITECTURE.md`, and `REPRODUCIBILITY.md` in `Docs/deliverables/` to distinguish challenge requirements, team hypotheses, implementation status, and setup. Use the source index’s newer-dictionary comparison; the original schema PDF is credential-free and the verified schema is unchanged. Never load AWS credential files just to build context.
 4. Keep a concise briefing in working context: objective, required demonstrations, evaluation metrics and denominators, relevant tables/keys/grain, known discrepancies, current task scope, and unresolved decisions. Name the sources/pages supporting decisions. Do not invent missing facts or claim files were read if unavailable; report missing sources and pause only dependent decisions.
 5. After context compaction or returning to work with an incomplete briefing, repeat this startup reading. When a source changes during the session, reread it and refresh the briefing before dependent work. At task handoff, preserve the relevant context and unresolved questions without credentials or raw customer records.
 

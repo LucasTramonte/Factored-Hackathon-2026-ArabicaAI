@@ -1,6 +1,6 @@
 # Intake API (Cloudflare Worker + D1)
 
-This is the only online implementation of the intake service ([ADR-003](../Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)).
+This is the only online implementation of the intake service ([ADR-003](../Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md), Proposed).
 
 - **Worker (JavaScript, ES modules):** serves the API.
 - **D1:** stores customers, charges, cases, sessions, and guided intake episodes, turns, events and handoffs.
@@ -8,7 +8,7 @@ This is the only online implementation of the intake service ([ADR-003](../Docs/
 
 The Worker never reads S3, DuckDB or Silver. The data it serves is loaded as a reviewed seed from the Gold slice (`data_pipelines/gold/`).
 
-The service does not decide fraud, issue refunds or authenticate bank customers. It confirms a report only after D1 has stored it and read it back. It calls no model.
+The service does not decide fraud, issue refunds or authenticate bank customers. It confirms a report only after D1 has stored it and read it back. It calls no model: the extractor switch (below) is off and can't turn on yet.
 
 ## Layout
 
@@ -23,8 +23,8 @@ The service does not decide fraud, issue refunds or authenticate bank customers.
 | `src/modules/intake/` | Guided intake: start, confirm and incomplete handoff, with strict validation. No free-text classification. |
 | `src/modules/agent/` | Agent session, the read-only case view, and the read-only intake queue and detail. |
 | `src/store/d1.js` | Every SQL statement. This is the only module to replace if the store changes. Multi-statement writes run as one atomic `db.batch()`. |
-| `src/config/identities.json` | Allowlisted demo identities, shared with the Gold slice. |
-| `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. 0004 (intake episodes, turns, events, handoffs) and 0005 (idle and queue indexes) have been applied to local D1 only. |
+| `src/config/identities.json` | Committed demo identities (fictitious, plus the one-day slice's customer), shared with the Gold slice. Dataset cohort customers are listed from D1 instead. |
+| `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. 0001–0007 are applied to local and remote D1 (0006: customer source and country; 0007: the `seed_loads` load log). |
 | `scripts/intake-store.mjs` | Local D1 binding for the operator scripts, through Wrangler's `getPlatformProxy`. It uses the store in `src/store/d1.js`, so the scripts contain no SQL. |
 | `scripts/close-idle-intakes.mjs`, `scripts/export-intake-events.mjs` | Manual operator scripts: bounded idle closure and the privacy-checked event export (below). |
 | `scripts/reset-demo-activity.sql` | Deletes demo activity in foreign-key order and keeps the seed (below). |
@@ -67,8 +67,8 @@ Every route except `GET /healthz` needs the team gate (HTTP Basic, below Cloudfl
 | Method and path | Session | Purpose | Main statuses |
 |---|---|---|---|
 | `GET /healthz` | none | Liveness; one D1 query | 200 |
-| `GET /demo/identities` | none | Allowlisted demo identities; no D1 | 200 |
-| `POST /demo/session` | none | Simulated customer login for an allowlisted id | 200, 422, 503 (identity not loaded) |
+| `GET /demo/identities` | none | Committed identities, then up to 1,000 dataset customers from D1, each with `country` (one query) | 200, 503 |
+| `POST /demo/session` | none | Simulated customer login for a committed identity or a D1 dataset customer; malformed ids are rejected before any query | 200, 422, 503 (committed identity not loaded) |
 | `GET /transactions` | customer | The customer's own charges, one page, with `has_more` | 200, 401 |
 | `POST /cases` | customer | Legacy one-step confirmed case | 201, 200 (replay), 401, 404, 409, 422, 503 |
 | `POST /intake/start` | customer | Start an explicit guided ES/PT unrecognized-charge report (10–2,000 code points, no U+0000, UUID key). No case reference is returned. A same-key replay returns the original, immutable start receipt (`state: selection_required`) even after the episode was abandoned or handed off, so it does not describe the current state | 201, 200 (same key and content), 401, 409 (same key, other content), 422, 503 (retry the same key) |
@@ -81,7 +81,7 @@ Every route except `GET /healthz` needs the team gate (HTTP Basic, below Cloudfl
 
 Agent routes are read-only; nothing changes status, refunds, blocks a card or decides fraud. A customer session never opens an agent route and an agent session never opens a customer route.
 
-`GET /agent/intakes` is the authoritative queue for guided reports. The legacy `GET /agent/cases` is unchanged: it lists every confirmed case row, including a guided complete case whose reservation is still `handoff_pending` after a lost read-back. In that case the customer got 503 and no reference, and a same-owner retry with the same key completes it. Until then the episode counts as pending in the event export.
+`GET /agent/intakes` is the authoritative queue for guided reports. The legacy `GET /agent/cases` is unchanged and the client no longer calls it: it lists every confirmed case row, including a guided complete case whose reservation is still `handoff_pending` after a lost read-back. In that case the customer got 503 and no reference, and a same-owner retry with the same key completes it. Until then the episode counts as pending in the event export.
 
 ## Operator scripts: idle closure and event export
 
@@ -100,9 +100,23 @@ node scripts/export-intake-events.mjs [--output ../data/intake-events/events.jso
   - **Result:** `{closed, pages, complete, cutoff, metrics}`. `complete: false` means a final probe still found due episodes, so run it again. A repeated sweep writes nothing.
   - **Only this sweep enforces the deadline; the online path does not.** A customer who returns after the deadline but before a sweep still confirms or hands off, and a same-key start replay renews the episode. Outcome counts and durations therefore depend on when the sweep runs, so run it immediately before an export, at the same cutoff.
   - **Reservations:** episodes with a handoff reservation (`handoff_pending`) are never closed and never acknowledged. Only the same customer's live session can finish them.
-- **Event export** reads every episode in keyset pages (`--limit` 1–100 episodes, cursor = last episode id), each page one D1 statement with complete per-episode event groups, and appends them to a temporary file. It then validates the whole file with `python -m evals.intake.episodes` (`--python`, else `INTAKE_PYTHON`, else `.venv/bin/python`) and renames it into place. The output is `{episodes, pages, complete: true, started_at, summary, metrics}`. `started_at` labels when the run began; it is not a data bound. The export is all-or-nothing. If the episodes don't fit in `--max-pages` (at most 100 pages, 10,000 episodes), if any group exceeds 101 events or an event exceeds 4,096 characters, or if an event carries a field or reference outside the reviewed `guided-0.1` allowlist (which has no `scenario`), the run fails and the previous artifact stays. `--limit` and `--max-pages` must be plain decimal integers in range, checked before the database is opened. A partial population is never published.
+- **Event export** reads every episode in keyset pages (`--limit` 1–100 episodes, cursor = last episode id), each page one D1 statement with complete per-episode event groups, and appends them to a temporary file. It then validates the whole file with `python -m evals.intake.episodes` (`--python`, else `INTAKE_PYTHON`, else `.venv/bin/python`) and renames it into place. The output is `{episodes, pages, complete: true, started_at, summary, metrics}`. `started_at` labels when the run began; it is not a data bound. The export is all-or-nothing. If the episodes don't fit in `--max-pages` (at most 100 pages, 10,000 episodes), if any group exceeds 101 events or an event exceeds 4,096 characters, or if an event carries a field or reference outside the reviewed allowlist (which has no `scenario`), or a `model_version` other than `guided-0.1` or the registered extractor's, the run fails and the previous artifact stays. `--limit` and `--max-pages` must be plain decimal integers in range, checked before the database is opened. A partial population is never published.
 - **Where artifacts go:** only under the repository's ignored `data/intake-events/`, ending in `.jsonl`. The export rejects a path that resolves outside it through a symlink, a `data/` that links into another repository path, and a nested directory that doesn't exist yet. It creates nothing through a link. Artifacts hold opaque references and aggregate usage only; see `Docs/intake/intake-events.md` for the allowlist, the cutoff and the timing rules.
 - **Costs** (D1, local counters, ADR-004): one idle page of 100 is 2 queries, 1,100 rows read and 300 written. A sweep with nothing due reads 6, and the final due probe reads 1. An export page reads 2 rows per episode plus its events (at most 702 for 100 guided episodes); CI checks each page against that formula.
+
+## Extractor switch (off; ADR-006 decision 6)
+
+`src/modules/intake/ai-transport.js` holds the call site for the learned extractor, in shadow mode. It is off, and it can't turn on yet: it runs only when all of these hold.
+
+- `INTAKE_AI_ENABLED` is exactly `"1"`. It is not in `wrangler.jsonc`, and a unit test keeps it out.
+- An `AI` binding exists. `wrangler.jsonc` has none (also test-enforced), so `wrangler dev --local` never reaches Workers AI. It is added at release.
+- `APPROVED_EXTRACTOR` is set to the blind builder's adapter (`extractApproved({message, language, asOf, vocabulary, invoke, deadline})`). It is `null` today. Exposed authors don't write the prompt, the request body, the parsing, the validation or the retry (ADR-006 decision 5).
+- The adapter's `modelVersion` equals `extractor-v1@` plus the first 12 hex digits of the SHA-256 of the prompt text (`PROMPT` in `src/modules/intake/extractor-prompt.js`). That text is a verbatim copy of `intake_agent/extractor/prompt.md`, the bytes pinned by pre-registration, and a unit test checks them. A placeholder or a stale prompt never runs.
+- The shadow call runs in `ctx.waitUntil` after the response, so a start never waits for the model. Keep the switch off in production until the frozen run is done: each shadow start spends one or two calls of the free Workers AI allocation. When it is turned on, ADR-004 must also justify the extra query and round trip per start.
+
+When on, a new (not replayed) `POST /intake/start` stores the episode exactly as today, then calls the adapter with the statement, the session language and the adapter's vocabulary only, within one 10 s deadline. `asOf` is `null`, because the Worker doesn't know the customer's local time. The response, the contract and the guided flow are unchanged whatever the call returns. The customer still picks and confirms the transaction, identity still comes from the session, and the model output is never stored, logged or returned. The episode's events carry the extractor's `model_version`, and `intake_ended` carries the measured `llm_calls` and tokens when the shadow call finishes before the customer confirms or hands off. If the customer is faster, the episode ends with the pre-recorded unknown usage (a unit test covers this), so measured token totals over-represent slower customers; report the share of unknown-usage episodes next to any token or cost figure. The start pre-records one call with unknown usage, so a timeout, an error, malformed output or a crash is reported as `usage_unavailable_calls` with null totals, never as free. A failure doesn't end the episode or create a technical handoff.
+
+D1 cost: off, nothing changes. On, a new start adds one query and one round trip (the usage update). Unit tests measure this; local D1 has no AI binding.
 
 ## Resetting demo activity
 

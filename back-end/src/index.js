@@ -16,10 +16,10 @@ export function withMetrics(response, env, store) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const store = createStore(env.DB);
     try {
-      return withMetrics(await route(request, env, store), env, store);
+      return withMetrics(await route(request, env, store, ctx), env, store);
     } catch {
       return fail(503, 'Demo service unavailable; retry later');
     }

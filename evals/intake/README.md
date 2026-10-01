@@ -2,7 +2,7 @@
 
 Start with the [customer and measurement contract](../../Docs/intake/customer-and-measurement-contract.md), then the [baseline notebook](../../notebooks/02_suspicious_charge_intake_baselines.ipynb).
 
-The next [team review package](../../Docs/intake/team-review.md) includes `review-candidates.json`: 24 additional ES/PT messages with proposed labels and blank human-review fields. They remain unscored and are not loaded by the default runner or notebook. They were authored with implementation knowledge, so they are not a blinded holdout.
+The next [team review package](../../Docs/archive/2026-09-26-team-review.md) includes `review-candidates.json`: 24 additional ES/PT messages with proposed labels and blank human-review fields. They remain unscored and are not loaded by the default runner or notebook. They were authored with implementation knowledge, so they are not a blinded holdout.
 
 From the repository root:
 
@@ -37,7 +37,7 @@ The decision-point completion-ready proxy is not the episode-level primary KPI. 
 1. Wrote safety/denominator tests before implementation; implemented two transparent references.
 2. Ran 42 authored cases; preserved two paraphrase failures rather than tuning evaluation phrases into the rules.
 3. Independent review found grouped/Unicode-signed money suffix matching, malformed source handling, and safety-scoring omissions. Added failing regression examples, fixed boundaries, and reran the suite. Corrected independence language in the contract/report.
-4. Next iteration requires human-reviewed intent cases and a fresh unseen ES/PT set, followed by multi-turn episode evaluation. No learned extractor or impact claim is included in this initial delivery.
+4. Next iteration requires human-reviewed intent cases and a fresh unseen ES/PT set, followed by multi-turn episode evaluation. No learned extractor or impact claim was included in this initial delivery. Extractor v1 (ADR-006, Proposed) now exists offline in `intake_agent/extractor/`; it is not pre-registered or scored on `frozen_es_pt_v1`, and the Worker does not call it.
 5. Added the V1-authored regression (Andrés's phrases) and safety splits without touching the rules. Checklist: 15/25 V1-authored, 20/22 safety, 0 unsafe; ES/PT paired cases score identically. Misses are documented rule limits (no currency code, non-ISO dates, phrases outside the list, no merchant search, per-session-language phrase lists), kept as targets for the agent, not for rule tuning.
 
 

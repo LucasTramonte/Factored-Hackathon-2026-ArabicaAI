@@ -11,7 +11,19 @@
     "target": "http://127.0.0.1:8787",
     "secure": false
   },
+  "/intake/**": {
+    "target": "http://127.0.0.1:8787",
+    "secure": false
+  },
   "/agent/cases": {
+    "target": "http://127.0.0.1:8787",
+    "secure": false
+  },
+  "/agent/intakes": {
+    "target": "http://127.0.0.1:8787",
+    "secure": false
+  },
+  "/agent/intake-detail": {
     "target": "http://127.0.0.1:8787",
     "secure": false
   },

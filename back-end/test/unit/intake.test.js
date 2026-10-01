@@ -27,7 +27,7 @@ async function setup(t) {
   db.exec('PRAGMA foreign_keys=ON');
   const migrations = new URL('../../migrations/', import.meta.url);
   for (const file of readdirSync(migrations).sort()) db.exec(readFileSync(new URL(file, migrations), 'utf8'));
-  db.exec("INSERT INTO customers VALUES('ana','Ana'),('bruno','Bruno')");
+  db.exec("INSERT INTO customers(customer_id,display_name) VALUES('ana','Ana'),('bruno','Bruno')");
   const expiry = Date.now() + 3600_000;
   db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(token), 'customer', 'ana', expiry);
   const prepare = sql => ({ bind: (...params) => ({ all: () => ({ results: db.prepare(sql).all(...params) }) }) });

@@ -123,12 +123,19 @@ def build_silver_table(con: duckdb.DuckDBPyConnection, spec: TableSpec) -> Silve
     for join in spec.extra_joins:
         from_clause += f"\n        {join}"
 
+    # Facts tie-break on the storage partition: rows copied by one Bronze load share one _ingested_at
+    # (an original and its re-delivery arriving in the same batch, or any full refresh).
+    order_by = spec.dedup_order_by
+    if spec.kind == "fact":
+        prefix = f"{spec.source_alias}." if spec.source_alias else ""
+        order_by += f", {prefix}process_date DESC"
+
     sql = f"""
         CREATE OR REPLACE TABLE silver.{silver_table} AS
         SELECT
         {select_list}
         FROM {from_clause}
-        QUALIFY row_number() OVER (PARTITION BY {pk_list} ORDER BY {spec.dedup_order_by}) = 1
+        QUALIFY row_number() OVER (PARTITION BY {pk_list} ORDER BY {order_by}) = 1
     """
 
     t0 = time.monotonic()

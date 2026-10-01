@@ -84,6 +84,8 @@ def print_summary(results: List[IngestResult]) -> None:
     for r in results:
         rows_str = f"{r.rows:,}" if r.status != "failed" else "-"
         print(f"{r.table_name:30s} {r.kind:10s} {rows_str:>12s} {r.status:10s}")
+        if r.late_partitions:
+            print(f"    late partitions loaded: {r.late_partitions} (older than the watermark, never loaded before)")
         if r.error:
             print(f"    error: {r.error}")
 

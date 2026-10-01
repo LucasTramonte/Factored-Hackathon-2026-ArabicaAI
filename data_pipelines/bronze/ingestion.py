@@ -41,6 +41,12 @@ logger = logging.getLogger(__name__)
 _IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
+def _sql_str(value: str) -> str:
+    """A SQL string literal for a path. Source directory names come from the bucket listing, so an
+    apostrophe in one must never end the literal early or change the statement (CWE-89)."""
+    return "'" + str(value).replace("'", "''") + "'"
+
+
 def _safe_identifier(name: str) -> str:
     """Defense in depth: table names are only ever supposed to come from config.py's fixed lists,
     but this guards against an f-string SQL injection if that ever changes (e.g. a future CLI flag
@@ -56,6 +62,7 @@ class IngestResult:
     kind: str
     rows: int
     partitions_added: Optional[int] = None  # facts only
+    late_partitions: int = 0  # facts only: days older than the watermark, never loaded before, now loaded
     status: str = "ok"
     error: Optional[str] = None
 
@@ -83,13 +90,13 @@ def ingest_dimension(
                    filename AS _source_file,
                    current_timestamp AS _ingested_at,
                    '{table_name}' AS _source_table
-            FROM read_csv('{s3_path}', ALL_VARCHAR=true, filename=true)
-        ) TO '{local_path}' (FORMAT PARQUET)
+            FROM read_csv({_sql_str(s3_path)}, ALL_VARCHAR=true, filename=true)
+        ) TO {_sql_str(local_path)} (FORMAT PARQUET)
     """)
 
     con.execute(f"""
         CREATE OR REPLACE TABLE bronze.{table_name} AS
-        SELECT * FROM read_parquet('{local_path}')
+        SELECT * FROM read_parquet({_sql_str(local_path)})
     """)
 
     count = con.execute(f"SELECT count(*) FROM bronze.{table_name}").fetchone()[0]
@@ -132,6 +139,34 @@ def update_watermark(con: duckdb.DuckDBPyConnection, table_name: str, loaded_dat
     )
 
 
+def _discover_partitions(con: duckdb.DuckDBPyConnection, base_path: str, table_name: str,
+                         invalid: Optional[set] = None) -> dict:
+    """``{date: {partition directory, ...}}`` for every year=/month=/day= directory holding a .csv.
+
+    The directories are kept exactly as discovered, because the path contract has no zero-padding rule
+    (``day=1`` and ``day=01`` both parse); reads use them instead of rebuilding a padded path. A
+    directory that isn't a real date (``day=32``, ``day=xx``) is skipped and, if ``invalid`` is given,
+    added to it, so a full refresh can refuse the source instead of importing it through a wide glob.
+    """
+    pattern = f"{base_path}/{table_name}/year=*/month=*/day=*/*.csv"
+    rows = con.execute("SELECT file FROM glob(?)", [pattern]).fetchall()
+    found: dict = {}
+    for (path,) in rows:
+        y = re.search(r"year=(\d+)", path)
+        m = re.search(r"month=(\d+)", path)
+        d = re.search(r"day=(\d+)", path)
+        directory = path.rsplit("/", 1)[0]
+        try:
+            if not (y and m and d):
+                raise ValueError(path)
+            found.setdefault(date(int(y.group(1)), int(m.group(1)), int(d.group(1))), set()).add(directory)
+        except ValueError:
+            logger.warning("[%s] skipping unparseable partition path: %s", table_name, path)
+            if invalid is not None:
+                invalid.add(directory)
+    return found
+
+
 def list_available_partition_dates(con: duckdb.DuckDBPyConnection, base_path: str, table_name: str) -> List[date]:
     """Lists year=/month=/day= partitions that actually contain a .csv file, via glob() -- this
     never reads file *contents*, so it's cheap in that sense even for huge tables. It is NOT
@@ -142,27 +177,18 @@ def list_available_partition_dates(con: duckdb.DuckDBPyConnection, base_path: st
     scales with the number of distinct partition dates, not with row count, so a small table can still
     be slow here if its date range is wide. Logged at DEBUG so a run that looks "stuck" is visibly
     still working, not hung."""
-    pattern = f"{base_path}/{table_name}/year=*/month=*/day=*/*.csv"
     logger.debug("[%s] discovering partitions via glob (this can take a while -- see docstring)...", table_name)
     t0 = time.monotonic()
-    rows = con.execute(f"SELECT file FROM glob('{pattern}')").fetchall()
-    logger.debug("[%s] glob returned %d file(s) in %.1fs", table_name, len(rows), time.monotonic() - t0)
-
-    partitions = set()
-    for (path,) in rows:
-        y = re.search(r"year=(\d+)", path)
-        m = re.search(r"month=(\d+)", path)
-        d = re.search(r"day=(\d+)", path)
-        if y and m and d:
-            try:
-                partitions.add(date(int(y.group(1)), int(m.group(1)), int(d.group(1))))
-            except ValueError:
-                logger.warning("[%s] skipping unparseable partition path: %s", table_name, path)
-    return sorted(partitions)
+    found = _discover_partitions(con, base_path, table_name)
+    logger.debug("[%s] glob found %d partition date(s) in %.1fs", table_name, len(found), time.monotonic() - t0)
+    return sorted(found)
 
 
-def _month_glob(base_path: str, table_name: str, year: int, month: int) -> str:
-    return f"{base_path}/{table_name}/year={year:04d}/month={month:02d}/day=*/*.csv"
+def _day_globs(discovered: dict, days: List[date]) -> List[str]:
+    """One glob per discovered directory of each day to load. A month-wide ``day=*`` glob would also
+    reread, and overwrite, the days Bronze already holds in that month, which would apply a source
+    correction unreviewed; a rebuilt zero-padded path could miss an unpadded directory."""
+    return [f"{directory}/*.csv" for d in days for directory in sorted(discovered[d])]
 
 
 def _full_history_glob(base_path: str, table_name: str) -> str:
@@ -184,7 +210,7 @@ def _rebuild_fact_table(con: duckdb.DuckDBPyConnection, table_name: str, local_d
     """Publish the Bronze table from the active local Parquet snapshot."""
     con.execute(f"""
         CREATE OR REPLACE TABLE bronze.{table_name} AS
-        SELECT * FROM read_parquet('{local_dir}/**/*.parquet', hive_partitioning=true)
+        SELECT * FROM read_parquet({_sql_str(local_dir + '/**/*.parquet')}, hive_partitioning=true)
     """)
 
 
@@ -262,7 +288,9 @@ def ingest_fact(
             raise ValueError(f"Scoped ingestion requires an isolated DATA_DIR: {local_dir} already holds "
                              f"{len(other_days)} other partition(s)")
     else:
-        available = list_available_partition_dates(con, base_path, table_name)
+        invalid: set = set()
+        discovered = _discover_partitions(con, base_path, table_name, invalid)
+        available = sorted(discovered)
 
     if not available:
         return IngestResult(table_name=table_name, kind="fact", rows=0, partitions_added=0,
@@ -271,8 +299,21 @@ def ingest_fact(
     if full_refresh or not table_exists or last_loaded is None or not os.path.isdir(local_dir):
         dates_to_load = available
         mode = "full refresh"
+        # A full refresh reads one history-wide glob, which would also import the skipped directories and
+        # store partition values that later runs can't turn into dates. Refuse before writing anything.
+        if partition_date is None and invalid:
+            raise ValueError(f"{len(invalid)} invalid partition directories in the source (for example "
+                             f"{sorted(invalid)[0]}); fix the source before a full refresh")
     else:
-        dates_to_load = [d for d in available if d > last_loaded]
+        # A day at or before the watermark that Bronze has never held is a late arrival, not a
+        # correction: load it. A day Bronze already holds is only revisited by --full-refresh.
+        loaded_days = {date(int(y), int(m), int(d)) for y, m, d in con.execute(
+            f"SELECT DISTINCT year, month, day FROM bronze.{table_name}").fetchall()}
+        late = [d for d in available if d <= last_loaded and d not in loaded_days]
+        if late:
+            logger.warning("[%s] %d late partition(s) older than the watermark %s: %s..%s",
+                           table_name, len(late), last_loaded, min(late), max(late))
+        dates_to_load = sorted(late + [d for d in available if d > last_loaded])
         mode = "incremental"
 
     if not dates_to_load:
@@ -288,15 +329,17 @@ def ingest_fact(
     write_dir = staging_dir or local_dir
     os.makedirs(write_dir, exist_ok=True)
 
-    def _copy_from(glob_pattern: str) -> None:
+    def _copy_from(glob_pattern: "str | List[str]") -> None:
+        source = (_sql_str(glob_pattern) if isinstance(glob_pattern, str)
+                  else "[" + ", ".join(_sql_str(g) for g in glob_pattern) + "]")
         con.execute(f"""
             COPY (
                 SELECT * EXCLUDE (filename),
                        filename AS _source_file,
                        current_timestamp AS _ingested_at,
                        '{table_name}' AS _source_table
-                FROM read_csv('{glob_pattern}', ALL_VARCHAR=true, hive_partitioning=true, filename=true)
-            ) TO '{write_dir}' (FORMAT PARQUET, PARTITION_BY (year, month, day), OVERWRITE_OR_IGNORE)
+                FROM read_csv({source}, ALL_VARCHAR=true, hive_partitioning=true, filename=true)
+            ) TO {_sql_str(write_dir)} (FORMAT PARQUET, PARTITION_BY (year, month, day), OVERWRITE_OR_IGNORE)
         """)
 
     try:
@@ -311,14 +354,14 @@ def ingest_fact(
             logger.info("[%s] full refresh: %d partition(s) loaded in %.0fs",
                         table_name, len(dates_to_load), time.monotonic() - loop_start)
         else:
-            # Incremental -- group the (usually few) new dates by year/month so a normal day-to-day
-            # rerun costs 1-2 S3 round trips rather than one per new day.
+            # Incremental -- group the (usually few) new dates by year/month: one read_csv per month over
+            # exactly those days' globs, so held days are never reread and a normal rerun costs 1-2 S3 reads.
             batches = _group_by_year_month(dates_to_load)
             logger.info("[%s] %d new partition(s) across %d month-batch(es)",
                         table_name, len(dates_to_load), len(batches))
             for i, ((year, month), month_dates) in enumerate(batches, start=1):
                 t0 = time.monotonic()
-                _copy_from(pattern if partition_date is not None else _month_glob(base_path, table_name, year, month))
+                _copy_from(pattern if partition_date is not None else _day_globs(discovered, month_dates))
                 logger.debug("[%s] batch %d/%d (%04d-%02d, %d new date(s)) loaded in %.1fs",
                              table_name, i, len(batches), year, month, len(month_dates),
                              time.monotonic() - t0)
@@ -335,7 +378,8 @@ def ingest_fact(
                     os.replace(backup_dir, local_dir)
                 raise
         _rebuild_fact_table(con, table_name, local_dir)
-        update_watermark(con, table_name, max(dates_to_load))
+        # Late days never move the watermark back.
+        update_watermark(con, table_name, max([*dates_to_load, *([last_loaded] if last_loaded else [])]))
         if staging_dir and had_live:
             shutil.rmtree(backup_dir)
     finally:
@@ -348,4 +392,5 @@ def ingest_fact(
         table_name, f"{count:,}", table_name, mode, len(dates_to_load),
         min(dates_to_load), max(dates_to_load),
     )
-    return IngestResult(table_name=table_name, kind="fact", rows=count, partitions_added=len(dates_to_load))
+    return IngestResult(table_name=table_name, kind="fact", rows=count, partitions_added=len(dates_to_load),
+                        late_partitions=len(late) if mode == "incremental" else 0)

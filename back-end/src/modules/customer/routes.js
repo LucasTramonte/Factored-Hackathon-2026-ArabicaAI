@@ -7,13 +7,25 @@ import { fail, json, readJsonBody } from '../../http.js';
 import { readSession, startSession } from '../../auth/session.js';
 import { validateCaseRequest } from './validation.js';
 
-const ALLOWED = new Set(identities.customers.map(c => c.customer_id));
+const COMMITTED = new Map(identities.customers.map(c => [c.customer_id, c]));
+/** Dataset ids are short ASCII codes; anything else is rejected before it reaches D1. */
+const CUSTOMER_ID = /^[A-Za-z0-9-]{1,64}$/;
+const COHORT_LIMIT = 1000;
 const PAGE = 20;
 const NOT_CONFIRMED = 'Acceptance not confirmed; retry with the same idempotency key';
 
-/** GET /demo/identities: the simulated identities the client may offer; no D1 access. */
-export function listIdentities() {
-  return json({ items: identities.customers.map(({ customer_id, display_name }) => ({ customer_id, display_name })) });
+/**
+ * GET /demo/identities: the committed (mostly fictitious) identities, then the dataset cohort loaded in D1.
+ * Cohort ids and names are never committed; a D1 row never overrides a committed identity.
+ */
+export async function listIdentities(request, env, store) {
+  let cohort;
+  try { cohort = await store.listDatasetIdentities(COHORT_LIMIT); } catch { return fail(503, 'Demo identities are unavailable'); }
+  const items = identities.customers.map(({ customer_id, display_name }) => ({ customer_id, display_name, country: null }));
+  for (const { customer_id, display_name, country } of cohort) {
+    if (!COMMITTED.has(customer_id)) items.push({ customer_id, display_name, country: country ?? null });
+  }
+  return json({ items });
 }
 
 const LOCALE = /^(es|pt)(-[A-Za-z0-9]+)*$/;
@@ -46,13 +58,16 @@ function contextCard(row) {
   return { version: row.card_version, snapshot_at: row.snapshot_at, first_name, locale_hint, products };
 }
 
-/** POST /demo/session: start a simulated session for an allowlisted identity. */
+/** POST /demo/session: start a simulated session for a committed identity or a loaded dataset customer. */
 export async function startCustomerSession(request, env, store) {
   const body = await readJsonBody(request);
   if (body.error) return body.error;
   const customerId = body.value?.customer_id;
-  if (typeof customerId !== 'string' || !ALLOWED.has(customerId)) return fail(422, 'Select an allowed demo identity');
-  if (!await store.customerExists(customerId)) return fail(503, 'Demo identity is not loaded');
+  if (typeof customerId !== 'string' || !CUSTOMER_ID.test(customerId)) return fail(422, 'Select an allowed demo identity');
+  // A committed identity must be loaded; any other id is allowed only as a dataset customer in D1.
+  const source = await store.customerSource(customerId);
+  if (!COMMITTED.has(customerId) && source !== 'dataset') return fail(422, 'Select an allowed demo identity');
+  if (!source) return fail(503, 'Demo identity is not loaded');
   const card = contextCard(await store.findContextCard(customerId));
   return json({ customer_id: customerId, mode: 'simulated_login', context_card: card }, 200,
     { 'Set-Cookie': await startSession(request, store, 'customer', customerId) });
@@ -63,7 +78,9 @@ export async function listTransactions(request, env, store) {
   const current = await readSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
   const rows = await store.listTransactions(current.customer_id, PAGE + 1);
-  return json({ items: rows.slice(0, PAGE), has_more: rows.length > PAGE, coverage: 'fictitious_demo_data_only' });
+  // Only committed fictitious identities show fictitious rows; everyone else is a dataset customer.
+  const coverage = COMMITTED.get(current.customer_id)?.source === 'fictitious' ? 'fictitious_demo_data_only' : 'dataset_cohort';
+  return json({ items: rows.slice(0, PAGE), has_more: rows.length > PAGE, coverage });
 }
 
 /**

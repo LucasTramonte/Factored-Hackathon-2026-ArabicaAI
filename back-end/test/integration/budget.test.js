@@ -18,6 +18,9 @@ import { tokenHash } from '../../src/auth/session.js';
 // Ceilings per request: [queries, rows_read, rows_written, round_trips]. D1 Free allows 50 queries per invocation;
 // round trips drive latency (about 150 ms each when the Worker runs far from D1).
 const CEILING = {
+  // One query listing the dataset cohort. It reads every customers row: 8 in the fixture (ceiling +2, the read
+  // margin), about 800 with the cohort loaded (ADR-004).
+  identities: [1, 10, 0, 1],
   login: [5, 10, 6, 3],
   list: [2, 25, 0, 2],
   create: [4, 12, 6, 4],
@@ -71,6 +74,7 @@ const config = () => resolve(process.cwd(), 'wrangler.jsonc');
 test('a customer episode and an agent read stay within the D1 budget', async () => {
   const c = client();
   const measured = {};
+  measured.identities = within('identities', (await c.call('/demo/identities')).metrics);
   measured.login = within('login', (await c.call('/demo/session', { customer_id: 'demo-ana' })).metrics);
   measured.list = within('list', (await c.call('/transactions')).metrics);
   measured.create = within('create', (await c.call('/cases', { transaction_id: 'demo-tx-001',

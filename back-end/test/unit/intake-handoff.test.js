@@ -15,7 +15,7 @@ async function setup(t) {
   const db = new DatabaseSync(':memory:'); t.after(() => db.close()); db.exec('PRAGMA foreign_keys=ON');
   const dir = new URL('../../migrations/', import.meta.url);
   for (const file of readdirSync(dir).sort()) db.exec(readFileSync(new URL(file, dir), 'utf8'));
-  db.exec("INSERT INTO customers VALUES('ana','Ana'),('bruno','Bruno'); INSERT INTO transactions VALUES('tx-ana','ana',NULL,'2026-06-17 12:00:00','Shop','10.00','ARS'),('tx-bruno','bruno',NULL,'2026-06-17 12:00:00','Other','20.00','ARS')");
+  db.exec("INSERT INTO customers(customer_id,display_name) VALUES('ana','Ana'),('bruno','Bruno'); INSERT INTO transactions VALUES('tx-ana','ana',NULL,'2026-06-17 12:00:00','Shop','10.00','ARS'),('tx-bruno','bruno',NULL,'2026-06-17 12:00:00','Other','20.00','ARS')");
   db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(token), 'customer', 'ana', Date.now() + 3600000);
   const store = createStore({ prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
     batch: async statements => { db.exec('BEGIN'); try { const results = statements.map(s => s.all()); db.exec('COMMIT'); return results; } catch(e) { db.exec('ROLLBACK'); throw e; } } });
@@ -165,4 +165,17 @@ test('a refused reservation answers from a fresh read and records the attempt', 
     findIntake:async(...a)=>{if(refused)throw new Error('down');return store.findIntake(...a);}};
   res=await route(post('/intake/handoff',{episode_id:episode,kind:'incomplete',idempotency_key:crypto.randomUUID()}),env,blind);
   assert.equal(res.status,503);assert.equal((await res.json()).protocol,undefined);
+});
+
+test('receipt reports the read-back checks and open questions for every kind', async t => {
+  const { store, start } = await setup(t);
+  const complete = await (await route(post('/intake/confirm', confirm(await start())), env, store)).json();
+  assertContract('intakeReceipt', complete);
+  assert.deepEqual([complete.actions_taken, complete.unresolved_questions], [['owned_transaction_retrieved','customer_confirmation_recorded'], []]);
+  const incomplete = await (await route(post('/intake/handoff', { episode_id: await start(), kind: 'incomplete', idempotency_key: crypto.randomUUID() }), env, store)).json();
+  assert.deepEqual([incomplete.actions_taken, incomplete.unresolved_questions], [[], ['matching_transaction','customer_confirmation']]);
+  const failing = { ...store, findOwnedTransaction: async () => { throw new Error('unavailable'); } };
+  const technical = await (await route(post('/intake/confirm', confirm(await start())), env, failing)).json();
+  assert.equal(technical.kind, 'technical');
+  assert.deepEqual([technical.actions_taken, technical.unresolved_questions], [['transaction_lookup_failed'], ['matching_transaction','customer_confirmation']]);
 });

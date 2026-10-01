@@ -1,7 +1,7 @@
 <div class="agent-page">
   <div class="topbar">
     <a class="ar-lockup" routerLink="/"><app-mark [size]="28" /><span class="ar-wordmark">Arabica<b>AI</b></span></a>
-    <div style="display: flex; align-items: center; gap: 16px">
+    <div class="topbar-end">
       <a routerLink="/" class="ar-small" style="font-weight: 500; color: var(--link)">{{ t().customer }}</a>
       <app-lang-switch />
     </div>
@@ -15,33 +15,94 @@
   @if (error()) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
 
   <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
-    <button type="button" class="ar-btn" (click)="load()" [disabled]="busy()">{{ t().agentLoad }}</button>
+    <button #signIn type="button" class="ar-btn" (click)="load()" [disabled]="busy()">{{ t().agentLoad }}</button>
     @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
     <span class="ar-chip ar-chip-warn">{{ t().sandbox }}</span>
   </div>
 
   @if (loaded()) {
-    <section class="box">
-      <div class="box-head"><h2>{{ t().openCases }}</h2><span class="ar-caption">{{ cases().length }}</span></div>
+    <section class="box" aria-labelledby="intake-queue-title">
+      <div class="box-head"><h2 #queueHeading id="intake-queue-title" tabindex="-1">{{ t().intakeQueue }}</h2><span class="ar-caption">{{ intakes().length }}</span></div>
       <div class="box-body" style="padding-top: 0">
-        @for (item of cases(); track item.protocol) {
-          <article class="case">
-            <div class="case-head"><h3 class="case-name">{{ item.display_name }}</h3><span class="ar-amount">{{ item.amount }} {{ item.currency }}</span><span class="ar-small">{{ item.merchant_name || t().noMerchant }}</span></div>
-            <span class="ar-chip ar-chip-ok" style="align-self: start">{{ t().accepted }}</span>
-            <p class="case-statement">{{ item.customer_statement }}</p>
-            <div class="case-meta">
-              <span><b>TX</b> {{ item.transaction_id }}</span>
-              <span><b>{{ t().date }}</b>
-                @if (item.source_occurred_at) { {{ sourceTime(item.source_occurred_at) }} ({{ t().tzMissing }}) }
-                @else if (item.occurred_at) { {{ item.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }} }
-                @else { {{ t().dateMissing }} }
-              </span>
-              <span><b>{{ t().reference }}</b> {{ item.protocol }}</span>
-              <span><b>{{ t().acceptedAt }}</b> {{ item.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span>
-            </div>
-          </article>
-        } @empty { <div class="ar-empty" style="margin-top: 12px"><p>{{ t().noCases }}</p></div> }
+        @if (intakes().length) {
+          <ul class="intake-list">
+            @for (item of intakes(); track item.protocol) {
+              <li>
+                <button #row type="button" class="intake-row" [attr.aria-expanded]="openProtocol() === item.protocol" [attr.aria-controls]="openProtocol() === item.protocol && detail() ? 'intake-detail' : null" (click)="open(item.protocol, row)">
+                  <span class="ar-chip" [class.ar-chip-ok]="item.kind === 'complete'" [class.ar-chip-err]="item.kind === 'technical'" [class.ar-chip-warn]="item.kind === 'incomplete'">{{ kindLabel(item.kind) }}</span>
+                  <span class="ar-mono">{{ item.protocol }}</span>
+                  <span class="ar-small">{{ item.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span>
+                  <span class="ar-small">{{ t().toolStatus }}: <code>{{ item.tool_status }}</code></span>
+                </button>
+              </li>
+            }
+          </ul>
+        } @else { <div class="ar-empty" style="margin-top: 12px"><p>{{ t().noIntakes }}</p></div> }
+        @if (intakesHasMore()) { <p class="status-line">{{ t().queueMore }}</p> }
       </div>
     </section>
+
+    @if (detail(); as d) {
+      <section id="intake-detail" class="box" aria-labelledby="intake-detail-title">
+        <div class="box-head">
+          <h2 #detailHeading id="intake-detail-title" tabindex="-1">{{ t().intakeDetail }}: {{ kindLabel(d.kind) }}</h2>
+          <button type="button" class="ar-btn ar-btn-secondary" (click)="close()">{{ t().close }}</button>
+        </div>
+        <div class="box-body detail">
+          <dl class="detail-meta">
+            <div><dt>{{ t().reference }}</dt><dd class="ar-mono">{{ d.protocol }}</dd></div>
+            <div><dt>{{ t().acceptedAt }}</dt><dd>{{ d.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</dd></div>
+            <div><dt>{{ t().toolStatus }}</dt><dd><code>{{ d.tool_status }}</code></dd></div>
+            <div><dt>{{ t().destination }}</dt><dd><code>{{ d.destination }}</code></dd></div>
+            <div><dt>{{ t().priority }}</dt><dd><code>{{ d.priority }}</code></dd></div>
+            <div><dt>{{ t().languageCode }}</dt><dd><code>{{ d.language }}</code></dd></div>
+          </dl>
+
+          <h3>{{ t().statement }}</h3>
+          <p class="case-statement" [attr.lang]="d.language">{{ d.customer_statement }}</p>
+
+          <h3>{{ t().evidence }}</h3>
+          @if (d.verified_evidence.transaction; as tx) {
+            <dl class="detail-meta">
+              <div><dt>{{ t().transactionId }}</dt><dd class="ar-mono">{{ tx.transaction_id }}</dd></div>
+              <div><dt>{{ t().merchant }}</dt><dd>{{ tx.merchant_name || t().noMerchant }}</dd></div>
+              <div><dt>{{ t().amount }}</dt><dd class="ar-amount">{{ tx.amount }} {{ tx.currency }}</dd></div>
+              <div><dt>{{ t().date }}</dt><dd>
+                @if (tx.source_occurred_at) { {{ sourceTime(tx.source_occurred_at) }} ({{ t().tzMissing }}) }
+                @else if (tx.occurred_at) { {{ tx.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }} }
+                @else { {{ t().dateMissing }} }
+              </dd></div>
+            </dl>
+          } @else { <p class="status-line">{{ t().noEvidence }}</p> }
+
+          <section id="intake-checks" class="ar-panel">
+            <h3>{{ t().whatWeChecked }}</h3>
+            @if (d.actions_taken.length) { <ul>@for (a of d.actions_taken; track $index) { <li>{{ check(a) }} <code>{{ a }}</code></li> }</ul> }
+            @else { <p class="status-line">{{ t().none }}</p> }
+            <h3>{{ t().openQuestions }}</h3>
+            @if (d.unresolved_questions.length) { <ul>@for (q of d.unresolved_questions; track $index) { <li>{{ check(q) }} <code>{{ q }}</code></li> }</ul> }
+            @else { <p class="status-line">{{ t().none }}</p> }
+          </section>
+
+          <h3>{{ t().history }}</h3>
+          <ol class="history">
+            @for (h of d.history; track h.seq) {
+              <li>
+                <span class="ar-mono">{{ h.seq }}</span> <code>{{ h.event }}</code>
+                <span class="ar-small">{{ h.ts | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span>
+                @if (h.kind) { <code>kind={{ h.kind }}</code> }
+                @if (h.tool_status) { <code>tool_status={{ h.tool_status }}</code> }
+                @if (h.outcome) { <code>outcome={{ h.outcome }}</code> }
+                @if (h.missing?.length) { <code>missing={{ h.missing!.join(',') }}</code> }
+                @if (h.accepted_by) { <code>accepted_by={{ h.accepted_by }}</code> }
+                @if (h.case_ref) { <code>case_ref={{ h.case_ref }}</code> }
+                @if (h.transaction_ref) { <code>transaction_ref={{ h.transaction_ref }}</code> }
+              </li>
+            } @empty { <li class="status-line">{{ t().none }}</li> }
+          </ol>
+          @if (d.history_has_more) { <p class="status-line">{{ t().historyMore }}</p> }
+        </div>
+      </section>
+    } @else if (openProtocol()) { <p class="status-line" role="status">{{ t().working }}</p> }
   }
 </div>

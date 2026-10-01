@@ -1,6 +1,6 @@
 # Current analysis: Silver first
 
-`07_silver_transcript_verification.ipynb` is the current transcript-label reconciliation readout. It consumes the fresh S3 → Bronze → Silver audit after the scoped quality gate passes. Run commands and scope are in `Docs/intake/silver-transcript-verification.md`.
+`07_silver_transcript_verification.ipynb` is the current transcript-label reconciliation readout. It consumes the fresh S3 → Bronze → Silver audit after the scoped quality gate passes. Run commands and scope are in `Docs/archive/2026-09-27-silver-transcript-verification.md`.
 
 Notebooks 01–06 and their CSV/SQLite reports below are **historical evidence**. Do not use their old ingestion instructions for new analysis. Their cached results remain available for comparison; they are not a substitute for the current Silver quality gate. Jev predictions remain unadjudicated.
 
@@ -24,7 +24,7 @@ If `python3 --version` is older than 3.11, use your installed newer Python execu
 
 ## Inputs
 
-Use the organizer-authorized AWS profile described in `REPRODUCIBILITY.md`. The required tables are `call_center_interactions`, `transactions`, `complaints`, `customers` and `call_transcripts`. Finish their download before the final run; the input gate rejects missing, extra or differently sized CSV files. Never place keys in commands or notebook cells.
+Use the organizer-authorized AWS profile described in `Docs/deliverables/REPRODUCIBILITY.md`. The required tables are `call_center_interactions`, `transactions`, `complaints`, `customers` and `call_transcripts`. Finish their download before the final run; the input gate rejects missing, extra or differently sized CSV files. Never place keys in commands or notebook cells.
 
 Create a fresh inventory from S3 (no credentials are included in this output):
 
