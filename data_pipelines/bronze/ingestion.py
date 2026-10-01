@@ -41,6 +41,12 @@ logger = logging.getLogger(__name__)
 _IDENTIFIER_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
 
+def _sql_str(value: str) -> str:
+    """A SQL string literal for a path. Source directory names come from the bucket listing, so an
+    apostrophe in one must never end the literal early or change the statement (CWE-89)."""
+    return "'" + str(value).replace("'", "''") + "'"
+
+
 def _safe_identifier(name: str) -> str:
     """Defense in depth: table names are only ever supposed to come from config.py's fixed lists,
     but this guards against an f-string SQL injection if that ever changes (e.g. a future CLI flag
@@ -84,13 +90,13 @@ def ingest_dimension(
                    filename AS _source_file,
                    current_timestamp AS _ingested_at,
                    '{table_name}' AS _source_table
-            FROM read_csv('{s3_path}', ALL_VARCHAR=true, filename=true)
-        ) TO '{local_path}' (FORMAT PARQUET)
+            FROM read_csv({_sql_str(s3_path)}, ALL_VARCHAR=true, filename=true)
+        ) TO {_sql_str(local_path)} (FORMAT PARQUET)
     """)
 
     con.execute(f"""
         CREATE OR REPLACE TABLE bronze.{table_name} AS
-        SELECT * FROM read_parquet('{local_path}')
+        SELECT * FROM read_parquet({_sql_str(local_path)})
     """)
 
     count = con.execute(f"SELECT count(*) FROM bronze.{table_name}").fetchone()[0]
@@ -140,7 +146,7 @@ def _discover_partitions(con: duckdb.DuckDBPyConnection, base_path: str, table_n
     (``day=1`` and ``day=01`` both parse); reads use them instead of rebuilding a padded path.
     """
     pattern = f"{base_path}/{table_name}/year=*/month=*/day=*/*.csv"
-    rows = con.execute(f"SELECT file FROM glob('{pattern}')").fetchall()
+    rows = con.execute("SELECT file FROM glob(?)", [pattern]).fetchall()
     found: dict = {}
     for (path,) in rows:
         y = re.search(r"year=(\d+)", path)
@@ -197,7 +203,7 @@ def _rebuild_fact_table(con: duckdb.DuckDBPyConnection, table_name: str, local_d
     """Publish the Bronze table from the active local Parquet snapshot."""
     con.execute(f"""
         CREATE OR REPLACE TABLE bronze.{table_name} AS
-        SELECT * FROM read_parquet('{local_dir}/**/*.parquet', hive_partitioning=true)
+        SELECT * FROM read_parquet({_sql_str(local_dir + '/**/*.parquet')}, hive_partitioning=true)
     """)
 
 
@@ -311,8 +317,8 @@ def ingest_fact(
     os.makedirs(write_dir, exist_ok=True)
 
     def _copy_from(glob_pattern: "str | List[str]") -> None:
-        source = (f"'{glob_pattern}'" if isinstance(glob_pattern, str)
-                  else "[" + ", ".join(f"'{g}'" for g in glob_pattern) + "]")
+        source = (_sql_str(glob_pattern) if isinstance(glob_pattern, str)
+                  else "[" + ", ".join(_sql_str(g) for g in glob_pattern) + "]")
         con.execute(f"""
             COPY (
                 SELECT * EXCLUDE (filename),
@@ -320,7 +326,7 @@ def ingest_fact(
                        current_timestamp AS _ingested_at,
                        '{table_name}' AS _source_table
                 FROM read_csv({source}, ALL_VARCHAR=true, hive_partitioning=true, filename=true)
-            ) TO '{write_dir}' (FORMAT PARQUET, PARTITION_BY (year, month, day), OVERWRITE_OR_IGNORE)
+            ) TO {_sql_str(write_dir)} (FORMAT PARQUET, PARTITION_BY (year, month, day), OVERWRITE_OR_IGNORE)
         """)
 
     try:

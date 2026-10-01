@@ -331,3 +331,14 @@ def test_incremental_run_reads_partitions_whose_paths_are_not_zero_padded(con, t
 
     assert result.partitions_added == 2
     assert result.rows == 3
+
+
+def test_paths_with_an_apostrophe_are_escaped_in_every_generated_sql_literal(con, tmp_path):
+    # Discovered directories (and the source base) become SQL string literals; an apostrophe must not
+    # end the literal early or change the statement (CWE-89).
+    base = tmp_path / "source'; DROP TABLE x; --"
+    _write_csv(base / "transactions/year=2024/month=01/day=01/t.csv", "transaction_id,amount\nT1,100\n")
+    assert ingest_fact(con, str(base), "transactions").rows == 1
+    _write_csv(base / "transactions/year=2024/month=01/day=02/t.csv", "transaction_id,amount\nT2,200\n")
+    result = ingest_fact(con, str(base), "transactions")
+    assert result.partitions_added == 1 and result.rows == 2
