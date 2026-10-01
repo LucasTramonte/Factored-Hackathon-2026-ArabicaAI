@@ -20,6 +20,7 @@ from pathlib import Path
 import duckdb
 
 from data_pipelines.gold.intake_slice import AMOUNT, CURRENCY
+from intake_agent.context_card import CARD_VERSION, VARIANTS
 
 SOURCE ="lake"  # alias of the attached, read-only Silver database
 # DuckDB names a file's catalog after its stem, so these stems would make ``gold.x`` or
@@ -107,7 +108,7 @@ def connect(gold_db: Path, silver_db: Path) -> duckdb.DuckDBPyConnection:
     return con
 
 
-def build_customers(con: duckdb.DuckDBPyConnection) -> list[Check]:
+def build_customers(con: duckdb.DuckDBPyConnection, quality: dict) -> list[Check]:
     """One row per Silver customer; ``row_hash`` covers only the columns published to D1.
 
     Grain: ``customer_id``, 1:1 with ``silver.dim_customers`` (a current snapshot, so country
@@ -147,7 +148,7 @@ def build_customers(con: duckdb.DuckDBPyConnection) -> list[Check]:
 CARD_TYPES = ("Tarjeta Crédito", "Tarjeta Débito")  # Silver keeps the source's Spanish labels (DF-018)
 
 
-def build_card_purchases(con: duckdb.DuckDBPyConnection) -> list[Check]:
+def build_card_purchases(con: duckdb.DuckDBPyConnection, quality: dict) -> list[Check]:
     """One row per approved card purchase, with the Bronze amount and wall time served verbatim.
 
     Grain: ``transaction_id``, 1:1 with Silver ``Purchase``/``Approved`` rows. Joins are N:1:
@@ -234,9 +235,95 @@ def build_card_purchases(con: duckdb.DuckDBPyConnection) -> list[Check]:
     ]
 
 
+# Mirrors LOCALE in back-end/src/modules/customer/routes.js: a card whose hint fails it is served as null.
+WORKER_LOCALE = "(es|pt)(-[A-Za-z0-9]+)*"
+CARD_PRODUCT = "STRUCT(currency VARCHAR, last4 VARCHAR, product_type VARCHAR)"
+
+
+def build_context_cards(con: duckdb.DuckDBPyConnection, quality: dict) -> list[Check]:
+    """One context card per Gold customer, byte-identical to ``intake_agent.context_card``.
+
+    Grain: ``customer_id``, 1:1 with ``gold.customers``. Products are the customer's *current*
+    active products (a snapshot, never what was active on a transaction date), aggregated to one
+    list per customer before the join. ``card_json`` has the same keys, order and escaping as the
+    Python builder's ``json.dumps(sort_keys=True, separators=(',', ':'), ensure_ascii=False)``,
+    because D1's drift guard compares it as text. ``snapshot_at`` is the quality run's time.
+    ``row_hash`` leaves ``snapshot_at`` out, so a newer quality run over unchanged data doesn't
+    mark every card as changed. Requires ``gold.customers`` from this or an earlier build.
+    """
+    con.execute("CREATE OR REPLACE TEMP TABLE locale_variants (key VARCHAR, locale VARCHAR)")
+    con.executemany("INSERT INTO locale_variants VALUES (?, ?)", list(VARIANTS.items()))
+    last4 = "CASE WHEN length(p.product_number) >= 4 THEN right(p.product_number, 4) END"
+    con.execute(f"""
+        CREATE OR REPLACE TEMP TABLE context_card_products AS
+        SELECT p.customer_id,
+               list(struct_pack(currency := p.currency, last4 := {last4}, product_type := p.product_type)
+                    ORDER BY p.product_type, {last4}, p.currency) AS products
+        FROM {SOURCE}.silver.dim_products p
+        WHERE p.product_status = 'Active' AND p.customer_id IN (SELECT customer_id FROM gold.customers)
+        GROUP BY 1
+    """)
+    con.execute(f"""
+        CREATE OR REPLACE TABLE gold.context_cards AS
+        WITH cards AS (
+            SELECT g.customer_id, {CARD_VERSION} AS card_version, CAST(? AS VARCHAR) AS snapshot_at,
+                   CAST(to_json(struct_pack(
+                       first_name := c.first_name,
+                       locale_hint := coalesce(va.locale, vc.locale, 'es-419'),
+                       products := coalesce(p.products, CAST([] AS {CARD_PRODUCT}[])))) AS VARCHAR) AS card_json
+            FROM gold.customers g
+            JOIN {SOURCE}.silver.dim_customers c USING (customer_id)
+            LEFT JOIN locale_variants va ON va.key = c.detected_accent
+            LEFT JOIN locale_variants vc ON vc.key = c.country
+            LEFT JOIN context_card_products p USING (customer_id)
+        )
+        SELECT customer_id, card_version, snapshot_at, card_json,
+               sha256(CAST(json_array(customer_id, card_version, card_json) AS VARCHAR)) AS row_hash
+        FROM cards
+        ORDER BY customer_id
+    """, [quality["generated_at_utc"]])
+    counts = con.execute(f"""
+        SELECT
+          (SELECT count(*) FROM gold.customers),
+          count(*),
+          count(customer_id) - count(DISTINCT customer_id),
+          (SELECT count(*) FROM gold.customers g WHERE NOT EXISTS
+             (SELECT 1 FROM gold.context_cards k WHERE k.customer_id = g.customer_id)),
+          count(*) FILTER (WHERE NOT json_valid(card_json)),
+          count(*) FILTER (WHERE coalesce(trim(json_extract_string(card_json, '$.first_name')), '') = ''),
+          count(*) FILTER (WHERE NOT regexp_full_match(json_extract_string(card_json, '$.locale_hint'), '{WORKER_LOCALE}')),
+          (SELECT count(*) FROM (SELECT unnest(products) AS item FROM context_card_products)
+            WHERE NOT (item.last4 IS NULL OR regexp_full_match(item.last4, '[0-9]{{4}}'))
+               OR NOT (item.currency IS NULL OR regexp_full_match(item.currency, '[A-Z]{{3}}'))),
+          (SELECT count(*) FROM {SOURCE}.silver.dim_products
+            WHERE product_status = 'Active' AND customer_id IN (SELECT customer_id FROM gold.customers)),
+          coalesce(sum(json_array_length(card_json, '$.products')), 0),
+          (SELECT count(*) FROM gold.customers g WHERE NOT EXISTS
+             (SELECT 1 FROM {SOURCE}.silver.dim_products p WHERE p.customer_id = g.customer_id AND p.product_status = 'Active')),
+          count(*) FILTER (WHERE json_array_length(card_json, '$.products') = 0)
+        FROM gold.context_cards
+    """).fetchone()
+    (customers, cards, duplicates, uncarded, bad_json, no_name, bad_locale, bad_product,
+     silver_active, carded_products, silver_no_active, cards_no_products) = counts
+    con.execute("DROP TABLE context_card_products")
+    con.execute("DROP TABLE locale_variants")
+    return [
+        Check("context_cards", "row_count_matches_gold_customers", customers, cards),
+        Check("context_cards", "duplicate_customer_id", 0, duplicates),
+        Check("context_cards", "gold_customer_without_card", 0, uncarded),
+        Check("context_cards", "card_json_invalid", 0, bad_json),
+        Check("context_cards", "blank_first_name", 0, no_name),
+        Check("context_cards", "locale_hint_rejected_by_worker", 0, bad_locale),
+        Check("context_cards", "product_field_rejected_by_worker", 0, bad_product),
+        Check("context_cards", "active_products_match_silver", silver_active, carded_products),
+        Check("context_cards", "customers_without_active_product", silver_no_active, cards_no_products),
+    ]
+
+
 # Gold table → (builder, Bronze/Silver tables its quality run must cover), in build order.
 BUILDERS = {"customers": (build_customers, {"customers"}),
-            "card_purchases": (build_card_purchases, {"customers", "products", "transactions"})}
+            "card_purchases": (build_card_purchases, {"customers", "products", "transactions"}),
+            "context_cards": (build_context_cards, {"customers", "products"})}
 
 
 def build(con: duckdb.DuckDBPyConnection, tables: tuple[str, ...], silver_db: Path, quality: dict) -> tuple[str, list[Check]]:
@@ -247,7 +334,7 @@ def build(con: duckdb.DuckDBPyConnection, tables: tuple[str, ...], silver_db: Pa
     build_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     con.execute("BEGIN TRANSACTION")
     try:
-        checks = [c for name in tables for c in BUILDERS[name][0](con)]
+        checks = [c for name in tables for c in BUILDERS[name][0](con, quality)]
         failed = [c for c in checks if not c.passed]
         if failed:
             raise GoldCheckError(failed)

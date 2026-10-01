@@ -14,10 +14,11 @@ import pytest
 
 from data_pipelines.gold import build_gold as gb
 
+# customer_id, first_name, last_name, country, segment[, detected_accent (default NULL)]
 CUSTOMERS = [("C1", " Ana ", "gómez", "Argentina", "Basic"),
              ("C2", "Bruno", "Lima", "Colombia", "Plus"),
              ("C3", "Carla", "Ruiz", "México", "Student")]
-# product_id, customer_id, product_type, product_number
+# product_id, customer_id, product_type, product_number[, currency (default 'ARS'), product_status (default 'Active')]
 PRODUCTS = [("P1", "C1", "Tarjeta Crédito", "4111222233334444"),
             ("P2", "C2", "Tarjeta Débito", "123"),
             ("P3", "C3", "Cuenta Ahorro", "9999888877776666")]
@@ -43,9 +44,9 @@ def make_silver(tmp_path: Path, customers=CUSTOMERS, products=PRODUCTS, purchase
     with duckdb.connect(str(path)) as con:
         con.execute("CREATE SCHEMA silver; CREATE SCHEMA bronze")
         con.execute("CREATE TABLE silver.dim_customers(customer_id VARCHAR, first_name VARCHAR, last_name VARCHAR,"
-                    " country VARCHAR, segment VARCHAR)")
+                    " country VARCHAR, segment VARCHAR, detected_accent VARCHAR DEFAULT NULL)")
         con.execute("CREATE TABLE silver.dim_products(product_id VARCHAR, customer_id VARCHAR, product_type VARCHAR,"
-                    " product_number VARCHAR)")
+                    " product_number VARCHAR, currency VARCHAR DEFAULT 'ARS', product_status VARCHAR DEFAULT 'Active')")
         con.execute("CREATE TABLE silver.fact_transactions(transaction_id VARCHAR, customer_id VARCHAR, product_id VARCHAR,"
                     " transaction_date TIMESTAMP, merchant_name VARCHAR, merchant_category VARCHAR, amount DOUBLE,"
                     " currency VARCHAR, transaction_country VARCHAR, transaction_type VARCHAR, transaction_status VARCHAR)")
@@ -53,8 +54,10 @@ def make_silver(tmp_path: Path, customers=CUSTOMERS, products=PRODUCTS, purchase
                     " _source_file VARCHAR)")
         for table, rows in (("silver.dim_customers", customers), ("silver.dim_products", products),
                             ("silver.fact_transactions", purchases), ("bronze.transactions", bronze)):
-            if rows:
-                con.executemany(f"INSERT INTO {table} VALUES ({', '.join('?' * len(rows[0]))})", rows)
+            columns = [r[0] for r in con.execute(f"DESCRIBE {table}").fetchall()]
+            for width in sorted({len(r) for r in rows or []}):  # shorter rows take the column defaults
+                con.executemany(f"INSERT INTO {table} ({', '.join(columns[:width])}) VALUES ({', '.join('?' * width)})",
+                                [r for r in rows if len(r) == width])
     return path
 
 
@@ -239,3 +242,86 @@ def test_a_failed_card_purchase_check_rolls_back_every_table(tmp_path, kwargs, f
     assert gold_rows(tmp_path, "SELECT display_name FROM gold.customers WHERE customer_id = 'C2'") == [("Bruno L.",)]
     assert gold_rows(tmp_path, "SELECT count(*) FROM gold.card_purchases") == [(2,)]
     assert gold_rows(tmp_path, "SELECT build_id FROM gold.builds") == [(first_build,)]
+
+# ---- gold.context_cards -----------------------------------------------------------------------
+
+from intake_agent.context_card import build_context_card  # noqa: E402  (the reference implementation)
+
+CARD_TABLES = ("customers", "context_cards")
+CARD_CUSTOMERS = [("C1", ' Ana "la"\t', "gómez", "Argentina", "Basic", "argentine"),  # accent → es-AR; raw name kept
+                  ("C2", "Bruno\\Ü", "Lima", "Colombia", "Plus", None),               # no accent → country → es-CO
+                  ("C3", "Carla", "Ruiz", "México", "Student", "colombian"),          # accent wins over country
+                  ("C4", "Dora", "Paz", "Brasil", "Basic", None)]                     # unknown → es-419; no products
+CARD_PRODUCTS = [("P1", "C1", "Tarjeta Crédito", "4111222233334444", "ARS", "Active"),
+                 ("P1b", "C1", "Cuenta Ahorro", "0000111122223333", "ARS", "Active"),
+                 ("P1c", "C1", "Tarjeta Crédito", "5555000011112222", "USD", "Active"),
+                 ("P1d", "C1", "Préstamo Personal", "9876543210", "ARS", "Closed"),       # not active: left off
+                 ("P2", "C2", "Tarjeta Débito", "123", "COP", "Active"),                  # short number: last4 null
+                 ("P3", "C3", "Cuenta Ahorro", "9999888877776666", "USD", "Active")]
+
+
+def card_silver(tmp_path, customers=CARD_CUSTOMERS, products=CARD_PRODUCTS):
+    return make_silver(tmp_path, customers=customers, products=products)
+
+
+def test_cards_are_byte_identical_to_the_python_builder(tmp_path):
+    silver = card_silver(tmp_path)
+    run(tmp_path, silver, CARD_TABLES)
+    gold = dict(gold_rows(tmp_path, "SELECT customer_id, card_json FROM gold.context_cards"))
+    with duckdb.connect(str(silver), read_only=True) as con:
+        expected = {c[0]: json.dumps(build_context_card(con, c[0]), ensure_ascii=False, sort_keys=True,
+                                     separators=(",", ":")) for c in CARD_CUSTOMERS}
+    assert gold == expected
+    c1 = json.loads(gold["C1"])
+    assert c1["locale_hint"] == "es-AR" and c1["first_name"] == ' Ana "la"\t'
+    assert [(p["product_type"], p["last4"]) for p in c1["products"]] == [
+        ("Cuenta Ahorro", "3333"), ("Tarjeta Crédito", "2222"), ("Tarjeta Crédito", "4444")]
+    assert json.loads(gold["C2"])["products"] == [{"currency": "COP", "last4": None, "product_type": "Tarjeta Débito"}]
+    assert json.loads(gold["C3"])["locale_hint"] == "es-CO"
+    assert json.loads(gold["C4"]) == {"first_name": "Dora", "locale_hint": "es-419", "products": []}
+
+
+def test_cards_carry_the_version_and_quality_time_and_report_their_checks(tmp_path):
+    silver = card_silver(tmp_path)
+    quality = gb.check_quality(silver, make_quality(tmp_path, silver), {"customers"})
+    with gb.connect(tmp_path / "gold_fixture.duckdb", silver) as con:
+        _, checks = gb.build(con, CARD_TABLES, silver, quality)
+    assert set(gold_rows(tmp_path, "SELECT card_version, snapshot_at FROM gold.context_cards")) == {
+        (1, quality["generated_at_utc"])}
+    found = {c.name: (c.expected, c.actual) for c in checks if c.table == "context_cards"}
+    assert len(found) == 9
+    assert found["active_products_match_silver"] == (5, 5)
+    assert found["customers_without_active_product"] == (1, 1)
+
+
+def test_card_hash_ignores_a_newer_quality_run_but_not_a_content_change(tmp_path):
+    silver = card_silver(tmp_path)
+    run(tmp_path, silver, CARD_TABLES)
+    query = "SELECT customer_id, row_hash, snapshot_at FROM gold.context_cards"
+    before = {r[0]: r[1:] for r in gold_rows(tmp_path, query)}
+    renamed = [("C2", "Bruna", *c[2:]) if c[0] == "C2" else c for c in CARD_CUSTOMERS]
+    run(tmp_path, card_silver(tmp_path, customers=renamed), CARD_TABLES)   # a new quality run, written later
+    after = {r[0]: r[1:] for r in gold_rows(tmp_path, query)}
+    assert after["C1"][1] != before["C1"][1]      # snapshot_at moved to the newer quality run...
+    assert after["C1"][0] == before["C1"][0]      # ...but an unchanged card keeps its hash
+    assert after["C2"][0] != before["C2"][0]      # a changed first name changes it
+
+
+@pytest.mark.parametrize(("products", "failed"), [
+    (CARD_PRODUCTS + [("P5", "C3", "Tarjeta Débito", "12a4", "USD", "Active")], "product_field_rejected_by_worker"),
+    (CARD_PRODUCTS + [("P5", "C3", "Tarjeta Débito", "1234", "usd", "Active")], "product_field_rejected_by_worker"),
+])
+def test_a_card_the_worker_would_reject_rolls_the_build_back(tmp_path, products, failed):
+    first_build, _ = run(tmp_path, card_silver(tmp_path), CARD_TABLES)
+    with pytest.raises(gb.GoldCheckError) as err:
+        run(tmp_path, card_silver(tmp_path, products=products), CARD_TABLES)
+    assert failed in {c.name for c in err.value.failed}
+    assert gold_rows(tmp_path, "SELECT build_id FROM gold.builds") == [(first_build,)]
+    assert gold_rows(tmp_path, "SELECT count(*) FROM gold.context_cards") == [(4,)]
+
+
+def test_a_blank_first_name_fails_the_card_even_though_the_customer_row_passes(tmp_path):
+    customers = CARD_CUSTOMERS + [("C5", "  ", "Vega", "Colombia", "Basic", None)]
+    with pytest.raises(gb.GoldCheckError) as err:
+        run(tmp_path, card_silver(tmp_path, customers=customers), CARD_TABLES)
+    assert {c.name for c in err.value.failed} == {"blank_first_name"}
