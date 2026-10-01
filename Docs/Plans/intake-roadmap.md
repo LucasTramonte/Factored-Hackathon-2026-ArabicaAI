@@ -21,7 +21,7 @@ This page maps each box to what exists and what's next. The decisions behind it 
 | Idempotent case + evidence + pending questions | Idempotent per customer and key; 409 on divergence; concurrency-tested. In the merged backend (not deployed), guided handoffs store their kind (complete, technical, incomplete), server actions, open questions and an evidence snapshot, one per episode. | A cross-key duplicate rule, and UI use of the handoff kinds |
 | Verify the saved case, then issue the reference | The reference is returned only after reading the row back | — |
 | Human review | Read-only agent queue. In the merged backend (not deployed), a guided intake queue and detail with the recorded service history (API only). | Human status history (accepted → in review → closed by a human), UI for the intake detail; still no refund or verdict actions |
-| ES / PT customer | English UI | ES/PT interface text; explicit currency and timezone labels kept |
+| ES / PT customer | ES/PT/EN interface with a language switch; evidence (amounts, IDs, timestamps) is not translated | Explicit currency and timezone labels kept |
 | Offline evaluation | Checklist baseline and episode scorer in `evals/intake`. In the merged backend (not deployed), the guided API emits the v2 event contract, and a validated export feeds the scorer (pending episodes included). | The deployed UI on the guided routes, so real episodes are scored; routing and authentication failures stay separate from episodes |
 
 ## Phases and exit gates
