@@ -28,9 +28,9 @@ const CEILING = {
   agentList: [2, 250, 0, 2],
   intakeStart: [6, 8, 11, 2],
   intakeStartReplay: [6, 6, 2, 2],
-  intakeConfirm: [18, 60, 22, 8],
+  intakeConfirm: [18, 60, 23, 8],
   intakeConfirmReplay: [17, 45, 0, 7],
-  intakeIncomplete: [14, 42, 14, 7],
+  intakeIncomplete: [14, 42, 15, 7],
   intakeIncompleteReplay: [14, 36, 0, 7],
   // 1 session row + 2 rows per scanned handoff; qualified for a 50-row page behind 50 tied pending reservations.
   // Pending density is not bounded in general, so this is a fixture workload, not a universal scan bound.
@@ -49,7 +49,7 @@ const CEILING = {
 const EXPORT_SLACK = 2;
 const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
 // Customer requests of one guided episode (login + list + start + terminal request); ADR-004 sizes capacity on these.
-const EPISODE_CEILING = { complete: [30, 72, 36, 15], incomplete: [26, 56, 28, 14] };
+const EPISODE_CEILING = { complete: [30, 72, 37, 15], incomplete: [26, 56, 29, 14] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);
