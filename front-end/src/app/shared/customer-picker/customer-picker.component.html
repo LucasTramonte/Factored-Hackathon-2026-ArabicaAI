@@ -1,0 +1,28 @@
+<fieldset class="picker" [disabled]="disabled()">
+  <legend class="sr-only">{{ t().chooseIdentity }}</legend>
+  <div class="picker-filters">
+    <label class="ar-field"><span class="ar-field-label">{{ t().pickerSearch }}</span>
+      <input type="search" class="ar-input" autocomplete="off" [value]="query()" (input)="query.set($any($event.target).value)">
+    </label>
+    <label class="ar-field"><span class="ar-field-label">{{ t().pickerCountry }}</span>
+      <select class="ar-select" [value]="country()" (change)="country.set($any($event.target).value)">
+        <option value="">{{ t().pickerAllCountries }}</option>
+        @for (c of countries(); track c) { <option [value]="c">{{ c }}</option> }
+        <option [value]="noCountry">{{ t().pickerNoCountry }}</option>
+      </select>
+    </label>
+  </div>
+  <p class="ar-small" role="status">
+    @if (matches().length) { {{ matches().length }} {{ t().pickerMatches }}@if (capped()) {. {{ t().pickerRefine }}} } @else { {{ t().pickerNone }} }
+  </p>
+  <div class="picker-list">
+    @for (person of shown(); track person.customer_id) {
+      <label class="ar-row" [class.ar-row-selected]="value() === person.customer_id">
+        <input type="radio" name="identity" [value]="person.customer_id" [checked]="value() === person.customer_id" (change)="value.set(person.customer_id)">
+        <span class="ar-tile" aria-hidden="true">{{ person.display_name.slice(0, 2).toUpperCase() }}</span>
+        <span class="ar-row-name">{{ person.display_name }}</span>
+        <span class="ar-row-meta">{{ person.customer_id }} · {{ person.country ?? t().pickerNoCountry }}</span>
+      </label>
+    }
+  </div>
+</fieldset>
