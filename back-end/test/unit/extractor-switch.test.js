@@ -111,9 +111,9 @@ test('switch off or not ready: events are byte-identical guided-0.1 and the mode
     [gate, route], [{ ...gate, INTAKE_AI_ENABLED: '1', AI: throwingAI }, route],
     ...[{ AI: throwingAI }, { INTAKE_AI_ENABLED: '0', AI: throwingAI }, { INTAKE_AI_ENABLED: 'true', AI: throwingAI },
       { INTAKE_AI_ENABLED: 1, AI: throwingAI }, { INTAKE_AI_ENABLED: '1' }, { INTAKE_AI_ENABLED: '1', AI: {} }]
-      .map(flags => [{ ...gate, ...flags }, (r, e, s) => startIntake(r, e, s, stubExtractor(() => { throw new Error('called'); }))]),
+      .map(flags => [{ ...gate, ...flags }, (r, e, s) => startIntake(r, e, s, undefined, stubExtractor(() => { throw new Error('called'); }))]),
     ...[placeholder, stale, { ...stubExtractor(), extractApproved: 'not a function' }]
-      .map(x => [{ ...gate, INTAKE_AI_ENABLED: '1', AI: throwingAI }, (r, e, s) => startIntake(r, e, s, x)])
+      .map(x => [{ ...gate, INTAKE_AI_ENABLED: '1', AI: throwingAI }, (r, e, s) => startIntake(r, e, s, undefined, x)])
   ];
   for (const [env, call] of cases) await episodes(env, store, events, call);
   const all = events();
@@ -127,8 +127,8 @@ test('switch off keeps the per-request D1 work of the guided start', async t => 
   const measure = async (env, call = route) => { const s = store(); assert.equal((await call(post('/intake/start', startBody()), env, s)).status, 201); return s.metrics(); };
   const baseline = await measure(gate);
   assert.deepEqual(await measure({ ...gate, INTAKE_AI_ENABLED: '1', AI: throwingAI }), baseline);
-  assert.deepEqual(await measure({ ...gate, AI: throwingAI }, (r, e, s) => startIntake(r, e, s, stubExtractor())), baseline);
-  const on = await measure({ ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() }, (r, e, s) => startIntake(r, e, s, stubExtractor()));
+  assert.deepEqual(await measure({ ...gate, AI: throwingAI }, (r, e, s) => startIntake(r, e, s, undefined, stubExtractor())), baseline);
+  const on = await measure({ ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() }, (r, e, s) => startIntake(r, e, s, undefined, stubExtractor()));
   assert.deepEqual(on, { ...baseline, queries: baseline.queries + 1, roundTrips: baseline.roundTrips + 1 }, 'on-mode adds exactly one usage update');
   console.log('D1_EXTRACTOR_START ' + JSON.stringify({ off: baseline, on }));
 });
@@ -139,7 +139,7 @@ test('on: shadow call gets only the statement, language and vocabulary, and the 
   const extractor = stubExtractor(async args => { await args.invoke({ messages: [{ role: 'user', content: args.message }] }); return { extracted: EXTRACTED, usage: USAGE }; });
   const env = { ...gate, INTAKE_AI_ENABLED: '1', AI: ai };
   const before = Date.now();
-  const res = await startIntake(post('/intake/start', startBody()), env, store(), extractor);
+  const res = await startIntake(post('/intake/start', startBody()), env, store(), undefined, extractor);
   assert.equal(res.status, 201);
   const payload = await res.json();
   assertContract('intakeStart', payload);
@@ -166,7 +166,7 @@ test('on: shadow call gets only the statement, language and vocabulary, and the 
 test('on: the customer still picks and confirms; end events carry the real producer and measured usage', async t => {
   const { store, events } = await setup(t);
   const env = { ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() };
-  const run = await episodes(env, store, events, (r, e, s) => startIntake(r, e, s, stubExtractor()));
+  const run = await episodes(env, store, events, (r, e, s) => startIntake(r, e, s, undefined, stubExtractor()));
   const parsed = run.events.map(JSON.parse);
   assert.equal(parsed.length, 10);
   for (const e of parsed) assert.equal(e.model_version, VERSION);
@@ -194,7 +194,7 @@ test('on: failure, timeout, malformed output or bad usage fall back to the same 
     [async args => { await args.invoke({}); return { extracted: EXTRACTED, usage: USAGE }; }, UNKNOWN, { run: async () => { throw new Error('binding error'); } }]
   ];
   for (const [behaviour, expected, ai] of behaviours) {
-    const res = await startIntake(post('/intake/start', startBody()), { ...env, ...(ai && { AI: ai }) }, store(), stubExtractor(behaviour));
+    const res = await startIntake(post('/intake/start', startBody()), { ...env, ...(ai && { AI: ai }) }, store(), undefined, stubExtractor(behaviour));
     assert.equal(res.status, 201);
     const payload = await res.json(); assertContract('intakeStart', payload);
     assert.equal(payload.state, 'selection_required');
@@ -218,7 +218,7 @@ test('on: the 10 s deadline bounds a hung adapter and the episode continues guid
   let reached;
   const called = new Promise(resolve => { reached = resolve; });
   const extractor = stubExtractor(() => { reached(); return new Promise(() => {}); });
-  const pending = startIntake(post('/intake/start', startBody()), env, store(), extractor);
+  const pending = startIntake(post('/intake/start', startBody()), env, store(), undefined, extractor);
   try {
     await Promise.race([called, pending.then(() => assert.fail('the request ended without calling the adapter'))]);
     assert.equal(extractor.calls.length, 1);
@@ -243,12 +243,12 @@ test('on: replays and concurrent same-key starts call the model once; a storage 
   const env = { ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() };
   const extractor = stubExtractor();
   const key = crypto.randomUUID();
-  const responses = await Promise.all(Array.from({ length: 4 }, () => startIntake(post('/intake/start', startBody(key)), env, store(), extractor)));
+  const responses = await Promise.all(Array.from({ length: 4 }, () => startIntake(post('/intake/start', startBody(key)), env, store(), undefined, extractor)));
   assert.deepEqual(responses.map(r => r.status).sort(), [200, 200, 200, 201]);
-  assert.equal((await startIntake(post('/intake/start', startBody(key)), env, store(), extractor)).status, 200);
+  assert.equal((await startIntake(post('/intake/start', startBody(key)), env, store(), undefined, extractor)).status, 200);
   assert.equal(extractor.calls.length, 1);
   const broken = { ...store(), recordIntakeExtraction: async () => { throw new Error('D1 down'); } };
-  const res = await startIntake(post('/intake/start', startBody()), env, broken, stubExtractor());
+  const res = await startIntake(post('/intake/start', startBody()), env, broken, undefined, stubExtractor());
   assert.equal(res.status, 201);
   const { tool_calls, model_version, ...recorded } = usage((await res.json()).episode_id);
   assert.deepEqual(recorded, UNKNOWN);
@@ -257,14 +257,14 @@ test('on: replays and concurrent same-key starts call the model once; a storage 
 test('on: identity stays with the session; another customer cannot see or finish the episode', async t => {
   const { db, store } = await setup(t);
   const env = { ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() };
-  const res = await startIntake(post('/intake/start', startBody()), env, store(), stubExtractor(async () => ({ extracted: { ...EXTRACTED, customer_id: 'bruno' }, usage: USAGE })));
+  const res = await startIntake(post('/intake/start', startBody()), env, store(), undefined, stubExtractor(async () => ({ extracted: { ...EXTRACTED, customer_id: 'bruno' }, usage: USAGE })));
   const { episode_id } = await res.json();
   assert.equal(db.prepare('SELECT customer_id FROM intake_episodes WHERE episode_id=?').get(episode_id).customer_id, 'ana');
   const other = 'b'.repeat(64);
   db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(other), 'customer', 'bruno', Date.now() + 3600000);
   const swap = await route(post('/intake/confirm', { episode_id, transaction_id: 'tx-bruno', customer_confirmed: true, idempotency_key: crypto.randomUUID() }, `demo_session=${other}`), env, store());
   assert.equal(swap.status, 404);
-  assert.equal((await startIntake(post('/intake/start', startBody(), ''), env, store(), stubExtractor())).status, 401);
+  assert.equal((await startIntake(post('/intake/start', startBody(), ''), env, store(), undefined, stubExtractor())).status, 401);
 });
 
 test('the exporter allows exactly guided-0.1 and the registered producer', () => {
@@ -275,8 +275,8 @@ test('the exporter allows exactly guided-0.1 and the registered producer', () =>
 test('on-mode events export only with their producer allowed, and the scorer accepts measured and unknown usage', async t => {
   const { store, events } = await setup(t);
   const env = { ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() };
-  await episodes(env, store, events, (r, e, s) => startIntake(r, e, s, stubExtractor()));
-  await episodes(env, store, events, (r, e, s) => startIntake(r, e, s, stubExtractor(() => { throw new Error('down'); })));
+  await episodes(env, store, events, (r, e, s) => startIntake(r, e, s, undefined, stubExtractor()));
+  await episodes(env, store, events, (r, e, s) => startIntake(r, e, s, undefined, stubExtractor(() => { throw new Error('down'); })));
   const dir = resolve(import.meta.dirname, '../../../data/intake-events', crypto.randomUUID());
   await mkdir(dir, { recursive: true }); t.after(() => rm(dir, { recursive: true, force: true }));
   const output = resolve(dir, 'events.jsonl');
@@ -293,4 +293,34 @@ test('model output is fail-closed: anything but exactly the five extraction fiel
   assert.deepEqual((await extractShadow(env, stubExtractor(), { statement: STATEMENT, language: 'es' })).extracted, EXTRACTED);
   for (const extracted of [{ ...EXTRACTED, customer_id: 'bruno' }, { intent: 'report' }, [], null, 'text', 7])
     assert.equal((await extractShadow(env, stubExtractor(async () => ({ extracted, usage: USAGE })), { statement: STATEMENT, language: 'es' })).extracted, null);
+});
+
+
+test('on: the shadow call runs after the response, in ctx.waitUntil, never on the request path', async t => {
+  const { store, usage } = await setup(t);
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  const extractor = stubExtractor(async () => { await held; return { extracted: EXTRACTED, usage: USAGE }; });
+  const pending = [];
+  const ctx = { waitUntil: work => pending.push(work) };
+  const env = { ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() };
+  const res = await startIntake(post('/intake/start', startBody()), env, store(), ctx, extractor);
+  assert.equal(res.status, 201, 'the start answers while the model call is still pending');
+  const { episode_id } = await res.json();
+  assert.equal(pending.length, 1);
+  const final = { tool_calls: 1, model_version: VERSION, ...USAGE };
+  assert.notDeepEqual(usage(episode_id), final);
+  release();
+  await Promise.all(pending);
+  assert.deepEqual(usage(episode_id), final);
+});
+
+test('on: a shadow call that throws inside waitUntil never rejects the background promise', async t => {
+  const { store } = await setup(t);
+  const pending = [];
+  const env = { ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() };
+  const extractor = stubExtractor(async () => { throw new Error('model down'); });
+  const res = await startIntake(post('/intake/start', startBody()), env, store(), { waitUntil: work => pending.push(work) }, extractor);
+  assert.equal(res.status, 201);
+  await Promise.all(pending);
 });
