@@ -113,7 +113,7 @@ This is slower than iteration 4 (p50 2.3 s), possibly because the service slows 
 
 The same command as attempt 1, from `main` at `3ca23e9`, started 3 h 21 min after the UTC reset with no other calls that day. Raw results stay in the ignored `data_foundation/runs/latency-2026-10-01/`. No call was refused or timed out (`errors: 0`, `usage_unavailable_calls: 0`).
 
-| Measure | All 180 executions (the rule) | The 160 model calls only |
+| Measure | All 180 executions (supplemental) | The 160 model calls (decision sample) |
 |---|---|---|
 | p50 | 2,331 ms | 2,418 ms |
 | p95 | 3,582 ms | 3,587 ms |
@@ -121,7 +121,7 @@ The same command as attempt 1, from `main` at `3ca23e9`, started 3 h 21 min afte
 | Slowest | | 5,117 ms |
 | Over 3 s / 5 s / 10 s | | 29 / 1 / 0 |
 
-- **Decision:** the interval's upper bound is 4,201 ms, above 3,000 ms, so the latency trigger fires (ADR-006 amendment 1). Under amendment 2 that does not climb the model ladder: the next version keeps gpt-oss-20b and lowers its documented `reasoning` level. Because that changes behaviour, the isolated builder makes it and re-runs development (decision 5). The rule's statistic includes the 20 executions that never call the model (about 0 ms); on the model calls alone the conclusion is the same.
+- **Decision:** on the 160 model-calling executions, the p95 interval's upper bound is 4,432 ms, above 3,000 ms, so the latency trigger fires (ADR-006 amendment 1). Under amendment 2 that does not climb the model ladder: the next version keeps gpt-oss-20b and lowers its documented `reasoning` level. Because that changes behaviour, the isolated builder makes it and re-runs development (decision 5). The all-180 statistics, including the 20 executions that never call the model (about 0 ms), are supplemental results.
 - **Quality, descriptive:** 180 of 180 correct and 0 unsafe on development (development is for tuning, not an unseen result).
 - **Tokens:** 337,010 input and 43,719 output over 160 calls, 2,106 and 273 per call, in line with iteration 4. At the published rates that is about $0.0005 per call.
 - **Recomputed independently** from the per-execution `latency_ms` with `evals.intake.stats.quantile_interval`; the values match the runner's pooled `repetition: "all"` row.
