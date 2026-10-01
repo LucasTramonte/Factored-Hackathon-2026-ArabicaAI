@@ -15,6 +15,7 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 | **System design:** customer, problem, solution, architecture, results, cost and risks, in one narrative | [`SYSTEM_DESIGN.md`](SYSTEM_DESIGN.md) |
 | **Evaluation:** how the model is compared with a baseline, the test sets we built ourselves, how data leakage is prevented, and every option we considered | [`EVALUATION.md`](EVALUATION.md) |
 | **Data quality:** every finding that changes or limits a decision, each with its query | [`DATA_QUALITY.md`](DATA_QUALITY.md) |
+| **Data engineering:** contracts, the quality gate, lineage from S3 to the served row, the update and freshness policy with its test fixture, and the stack with its trade-offs | [`DATA_ENGINEERING.md`](DATA_ENGINEERING.md) |
 | **Capacity and cost:** where each layer runs and why, the Cloudflare limits, and a priced AWS production target ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)) | [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) |
 
 ## How it fits together

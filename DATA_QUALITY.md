@@ -46,6 +46,7 @@ Every number here comes from a query in [`data_profiles/findings/queries/`](data
 | [DF-020](#df-020-one-clock-for-every-country-no-daily-rhythm) | One clock for every country, no daily rhythm | design | Medium | Accepted limitation | Manoella |
 | [DF-021](#df-021-disputing-customers-have-few-recent-purchases) | Disputing customers have few recent purchases | design | High | Handled in the Gold cohort | Manoella |
 | [DF-022](#df-022-unrecognized-charge-customers-by-country-segment-and-accent) | Unrecognized-charge customers by country, segment and accent | design | Low | Supports the Gold cohort | Manoella |
+| [DF-023](#df-023-amounts-share-one-usd-scale-and-claimed-currencies-ignore-the-customers-country) | Amounts share one USD scale, and claimed currencies ignore the customer's country | design | Medium | Open | Manoella |
 
 ## Findings
 
@@ -80,7 +81,7 @@ Every number here comes from a query in [`data_profiles/findings/queries/`](data
 ### DF-005 Mexican customers transact only in USD
 
 - **Evidence:** in the design window, 100% of approved purchases by Mexican customers are in USD, and no MXN transaction or product exists. Colombia is 89.9% COP and 10.1% USD, and Argentina is 90.0% ARS and 10.0% USD. Purchase currency always equals the card's currency.
-- **Impact:** unlike a real Mexican bank, and inconsistent with the MXN complaint amounts in DF-003. No claim about Mexican local-currency behaviour is possible.
+- **Impact:** unlike a real Mexican bank. The MXN complaint amounts in DF-003 are not evidence either way, because claimed currencies ignore the customer's country (DF-023). No claim about Mexican local-currency behaviour is possible.
 - **Handling:** stated as a limitation. Fixtures mirror it.
 
 ### DF-006 Closed merchant list with one category each
@@ -207,6 +208,20 @@ The [bronze profile findings](data_profiles/bronze_data_profile/bronze_profile_f
   - **By country.** 10,013 distinct customers filed a `Cargo no reconocido` complaint in the design window: Mexico 5,001 (49.9%), Colombia 3,031 (30.3%) and Argentina 1,981 (19.8%).
   - **By segment and accent.** The query reports the full country × segment × accent rollup, and missing values are labelled `(none)` so they can't be mistaken for subtotals.
 - **Handling:** these shares are the reference for the Gold cohort's country mix. The cohort's own shares are reported against them in the slice manifest.
+
+### DF-023 Amounts share one USD scale, and claimed currencies ignore the customer's country
+
+- **Evidence** (design window, run `20261001T030222Z`):
+  - **Purchases sit on one USD scale.** Once converted, the median approved purchase is about USD 252 in every country and currency: Mexico USD 252.09 (420,916 purchases), Colombia COP 1,011,764 = USD 252.93, Argentina ARS 88,303 = USD 252.27. The USD purchases in Colombia and Argentina are USD 251.73 and 255.24. Mexican amounts are therefore dollar-sized, not peso amounts labelled USD.
+  - **Claimed currencies are spread evenly in every country.** Among `Cargo no reconocido` complaints with a claimed amount, each country splits almost evenly across MXN, USD, COP and ARS. Mexico has COP 424, MXN 423, USD 394 and ARS 391. Argentina has USD 178, MXN 174, ARS 172 and COP 147. The median amount is 2,094–2,952 whatever the currency.
+- **Interpretation:** the generator appears to draw amounts in USD and convert them for Colombia and Argentina, but not for Mexico. It also draws a complaint's currency independently of the customer. So the MXN claims say nothing about how Mexican customers transact.
+- **Impact on the product:**
+  - **The live guided flow:** none. The customer picks the charge from their own list, which shows each amount with its currency code.
+  - **The written policy** (`evals/intake/frozen_es_pt_v1/POLICY.md`, `label_rules._currency`) maps "pesos" from a Mexican customer to a currency they don't hold. The answer is therefore "clarify, no candidates". That is faithful to this data, but "pesos" is how a Mexican customer naturally names an amount. Once the model reads free text online, every Mexican report that states pesos would ask the customer again, and Mexico is 48.7% of the served cohort. Ignoring the currency would not help, because the amounts are dollar-sized.
+  - **The frozen evaluation** uses the same rule. Its fixtures mirror DF-005, so the cases that depend on it test this data, not real Mexican usage.
+- **Handling:** open.
+  - **Factored question:** is USD for Mexico intended?
+  - **Until then:** the policy stays unchanged, because changing it would change frozen labels and needs Manoella's approval. The online clarifying message should say which currency the customer's card uses, so the second answer can match.
 
 ## Disclosure
 
