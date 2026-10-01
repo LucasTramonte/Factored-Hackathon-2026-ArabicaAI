@@ -42,6 +42,20 @@ describe('CustomerPage', () => {
     expect(p.step()).toBe('home');
   });
 
+  it('states the purpose before the picker, and that sign-in is simulated and shows only your own charges', async () => {
+    const fixture = TestBed.createComponent(CustomerPage);
+    const p = fixture.componentInstance;
+    await p.ngOnInit();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const purpose = el.querySelector('.purpose')!;
+    const picker = el.querySelector('app-customer-picker')!;
+    expect(purpose.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const note = el.querySelector('.sign-in-note')?.textContent ?? '';
+    expect(note).toContain(p.t().synthetic);
+    expect(note).toContain(p.t().onlyYours);
+  });
+
   it('signs in and lists only what the API returns', async () => {
     page.identity = 'demo-ana';
     await page.login();

@@ -24,7 +24,7 @@ The service does not decide fraud, issue refunds or authenticate bank customers.
 | `src/modules/agent/` | Agent session, the read-only case view, and the read-only intake queue and detail. |
 | `src/store/d1.js` | Every SQL statement. This is the only module to replace if the store changes. Multi-statement writes run as one atomic `db.batch()`. |
 | `src/config/identities.json` | Committed demo identities (fictitious, plus the one-day slice's customer), shared with the Gold slice. Dataset cohort customers are listed from D1 instead. |
-| `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. 0004 (intake episodes, turns, events, handoffs) and 0005 (idle and queue indexes) have been applied to local D1 only. |
+| `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. 0001–0007 are applied to local and remote D1 (0006: customer source and country; 0007: the `seed_loads` load log). |
 | `scripts/intake-store.mjs` | Local D1 binding for the operator scripts, through Wrangler's `getPlatformProxy`. It uses the store in `src/store/d1.js`, so the scripts contain no SQL. |
 | `scripts/close-idle-intakes.mjs`, `scripts/export-intake-events.mjs` | Manual operator scripts: bounded idle closure and the privacy-checked event export (below). |
 | `scripts/reset-demo-activity.sql` | Deletes demo activity in foreign-key order and keeps the seed (below). |

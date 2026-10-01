@@ -27,10 +27,13 @@ jobs:
         run: python -m pip install -r data_pipelines/bronze/requirements.txt
 
       - name: Run pipeline tests
-        run: python -m pytest data_pipelines data_foundation/tests data_profiles/findings evals/intake intake_agent -q
+        run: python -m pytest data_pipelines data_foundation/tests data_profiles/findings evals/intake intake_agent scripts -q
 
       - name: Compile pipeline package
         run: python -m compileall -q data_pipelines data_foundation data_profiles/findings evals intake_agent
+
+      - name: Check relative Markdown links and anchors
+        run: python scripts/check_doc_links.py
 
   web:
     runs-on: ubuntu-latest

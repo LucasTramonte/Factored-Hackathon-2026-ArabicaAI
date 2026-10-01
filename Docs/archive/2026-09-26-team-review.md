@@ -2,7 +2,7 @@
 
 Prepared for Roberto, Lucas and Andrés • 26 September 2026 • Pending team review
 
-This package asks the team to accept or revise the [customer and measurement contract](customer-and-measurement-contract.md) and adjudicate new test cases. It records no approval on anyone's behalf. Proposed reviewer roles below are not assigned commitments.
+This package asks the team to accept or revise the [customer and measurement contract](../intake/customer-and-measurement-contract.md) and adjudicate new test cases. It records no approval on anyone's behalf. Proposed reviewer roles below are not assigned commitments.
 
 ## Decisions to record
 

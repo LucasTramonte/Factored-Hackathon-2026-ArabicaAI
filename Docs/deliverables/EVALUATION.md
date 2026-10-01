@@ -1,10 +1,10 @@
 # Evaluation: how we test the intake workflow
 
-**Workflow:** transaction-dispute intake, narrowed to unrecognized card charges with a human handoff ([ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)).
+**Workflow:** transaction-dispute intake, narrowed to unrecognized card charges with a human handoff ([ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)).
 
 **Question:** does a learned component that reads the customer's message do better than a rule-based baseline, on the same cases, without becoming less safe?
 
-This document is the evaluation deliverable, like [`DATA_QUALITY.md`](DATA_QUALITY.md) is for data quality and [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) is for capacity and cost. It covers:
+This document is the evaluation deliverable, like [`DATA_QUALITY.md`](DATA_QUALITY.md) is for data quality and [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md) is for capacity and cost. It covers:
 - what we test and why;
 - the test sets we built;
 - how we keep test data from leaking into the systems;
@@ -20,7 +20,7 @@ This document is the evaluation deliverable, like [`DATA_QUALITY.md`](DATA_QUALI
 |---|---|
 | Always-handoff reference | Sends every case to a person. It is the floor any useful system must beat |
 | Checklist baseline (`evals/intake/baseline.py`) | Hand-written rules. They read amounts, dates, currencies and merchants with fixed patterns |
-| Extractor v1 ([ADR-006](Docs/ADRs/ADR-006-learned-extractor-workers-ai.md)) | A pretrained model (gpt-oss-20b on Workers AI) that **only turns the message into facts**. The same written policy as the checklist then decides the action from those facts, the session and the customer's own purchases |
+| Extractor v1 ([ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md)) | A pretrained model (gpt-oss-20b on Workers AI) that **only turns the message into facts**. The same written policy as the checklist then decides the action from those facts, the session and the customer's own purchases |
 
 So the comparison measures one thing: **how well each system reads the message.** Identity, ownership, confirmation and permissions stay deterministic in both, outside anything a model writes.
 
@@ -43,7 +43,7 @@ The data decides what kind of evaluation is possible:
 - **No complaint points to a transaction** (DF-003). The data can't tell us which charge a customer disputed.
 - **There is no Portuguese text or Portuguese-speaking customer:** all 42 transcript texts are Spanish (DF-001). Ambiguous or duplicate charges almost never occur (DF-012).
 
-Once a message's facts are known, the correct action follows from the written policy ([`POLICY.md`](evals/intake/frozen_es_pt_v1/POLICY.md)). So labels are cheap and exact. What the dataset doesn't have is **realistic customer wording**. That shapes every choice below. Techniques built for a shortage of labels, which assume a large pool of real unlabeled messages, don't fit (section 6).
+Once a message's facts are known, the correct action follows from the written policy ([`POLICY.md`](../../evals/intake/frozen_es_pt_v1/POLICY.md)). So labels are cheap and exact. What the dataset doesn't have is **realistic customer wording**. That shapes every choice below. Techniques built for a shortage of labels, which assume a large pool of real unlabeled messages, don't fit (section 6).
 
 ## 3. The test sets: all built by our team
 
@@ -57,7 +57,7 @@ None of the test messages comes from the organizers' data, because it has no usa
 | `safety` | 22 | The team: red-team cases for injection, other people's cards, refunds and similar | Safety regression |
 | **`frozen_es_pt_v1`** | **60** (30 situations, each in Spanish and Portuguese) | **The team.** We wrote the method and the drafting instructions, which spell out the policy, its rules, and the constraints for the synthetic customers and purchases. An isolated model session turned them into `POLICY.md`, the tested rules script `label_rules.py`, the fixture and the messages. We reviewed and tested the result (see below) | **The one unseen comparison, run once per system version** |
 
-**How the frozen set was built** ([details](evals/intake/frozen_es_pt_v1/README.md)):
+**How the frozen set was built** ([details](../../evals/intake/frozen_es_pt_v1/README.md)):
 1. **Spec first.** An isolated drafting session (Codex), following our written instructions and allowed to read only an allowlist of files, generated the synthetic customers and purchases within our constraints and wrote a structured spec for each situation: the intent and the facts the customer states. It then wrote a Spanish and a Portuguese message from each spec. The two messages use different wording; one isn't a translation of the other.
 2. **Gold by construction.** A tested rules script (`label_rules.py`) applies the written policy to the spec and the fixture, and never reads the message.
 3. **Independent verification.** A model of another family (Claude, in a fresh context that could read only the policy and the messages) re-derived the facts and the answer. It agreed on 60/60 answers and on the facts of 58/60.
@@ -82,13 +82,13 @@ Leakage can happen in two ways here. Statistics from the test period can shape d
 
 | Risk | Control | Where it is enforced |
 |---|---|---|
-| Data from the test period shapes design | Two windows by business timestamp: design before 2026-01-01, holdout after. Only the design window informs prompts, thresholds or fixtures. `process_date` is never used as the event date (DF-004) | `data_profiles/findings/run_findings.py` bounds every design query and has no option to move the window. A test fails if a design query isn't bounded ([ADR-005](Docs/ADRs/ADR-005-evaluation-data-protocol.md)) |
+| Data from the test period shapes design | Two windows by business timestamp: design before 2026-01-01, holdout after. Only the design window informs prompts, thresholds or fixtures. `process_date` is never used as the event date (DF-004) | `data_profiles/findings/run_findings.py` bounds every design query and has no option to move the window. A test fails if a design query isn't bounded ([ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md)) |
 | The model's builder sees test cases | The frozen files stay off the repository behind a SHA-256 commitment. The extractor is built by an isolated agent in a clean checkout where those files don't exist. Since 2026-09-30 that checkout is a history-free snapshot, because a shared-history worktree exposed old versions of a status page (see the disclosures) | `COMMITMENT.json`, and `make_clean_checkout.py`, which refuses a checkout if any withheld path exists or is tracked, or if more than one commit is reachable |
 | The test set is changed after the fact | Every committed file (the cases, fixture, gold, verifier files, queues and review answers) must match its SHA-256 when published. Mutable working state (review progress files and the session record) isn't committed and is disclosed as such. The checks run on the machine that holds the withheld files; CI skips them | `rehearse_publication.py`, and the invariance test in `test_label_rules.py` |
 | The system is changed after seeing results | Pre-registration binds the prompt file and the implementation file, by hash, to a git tag. The model name is fixed inside that hashed implementation file. The runner refuses to score the frozen set without a valid registration | `evals/intake/preregistration/prereg.py`, `evals/intake/run.py` |
-| The frozen set is scored repeatedly until a result looks good | Rule, not code: each registered version is scored once, a fix is a new version, and every version's result is reported. Run outputs are local, so each published result will name its registration, tag and commit | [ADR-005](Docs/ADRs/ADR-005-evaluation-data-protocol.md), decision 4 |
+| The frozen set is scored repeatedly until a result looks good | Rule, not code: each registered version is scored once, a fix is a new version, and every version's result is reported. Run outputs are local, so each published result will name its registration, tag and commit | [ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md), decision 4 |
 | Tuning on test material | Tuning happens only on `development`. Within a corpus, a scenario family lives in exactly one split, and the runner rejects a corpus that breaks that. Across corpora, the frozen set reuses three skill names from `cases.json`. One of them, `no_match`, is a development family, so the extractor is tuned on that skill and then scored on it with different cases, which is how a held-out test normally works. The other two appear only in `safety`. No frozen case was ever in development | `validate()` in `evals/intake/run.py` (within a corpus) |
-| People who saw test cases steer the model | Anyone who has seen a frozen case (Lucas, Roberto, and the assistant sessions that helped them) may not change the model's prompt, parsing or parameters. Policy or label changes need the approval of Manoella, who hasn't seen any frozen case | [ADR-006](Docs/ADRs/ADR-006-learned-extractor-workers-ai.md), decision 5 |
+| People who saw test cases steer the model | Anyone who has seen a frozen case (Lucas, Roberto, and the assistant sessions that helped them) may not change the model's prompt, parsing or parameters. Policy or label changes need the approval of Manoella, who hasn't seen any frozen case | [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md), decision 5 |
 | Test content spreads through documents | Status pages carry aggregates and rules only, never messages or fixture detail | `REVIEW_STATUS.md`, redacted on 2026-09-30 (see the disclosure below) |
 
 **What we disclose**, instead of hiding it:
@@ -99,20 +99,20 @@ Leakage can happen in two ways here. Statistics from the test period can shape d
   - Until 2026-09-30, `REVIEW_STATUS.md` listed the IDs of 6 frozen cases next to the policy question each one raised and the rule's answer, and named one message's language.
   - Two earlier versions of the same file (commits `f847c47` and `798889f`, later removed in `59067f1`) described 2 more cases with fragments of their messages and their answers.
   - `test_review.py` pins the IDs of 2 cases, with no content.
-  - The extractor v1 build ran in a `git worktree`, which shares the repository's history, so all of this was reachable from the builder's checkout. Its [committed instructions](evals/intake/preregistration/extractor-v1-builder-instructions.md) allowed only `POLICY.md` and `label_rules.py` in that folder and forbade other branches and reflogs, but not the branch's own history, and git can't prove what was read.
+  - The extractor v1 build ran in a `git worktree`, which shares the repository's history, so all of this was reachable from the builder's checkout. Its [committed instructions](../../evals/intake/preregistration/extractor-v1-builder-instructions.md) allowed only `POLICY.md` and `label_rules.py` in that folder and forbade other branches and reflogs, but not the branch's own history, and git can't prove what was read.
   - Manoella was also told the page was safe to read.
 
   **In total, 8 of the 60 frozen cases had content exposed (2 of them with message fragments), plus 1 more case ID.** What we did:
   - redacted the page;
   - the frozen result will be **reported with and without those 8 cases**, so any effect of the exposure is visible;
   - the blind checkout is now a history-free snapshot (one commit, no shared objects), tested so that an earlier commit's text can't be reached. The next blind build uses it.
-- **Two development labels were corrected:** they contradicted the written policy. The trail and the before and after scores are in the [development log](intake_agent/extractor/DEV_LOG.md).
+- **Two development labels were corrected:** they contradicted the written policy. The trail and the before and after scores are in the [development log](../../intake_agent/extractor/DEV_LOG.md).
 
 ## 5. Statistics, and what 60 cases can and can't show
 
 - **Paired comparison:** exact McNemar test on the cases where the two systems disagree, since both run on the same cases.
 - **Rates:** Wilson intervals. **Audit error:** an exact Clopper–Pearson upper bound.
-- **Latency:** p95 with a distribution-free order-statistic interval, which needs at least 72 calls to exist. The gate, fixed before any measurement ([ADR-006](Docs/ADRs/ADR-006-learned-extractor-workers-ai.md), Proposed; amendment 1):
+- **Latency:** p95 with a distribution-free order-statistic interval, which needs at least 72 calls to exist. The gate, fixed before any measurement ([ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md), Proposed; amendment 1):
   - at least 150 model-calling executions on the development split, pooled across all repetitions into the runner's `repetition: "all"` summary row, each at its wall time with timeouts at their full duration;
   - the p95 of that pooled sample, with the equal-tailed 95% interval reported as `latency_p95_interval_ms`;
   - **pass only if the interval's upper bound is at most 3,000 ms.** Otherwise the latency trigger fires, and the response is a lower reasoning level, not a larger model.
@@ -137,7 +137,7 @@ So the frozen set can only show a **large** improvement. That may be enough, bec
 | Option | Decision | Why |
 |---|---|---|
 | Test on the organizers' complaint or transcript text | Rejected | Fixed templates (DF-001). A model would be tested on recall, not reading |
-| Random row split of the dataset | Rejected | It mixes time periods and puts near-identical templates on both sides ([ADR-005](Docs/ADRs/ADR-005-evaluation-data-protocol.md)) |
+| Random row split of the dataset | Rejected | It mixes time periods and puts near-identical templates on both sides ([ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md)) |
 | Train our own text model | Rejected | There is no realistic text to learn from; on templates it would learn a lookup |
 | **Pretrained model, zero-shot, extracting facts only** | **Used** | This is transfer learning without training data. The model reads, and the rules decide, so its errors are measurable and its reach is limited |
 | Weak supervision (labeling functions, as in Snorkel) | Rejected for evaluation | Our checklist *is* a set of labeling functions. Using it to label test cases would build its known errors into the answer key the model must beat |
@@ -168,11 +168,11 @@ The Portuguese results show the system handles Portuguese, not that there is Por
 
 ## Where to look
 
-- Harness, baselines and splits: [`evals/intake/`](evals/intake/README.md)
-- Frozen set method and review status: [`evals/intake/frozen_es_pt_v1/`](evals/intake/frozen_es_pt_v1/README.md), [`REVIEW_STATUS.md`](evals/intake/frozen_es_pt_v1/REVIEW_STATUS.md)
-- Pre-registration and blind build: [`evals/intake/preregistration/`](evals/intake/preregistration/README.md)
-- Protocol and learned component: [ADR-005](Docs/ADRs/ADR-005-evaluation-data-protocol.md), [ADR-006](Docs/ADRs/ADR-006-learned-extractor-workers-ai.md)
-- Extractor development log, including the latency measurements: [`intake_agent/extractor/DEV_LOG.md`](intake_agent/extractor/DEV_LOG.md)
+- Harness, baselines and splits: [`evals/intake/`](../../evals/intake/README.md)
+- Frozen set method and review status: [`evals/intake/frozen_es_pt_v1/`](../../evals/intake/frozen_es_pt_v1/README.md), [`REVIEW_STATUS.md`](../../evals/intake/frozen_es_pt_v1/REVIEW_STATUS.md)
+- Pre-registration and blind build: [`evals/intake/preregistration/`](../../evals/intake/preregistration/README.md)
+- Protocol and learned component: [ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md), [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md)
+- Extractor development log, including the latency measurements: [`intake_agent/extractor/DEV_LOG.md`](../../intake_agent/extractor/DEV_LOG.md)
 
 **References:**
 - Ribeiro et al., "Beyond Accuracy: Behavioral Testing of NLP Models with CheckList", ACL 2020.

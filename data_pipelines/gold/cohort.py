@@ -1,7 +1,7 @@
 """Gold cohort: customers who disputed a charge, with their recent approved purchases, as D1 seed parts.
 
 The one-day slice in ``intake_slice`` shows a handful of rows. The cohort serves the customers the
-workflow is for, defined by the design-window findings in ``DATA_QUALITY.md``:
+workflow is for, defined by the design-window findings in ``Docs/deliverables/DATA_QUALITY.md``:
 
 - **Who** (DF-022): customers with a ``Cargo no reconocido`` complaint created before the design
   end (ADR-005), excluding closed accounts. Holdout complaints never decide who is served.
