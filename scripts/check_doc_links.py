@@ -2,7 +2,8 @@
 
 Reads every Markdown file Git tracks (outside ``Docs/superpowers/`` and ``Docs/sources/``, which are
 dated working notes and verbatim organizer material) and checks that each relative link target
-is a tracked file or directory. A ``#anchor`` on a Markdown target must match one of that file's
+is a tracked file or directory, for inline links, images and reference definitions
+(``[label]: target``). A ``#anchor`` on a Markdown target must match one of that file's
 headings, using GitHub's slug rules. External links (``http``, ``mailto``) are not fetched. Text in
 fenced code blocks and inline code is ignored. Exits 1 and lists each broken link as
 ``file:line: target``.
@@ -21,8 +22,29 @@ from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parents[1]
 SKIP_PREFIXES = ("Docs/superpowers/", "Docs/sources/")
 LINK = re.compile(r"!?\[(?:[^\[\]]|\[[^\]]*\])*\]\((<[^>]+>|[^)\s]+)(?:\s+\"[^\"]*\")?\)")
-FENCE = re.compile(r"^\s*(```|~~~)")
+# A reference definition, ``[label]: target``, used by ``[text][label]`` and ``![alt][label]``.
+REFERENCE = re.compile(r"^ {0,3}\[[^\]]+\]:\s*(<[^>]+>|\S+)")
+OPEN_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 INLINE_CODE = re.compile(r"`[^`]*`")
+
+
+def prose(path: Path):
+    """Yield (line number, line) outside fenced code blocks.
+
+    A fence closes only on a line of the opening character, at least as long as the opening run,
+    with nothing after it but whitespace, so a three-backtick example inside a four-backtick block
+    doesn't end the block early.
+    """
+    fence = None
+    for no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if fence is None:
+            m = OPEN_FENCE.match(line)
+            if m:
+                fence = m.group(1)
+                continue
+            yield no, line
+        elif re.fullmatch(r" {0,3}" + re.escape(fence[0]) + "{" + str(len(fence)) + r",}\s*", line):
+            fence = None
 
 
 def tracked() -> list[str]:
@@ -43,12 +65,8 @@ def anchors(path: Path) -> set[str]:
     """Every heading anchor in a Markdown file, with GitHub's -1, -2 suffixes for repeats."""
     seen: dict[str, int] = {}
     found: set[str] = set()
-    in_fence = False
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if FENCE.match(line):
-            in_fence = not in_fence
-            continue
-        m = None if in_fence else re.match(r"^#{1,6}\s+(.*?)\s*#*\s*$", line)
+    for _, line in prose(path):
+        m = re.match(r"^#{1,6}\s+(.*?)\s*#*\s*$", line)
         if m:
             base = slug(m.group(1))
             n = seen.get(base, 0)
@@ -58,20 +76,18 @@ def anchors(path: Path) -> set[str]:
 
 
 def links(path: Path):
-    """Yield (line number, target) for each Markdown link outside code."""
-    in_fence = False
-    for no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if FENCE.match(line):
-            in_fence = not in_fence
-            continue
-        if in_fence:
+    """Yield (line number, target) for each inline link and reference definition outside code."""
+    for no, line in prose(path):
+        ref = REFERENCE.match(line)
+        if ref:
+            yield no, ref.group(1).strip("<>")
             continue
         for m in LINK.finditer(INLINE_CODE.sub("", line)):
             yield no, m.group(1).strip("<>")
 
 
-def broken(files: list[str]) -> list[str]:
-    """Every link in ``files`` whose relative target or anchor doesn't resolve."""
+def broken(files: list[str], root: Path = ROOT) -> list[str]:
+    """Every link in ``files`` (paths relative to ``root``) whose relative target or anchor doesn't resolve."""
     paths = set(files)
     dirs = {posixpath.dirname(p) for p in files}
     dirs |= {d for p in list(dirs) for d in _parents(p)}
@@ -80,7 +96,7 @@ def broken(files: list[str]) -> list[str]:
     for md in files:
         if not md.endswith(".md") or md.startswith(SKIP_PREFIXES):
             continue
-        for no, target in links(ROOT / md):
+        for no, target in links(root / md):
             if re.match(r"^[a-z][a-z0-9+.-]*:", target, re.I):
                 continue
             file_part, _, anchor = target.partition("#")
@@ -91,7 +107,7 @@ def broken(files: list[str]) -> list[str]:
                 continue
             if anchor and resolved.endswith(".md"):
                 if resolved not in cache:
-                    cache[resolved] = anchors(ROOT / resolved)
+                    cache[resolved] = anchors(root / resolved)
                 if anchor.lower() not in cache[resolved]:
                     problems.append(f"{md}:{no}: {target} (no such heading)")
     return problems

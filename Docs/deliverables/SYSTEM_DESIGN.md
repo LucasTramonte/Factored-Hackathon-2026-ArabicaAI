@@ -50,7 +50,7 @@ That is the job we take on: **leave every dispute with the right transaction, co
 - **several fit:** it would list them;
 - **none fits, or a fact is impossible:** it would ask again, and never claim the charge doesn't exist.
 
-Once the customer confirms, the service stores the case with the statement and the verified transaction, reads it back, and only then gives a reference; this part is live. If a lookup fails or the customer can't find the charge, the case still reaches a person, marked as a technical or incomplete handoff, with the open questions listed; this is in the guided backend under review. The agent would then see:
+Once the customer confirms, the service stores the case with the statement and the verified transaction, reads it back, and only then gives a reference; this part is live. If a lookup fails or the customer can't find the charge, the case still reaches a person, marked as a technical or incomplete handoff, with the open questions listed; this is live too. The agent would then see:
 - the customer's own words;
 - the confirmed transaction, when there is one;
 - what the service did;
@@ -101,7 +101,7 @@ A large charge you don't recognize causes panic. The customer wants it handled f
 
 **Where AI helps, and where rules decide.** In this workflow, AI's advantage is that the customer can say what happened in their own words instead of filling a form. Speed today comes from the deterministic path, so the model has to earn its place on effort without costing correctness:
 - **It reads; it doesn't decide.** It extracts facts. The written policy, the customer's confirmation and the session decide everything else.
-- **It must be fast enough to sit in front of a panicked customer.** On development calls it is 180 of 180 correct with 0 unsafe outcomes. But its p95 latency is 3.58 s against a 3 s trigger, so the next version lowers its reasoning level before it goes online ([ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md)).
+- **It must be fast enough to sit in front of a panicked customer.** It is accurate enough on development: in the latency run (attempt 2), all 180 extractor calls on the development cases were correct, with 0 unsafe outcomes. The per-case scores are under "How we know it works". But its p95 latency is 3.58 s against a 3 s trigger, so the next version lowers its reasoning level before it goes online ([ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md)).
 - **It fails safe.** If the switch is off, the call fails or the facts are unsafe, the customer gets the guided flow they have today.
 - **Later roles stay inside the same limits:** drafting the case summary for the agent, explaining a case's status in the customer's language, and asking for a missing fact once. Each would be measured against the same baseline before it ships. None of them moves money, blocks a card or decides fraud (ADR-002).
 
@@ -121,7 +121,7 @@ The dataset has no realistic customer wording: its complaint text is five fixed 
 
 So far:
 - The checklist gets 15 of 25 on phrases written without knowledge of its rules. It misses currency words, non-ISO and relative dates, and paraphrases.
-- On the development cases, two labels contradicted the written policy and were corrected (the correction still needs the unexposed reviewer's approval). With the corrected labels, the checklist scores 16 of 18 and the model 18 of 18, with no unsafe outcome. The model's figure is inferred from its logged outputs, and a later run agreed on 82 of 83 calls. Before the correction the figures were 18 of 18 and 16 of 18.
+- On the development cases, two labels contradicted the written policy and were corrected (the correction still needs the unexposed reviewer's approval). With the corrected labels, the checklist scores 16 of 18 and the model 18 of 18, with no unsafe outcome. These are per-case scores on 18 development cases. The model's figure is inferred from its logged outputs. Two later runs repeated the calls: latency attempt 1 got 82 of its 83 returned calls right, and attempt 2 got all 180 calls right (ADR-006). Before the correction the figures were 18 of 18 and 16 of 18.
 - The frozen comparison has not run yet. It runs once, after the model is registered, and is reported on all 60 cases and on the 52 whose content never reached the repository.
 
 How the sets were built, every leakage control, what 60 cases can and can't show, and every option we rejected are in [`EVALUATION.md`](EVALUATION.md).

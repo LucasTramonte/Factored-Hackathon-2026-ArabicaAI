@@ -39,6 +39,12 @@ Add a scope when it helps, for example `feat(intake): …`, `fix(front-end): …
 ## Pull requests
 
 - **Keep a PR small and about one thing.** A PR that mixes a refactor, a feature and a data change is hard to review and hard to revert.
+- **Before opening a PR, set its label, assignee and reviewer.** All three are required ([`AGENTS.md`](AGENTS.md)):
+  - **label,** by branch prefix: `feat` → `enhancement`, `fix` → `bug`, `docs` → `documentation`, `eval` → `evaluation`, `data` → `data`, `chore` → `chore`, plus `accessibility` when it applies;
+  - **assignee:** the PR's owner, normally its author;
+  - **reviewer:** at least one other teammate.
+
+  For example: `gh pr create --label documentation --assignee @me --reviewer Robertzu43 --fill`.
 - **Fill in the [PR template](.github/pull_request_template.md):**
   - what changed and why;
   - the evidence (ADR, finding, evaluation, or judge-feedback ID from [`JUDGE_FEEDBACK.md`](Docs/deliverables/JUDGE_FEEDBACK.md));

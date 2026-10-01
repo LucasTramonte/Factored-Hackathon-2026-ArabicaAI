@@ -239,7 +239,7 @@ The [bronze profile findings](../../data_profiles/bronze_data_profile/bronze_pro
 
 - **Evidence** (design window, findings run `20261001T182840Z`, 842,103 approved purchases with a USD amount):
   - **The range is narrow and almost uniform.** Purchases run from USD 5.00 to USD 509.41: p50 252.39, p90 450.29, p99 495.00.
-  - **By tier, under USD 50:** 9.1% of purchases and 1.0% of value. **50–200:** 30.3% and 15.0%. **200–500:** 60.6% and 84.0%. **Over 500:** 78 purchases, 0.0002 of value.
+  - **By tier, under USD 50:** 9.1% of purchases and 1.0% of value. **50–200:** 30.3% and 15.0%. **200–500:** 60.6% and 84.0%. **Over 500:** 78 purchases, 0.02% of value.
   - **No Pareto tail.** The top 20% of purchases by amount hold 35.7% of the value. A long-tailed card book would put most of the value there.
   - **Claimed amounts don't match purchases.** Unrecognized-charge complaints with a claimed amount (3,451) run from 55.06 to 4,999.90 in their own random currency (DF-023), with a median of 2,533.08. That is far above any purchase, and claims aren't linked to transactions (DF-003).
 - **Interpretation:** a USD 5,000 purchase doesn't exist in this data. So the data can't tell us where a "high-value" dispute starts, and it can't justify amount tiers fitted to it.

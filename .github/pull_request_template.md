@@ -1,3 +1,4 @@
+<!-- Before opening: set a label (by branch prefix), an assignee (the owner) and a reviewer (another teammate). See CONTRIBUTING.md. -->
 <!-- Title: a Conventional Commit, e.g. "fix(intake): a retried confirm never creates a second case". It becomes the squash commit on main. -->
 
 ## What and why
