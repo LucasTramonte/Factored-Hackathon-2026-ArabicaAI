@@ -85,9 +85,6 @@ def test_a_row_redelivered_later_with_new_content_replaces_the_old_copy_in_silve
     con, base = env
     deliver(base, date(2024, 1, 1), row("T1", date(2024, 1, 1), text="old"))
     ingest_fact(con, str(base), "call_transcripts")
-    con.execute("SELECT 1")  # distinct _ingested_at for the next load
-    import time
-    time.sleep(0.01)
     deliver(base, date(2024, 1, 2), row("T1", date(2024, 1, 2), text="new"), row("T2", date(2024, 1, 2)))
     ingest_fact(con, str(base), "call_transcripts")
     assert con.execute("SELECT count(*) FROM bronze.call_transcripts WHERE transcript_id='T1'").fetchone()[0] == 2
@@ -105,3 +102,28 @@ def test_a_corrected_old_partition_needs_a_full_refresh(env):
     assert incremental.partitions_added == 0 and silver(con)["T1"] == "wrong"  # documented: not revisited
     ingest_fact(con, str(base), "call_transcripts", full_refresh=True)
     assert silver(con)["T1"] == "fixed"
+
+
+def test_a_late_day_never_rereads_the_days_already_held_in_its_month(env):
+    con, base = env
+    deliver(base, date(2024, 1, 1), row("T1", date(2024, 1, 1), text="held"))
+    deliver(base, date(2024, 2, 5), row("T5", date(2024, 2, 5)))
+    ingest_fact(con, str(base), "call_transcripts")
+    # In the same month: a correction to a held day, and a late day that was never delivered.
+    shutil.rmtree(base / "call_transcripts/year=2024/month=01/day=01")
+    deliver(base, date(2024, 1, 1), row("T1", date(2024, 1, 1), text="unreviewed correction"))
+    deliver(base, date(2024, 1, 20), row("T20", date(2024, 1, 20)))
+    result = ingest_fact(con, str(base), "call_transcripts")
+    assert result.partitions_added == 1 and result.late_partitions == 1
+    assert silver(con) == {"T1": "held", "T5": "Hola.", "T20": "Hola."}, "the correction waits for a full refresh"
+
+
+def test_a_new_day_never_rereads_earlier_days_of_the_current_month(env):
+    con, base = env
+    deliver(base, date(2024, 3, 1), row("T1", date(2024, 3, 1), text="held"))
+    ingest_fact(con, str(base), "call_transcripts")
+    shutil.rmtree(base / "call_transcripts/year=2024/month=03/day=01")
+    deliver(base, date(2024, 3, 1), row("T1", date(2024, 3, 1), text="unreviewed correction"))
+    deliver(base, date(2024, 3, 2), row("T2", date(2024, 3, 2)))
+    ingest_fact(con, str(base), "call_transcripts")
+    assert silver(con) == {"T1": "held", "T2": "Hola."}

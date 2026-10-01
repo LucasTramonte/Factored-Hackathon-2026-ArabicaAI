@@ -34,7 +34,7 @@ S3 (organizers, read-only) ─▶ Bronze (raw Parquet) ─▶ Silver (typed tabl
 - **Gold** (`data_pipelines/gold/`) cuts the serving data. It is either the one-day slice or the cohort of customers who disputed a charge (796 customers and 2,906 purchases as of 2026-06-17, [ADR-004 §2](Docs/ADRs/ADR-004-intake-capacity-and-cost.md)). The output is an idempotent SQL seed and a manifest.
 - **D1** receives the reviewed seed. The Worker never reads S3, DuckDB or Silver ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)).
 
-**Measured on the full data** (2026-09-29, one laptop):
+**Measured on the full data** (one laptop; the source reconciliation in `PARITY.md` ran on 2026-09-27, and the full build in ADR-004 on 2026-09-29):
 
 | What | Value |
 |---|---|
@@ -102,15 +102,15 @@ A transaction shown to a customer can be traced back to its S3 file.
 
 ## 5. Update and freshness policy
 
-**The source is a static snapshot** (dataset version 1.0.0, generated July 2026). It has 1,097 daily partitions from 2023-06-17 to 2026-06-17, loaded on 2026-09-29. **We freeze the submission on that snapshot.** Any later delivery becomes a new versioned build and is never patched in silently. We have asked the organizers whether the snapshot is final.
+**The source is a static snapshot** (dataset version 1.0.0, generated July 2026). It has 1,097 daily partitions from 2023-06-17 to 2026-06-17, reconciled on 2026-09-27 and rebuilt in full on 2026-09-29. **We freeze the submission on that snapshot.** Any later delivery becomes a new versioned build and is never patched in silently. We have asked the organizers whether the snapshot is final.
 
 This policy describes how the pipeline handles a live feed, and the fixture in [section 6](#6-update-correctness) runs every case.
 
 | Delivery | What the pipeline does | Why |
 |---|---|---|
-| **A new day** | An incremental run loads it and moves the watermark forward | The normal case. It reads only the months that contain new days |
-| **A late day** (older than the watermark, never delivered before) | Loaded on the next incremental run, reported in `late_partitions` with a warning; the watermark doesn't move back | A late arrival is new data, not a correction. Skipping it would lose it silently, which the old code did |
-| **A corrected or removed day** (one Bronze already holds) | Ignored by incremental runs. `make bronze-full` re-reads the history and swaps it in atomically | Revisiting history on every run would cost an S3 read of every partition. A correction should be a deliberate, reviewed act |
+| **A new day** | An incremental run loads it and moves the watermark forward | The normal case. It reads exactly the new days, one S3 read per month that has any |
+| **A late day** (older than the watermark, never delivered before) | Loaded on the next incremental run, logged as a warning and printed in the run summary as late partitions; the watermark doesn't move back | A late arrival is new data, not a correction. Skipping it would lose it silently, which the old code did |
+| **A corrected or removed day** (one Bronze already holds) | Never reread by an incremental run, even when a new or late day arrives in the same month. `make bronze-full` re-reads the history and swaps it in atomically | Revisiting history on every run would cost an S3 read of every partition. A correction should be a deliberate, reviewed act |
 | **A row re-delivered later** with the same key | Bronze keeps both copies; Silver keeps the copy from the latest partition | Bronze stays raw and auditable, and Silver serves the latest truth. Ties within one load break on `process_date` |
 | **Dimensions** | Rebuilt in full every run | They are flat exports and small |
 
@@ -134,14 +134,17 @@ This policy describes how the pipeline handles a live feed, and the fixture in [
 | `test_a_late_old_day_is_loaded_and_counted_without_moving_the_watermark_back` | A late day is loaded, counted and not reloaded on the next run |
 | `test_a_row_redelivered_later_with_new_content_replaces_the_old_copy_in_silver` | Silver keeps the latest copy even when both copies were ingested together |
 | `test_a_corrected_old_partition_needs_a_full_refresh` | Incremental runs don't revisit history, and a full refresh picks up the correction |
+| `test_a_late_day_never_rereads_the_days_already_held_in_its_month` | A late day in an old month leaves that month's held days untouched, so a correction there waits for a full refresh |
+| `test_a_new_day_never_rereads_earlier_days_of_the_current_month` | The same holds for the current month |
 
 Older tests cover atomic swaps, crash recovery and idempotent reruns in Bronze (`data_pipelines/bronze/test_ingestion.py`), and rerun and drift rejection in Gold (`data_pipelines/gold/test_*.py`).
 
-**Two defects that the fixture found and that are now fixed:**
+**Three defects that the fixture and its review found and that are now fixed:**
 - **Late days were dropped.** A day older than the watermark was skipped silently, even if Bronze had never held it.
-- **Duplicate keys within one load could keep the stale copy.** An incremental run rereads a whole month in one statement, so an original and its re-delivery shared one `_ingested_at`, and the Silver dedup kept either copy.
+- **Incremental runs reread whole months.** They used a `day=*` glob, so an incremental run reread, and overwrote, the days already held in any month it touched. A source correction could then slip in unreviewed. Runs now read exactly the days they load.
+- **Duplicate keys within one load could keep the stale copy.** An original and its re-delivery could share one `_ingested_at`, and the Silver dedup kept either copy. Facts now tie-break on `process_date`.
 
-Both were fixed test-first, and reverting either fix makes its test fail. Neither affects the current snapshot, which has no gaps and no duplicate keys.
+Each was fixed test-first, and reverting the fix makes its test fail. Neither affects the current snapshot, which has no gaps and no duplicate keys.
 
 ## 7. Stack and trade-offs
 
@@ -160,8 +163,7 @@ Both were fixed test-first, and reverting either fix makes its test fail. Neithe
 ## Limitations
 
 - **An in-place correction is invisible to incremental runs.** If a file is replaced under the same name, only `make bronze-full` picks it up, and nothing tells the operator to run it. A per-object ETag manifest would detect that. We haven't built it, because the snapshot is static.
-- **Late-day detection reads the partition columns** of the Bronze table on every incremental run. On the full data that took 0.1 s for `digital_events` (15.6 M rows, 1,097 days), and the cost grows with history.
-- **An incremental run rereads whole months,** not single days. Each month is one S3 read instead of one per day, which is the right trade-off at this size, but the re-read days get a new `_ingested_at`.
+- **Late-day detection reads the partition columns** of the Bronze table on every incremental run. That is one columnar read of three columns, and its cost grows with history.
 - **The pipeline has never run on a live feed.** The policy in section 5 is tested on fixtures and runs on the static snapshot, but no real daily delivery has exercised it.
 - **The DBML schema is documentation only.** The enforced contract is the code in `table_specs.py`.
 - **Freshness is bounded by the snapshot.** The demo can't show anything after 2026-06-17.

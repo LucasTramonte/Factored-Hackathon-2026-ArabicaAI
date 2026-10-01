@@ -123,8 +123,8 @@ def build_silver_table(con: duckdb.DuckDBPyConnection, spec: TableSpec) -> Silve
     for join in spec.extra_joins:
         from_clause += f"\n        {join}"
 
-    # Facts tie-break on the storage partition: an incremental Bronze run rereads a whole month in one
-    # COPY, so an original row and its re-delivery later that month share one _ingested_at.
+    # Facts tie-break on the storage partition: rows copied by one Bronze load share one _ingested_at
+    # (an original and its re-delivery arriving in the same batch, or any full refresh).
     order_by = spec.dedup_order_by
     if spec.kind == "fact":
         prefix = f"{spec.source_alias}." if spec.source_alias else ""

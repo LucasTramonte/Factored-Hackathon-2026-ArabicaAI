@@ -492,8 +492,8 @@ def test_digital_events_canonicalizes_ip_country(con):
 
 
 def test_a_fact_row_duplicated_within_one_load_keeps_the_copy_from_the_latest_partition(con):
-    # An incremental Bronze run rereads a whole month, so an original and its re-delivery in a
-    # later day of that month share one _ingested_at. The later partition must win, not a random one.
+    # Rows copied by one Bronze load (a full refresh, or an original and its re-delivery in the same
+    # batch) share one _ingested_at. The later partition must win, not a random one.
     columns = (
         "transcript_id, interaction_id, process_date, customer_id, agent_id, full_text, "
         "customer_text, agent_text, detected_language, detected_accent, accent_confidence, "

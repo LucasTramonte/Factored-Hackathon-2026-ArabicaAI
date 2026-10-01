@@ -162,8 +162,10 @@ def list_available_partition_dates(con: duckdb.DuckDBPyConnection, base_path: st
     return sorted(partitions)
 
 
-def _month_glob(base_path: str, table_name: str, year: int, month: int) -> str:
-    return f"{base_path}/{table_name}/year={year:04d}/month={month:02d}/day=*/*.csv"
+def _day_globs(base_path: str, table_name: str, days: List[date]) -> List[str]:
+    """One glob per day to load. A month-wide ``day=*`` glob would also reread, and overwrite, the
+    days Bronze already holds in that month, which would apply a source correction unreviewed."""
+    return [f"{base_path}/{table_name}/year={d:%Y}/month={d:%m}/day={d:%d}/*.csv" for d in days]
 
 
 def _full_history_glob(base_path: str, table_name: str) -> str:
@@ -297,14 +299,16 @@ def ingest_fact(
     write_dir = staging_dir or local_dir
     os.makedirs(write_dir, exist_ok=True)
 
-    def _copy_from(glob_pattern: str) -> None:
+    def _copy_from(glob_pattern: "str | List[str]") -> None:
+        source = (f"'{glob_pattern}'" if isinstance(glob_pattern, str)
+                  else "[" + ", ".join(f"'{g}'" for g in glob_pattern) + "]")
         con.execute(f"""
             COPY (
                 SELECT * EXCLUDE (filename),
                        filename AS _source_file,
                        current_timestamp AS _ingested_at,
                        '{table_name}' AS _source_table
-                FROM read_csv('{glob_pattern}', ALL_VARCHAR=true, hive_partitioning=true, filename=true)
+                FROM read_csv({source}, ALL_VARCHAR=true, hive_partitioning=true, filename=true)
             ) TO '{write_dir}' (FORMAT PARQUET, PARTITION_BY (year, month, day), OVERWRITE_OR_IGNORE)
         """)
 
@@ -320,14 +324,14 @@ def ingest_fact(
             logger.info("[%s] full refresh: %d partition(s) loaded in %.0fs",
                         table_name, len(dates_to_load), time.monotonic() - loop_start)
         else:
-            # Incremental -- group the (usually few) new dates by year/month so a normal day-to-day
-            # rerun costs 1-2 S3 round trips rather than one per new day.
+            # Incremental -- group the (usually few) new dates by year/month: one read_csv per month over
+            # exactly those days' globs, so held days are never reread and a normal rerun costs 1-2 S3 reads.
             batches = _group_by_year_month(dates_to_load)
             logger.info("[%s] %d new partition(s) across %d month-batch(es)",
                         table_name, len(dates_to_load), len(batches))
             for i, ((year, month), month_dates) in enumerate(batches, start=1):
                 t0 = time.monotonic()
-                _copy_from(pattern if partition_date is not None else _month_glob(base_path, table_name, year, month))
+                _copy_from(pattern if partition_date is not None else _day_globs(base_path, table_name, month_dates))
                 logger.debug("[%s] batch %d/%d (%04d-%02d, %d new date(s)) loaded in %.1fs",
                              table_name, i, len(batches), year, month, len(month_dates),
                              time.monotonic() - t0)
