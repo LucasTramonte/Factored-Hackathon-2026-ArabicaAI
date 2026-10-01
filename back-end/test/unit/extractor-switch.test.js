@@ -213,19 +213,29 @@ test('on: the 10 s deadline bounds a hung adapter and the episode continues guid
   const { store, usage } = await setup(t);
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const env = { ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() };
-  const extractor = stubExtractor(() => new Promise(() => {}));
+  // Wait for the call itself, not for a number of event-loop turns: the session and payload hashes run on the
+  // thread pool, so how many turns reach the adapter depends on the machine.
+  let reached;
+  const called = new Promise(resolve => { reached = resolve; });
+  const extractor = stubExtractor(() => { reached(); return new Promise(() => {}); });
   const pending = startIntake(post('/intake/start', startBody()), env, store(), extractor);
-  for (let i = 0; i < 50 && !extractor.calls.length; i++) await new Promise(r => setImmediate(r));
-  assert.equal(extractor.calls.length, 1);
-  t.mock.timers.tick(EXTRACTION_TIMEOUT_MS - 1);
-  let settled = false; pending.then(() => { settled = true; });
-  await new Promise(r => setImmediate(r));
-  assert.equal(settled, false);
-  t.mock.timers.tick(1);
-  const res = await pending;
-  assert.equal(res.status, 201);
-  const { tool_calls, model_version, ...recorded } = usage((await res.json()).episode_id);
-  assert.deepEqual(recorded, UNKNOWN);
+  try {
+    await Promise.race([called, pending.then(() => assert.fail('the request ended without calling the adapter'))]);
+    assert.equal(extractor.calls.length, 1);
+    t.mock.timers.tick(EXTRACTION_TIMEOUT_MS - 1);
+    let settled = false; pending.then(() => { settled = true; }, () => { settled = true; });
+    await new Promise(r => setImmediate(r));
+    assert.equal(settled, false, 'still waiting 1 ms before the deadline');
+    t.mock.timers.tick(1);
+    const res = await pending;
+    assert.equal(res.status, 201);
+    const { tool_calls, model_version, ...recorded } = usage((await res.json()).episode_id);
+    assert.deepEqual(recorded, UNKNOWN);
+  } finally {
+    // Settle the request before the database closes, even when an assertion above failed.
+    t.mock.timers.tick(EXTRACTION_TIMEOUT_MS);
+    await pending.catch(() => {});
+  }
 });
 
 test('on: replays and concurrent same-key starts call the model once; a storage failure keeps the pessimistic usage', async t => {
