@@ -102,7 +102,7 @@ A transaction shown to a customer can be traced back to its S3 file.
 
 ## 5. Update and freshness policy
 
-**The source is a static snapshot** (dataset version 1.0.0, generated July 2026). It has 1,097 daily partitions from 2023-06-17 to 2026-06-17, reconciled on 2026-09-27 and rebuilt in full on 2026-09-29. **We freeze the submission on that snapshot.** Any later delivery becomes a new versioned build and is never patched in silently. We have asked the organizers whether the snapshot is final.
+**The source is a static snapshot** (dataset version 1.0.0, generated July 2026). It has 1,097 daily partitions from 2023-06-17 to 2026-06-17, reconciled on 2026-09-27 and rebuilt in full on 2026-09-29. **We freeze the submission on that snapshot.** Any later delivery becomes a new versioned build and is never patched in silently. We will ask the organizers whether the snapshot is final.
 
 This policy describes how the pipeline handles a live feed, and the fixture in [section 6](#6-update-correctness) runs every case.
 
@@ -115,8 +115,8 @@ This policy describes how the pipeline handles a live feed, and the fixture in [
 | **Dimensions** | Rebuilt in full every run | They are flat exports and small |
 
 **How fresh each layer is:**
-- **Bronze and Silver:** as fresh as the last run. In production, one batch runs a day after the daily partition lands; the AWS target schedules it with EventBridge on Fargate ([ADR-004 §3](Docs/ADRs/ADR-004-intake-capacity-and-cost.md)).
-- **Gold and D1:** they change only through a reviewed seed with a new version. `seed_loads` records what is loaded, so the service shows data as of the manifest's `as_of` date and no fresher. The cohort's `as_of` is the last loaded partition, so the demo shows data up to 2026-06-17.
+- **Bronze and Silver:** as fresh as the last run. In production, one batch runs a day after the daily partition lands; the AWS target, which is designed but not deployed, would schedule it with EventBridge on Fargate ([ADR-004 §3](Docs/ADRs/ADR-004-intake-capacity-and-cost.md)).
+- **Gold and D1:** they change only through a reviewed seed with a new version. `seed_loads` records what is loaded, so the service shows data as of the manifest's `as_of` date and no fresher. The cohort's `as_of` is the last loaded partition, so once the cohort is loaded into remote D1 the demo will show data up to 2026-06-17.
 - **Event time vs. storage time:** `process_date` is the storage partition and is used only to prune reads. Every business filter uses the event timestamp. The two differ: early-hour events are filed under the previous day (DF-004), and the same clock applies to every country (DF-020).
 - **Retention:** demo activity is kept until judging ends and deleted after 2026-10-20 ([ADR-004 §7](Docs/ADRs/ADR-004-intake-capacity-and-cost.md)).
 
@@ -144,7 +144,7 @@ Older tests cover atomic swaps, crash recovery and idempotent reruns in Bronze (
 - **Incremental runs reread whole months.** They used a `day=*` glob, so an incremental run reread, and overwrote, the days already held in any month it touched. A source correction could then slip in unreviewed. Runs now read exactly the days they load.
 - **Duplicate keys within one load could keep the stale copy.** An original and its re-delivery could share one `_ingested_at`, and the Silver dedup kept either copy. Facts now tie-break on `process_date`.
 
-Each was fixed test-first, and reverting the fix makes its test fail. Neither affects the current snapshot, which has no gaps and no duplicate keys.
+Each was fixed test-first, and reverting the fix makes its test fail. None of the three affects the current snapshot, which has no gaps and no duplicate keys.
 
 ## 7. Stack and trade-offs
 
@@ -152,7 +152,7 @@ Each was fixed test-first, and reverting the fix makes its test fail. Neither af
 
 | Concern | Our choice | Considered | Why ours, at this size | What would change it |
 |---|---|---|---|---|
-| Engine | **DuckDB**, one process | Spark (EMR, Glue), Athena, Snowflake/BigQuery | 2.86 GB builds in 11 minutes on a laptop and runs unchanged on Fargate for $0.60 a month. A Glue job would cost about $6.60 a month at its minimum, and moving to Spark means a rewrite | Over ~100 GB, a build over 1 hour, or several concurrent jobs (ADR-004 §1) |
+| Engine | **DuckDB**, one process | Spark (EMR, Glue), Athena, Snowflake/BigQuery | 2.86 GB builds in 11 minutes on a laptop and would run unchanged on Fargate for $0.60 a month. A Glue job would cost about $6.60 a month at its minimum, and moving to Spark means a rewrite | Over ~100 GB, a build over 1 hour, or several concurrent jobs (ADR-004 §1) |
 | Storage format | **Hive-partitioned Parquet** plus a DuckDB file | Apache Iceberg, Delta Lake | One writer and full Silver rebuilds need no ACID table format or time travel | Several writers, row-level corrections without full rebuilds, or query engines that must share tables |
 | Transformations | **Typed specs in Python** that generate SQL, plus unit tests | dbt | 13 tables with one transformation each. The specs already give typed columns, tests and one dedup rule | More than about 30 models, or analysts who maintain SQL themselves |
 | Orchestration | **Make targets and a CLI**, plus CI | cron or GitHub Actions; EventBridge with Fargate; Airflow, Dagster, Prefect | There is no live feed, so there is nothing to schedule yet. A scheduler would add operations without a measured need | A real daily feed: start with EventBridge and one Fargate task (the AWS target). Use Dagster or Airflow only once there are several dependent pipelines with retries and backfills |
