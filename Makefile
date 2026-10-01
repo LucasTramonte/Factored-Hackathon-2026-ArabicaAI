@@ -17,13 +17,13 @@ setup:
 	.venv/bin/python -m pip install -r data_pipelines/bronze/requirements.txt
 
 test:
-	$(PYTHON) -m pytest data_pipelines data_foundation/tests data_profiles/findings intake_agent -q
+	$(PYTHON) -m pytest data_pipelines data_foundation/tests data_profiles/findings evals/intake intake_agent -q
 
 test-evaluation:
 	$(PYTHON) -m pytest data_foundation/tests evals/intake/test_baseline.py -q
 
 compile:
-	$(PYTHON) -m compileall -q data_pipelines data_foundation
+	$(PYTHON) -m compileall -q data_pipelines data_foundation data_profiles/findings evals intake_agent
 
 bronze:
 	$(PYTHON) data_pipelines/bronze/run_ingestion.py
