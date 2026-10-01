@@ -10,7 +10,7 @@ import { AgentService } from './agent.service';
 const P1 = '11111111-1111-4111-8111-111111111111';
 const P2 = '22222222-2222-4222-8222-222222222222';
 const intake = (protocol: string, kind: AgentIntake['kind'] = 'complete'): AgentIntake =>
-  ({ protocol, episode_id: P2, kind, tool_status: 'ok', destination: 'case_service', priority: 'normal', accepted_at: '2026-09-30T12:00:00.000Z' });
+  ({ protocol, reference_short: protocol === P1 ? 'AR-7K3M-2Q4X' : null, episode_id: P2, kind, tool_status: 'ok', destination: 'case_service', priority: 'normal', accepted_at: '2026-09-30T12:00:00.000Z' });
 const detail = (protocol: string, over: Partial<AgentIntakeDetail> = {}): AgentIntakeDetail => ({
   ...intake(protocol), language: 'es', customer_statement: 'No reconozco este cargo',
   verified_evidence: { transaction: { transaction_id: 'TX-9', merchant_name: 'Café', occurred_at: null, source_occurred_at: '2026-09-01 10:00:00', amount: '12.50', currency: 'MXN' } },
@@ -41,7 +41,7 @@ describe('AgentPage', () => {
   async function loadAndOpen(protocol = P1): Promise<HTMLButtonElement> {
     await page.load();
     fixture.detectChanges();
-    const button = [...el().querySelectorAll<HTMLButtonElement>('.intake-row')].find(b => b.textContent!.includes(protocol))!;
+    const button = el().querySelector<HTMLButtonElement>(`.intake-row[data-protocol="${protocol}"]`)!; // the row shows the short code, so find it by its case id
     button.focus();
     button.click();
     await fixture.whenStable();
@@ -87,6 +87,13 @@ describe('AgentPage', () => {
     expect(checks.textContent).toContain(t().check_owned_transaction_retrieved);
     expect(checks.textContent).toContain('owned_transaction_retrieved');
     expect(el().textContent).toContain('12.50 MXN');
+    // The queue row and the detail show the short code; the detail keeps the UUID as the case id. A null code falls back to the UUID.
+    const rows = [...el().querySelectorAll('.intake-row')].map(r => r.textContent!);
+    expect(rows.find(r => r.includes('AR-7K3M-2Q4X'))).toBeDefined();
+    expect(rows.find(r => r.includes(P2))).toBeDefined();
+    const detailText = el().querySelector('#intake-detail')!.textContent!;
+    expect(detailText).toContain('AR-7K3M-2Q4X');
+    expect(detailText).toContain(P1);
     expect(button.getAttribute('aria-expanded')).toBe('true');
     page.close();
     fixture.detectChanges();
