@@ -30,8 +30,9 @@ export class AgentPage {
   readonly intakes = signal<AgentIntake[]>([]);
   readonly intakesHasMore = signal(false);
   readonly detail = signal<AgentIntakeDetail | null>(null);
-  /** The protocol whose detail is open or loading; a response for any other protocol is dropped. */
+  /** The protocol whose detail is open or loading. */
   readonly openProtocol = signal<string | null>(null);
+  private detailRequest = 0;
   readonly sourceTime = formatSourceTime;
   private readonly detailHeading = viewChild<ElementRef<HTMLElement>>('detailHeading');
   private readonly signInButton = viewChild<ElementRef<HTMLButtonElement>>('signIn');
@@ -70,24 +71,29 @@ export class AgentPage {
 
   /** Open one intake's detail; focus moves to its heading once it renders. */
   async open(protocol: string, trigger: HTMLElement): Promise<void> {
+    // Each request gets a number; only the latest may change the panel, even for the same protocol
+    // (a double click whose first request fails must not hide the second one's detail).
+    const request = ++this.detailRequest;
     this.trigger = trigger;
     this.openProtocol.set(protocol);
     this.detail.set(null);
     this.error.set('');
     try {
       const detail = await this.service.intakeDetail(protocol);
-      if (this.openProtocol() !== protocol) return;
+      if (request !== this.detailRequest) return;
       this.detail.set(detail);
       afterNextRender(() => this.detailHeading()?.nativeElement.focus(), { injector: this.injector });
     } catch (e) {
-      if (this.openProtocol() !== protocol) return;
+      if (request !== this.detailRequest) return;
       this.openProtocol.set(null);
+      this.detail.set(null);
       this.fail(e);
     }
   }
 
   /** Close the detail and return focus to the button that opened it. */
   close(): void {
+    this.detailRequest++;
     this.openProtocol.set(null);
     this.detail.set(null);
     this.trigger?.focus();
@@ -95,6 +101,7 @@ export class AgentPage {
   }
 
   private reset(): void {
+    this.detailRequest++;
     this.error.set('');
     this.loaded.set(false);
     this.cases.set([]);
