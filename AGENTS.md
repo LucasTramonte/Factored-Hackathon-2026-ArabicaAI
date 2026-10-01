@@ -52,7 +52,7 @@
 - `make intake-setup` / `make intake-test`: install and run the intake suites (Gold slice, Angular specs, Worker unit and local-D1 integration tests).
 - `make intake-sample-{bronze,silver,quality,slice}`, `make intake-seed-local`: the bounded one-day sample → reviewed D1 seed → local D1.
 
-See `ARCHITECTURE.md`, `REPRODUCIBILITY.md` and `.github/skills/` for further procedures. `Docs/Plans/marketing-product-trust.md` records the deferred report rebuild; old HTML metrics are withdrawn until that gate passes.
+See `ARCHITECTURE.md`, `REPRODUCIBILITY.md` and `.github/skills/` for further procedures. The Marketing/Product HTML, intake decision page and aggregates were rebuilt from one verified Silver run and passed the gate in `Docs/Plans/marketing-product-trust.md` (release record); they are in `data_foundation/reports/`.
 
 ## Mandatory Session Startup: Hackathon Context
 

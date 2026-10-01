@@ -33,7 +33,7 @@ The Silver command always refreshes its small FX reference table. Bronze default
 
 ## Rebuilding reports
 
-The old HTML and aggregates were withdrawn. `Docs/Plans/marketing-product-trust.md` records the customer-backwards analysis and report gate. New aggregate artifacts can be committed only after a single full Silver run, numerator/denominator reconciliation, privacy check and local HTML inspection.
+The Marketing/Product HTML, intake decision page and aggregates were rebuilt from one verified Silver run and passed the gate in `Docs/Plans/marketing-product-trust.md` (release record); they are in `data_foundation/reports/`. That plan records the customer-backwards analysis and report gate. New aggregate artifacts can be committed only after a single full Silver run, numerator/denominator reconciliation, privacy check and local HTML inspection.
 
 ## Optional cached Jev labels
 
