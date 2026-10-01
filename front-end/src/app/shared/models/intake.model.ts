@@ -153,5 +153,8 @@ export interface IntakeReceipt {
   kind: 'complete' | 'technical' | 'incomplete';
   accepted_at: string;
   replayed: boolean;
+  /** Server codes read back with the handoff: what was checked and what is still open. */
+  actions_taken: string[];
+  unresolved_questions: string[];
   next_step_code: 'await_human_review';
 }

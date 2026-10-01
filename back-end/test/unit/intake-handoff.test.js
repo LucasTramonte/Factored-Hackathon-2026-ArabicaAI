@@ -166,3 +166,16 @@ test('a refused reservation answers from a fresh read and records the attempt', 
   res=await route(post('/intake/handoff',{episode_id:episode,kind:'incomplete',idempotency_key:crypto.randomUUID()}),env,blind);
   assert.equal(res.status,503);assert.equal((await res.json()).protocol,undefined);
 });
+
+test('receipt reports the read-back checks and open questions for every kind', async t => {
+  const { store, start } = await setup(t);
+  const complete = await (await route(post('/intake/confirm', confirm(await start())), env, store)).json();
+  assertContract('intakeReceipt', complete);
+  assert.deepEqual([complete.actions_taken, complete.unresolved_questions], [['owned_transaction_retrieved','customer_confirmation_recorded'], []]);
+  const incomplete = await (await route(post('/intake/handoff', { episode_id: await start(), kind: 'incomplete', idempotency_key: crypto.randomUUID() }), env, store)).json();
+  assert.deepEqual([incomplete.actions_taken, incomplete.unresolved_questions], [[], ['matching_transaction','customer_confirmation']]);
+  const failing = { ...store, findOwnedTransaction: async () => { throw new Error('unavailable'); } };
+  const technical = await (await route(post('/intake/confirm', confirm(await start())), env, failing)).json();
+  assert.equal(technical.kind, 'technical');
+  assert.deepEqual([technical.actions_taken, technical.unresolved_questions], [['transaction_lookup_failed'], ['matching_transaction','customer_confirmation']]);
+});

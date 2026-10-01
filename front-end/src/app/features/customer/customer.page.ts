@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { formatSourceTime } from '../../shared/format/source-time.util';
-import { Lang, LangService, Strings, errorText } from '../../shared/i18n/lang.service';
+import { Lang, LangService, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
@@ -170,6 +170,19 @@ export class CustomerPage implements OnInit, OnDestroy {
   start(): void {
     this.booted.set(true);
     this.step.set('login');
+  }
+
+  /** End the intro now: the words stop on the current language and Start is shown and focused. */
+  skipIntro(): void {
+    clearTimeout(this.introTimer);
+    this.booted.set(true);
+    this.introDone.set(true);
+    afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('.intro-cta .ar-btn')?.focus(), { injector: this.injector });
+  }
+
+  /** A server check or open-question code in the interface language. */
+  check(code: string): string {
+    return checkText(this.t(), code);
   }
 
   /** Sign in; while a request is pending, re-authenticate as the same identity. */

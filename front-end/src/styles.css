@@ -170,6 +170,7 @@ button, input, select, textarea { font: inherit; }
 .ar-panel { display: flex; flex-direction: column; gap: 12px; padding: 20px; border-radius: var(--radius-lg); border: var(--hairline) solid var(--line); background: var(--surface-raised); }
 .ar-panel-ok { background: var(--ok-soft); border-color: var(--ok); } .ar-panel-warn { background: var(--warn-soft); border-color: var(--warn); }
 .ar-panel-title { margin: 0; font: 600 18px/26px var(--font-sans); letter-spacing: -0.01em; } .ar-panel p { margin: 0; }
+.ar-panel h4 { margin: 0; font: 600 14px/20px var(--font-sans); } .ar-panel ul { margin: 0; padding-left: 20px; }
 .ar-ref { display: inline-flex; flex-direction: column; gap: 4px; padding: 12px 16px; background: var(--surface-raised); border: var(--hairline) solid var(--line-strong); border-radius: var(--radius-md); align-self: flex-start; max-width: 100%; }
 .ar-ref-label { font: 500 13px/18px var(--font-sans); color: var(--ink-muted); } .ar-ref-code { font: 500 22px/28px var(--font-mono); overflow-wrap: anywhere; user-select: all; }
 .ar-alert { display: flex; flex-direction: column; gap: 4px; padding: 16px 20px; border-radius: var(--radius-lg); border: var(--hairline) solid var(--err); background: var(--err-soft); color: var(--ink); }
@@ -209,6 +210,9 @@ body { min-height: 100%; }
 .intro-word { animation-delay: 2.6s; } .intro-word:nth-child(2) { animation-delay: 4s; } .intro-word:nth-child(3) { animation-delay: 5.4s; } /* 1.4 s slots (33% of 4.2 s); motion ends at 6.8 s, which the introDone timer (6800 ms) in customer.page.ts must match */
 .intro-cta { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 48px; opacity: 0; visibility: hidden; animation: ar-rise .8s cubic-bezier(.16, 1, .3, 1) 4.4s both, ar-show 0s 4.4s forwards; }
 .intro-foot { position: absolute; bottom: 40px; left: 0; right: 0; text-align: center; margin: 0; font: 400 13px/20px var(--font-mono); color: var(--ink-muted); opacity: 0; visibility: hidden; animation: ar-rise .8s cubic-bezier(.16, 1, .3, 1) 4.8s both, ar-show 0s 4.8s forwards; }
+.intro-purpose { position: absolute; bottom: 72px; left: 24px; right: 24px; margin: 0; text-align: center; font: 500 20px/28px var(--font-sans); color: var(--ink); } /* the purpose, visible from the first frame, below the boot disc */
+.intro-skip { position: absolute; top: 24px; right: 24px; z-index: 3; }
+.intro.is-done .intro-cta, .intro.is-done .intro-foot { animation: none; opacity: 1; visibility: visible; } /* skipped or finished: show Start at once */
 .lang-links { display: flex; gap: 20px; }
 .lang-links button { border: 0; background: none; padding: 0 0 2px; font: 400 14px/20px var(--font-sans); color: var(--ink-muted); cursor: pointer; border-bottom: 1px solid transparent; }
 .lang-links button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); }

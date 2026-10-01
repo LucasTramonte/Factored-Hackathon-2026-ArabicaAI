@@ -5,11 +5,13 @@
 
   @switch (step()) {
     @case ('intro') {
-      <section class="step intro" aria-label="ArabicaAI">
+      <section class="step intro" aria-label="ArabicaAI" [class.is-done]="introDone()">
+        @if (!introDone()) { <button type="button" class="link-btn intro-skip" (click)="skipIntro()">{{ t().skipIntro }}</button> }
         <div class="intro-words" aria-live="off" [class.is-done]="introDone()">
           <p class="intro-word" lang="es" [class.is-current]="lang.lang() === 'es'">Hola</p><p class="intro-word" lang="pt" [class.is-current]="lang.lang() === 'pt'">Olá</p><p class="intro-word" lang="en" [class.is-current]="lang.lang() === 'en'">Hello</p>
         </div>
-        <p class="sr-only">{{ t().tagline }} {{ t().promise }}</p>
+        <p class="intro-purpose">{{ t().tagline }}</p>
+        <p class="sr-only">{{ t().promise }}</p>
         <div class="intro-cta">
           <button type="button" class="ar-btn" (click)="start()">{{ t().start }}
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5l7 7-7 7"></path></svg>
@@ -20,7 +22,7 @@
             <button type="button" lang="en" [attr.aria-pressed]="lang.lang() === 'en'" (click)="lang.set('en')">English</button>
           </div>
         </div>
-        <p class="intro-foot">ArabicaAI. {{ t().tagline }}</p>
+        <p class="intro-foot">ArabicaAI</p>
       </section>
     }
 
@@ -147,7 +149,7 @@
                       </span>
                       <span role="cell" class="td td-state">
                         @if (reportedState(tx.transaction_id); as state) { <span class="ar-chip" [class.ar-chip-ok]="state === 'accepted'" [class.ar-chip-warn]="state === 'chipPending'">{{ t()[state] }}</span> }
-                        @else { <button type="button" class="link-btn" (click)="openChat(tx.transaction_id)" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null" [disabled]="!!frozen() || chatStep() === 'receipt'">{{ t().notRecognized }}</button> }
+                        @else { <button type="button" class="ar-btn ar-btn-secondary report-btn" (click)="openChat(tx.transaction_id)" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null" [disabled]="!!frozen() || chatStep() === 'receipt'">{{ t().reportCharge }}<span class="sr-only">: {{ tx.merchant_name || t().noMerchant }}, {{ tx.amount }} {{ tx.currency }}</span></button> }
                       </span>
                       <span role="cell" class="td td-amount">{{ tx.amount }} {{ tx.currency }}</span>
                       </div>
@@ -220,6 +222,12 @@
                   <div class="ar-panel ar-panel-ok" role="status" id="intake-receipt" #intakeReceiptEl tabindex="-1">
                     <h3 class="ar-panel-title">{{ receiptTitle() }}</h3>
                     <div class="ar-ref"><span class="ar-ref-label">{{ t().reference }}</span><span class="ar-ref-code">{{ r.protocol }}</span></div>
+                    <h4>{{ t().whatWeChecked }}</h4>
+                    <ul class="checks">@for (a of r.actions_taken; track $index) { <li>{{ check(a) }}</li> } @empty { <li>{{ t().none }}</li> }</ul>
+                    @if (r.unresolved_questions.length) {
+                      <h4>{{ t().openQuestions }}</h4>
+                      <ul class="open-questions">@for (q of r.unresolved_questions; track $index) { <li>{{ check(q) }}</li> }</ul>
+                    }
                     <p>{{ t().nextStep }}</p>
                     @if (r.replayed) { <p class="ar-small">{{ t().replayed }}</p> }
                   </div>

@@ -45,7 +45,7 @@ describe('CustomerPage focus', () => {
     page.identity = 'demo-ana';
     await page.login();
     page.chatOpen.set(true);
-    page.intakeReceipt.set({ kind: 'complete', protocol: 'P-1', replayed: false } as unknown as IntakeReceipt);
+    page.intakeReceipt.set({ kind: 'complete', protocol: 'P-1', replayed: false, actions_taken: [], unresolved_questions: [] } as unknown as IntakeReceipt);
     await fixture.whenStable();
     const newReport = [...fixture.nativeElement.querySelectorAll('.chat .ar-btn-secondary')].find((b: Element) => b.textContent!.trim() === page.t().chatNew) as HTMLButtonElement;
     newReport.focus();

@@ -17,7 +17,7 @@ const es = {
     guideTitle: 'Reporte guiado', guideBlurb: 'Eliges el cargo, cuentas qué pasó y confirmas. Una persona revisa el caso.',
     report: 'Reportar un cargo', openCases: 'Casos abiertos', inReview: 'en revisión', accepted: 'aceptada', none: 'ninguno',
     recent: 'Cargos recientes', merchant: 'Comercio', date: 'Fecha', state: 'Estado', amount: 'Monto',
-    notRecognized: 'No lo reconozco', selected: 'seleccionado', noMerchant: 'Comercio: no consta en la fuente',
+    selected: 'seleccionado', noMerchant: 'Comercio: no consta en la fuente',
     tzMissing: 'zona horaria no indicada', dateMissing: 'fecha no disponible', utc: 'UTC',
     coverage: 'Solo tus propios cargos, los más recientes al corte. No se muestran calificaciones de riesgo.',
     empty: 'No se cargaron cargos.', emptyCaveat: 'Esto no establece que el cliente no tenga cargos.',
@@ -47,7 +47,7 @@ const es = {
     queueMore: 'Solo se muestran los 50 más recientes.', historyMore: 'Solo se muestran los primeros 100 eventos.',
     kindComplete: 'Completo', kindTechnical: 'Falla técnica', kindIncomplete: 'Incompleto',
     transactionId: 'ID de transacción', evidence: 'Evidencia verificada', noEvidence: 'Sin transacción verificada.',
-    actionsTaken: 'Acciones realizadas', openQuestions: 'Preguntas abiertas', history: 'Historial',
+    openQuestions: 'Preguntas abiertas', history: 'Historial',
     toolStatus: 'Estado de la consulta', destination: 'Destino', priority: 'Prioridad', close: 'Cerrar',
     statement: 'Relato del cliente', languageCode: 'Idioma del reporte',
     agentErr401: 'La sesión de agente expiró. Vuelve a entrar como agente.', agentErr404: 'No se encontró el reporte.',
@@ -69,7 +69,13 @@ const es = {
     products: 'Productos', notListed: 'no consta', chipPending: 'sin confirmar',
     moreCharges: 'Hay más cargos que no se muestran aquí.',
     err409Finish: 'Este reporte ya no se puede cambiar. Si no recibiste una referencia, inicia un nuevo reporte.',
-    chatValidationShort: 'Describe lo que pasó en al menos 10 caracteres.'
+    chatValidationShort: 'Describe lo que pasó en al menos 10 caracteres.',
+    // Purpose, report button, what we checked
+    skipIntro: 'Saltar la introducción', reportCharge: 'Reportar', whatWeChecked: 'Lo que verificamos',
+    check_owned_transaction_retrieved: 'Cargo encontrado entre los cargos de la cuenta',
+    check_customer_confirmation_recorded: 'Confirmación del cargo registrada',
+    check_transaction_lookup_failed: 'La búsqueda del cargo falló',
+    check_matching_transaction: 'Cargo sin identificar', check_customer_confirmation: 'Confirmación del cargo pendiente'
 };
 
 /** The key set is the Spanish table; the other two must match it exactly. */
@@ -90,7 +96,7 @@ const STRINGS: Record<Lang, Strings> = {
     guideTitle: 'Relato guiado', guideBlurb: 'Você escolhe a cobrança, conta o que aconteceu e confirma. Uma pessoa analisa o caso.',
     report: 'Reportar uma cobrança', openCases: 'Casos abertos', inReview: 'em análise', accepted: 'aceito', none: 'nenhum',
     recent: 'Cobranças recentes', merchant: 'Estabelecimento', date: 'Data', state: 'Estado', amount: 'Valor',
-    notRecognized: 'Não reconheço', selected: 'selecionado', noMerchant: 'Estabelecimento: não consta na fonte',
+    selected: 'selecionado', noMerchant: 'Estabelecimento: não consta na fonte',
     tzMissing: 'fuso horário não informado', dateMissing: 'data indisponível', utc: 'UTC',
     coverage: 'Apenas suas próprias cobranças, as mais recentes no corte. Nenhuma pontuação de risco é exibida.',
     empty: 'Nenhuma cobrança carregada.', emptyCaveat: 'Isso não estabelece que o cliente não tenha cobranças.',
@@ -120,7 +126,7 @@ const STRINGS: Record<Lang, Strings> = {
     queueMore: 'Apenas os 50 mais recentes são exibidos.', historyMore: 'Apenas os primeiros 100 eventos são exibidos.',
     kindComplete: 'Completo', kindTechnical: 'Falha técnica', kindIncomplete: 'Incompleto',
     transactionId: 'ID da transação', evidence: 'Evidência verificada', noEvidence: 'Sem transação verificada.',
-    actionsTaken: 'Ações realizadas', openQuestions: 'Perguntas em aberto', history: 'Histórico',
+    openQuestions: 'Perguntas em aberto', history: 'Histórico',
     toolStatus: 'Status da consulta', destination: 'Destino', priority: 'Prioridade', close: 'Fechar',
     statement: 'Relato do cliente', languageCode: 'Idioma do relato',
     agentErr401: 'A sessão de agente expirou. Entre novamente como agente.', agentErr404: 'Relato não encontrado.',
@@ -142,7 +148,13 @@ const STRINGS: Record<Lang, Strings> = {
     products: 'Produtos', notListed: 'não consta', chipPending: 'não confirmado',
     moreCharges: 'Há mais cobranças que não aparecem aqui.',
     err409Finish: 'Este relato não pode mais ser alterado. Se você não recebeu uma referência, inicie um novo relato.',
-    chatValidationShort: 'Descreva o que aconteceu em pelo menos 10 caracteres.'
+    chatValidationShort: 'Descreva o que aconteceu em pelo menos 10 caracteres.',
+    // Purpose, report button, what we checked
+    skipIntro: 'Pular a introdução', reportCharge: 'Reportar', whatWeChecked: 'O que verificamos',
+    check_owned_transaction_retrieved: 'Cobrança encontrada entre as cobranças da conta',
+    check_customer_confirmation_recorded: 'Confirmação da cobrança registrada',
+    check_transaction_lookup_failed: 'A busca da cobrança falhou',
+    check_matching_transaction: 'Cobrança não identificada', check_customer_confirmation: 'Confirmação da cobrança pendente'
   },
   en: {
     greeting: 'Hello', tagline: 'Report a charge you do not recognize.',
@@ -157,7 +169,7 @@ const STRINGS: Record<Lang, Strings> = {
     guideTitle: 'Guided report', guideBlurb: 'You pick the charge, say what happened and confirm. A person reviews the case.',
     report: 'Report a charge', openCases: 'Open cases', inReview: 'in review', accepted: 'accepted', none: 'none',
     recent: 'Recent charges', merchant: 'Merchant', date: 'Date', state: 'State', amount: 'Amount',
-    notRecognized: 'I do not recognize it', selected: 'selected', noMerchant: 'Merchant: not in source',
+    selected: 'selected', noMerchant: 'Merchant: not in source',
     tzMissing: 'source timezone not provided', dateMissing: 'date unavailable', utc: 'UTC',
     coverage: 'Only your own charges, the most recent at the cutoff. No risk scores are shown.',
     empty: 'No charges loaded.', emptyCaveat: 'This does not establish that the customer has no charges.',
@@ -187,7 +199,7 @@ const STRINGS: Record<Lang, Strings> = {
     queueMore: 'Only the newest 50 are shown.', historyMore: 'Only the first 100 events are shown.',
     kindComplete: 'Complete', kindTechnical: 'Technical failure', kindIncomplete: 'Incomplete',
     transactionId: 'Transaction ID', evidence: 'Verified evidence', noEvidence: 'No verified transaction.',
-    actionsTaken: 'Actions taken', openQuestions: 'Open questions', history: 'History',
+    openQuestions: 'Open questions', history: 'History',
     toolStatus: 'Lookup status', destination: 'Destination', priority: 'Priority', close: 'Close',
     statement: 'Customer statement', languageCode: 'Report language',
     agentErr401: 'The agent session expired. Sign in as an agent again.', agentErr404: 'Report not found.',
@@ -209,7 +221,13 @@ const STRINGS: Record<Lang, Strings> = {
     products: 'Products', notListed: 'not listed', chipPending: 'not confirmed',
     moreCharges: 'There are more charges that are not shown here.',
     err409Finish: 'This report can no longer be changed. If you did not receive a reference, start a new report.',
-    chatValidationShort: 'Describe what happened in at least 10 characters.'
+    chatValidationShort: 'Describe what happened in at least 10 characters.',
+    // Purpose, report button, what we checked
+    skipIntro: 'Skip intro', reportCharge: 'Report', whatWeChecked: 'What we checked',
+    check_owned_transaction_retrieved: "Charge found among the account's own charges",
+    check_customer_confirmation_recorded: 'Charge confirmation recorded',
+    check_transaction_lookup_failed: 'Charge lookup failed',
+    check_matching_transaction: 'Charge not identified', check_customer_confirmation: 'Charge confirmation pending'
   }
 };
 
@@ -247,4 +265,9 @@ export function errorText(t: Strings, e: unknown): string {
   if (!(e instanceof ApiError)) return t.errOther;
   const key = ERROR_KEYS[e.status];
   return key ? t[key] : `${t.errOther} (HTTP ${e.status})`;
+}
+
+/** A server check or open-question code in the interface language; a code without a label is shown as is. */
+export function checkText(t: Strings, code: string): string {
+  return (t as Record<string, string>)['check_' + code] ?? code;
 }

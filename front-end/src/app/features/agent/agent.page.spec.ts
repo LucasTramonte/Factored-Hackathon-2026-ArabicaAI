@@ -78,7 +78,10 @@ describe('AgentPage', () => {
     expect(service.intakeDetail).toHaveBeenCalledOnceWith(P1);
     const heading = el().querySelector('#intake-detail-title')!;
     expect(document.activeElement).toBe(heading);
-    expect(el().textContent).toContain('owned_transaction_retrieved');
+    const checks = el().querySelector('#intake-checks')!;
+    expect(checks.querySelector('h3')?.textContent).toContain(t().whatWeChecked);
+    expect(checks.textContent).toContain(t().check_owned_transaction_retrieved);
+    expect(checks.textContent).toContain('owned_transaction_retrieved');
     expect(el().textContent).toContain('12.50 MXN');
     expect(button.getAttribute('aria-expanded')).toBe('true');
     page.close();

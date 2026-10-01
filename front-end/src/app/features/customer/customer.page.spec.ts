@@ -76,7 +76,8 @@ describe('CustomerPage', () => {
   describe('guided intake chat', () => {
     const started: IntakeStart = { episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false };
     const intakeReceipt: IntakeReceipt = { episode_id: started.episode_id, protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
-      accepted_at: '2026-09-30T12:00:00Z', replayed: false, next_step_code: 'await_human_review' };
+      accepted_at: '2026-09-30T12:00:00Z', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'],
+      unresolved_questions: [], next_step_code: 'await_human_review' };
     let lang: LangService;
 
     beforeEach(async () => {
@@ -358,7 +359,8 @@ describe('CustomerPage', () => {
       fixture.detectChanges();
       expect(link().getAttribute('href')).toBe('/agent');
       service.receipts.set([{ receipt: { episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555',
-        kind: 'incomplete', accepted_at: 'x', replayed: false, next_step_code: 'await_human_review' }, transactionId: null }]);
+        kind: 'incomplete', accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'],
+        next_step_code: 'await_human_review' }, transactionId: null }]);
       fixture.destroy();
       const again = TestBed.createComponent(CustomerPage);
       await again.componentInstance.ngOnInit();
@@ -419,7 +421,7 @@ describe('CustomerPage', () => {
       expect(el.querySelector('#chat-error')?.textContent).toContain(p.t().chatValidationShort);
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
       service.confirmIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
-        accepted_at: 'x', replayed: false, next_step_code: 'await_human_review' });
+        accepted_at: 'x', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'], unresolved_questions: [], next_step_code: 'await_human_review' });
       p.chatStatement = 'No reconozco este cargo.';
       await p.send();
       fixture.detectChanges();
@@ -433,6 +435,52 @@ describe('CustomerPage', () => {
       const receiptEl = el.querySelector('#intake-receipt')!;
       expect(receiptEl.textContent).toContain('99999999-8888-4777-8666-555555555555');
       expect(document.activeElement).toBe(receiptEl);
+      const checks = [...receiptEl.querySelectorAll('.checks li')].map(li => li.textContent?.trim());
+      expect(checks).toEqual([p.t().check_owned_transaction_retrieved, p.t().check_customer_confirmation_recorded]);
+      expect(receiptEl.querySelector('.open-questions')).toBeNull();
+    });
+
+    it('lists the open questions on a receipt without a confirmed charge', async () => {
+      const { fixture, p, el } = await home();
+      p.openChat();
+      service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
+      service.handoffIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'incomplete',
+        accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'], next_step_code: 'await_human_review' });
+      p.chatStatement = 'No reconozco este cargo.';
+      await p.send();
+      await p.cannotFind();
+      fixture.detectChanges();
+      const receiptEl = el.querySelector('#intake-receipt')!;
+      expect([...receiptEl.querySelectorAll('.open-questions li')].map(li => li.textContent?.trim()))
+        .toEqual([p.t().check_matching_transaction, p.t().check_customer_confirmation]);
+      expect(receiptEl.querySelector('.checks')?.textContent).toContain(p.t().none);
+    });
+
+    it('gives every charge a Report button named after its merchant that opens the chat on it', async () => {
+      const { fixture, p, el } = await home();
+      const button = el.querySelector<HTMLButtonElement>('.report-btn')!;
+      expect(button.textContent).toContain(p.t().reportCharge);
+      expect(button.textContent).toContain('Mercado');
+      button.click();
+      fixture.detectChanges();
+      expect(p.chatOpen()).toBeTrue();
+      expect(p.choice).toBe('demo-tx-001');
+    });
+
+    it('states the purpose on the first screen and lets the intro be skipped', async () => {
+      const fixture = TestBed.createComponent(CustomerPage);
+      const p = fixture.componentInstance;
+      await p.ngOnInit();
+      fixture.detectChanges();
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('.intro-purpose')?.textContent?.trim()).toBe(p.t().tagline);
+      expect(p.introDone()).toBeFalse();
+      el.querySelector<HTMLButtonElement>('.intro-skip')!.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(p.introDone()).toBeTrue();
+      expect(el.querySelector('.intro-skip')).toBeNull();
+      expect(document.activeElement).toBe(el.querySelector('.intro-cta .ar-btn'));
     });
   });
 });
