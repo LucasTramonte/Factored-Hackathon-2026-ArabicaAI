@@ -58,13 +58,27 @@ describe('CustomerPicker', () => {
     expect(el().textContent).not.toContain(picker.t().pickerRefine);
   });
 
-  it('keeps the selected identity visible even when the filter hides it', () => {
+  it('pins a selected identity the filter hides apart from the matches, tagged as selected', () => {
+    const listed = () => [...el().querySelectorAll('.picker-list .ar-row-name')].map(n => n.textContent?.trim());
+    const pinned = () => el().querySelector('.picker-pinned label');
     render(many(120), 'CLI-99');
-    expect(names()[0]).toBe('Person 99');
-    expect(names().length).toBe(50);
+    expect(pinned()?.textContent).toContain('Person 99');
+    expect(pinned()?.textContent).toContain(picker.t().selected);
+    expect(listed().length).toBe(50);
+    expect(el().querySelector('[role=status]')?.textContent).toContain('120');
     type('input[type=search]', 'nobody', 'input');
-    expect(names()).toEqual(['Person 99']);
+    expect(listed()).toEqual([]);
+    expect(pinned()?.textContent).toContain('Person 99');
     expect(el().querySelector('[role=status]')?.textContent).toContain(picker.t().pickerNone);
+    type('input[type=search]', 'Person 99', 'input');
+    expect(pinned()).toBeNull();
+    expect(listed()).toEqual(['Person 99']);
+  });
+
+  it('names the group once, with the visible legend', () => {
+    render(base);
+    expect(el().querySelector('legend')?.textContent?.trim()).toBe(picker.t().chooseIdentity);
+    expect(el().querySelector('legend')?.classList).not.toContain('sr-only');
   });
 
   it('selecting a radio updates the value', () => {

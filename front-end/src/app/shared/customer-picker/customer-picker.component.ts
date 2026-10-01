@@ -1,4 +1,5 @@
 import { Component, computed, inject, input, model, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { LangService } from '../i18n/lang.service';
 import { Identity } from '../models/intake.model';
 
@@ -10,11 +11,13 @@ const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCas
 
 /**
  * Pick a demo identity by name or id, narrowed by country. Native radios, so arrow keys and the
- * disabled fieldset work as usual. The selected identity always stays in the list, so the caller
- * never signs in someone the customer can't see.
+ * disabled fieldset work as usual. A selected identity the filter or cap hides is pinned apart from
+ * the matches and tagged as selected, so the caller never signs in someone the customer can't see
+ * and the count describes only the matches.
  */
 @Component({
   selector: 'app-customer-picker',
+  imports: [NgTemplateOutlet],
   templateUrl: './customer-picker.component.html',
   styleUrl: './customer-picker.component.css'
 })
@@ -35,10 +38,10 @@ export class CustomerPicker {
     return this.identities().filter(i => (!c || (c === NO_COUNTRY ? !i.country : i.country === c))
       && (!q || fold(i.display_name).includes(q) || fold(i.customer_id).includes(q)));
   });
-  readonly shown = computed(() => {
-    const shown = this.matches().slice(0, CAP);
+  readonly shown = computed(() => this.matches().slice(0, CAP));
+  readonly pinned = computed(() => {
     const selected = this.identities().find(i => i.customer_id === this.value());
-    return selected && !shown.includes(selected) ? [selected, ...shown.slice(0, CAP - 1)] : shown;
+    return selected && !this.shown().includes(selected) ? selected : null;
   });
   readonly capped = computed(() => this.matches().length > CAP);
 }
