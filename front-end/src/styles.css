@@ -260,7 +260,6 @@ body { min-height: 100%; }
   .tr-last ~ .td-state { border-bottom: 0; }
   .td-merchant { flex-wrap: wrap; }
   .box-head, .box-body { padding-left: 16px; padding-right: 16px; }
-  .ar-sidebar .ar-nav a .label { display: none; }
-  .ar-sidebar .ar-nav a { padding: 0 10px; }
+  .ar-sidebar .ar-nav a { padding: 0 10px; } /* one nav link now, so its label fits on a phone */
   .agent-page { padding: 20px 16px 40px; }
 }

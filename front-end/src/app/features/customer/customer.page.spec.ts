@@ -185,6 +185,8 @@ describe('CustomerPage', () => {
       const [first, second] = service.startIntake.calls.allArgs().map(a => a[0]);
       expect(second).toEqual(first);
       expect(page.chatStep()).toBe('choose');
+      // The renewal is visible: the guide says the session was renewed and the same request was resent.
+      expect(page.log()).toContain({ from: 'bot', key: 'sessionRenewed' });
     });
 
     it('after a second 401 keeps the request frozen for a manual renew and retry', async () => {

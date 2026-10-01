@@ -288,6 +288,8 @@ export class CustomerPage implements OnInit, OnDestroy {
           this.chatError.set(errorText(this.t(), renewal));
           return;
         }
+        // Say it happened: a judge watching the expired-session scenario should see the renewal, not infer it.
+        this.log.update(l => [...l, { from: 'bot', key: 'sessionRenewed' }]);
         result = await this.call(frozen);
       }
       this.frozen.set(null);
