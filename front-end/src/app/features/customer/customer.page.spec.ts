@@ -185,6 +185,8 @@ describe('CustomerPage', () => {
       const [first, second] = service.startIntake.calls.allArgs().map(a => a[0]);
       expect(second).toEqual(first);
       expect(page.chatStep()).toBe('choose');
+      // The renewal is visible: the guide says the session was renewed and the same request was resent.
+      expect(page.log()).toContain({ from: 'bot', key: 'sessionRenewed' });
     });
 
     it('after a second 401 keeps the request frozen for a manual renew and retry', async () => {
@@ -397,7 +399,7 @@ describe('CustomerPage', () => {
       const html = again.nativeElement as HTMLElement;
       expect(again.componentInstance.step()).toBe('home');
       expect(html.textContent).toContain('AR-3F9Q-1Z7P'); // the home shows the short code; the UUID lives in the receipt panel as the case id
-      expect(html.querySelector('.ar-count')?.textContent).toBe('1');
+      expect(html.querySelector('.ar-count')).withContext('no receipt badge on the agent link: it read as a queue count').toBeNull();
       const reports = [...html.querySelectorAll('.your-reports li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim());
       expect(reports.length).toBe(1);
       expect(reports[0]).toContain(p.t().receiptIncomplete);
@@ -473,6 +475,10 @@ describe('CustomerPage', () => {
       const receiptEl = el.querySelector('#intake-receipt')!;
       expect(receiptEl.textContent).toContain('99999999-8888-4777-8666-555555555555');
       expect(document.activeElement).toBe(receiptEl);
+      // The sentence that says a person reviews the case and nothing was refunded comes right after the reference, before the checks.
+      const order = [...receiptEl.children].map(c => c.className || c.tagName);
+      expect(order.indexOf('next-step')).toBe(order.indexOf('ar-ref') + 1);
+      expect(order.indexOf('next-step')).toBeLessThan(order.indexOf('checks'));
       expect(receiptEl.querySelector('.ar-ref-code')?.textContent?.trim()).toBe('AR-7K3M-2Q4X');
       expect(receiptEl.querySelector('.case-id')?.textContent).toContain('99999999-8888-4777-8666-555555555555'); // the UUID stays, smaller, as the case id
       const checks = [...receiptEl.querySelectorAll('.checks li')].map(li => li.textContent?.trim());

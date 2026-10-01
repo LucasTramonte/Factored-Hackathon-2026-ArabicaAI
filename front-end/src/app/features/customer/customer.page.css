@@ -2,7 +2,7 @@
    below (the page behind is inert) and a non-modal region above that. */
 .chat {
   position: fixed; right: 24px; bottom: 84px; z-index: 20; width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 120px); max-height: calc(100dvh - 120px);
-  overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 20px;
+  overflow-y: auto; scroll-padding-bottom: 72px; display: flex; flex-direction: column; gap: 12px; padding: 20px; /* scroll-padding: a focused receipt lands above the sticky actions bar */
   background: var(--surface-raised); border: var(--hairline) solid var(--line-strong); border-radius: var(--radius-lg);
 }
 .chat-close { align-self: flex-end; }

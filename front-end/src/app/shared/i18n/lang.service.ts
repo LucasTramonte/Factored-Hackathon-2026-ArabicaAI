@@ -76,7 +76,8 @@ const es = {
     check_customer_confirmation_recorded: 'Confirmación del cargo registrada',
     check_transaction_lookup_failed: 'La búsqueda del cargo falló',
     check_matching_transaction: 'Cargo sin identificar', check_customer_confirmation: 'Confirmación del cargo pendiente',
-    yourReports: 'Tus reportes'
+    yourReports: 'Tus reportes',
+    sessionRenewed: 'Tu sesión había expirado. La renovamos con la misma identidad y reenviamos la misma solicitud.'
 };
 
 /** The key set is the Spanish table; the other two must match it exactly. */
@@ -156,7 +157,8 @@ const STRINGS: Record<Lang, Strings> = {
     check_customer_confirmation_recorded: 'Confirmação da cobrança registrada',
     check_transaction_lookup_failed: 'A busca da cobrança falhou',
     check_matching_transaction: 'Cobrança não identificada', check_customer_confirmation: 'Confirmação da cobrança pendente',
-    yourReports: 'Seus relatos'
+    yourReports: 'Seus relatos',
+    sessionRenewed: 'Sua sessão tinha expirado. Nós a renovamos com a mesma identidade e reenviamos o mesmo pedido.'
   },
   en: {
     greeting: 'Hello', tagline: 'Report a charge you do not recognize.',
@@ -230,7 +232,8 @@ const STRINGS: Record<Lang, Strings> = {
     check_customer_confirmation_recorded: 'Charge confirmation recorded',
     check_transaction_lookup_failed: 'Charge lookup failed',
     check_matching_transaction: 'Charge not identified', check_customer_confirmation: 'Charge confirmation pending',
-    yourReports: 'Your reports'
+    yourReports: 'Your reports',
+    sessionRenewed: 'Your session had expired. We renewed it with the same identity and resent the same request.'
   }
 };
 
