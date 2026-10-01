@@ -1,0 +1,26 @@
+import { TestBed } from '@angular/core/testing';
+import { ApiService } from '../../core/http/api.service';
+import { AgentService } from './agent.service';
+
+describe('AgentService', () => {
+  let api: jasmine.SpyObj<ApiService>;
+  let service: AgentService;
+
+  beforeEach(() => {
+    api = jasmine.createSpyObj<ApiService>('ApiService', ['request']);
+    TestBed.configureTestingModule({ providers: [{ provide: ApiService, useValue: api }] });
+    service = TestBed.inject(AgentService);
+  });
+
+  it('reads the intake queue with GET and keeps has_more', async () => {
+    api.request.and.resolveTo({ items: [], has_more: true, scope: 'synthetic_demo_only' });
+    expect((await service.intakes()).has_more).toBeTrue();
+    expect(api.request).toHaveBeenCalledOnceWith('/agent/intakes');
+  });
+
+  it('asks for exactly one encoded protocol', async () => {
+    api.request.and.resolveTo({});
+    await service.intakeDetail('a&b=c');
+    expect(api.request).toHaveBeenCalledOnceWith('/agent/intake-detail?protocol=a%26b%3Dc');
+  });
+});
