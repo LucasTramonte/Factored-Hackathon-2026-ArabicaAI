@@ -115,6 +115,48 @@ Files are in `Docs/Evidence/screenshots/`. All are PNG at 1×, each under 200 KB
 | `fix-f-after-intro-14s.png` | 1440×900 dark | After | Current word static after the single pass |
 | `fix-2411-before-focus-hidden-1024.png` | 1024×768 dark | Before | Focus on "Reportar un cargo", fully behind the chat panel |
 
+## Direct client (2026-10-02)
+
+The client changed after this audit was written (plan `Docs/superpowers/plans/2026-10-01-factored-feedback-response.md`, Tasks 1–3): the intro step, its word animation, the travelling disc and both timers were removed, so the first render is the sign-in screen; the home shows the greeting, the charges table with one Report button per row and the report panel, which opens only from a row and carries its own close button at every width. The findings above are kept as the record of the earlier client. What they mean now:
+
+- Finding 2 (2.2.2), finding 16 and the intro notes in finding 12 are moot: nothing animates and no control is hidden for a time.
+- Finding 5 (2.4.11): the inert behaviour at 1180 px and below is unchanged. The "toggle" it mentions no longer exists; the panel's own close button closes it at every width, and closing returns focus to the row button that opened the panel, or to the page heading when nothing did.
+- Advisories: the sign-in screen has one `h1` (the greeting) and "¿Quién eres?" is an `h2`; the 6.8 s timer that had to match the stylesheet is gone. The missing `main` landmarks on sign-in and `/agent` remain open.
+
+### Contrast, 2026-10-02
+
+Measured from the tokens in `front-end/src/styles.css` with `Docs/Evidence/contrast_ratios.py` (re-run it after any token change). The hero card, the explainer card and its chips were removed in Task 2, which also removed the one layering failure the feedback described: `es` / `demo-ana` / `2 cargos` chips sat on the navy explainer card at 1.32:1. No text is de-emphasised by opacity any more (`.products` used `opacity: .85`; it now uses `--ink-muted`, 5.54:1 light and 7.40:1 dark on the page).
+
+### Text on background
+
+| Pair | Light | Dark | Needs | Result |
+|---|---|---|---|---|
+| body text on page (`--ink` on `--surface`) | 16.90 | 16.76 | 4.5 | pass |
+| body text on raised box (`--ink` on `--surface-raised`) | 17.98 | 15.48 | 4.5 | pass |
+| muted text on page (`--ink-muted` on `--surface`) | 5.54 | 7.40 | 4.5 | pass |
+| muted text on raised box (`--ink-muted` on `--surface-raised`) | 5.90 | 6.83 | 4.5 | pass |
+| muted chip text on sunken chip (`--ink-muted` on `--surface-sunken`) | 5.20 | 7.59 | 4.5 | pass |
+| link / accent text on page (`--accent` on `--surface`) | 5.71 | 7.85 | 4.5 | pass |
+| link / accent text on raised box (`--accent` on `--surface-raised`) | 6.08 | 7.25 | 4.5 | pass |
+| ok chip text (`--ok` on `--ok-soft`) | 4.58 | 6.98 | 4.5 | pass |
+| warn chip text (`--warn` on `--warn-soft`) | 5.06 | 7.81 | 4.5 | pass |
+| text on accent-soft (selected row, chat bubble) (`--ink` on `--accent-soft`) | 15.33 | 13.03 | 4.5 | pass |
+| muted text on accent-soft (`--ink-muted` on `--accent-soft`) | 5.03 | 5.75 | 4.5 | pass |
+| button label on accent button (`--surface` on `--accent`) | 5.71 | 7.85 | 4.5 | pass |
+
+### Adjacent surfaces (non-text)
+
+| Pair | Light | Dark | Needs | Result |
+|---|---|---|---|---|
+| raised box on page (`--surface-raised` on `--surface`) | 1.06 | 1.08 | 3.0 | FAIL |
+| sunken chip on raised box (`--surface-sunken` on `--surface-raised`) | 1.13 | 1.11 | 3.0 | FAIL |
+| hairline on page (`--line` on `--surface`) | 1.16 | 1.34 | 3.0 | FAIL |
+| strong line (inputs) on page (`--line-strong` on `--surface`) | 3.17 | 4.03 | 3.0 | pass |
+
+Reading the surface rows: card and chip edges against the page do not reach 3:1 in either theme. WCAG 1.4.11 asks that of boundaries needed to identify a control or its state, not of decorative container edges whose content identifies them, so they are recorded, not treated as failures. The input boundary, which does matter, passes in both themes (`--line-strong`, 3.17 light and 4.03 dark).
+
+Screenshots, fictitious seed, 1280×900: `screenshots/direct-client-home-light.png`, `screenshots/direct-client-home-dark.png`.
+
 ## Tests run
 
 - `npm --prefix front-end test -- --watch=false --browsers=ChromeHeadless`: 68 of 68 pass. That includes the 3 new specs. The 2 focus specs were checked to fail with their fix removed.
