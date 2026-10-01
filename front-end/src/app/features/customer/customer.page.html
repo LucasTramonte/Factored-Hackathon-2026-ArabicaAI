@@ -30,7 +30,7 @@
               @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
             </div>
           </div>
-          <p class="ar-small" style="display: flex; align-items: center; gap: 10px"><span class="ar-chip ar-chip-warn">{{ t().sandbox }}</span>{{ t().synthetic }}</p>
+          <p class="ar-small sign-in-note" style="display: flex; align-items: center; gap: 10px"><span class="ar-chip ar-chip-warn">{{ t().sandbox }}</span><span>{{ t().synthetic }} {{ t().onlyYours }}</span></p>
         </div>
       </section>
     }
