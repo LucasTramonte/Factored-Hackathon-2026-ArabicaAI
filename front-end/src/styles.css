@@ -307,6 +307,7 @@ body { min-height: 100%; }
   .intro-cta { width: 100%; } .intro-cta .ar-btn { width: 100%; }
   .disc--boot { transform: translate(calc(50vw - 96px), calc(50dvh - 140px)) scale(3); }
   .disc--top { transform: translate(calc(50vw - 24px), 24px) scale(0.75); }
+  .disc--login { opacity: .25; } /* the form fills a phone screen, so the disc sits behind text: keep that text legible */
   .home-top { grid-template-columns: minmax(0, 1fr); }
   .home-top .stats { flex-direction: column; }
   .ar-card { height: 196px; padding: 20px; }
