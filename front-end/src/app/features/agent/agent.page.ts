@@ -7,7 +7,7 @@ import { formatSourceTime } from '../../shared/format/source-time.util';
 import { LangService, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
-import { AgentCase, AgentIntake, AgentIntakeDetail, IntakeKind } from '../../shared/models/intake.model';
+import { AgentIntake, AgentIntakeDetail, IntakeKind } from '../../shared/models/intake.model';
 import { AgentService } from './agent.service';
 
 const KIND_KEYS: Record<IntakeKind, keyof Strings> = { complete: 'kindComplete', technical: 'kindTechnical', incomplete: 'kindIncomplete' };
@@ -26,7 +26,6 @@ export class AgentPage {
   readonly busy = signal(false);
   readonly error = signal('');
   readonly loaded = signal(false);
-  readonly cases = signal<AgentCase[]>([]);
   readonly intakes = signal<AgentIntake[]>([]);
   readonly intakesHasMore = signal(false);
   readonly detail = signal<AgentIntakeDetail | null>(null);
@@ -54,15 +53,14 @@ export class AgentPage {
     return this.t()[KIND_KEYS[kind]];
   }
 
-  /** Start an agent session, then load the intake queue and the legacy case list. The button is disabled while busy, which drops its focus: focus then goes to the queue, or back to the button on failure. */
+  /** Start an agent session, then load the intake queue. The button is disabled while busy, which drops its focus: focus then goes to the queue, or back to the button on failure. */
   async load(): Promise<void> {
     if (this.busy()) return;
     this.busy.set(true);
     this.reset();
     try {
       await this.service.signIn();
-      const [cases, intakes] = await Promise.all([this.service.cases(), this.service.intakes()]);
-      this.cases.set(cases);
+      const intakes = await this.service.intakes();
       this.intakes.set(intakes.items);
       this.intakesHasMore.set(intakes.has_more);
       this.loaded.set(true);
@@ -109,7 +107,6 @@ export class AgentPage {
     this.detailRequest++;
     this.error.set('');
     this.loaded.set(false);
-    this.cases.set([]);
     this.intakes.set([]);
     this.intakesHasMore.set(false);
     this.openProtocol.set(null);

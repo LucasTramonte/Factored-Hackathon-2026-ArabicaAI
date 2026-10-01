@@ -233,13 +233,7 @@ body { min-height: 100%; }
 
 /* Agent view */
 .agent-page { max-width: 1120px; margin: 0 auto; padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 24px; }
-.case { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px; padding: 14px 0; border-bottom: var(--hairline) solid var(--line); }
-.case:last-child { border-bottom: 0; }
-.case-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
-.case-name { margin: 0; font: 600 16px/22px var(--font-sans); }
 .case-statement { grid-column: 1 / -1; margin: 4px 0 0; padding-left: 12px; border-left: 2px solid var(--line-strong); font: 400 15px/22px var(--font-sans); }
-.case-meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 16px; font: 400 12px/18px var(--font-mono); color: var(--ink-muted); overflow-wrap: anywhere; }
-.case-meta b { font-weight: 500; color: var(--ink); }
 
 /* ---------- Responsive ---------- */
 /* Keep 1180px in sync with narrowQuery in customer.page.ts and the chat rule in customer.page.css. */
@@ -270,5 +264,4 @@ body { min-height: 100%; }
   .ar-sidebar .ar-nav a .label { display: none; }
   .ar-sidebar .ar-nav a { padding: 0 10px; }
   .agent-page { padding: 20px 16px 40px; }
-  .case { grid-template-columns: minmax(0, 1fr); }
 }
