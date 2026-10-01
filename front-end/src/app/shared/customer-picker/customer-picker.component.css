@@ -1,0 +1,9 @@
+.picker { display: flex; flex-direction: column; gap: var(--space-3); border: 0; padding: 0; margin: 0; min-width: 0; }
+.picker-filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--space-3); }
+.picker-list { display: flex; flex-direction: column; gap: var(--space-2); max-height: 360px; overflow-y: auto; }
+.picker .ar-small { margin: 0; }
+@media (max-width: 480px) { .picker-filters { grid-template-columns: minmax(0, 1fr); } }
+.picker-legend { padding: 0; margin: 0 0 var(--space-1); font-size: 17px; line-height: 26px; }
+/* Long ids and labels wrap instead of overflowing narrow rows (320px). */
+.picker .ar-row { flex-wrap: wrap; }
+.picker .ar-row-name, .picker .ar-row-meta { min-width: 0; overflow-wrap: anywhere; }
