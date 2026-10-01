@@ -107,7 +107,7 @@ Write what was merged, not what was hoped for. `gh pr list --state merged --sear
 | Release Please, semantic-release | Versions and changelogs generated from commit types | Only about a quarter of our recent commits are Conventional, and only a handful of releases are left before submission. Writing the notes by hand costs minutes and stays accurate |
 | commitlint, commit hooks | Enforcing the commit format | Adds friction to every AI-assisted commit. A Conventional PR title plus squash merge gives the same `main` history |
 | CHANGELOG.md | A committed change list | It would repeat the GitHub Releases. The [release history](Docs/releases/README.md) adds what Releases can't: the ADRs, evidence and deployed state per version |
-| CODEOWNERS | Routing reviews by path | Four people review everything; routing adds nothing |
+| CODEOWNERS | Routing reviews by path | Three people review everything; routing adds nothing |
 | Merge queue | Serializing merges under heavy concurrency | Few PRs merge at once |
 | Signed commits | Proving who authored a commit | Key management for every machine and agent; review plus protected `main` already gates what lands |
 | Required linear history | No merge commits on `main` | Squash-only merging already gives it |

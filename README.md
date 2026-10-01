@@ -19,6 +19,7 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 - [Offline baseline from supplied CSVs](#offline-baseline-from-supplied-csvs)
 - [Common commands](#common-commands)
 - [Where to look next](#where-to-look-next)
+- [About us](#about-us)
 - [Appendix: AWS production target](#appendix-aws-production-target)
 
 ## Deliverables
@@ -167,6 +168,18 @@ Docker reuses cached build layers on later runs. For a smaller first S3 check, f
 - [Marketing/Product evidence](data_foundation/reports/README.md) and [offline report hub](data_foundation/reports/index.html): reviewed aggregates, limits and reproducible source. The [customer-backward brief](Docs/Marketing-Product-PRFAQ.md) frames the proposed test.
 
 The dataset is synthetic. Descriptive counts from it should not be presented as measured bank outcomes or causal effects.
+
+## About us
+
+We are three engineers from two coffee countries, Brazil and Colombia, and the name comes from the plant they share. Both grow *Coffea arabica*, the most widely traded coffee species, which originally comes from Ethiopia. The same plant gives two different cups:
+- **Brazil,** the world's largest producer, mostly processes its beans naturally (dried in the fruit). The coffee has a dense body, with chocolate and nut notes.
+- **Colombia** grows only arabica and mostly washes it. The coffee has a brighter acidity, caramel sweetness and citrus or fruit notes.
+
+| | Role | From | Main contributions |
+|---|---|---|---|
+| **Manoella** ([@ManoellaR](https://github.com/ManoellaR)) | Data engineer | Santa Catarina, southern Brazil | The Bronze and Silver pipelines, data contracts and profiling, and the data deep-dive findings; the unexposed reviewer of the frozen evaluation |
+| **Roberto** ([@Robertzu43](https://github.com/Robertzu43)) | AI engineer | Colombia | The intake evaluation harness and event contract, the guided intake backend, the Angular client and agent view, and the accessibility audit; the native Spanish review of the frozen set |
+| **Lucas** ([@LucasTramonte](https://github.com/LucasTramonte)) | Machine learning engineer | Limeira, São Paulo, Brazil | The quality gate and findings register, the Worker and D1 runtime, the ADRs, the capacity and cost record, the learned extractor, the evaluation deliverable and the Gold cohort |
 
 ## Appendix: AWS production target
 
