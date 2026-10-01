@@ -87,6 +87,7 @@ def load(out_dir: Path, part: int, target: str, run: Callable[[list[str]], str] 
     version = meta["version"]
     if not re.fullmatch(r"[0-9a-f]{16}", version):
         raise ValueError(f"Part {part} has a malformed version")
+    # ``version`` is checked against [0-9a-f]{16} above, so it is safe inside the SQL literal below.
     probe = _json(run(["d1", "execute", DATABASE, flag, "--json", "--command",
                        f"SELECT count(*) AS n FROM seed_loads WHERE version='{version}'"]))
     if probe[0]["results"][0]["n"]:
@@ -96,6 +97,10 @@ def load(out_dir: Path, part: int, target: str, run: Callable[[list[str]], str] 
     # Remote D1 reports rows_written per statement; local Wrangler doesn't, so locally it is unmeasured.
     measured = [r["meta"]["rows_written"] for r in result if "rows_written" in r.get("meta", {})]
     written = sum(measured) if measured else "not_measured"
+    if target == "remote" and not measured:
+        # The quota check is the point of a remote load; without it the part stays unrecorded, and a
+        # rerun reloads it (idempotent) once the count can be read.
+        raise ValueError(f"Remote part {part} did not report rows_written; not recorded as loaded")
     if measured and written > meta["expected_writes"]:
         raise ValueError(f"Part {part} wrote {written} rows, over its estimate of {meta['expected_writes']}")
     run(["d1", "execute", DATABASE, flag, "--json", "--command",

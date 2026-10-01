@@ -98,3 +98,10 @@ def test_load_refuses_an_unknown_target_and_a_part_edited_after_publication(tmp_
 
 def test_a_load_without_a_measured_write_count_says_so_instead_of_reporting_zero(tmp_path):
     assert cli.load(published(tmp_path), part=1, target="local", run=FakeWrangler(meta=False))["rows_written"] == "not_measured"
+
+
+def test_a_remote_load_without_a_measured_write_count_is_refused_and_not_recorded(tmp_path):
+    fake = FakeWrangler(meta=False)
+    with pytest.raises(ValueError, match="rows_written"):
+        cli.load(published(tmp_path), part=1, target="remote", run=fake)
+    assert not fake.loaded, "a remote part with no write count is not recorded as loaded"
