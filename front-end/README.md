@@ -27,3 +27,7 @@ Tokens and components come from the ArabicaAI design system (graphite neutrals, 
 The interface language comes from the visitor's choice (`localStorage` key `arabica.lang`), else `navigator.language`, never from the customer's country. Evidence (amounts, IDs, timestamps, currency codes) is never translated; amounts keep their source currency and totals are per currency, computed from the loaded charges only.
 
 `angular.json` sets `optimization.fonts: false` for production: Angular's default downloads Google Fonts at build time to inline them, and the Workers Builds runner does not always have egress to `fonts.googleapis.com`, which failed the build. The browser still loads the fonts from the `<link>` in `index.html`.
+
+Loading the fonts that way is a third-party request: every visitor's browser contacts `fonts.googleapis.com` and `fonts.gstatic.com`, which sees the visitor's IP address. That is acceptable for the synthetic demo behind Cloudflare Access. A deployment with real customers should self-host the Geist files instead, and add a `font-src 'self'` Content-Security-Policy.
+
+The interface copy describes what V1 does: a deterministic guided report reviewed by a person. It makes no claim of an AI agent, because the MVP calls no model ([ADR-002](../Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). API failures are shown in the interface language, keyed by HTTP status (`errorText` in `shared/i18n/`); server text is never shown.

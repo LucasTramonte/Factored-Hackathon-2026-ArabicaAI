@@ -6,9 +6,21 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 
 **Evaluators: start with [`SYSTEM_DESIGN.md`](SYSTEM_DESIGN.md).** It tells the whole story in one narrative: the customer and the problem, what we built, how it works, how we know it works, what it costs, and what is missing. The [reading guide](Docs/README.md) then maps each point of the brief to the document that answers it.
 
-![AWS production target: CloudFront and WAF at the edge, HTTP API and Lambda in a two-AZ VPC with RDS PostgreSQL Multi-AZ and a Bedrock endpoint, a daily Fargate batch into an S3 lake](Docs/Costs/aws-target/architecture.png)
+![Current architecture on Cloudflare: browsers pass Cloudflare Access, the Basic gate, the router and the session cookie to the customer, intake and agent modules, whose SQL lives in store/d1.js over D1. Static assets skip the Worker; Workers AI is gated and offline only. An offline DuckDB batch goes from S3 to Bronze, Silver, the quality gate, the Gold slice and a reviewed seed loaded into D1](Docs/current_workflow_arabica_ai.png)
 
-*The AWS production target (design only, not deployed; the live prototype runs on Cloudflare). Source: [`Docs/Costs/aws-target/`](Docs/Costs/aws-target/).*
+*What runs today, on Cloudflare (solid: live, dashed: planned). The editable source is [`Workflow - Cloudflare intake.excalidraw`](<Docs/Factored Hackathon - Arabica AI/Workflow - Cloudflare intake.excalidraw>). The priced AWS production target is in the [appendix](#appendix-aws-production-target).*
+
+## Contents
+
+- [Deliverables](#deliverables)
+- [How it fits together](#how-it-fits-together)
+- [Data pipeline: start here](#data-pipeline-start-here)
+- [Offline baseline from supplied CSVs](#offline-baseline-from-supplied-csvs)
+- [Common commands](#common-commands)
+- [Where to look next](#where-to-look-next)
+- [Appendix: AWS production target](#appendix-aws-production-target)
+
+## Deliverables
 
 | Deliverable | Document |
 |---|---|
@@ -134,3 +146,9 @@ Docker reuses cached build layers on later runs. For a smaller first S3 check, f
 - [Marketing/Product evidence](data_foundation/reports/README.md) and [offline report hub](data_foundation/reports/index.html): reviewed aggregates, limits and reproducible source. The [customer-backward brief](Docs/Marketing-Product-PRFAQ.md) frames the proposed test.
 
 The dataset is synthetic. Descriptive counts from it should not be presented as measured bank outcomes or causal effects.
+
+## Appendix: AWS production target
+
+![AWS production target: CloudFront and WAF at the edge, HTTP API and Lambda in a two-AZ VPC with RDS PostgreSQL Multi-AZ and a Bedrock endpoint, a daily Fargate batch into an S3 lake](Docs/Costs/aws-target/architecture.png)
+
+*Design only, never deployed: what this workflow would run on if a bank required private networking, a standby database and its own keys. It is priced at $86.36 a month, service by service, in [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) section 3. Templates and diagram source: [`Docs/Costs/aws-target/`](Docs/Costs/aws-target/).*

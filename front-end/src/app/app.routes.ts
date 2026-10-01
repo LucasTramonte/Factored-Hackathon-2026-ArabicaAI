@@ -5,6 +5,6 @@ import { CustomerPage } from './features/customer/customer.page';
 /** The Worker serves documents at / and /agent only, so the customer flow's steps live under / and never change the URL. */
 export const routes: Routes = [
   { path: '', component: CustomerPage, title: 'ArabicaAI' },
-  { path: 'agent', component: AgentPage, title: 'ArabicaAI, vista de agente' },
+  { path: 'agent', component: AgentPage, title: 'ArabicaAI' },
   { path: '**', redirectTo: '' }
 ];
