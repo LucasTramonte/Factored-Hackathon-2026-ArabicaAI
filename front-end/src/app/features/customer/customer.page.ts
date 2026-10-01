@@ -56,6 +56,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly transactions = signal<Transaction[]>([]);
   readonly hasMore = signal(false);
   readonly identities = signal<Identity[]>([]);
+  /** True while the identity list is on its way, so the sign-in screen never looks stuck. */
+  readonly identitiesLoading = signal(false);
   readonly chatOpen = signal(false);
   readonly chosenLang = signal<IntakeLang | null>(null);
   readonly reportLang = computed(() => this.chosenLang() ?? intakeLanguage(this.lang.lang()));
@@ -126,11 +128,14 @@ export class CustomerPage implements OnInit, OnDestroy {
   async ngOnInit(): Promise<void> {
     if (this.narrowQuery) this.narrowQuery.onchange = e => this.narrow.set(e.matches);
     if (this.client()) void this.resume();
+    this.identitiesLoading.set(true);
     try {
       this.identities.set(await this.service.identities());
       this.identity ||= this.identities()[0]?.customer_id ?? '';
     } catch (e) {
       this.fail(e);
+    } finally {
+      this.identitiesLoading.set(false);
     }
   }
 

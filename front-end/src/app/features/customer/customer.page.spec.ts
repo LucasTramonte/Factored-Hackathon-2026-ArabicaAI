@@ -5,7 +5,7 @@ import { ApiError } from '../../core/http/api.service';
 import { CustomerPage, initialsOf } from './customer.page';
 import { LangService } from '../../shared/i18n/lang.service';
 import { CustomerService } from './customer.service';
-import { IntakeReceipt, IntakeStart, Transaction } from '../../shared/models/intake.model';
+import { Identity, IntakeReceipt, IntakeStart, Transaction } from '../../shared/models/intake.model';
 
 describe('CustomerPage', () => {
   let service: jasmine.SpyObj<CustomerService>;
@@ -55,6 +55,21 @@ describe('CustomerPage', () => {
     await page.login();
     expect(page.step()).toBe('login');
     expect(page.error()).toBe(TestBed.inject(LangService).t().err503);
+  });
+
+  it('shows a loading line until the identities arrive, then the picker', async () => {
+    let resolve!: (v: Identity[]) => void;
+    service.identities.and.returnValue(new Promise<Identity[]>(r => { resolve = r; }));
+    const fixture = TestBed.createComponent(CustomerPage);
+    const init = fixture.componentInstance.ngOnInit();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('#identities-loading')?.textContent).toContain(fixture.componentInstance.t().working);
+    resolve([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' }]);
+    await init;
+    fixture.detectChanges();
+    expect(el.querySelector('#identities-loading')).toBeNull();
+    expect(el.querySelector('app-customer-picker')).not.toBeNull();
   });
 
   it('loads the identity choices from the API instead of a hard-coded list', async () => {

@@ -20,6 +20,7 @@
               <h2 class="headline">{{ t().whoAreYou }}</h2>
             </div>
             @if (error()) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
+            @if (identitiesLoading()) { <p id="identities-loading" class="status-line" role="status">{{ t().working }}</p> }
             <app-customer-picker [identities]="identities()" [disabled]="busy() || identityLocked()" [(value)]="identity" />
             <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
               <button type="button" class="ar-btn" (click)="login()" [disabled]="busy() || !identity">
