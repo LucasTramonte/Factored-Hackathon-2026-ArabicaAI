@@ -1,10 +1,12 @@
-import { Component, computed, inject, input, model, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, input, model, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { LangService } from '../i18n/lang.service';
 import { Identity } from '../models/intake.model';
 
-// ponytail: renders at most 50 matches (the cohort is ~800); add virtual scrolling only if all must show at once.
+/** At most this many matches render (the cohort is about 800); add virtual scrolling only if all must show at once. */
 const CAP = 50;
+/** How long typing must pause before the count is announced, so a screen reader isn't interrupted per keystroke. */
+const ANNOUNCE_DELAY_MS = 500;
 /** Select value for identities whose country is null; can't collide with a real country name. */
 const NO_COUNTRY = '\u0000none';
 const fold = (s: string) => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
@@ -44,4 +46,21 @@ export class CustomerPicker {
     return selected && !this.shown().includes(selected) ? selected : null;
   });
   readonly capped = computed(() => this.matches().length > CAP);
+  readonly countText = computed(() => {
+    const n = this.matches().length;
+    if (!n) return this.t().pickerNone;
+    return `${n} ${n === 1 ? this.t().pickerMatch : this.t().pickerMatches}` + (this.capped() ? `. ${this.t().pickerRefine}` : '');
+  });
+  /** The live-region text: the count, once typing has paused for ANNOUNCE_DELAY_MS. */
+  readonly announced = signal('');
+
+  constructor() {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    effect(() => {
+      const text = this.countText();
+      clearTimeout(timer);
+      timer = setTimeout(() => this.announced.set(text), ANNOUNCE_DELAY_MS);
+    });
+    inject(DestroyRef).onDestroy(() => clearTimeout(timer));
+  }
 }

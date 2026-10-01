@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { CustomerPicker } from './customer-picker.component';
 import { Identity } from '../models/intake.model';
 
@@ -34,9 +34,9 @@ describe('CustomerPicker', () => {
     expect(names()).toEqual(['Zoë O.']);
     type('input[type=search]', 'mx1', 'input');
     expect(names()).toEqual(['Luis P.']);
-    expect(el().querySelector('[role=status]')?.textContent?.trim()).toBe(`1 ${picker.t().pickerMatch}`);
+    expect(el().querySelector('.picker-count')?.textContent?.trim()).toBe(`1 ${picker.t().pickerMatch}`);
     type('input[type=search]', '', 'input');
-    expect(el().querySelector('[role=status]')?.textContent?.trim()).toBe(`3 ${picker.t().pickerMatches}`);
+    expect(el().querySelector('.picker-count')?.textContent?.trim()).toBe(`3 ${picker.t().pickerMatches}`);
   });
 
   it('filters by country, and lists identities without one under their own option', () => {
@@ -52,7 +52,7 @@ describe('CustomerPicker', () => {
   it('renders at most 50 matches, counts all of them and asks to refine', () => {
     render(many(120));
     expect(names().length).toBe(50);
-    expect(el().querySelector('[role=status]')?.textContent).toContain('120');
+    expect(el().querySelector('.picker-count')?.textContent).toContain('120');
     expect(el().textContent).toContain(picker.t().pickerRefine);
     type('input[type=search]', 'Person 11', 'input');
     expect(names()).toEqual(['Person 11', 'Person 110', 'Person 111', 'Person 112', 'Person 113', 'Person 114',
@@ -67,11 +67,11 @@ describe('CustomerPicker', () => {
     expect(pinned()?.textContent).toContain('Person 99');
     expect(pinned()?.textContent).toContain(picker.t().selected);
     expect(listed().length).toBe(50);
-    expect(el().querySelector('[role=status]')?.textContent).toContain('120');
+    expect(el().querySelector('.picker-count')?.textContent).toContain('120');
     type('input[type=search]', 'nobody', 'input');
     expect(listed()).toEqual([]);
     expect(pinned()?.textContent).toContain('Person 99');
-    expect(el().querySelector('[role=status]')?.textContent).toContain(picker.t().pickerNone);
+    expect(el().querySelector('.picker-count')?.textContent).toContain(picker.t().pickerNone);
     type('input[type=search]', 'Person 99', 'input');
     expect(pinned()).toBeNull();
     expect(listed()).toEqual(['Person 99']);
@@ -96,4 +96,21 @@ describe('CustomerPicker', () => {
     el().querySelectorAll<HTMLInputElement>('input[type=radio]')[1].click();
     expect(picker.value()).toBe('demo-ana');
   });
+
+  it('announces the match count to screen readers once typing pauses, not on every keystroke', fakeAsync(() => {
+    render(base);
+    const live = () => el().querySelector('[role=status]')?.textContent?.trim();
+    tick(600);
+    fixture.detectChanges();
+    expect(live()).toBe(`3 ${picker.t().pickerMatches}`);
+    type('input[type=search]', 'z', 'input');
+    type('input[type=search]', 'zo', 'input');
+    tick(300);
+    fixture.detectChanges();
+    expect(live()).toBe(`3 ${picker.t().pickerMatches}`);
+    expect(el().querySelector('.picker-count')?.textContent?.trim()).toBe(`1 ${picker.t().pickerMatch}`);
+    tick(600);
+    fixture.detectChanges();
+    expect(live()).toBe(`1 ${picker.t().pickerMatch}`);
+  }));
 });

@@ -37,12 +37,12 @@ const es = {
     err409: 'Esta clave de solicitud ya se usó con otro contenido. No inicies otra solicitud; pide a un agente que revise el caso.',
     err413: 'La descripción es demasiado larga.', err422: 'Revisa los campos y confirma la solicitud.',
     err503: 'Servicio no disponible. La aceptación no se confirmó. Reintenta la misma solicitud.', errOther: 'La solicitud falló.',
-    // W3 fe-customer-picker
+    // Customer picker
     pickerSearch: 'Buscar por nombre o ID', pickerCountry: 'País', pickerAllCountries: 'Todos los países',
     pickerNoCountry: 'Sin país indicado', pickerMatches: 'coincidencias', pickerNone: 'Ninguna identidad coincide.',
     pickerRefine: 'Solo se muestran las primeras coincidencias. Afina la búsqueda.',
     pickerMatch: 'coincidencia',
-    // W4 fe-agent-console
+    // Agent intake console
     intakeQueue: 'Cola de reportes guiados', intakeDetail: 'Detalle del reporte', noIntakes: 'No se devolvieron reportes guiados.',
     queueMore: 'Solo se muestran los 50 más recientes.', historyMore: 'Solo se muestran los primeros 100 eventos.',
     kindComplete: 'Completo', kindTechnical: 'Falla técnica', kindIncomplete: 'Incompleto',
@@ -51,7 +51,7 @@ const es = {
     toolStatus: 'Estado de la consulta', destination: 'Destino', priority: 'Prioridad', close: 'Cerrar',
     statement: 'Relato del cliente', languageCode: 'Idioma del reporte',
     agentErr401: 'La sesión de agente expiró. Vuelve a entrar como agente.', agentErr404: 'No se encontró el reporte.',
-    // W5 fe-intake-chat
+    // Guided intake chat
     chatOpen: 'Abrir el reporte guiado', chatClose: 'Cerrar el reporte guiado', chatYou: 'Tú', chatGuide: 'Guía',
     chatHello: 'Cuéntame qué pasó con el cargo que no reconoces. Después eliges el cargo y confirmas.',
     chatLangPrompt: 'Idioma del reporte', chatSend: 'Enviar',
@@ -110,12 +110,12 @@ const STRINGS: Record<Lang, Strings> = {
     err409: 'Esta chave de pedido já foi usada com outro conteúdo. Não inicie outro pedido; peça a um agente que verifique o caso.',
     err413: 'A descrição é longa demais.', err422: 'Revise os campos e confirme o pedido.',
     err503: 'Serviço indisponível. A aceitação não foi confirmada. Tente o mesmo pedido novamente.', errOther: 'O pedido falhou.',
-    // W3 fe-customer-picker
+    // Customer picker
     pickerSearch: 'Buscar por nome ou ID', pickerCountry: 'País', pickerAllCountries: 'Todos os países',
     pickerNoCountry: 'Sem país informado', pickerMatches: 'resultados', pickerNone: 'Nenhuma identidade corresponde.',
     pickerRefine: 'Apenas os primeiros resultados são exibidos. Refine a busca.',
     pickerMatch: 'resultado',
-    // W4 fe-agent-console
+    // Agent intake console
     intakeQueue: 'Fila de relatos guiados', intakeDetail: 'Detalhe do relato', noIntakes: 'Nenhum relato guiado retornado.',
     queueMore: 'Apenas os 50 mais recentes são exibidos.', historyMore: 'Apenas os primeiros 100 eventos são exibidos.',
     kindComplete: 'Completo', kindTechnical: 'Falha técnica', kindIncomplete: 'Incompleto',
@@ -124,7 +124,7 @@ const STRINGS: Record<Lang, Strings> = {
     toolStatus: 'Status da consulta', destination: 'Destino', priority: 'Prioridade', close: 'Fechar',
     statement: 'Relato do cliente', languageCode: 'Idioma do relato',
     agentErr401: 'A sessão de agente expirou. Entre novamente como agente.', agentErr404: 'Relato não encontrado.',
-    // W5 fe-intake-chat
+    // Guided intake chat
     chatOpen: 'Abrir o relato guiado', chatClose: 'Fechar o relato guiado', chatYou: 'Você', chatGuide: 'Guia',
     chatHello: 'Conte o que aconteceu com a cobrança que você não reconhece. Depois você escolhe a cobrança e confirma.',
     chatLangPrompt: 'Idioma do relato', chatSend: 'Enviar',
@@ -177,12 +177,12 @@ const STRINGS: Record<Lang, Strings> = {
     err409: 'This request key was used for different content. Do not start another request; ask an agent to check the case.',
     err413: 'The description is too long.', err422: 'Check the fields and confirm the request.',
     err503: 'Service unavailable. Acceptance was not confirmed. Retry the same request.', errOther: 'Request failed.',
-    // W3 fe-customer-picker
+    // Customer picker
     pickerSearch: 'Search by name or ID', pickerCountry: 'Country', pickerAllCountries: 'All countries',
     pickerNoCountry: 'No country listed', pickerMatches: 'matches', pickerNone: 'No identity matches.',
     pickerRefine: 'Only the first matches are shown. Refine your search.',
     pickerMatch: 'match',
-    // W4 fe-agent-console
+    // Agent intake console
     intakeQueue: 'Guided report queue', intakeDetail: 'Report detail', noIntakes: 'No guided reports returned.',
     queueMore: 'Only the newest 50 are shown.', historyMore: 'Only the first 100 events are shown.',
     kindComplete: 'Complete', kindTechnical: 'Technical failure', kindIncomplete: 'Incomplete',
@@ -191,7 +191,7 @@ const STRINGS: Record<Lang, Strings> = {
     toolStatus: 'Lookup status', destination: 'Destination', priority: 'Priority', close: 'Close',
     statement: 'Customer statement', languageCode: 'Report language',
     agentErr401: 'The agent session expired. Sign in as an agent again.', agentErr404: 'Report not found.',
-    // W5 fe-intake-chat
+    // Guided intake chat
     chatOpen: 'Open the guided report', chatClose: 'Close the guided report', chatYou: 'You', chatGuide: 'Guide',
     chatHello: 'Tell me what happened with the charge you do not recognize. Then you choose the charge and confirm.',
     chatLangPrompt: 'Report language', chatSend: 'Send',
