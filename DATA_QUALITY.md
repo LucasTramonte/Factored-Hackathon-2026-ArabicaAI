@@ -43,6 +43,9 @@ Every number here comes from a query in [`data_profiles/findings/queries/`](data
 | [DF-017](#df-017-a-few-business-codes-are-shared-by-two-entities) | A few business codes are shared by two entities | full | Low | Accepted limitation | Manoella |
 | [DF-018](#df-018-categorical-values-are-in-spanish-where-the-dictionary-lists-english) | Categorical values are in Spanish where the dictionary lists English | full | Low | Handled at metric level | Manoella |
 | [DF-019](#df-019-foreign-purchase-countries-are-stored-in-english) | Foreign purchase countries are stored in English | full | Medium | Handled in the written policy (pending review) | Manoella |
+| [DF-020](#df-020-one-clock-for-every-country-no-daily-rhythm) | One clock for every country, no daily rhythm | design | Medium | Accepted limitation | Manoella |
+| [DF-021](#df-021-disputing-customers-have-few-recent-purchases) | Disputing customers have few recent purchases | design | High | Handled in the Gold cohort | Manoella |
+| [DF-022](#df-022-unrecognized-charge-customers-by-country-segment-and-accent) | Unrecognized-charge customers by country, segment and accent | design | Low | Supports the Gold cohort | Manoella |
 
 ## Findings
 
@@ -173,6 +176,37 @@ The [bronze profile findings](data_profiles/bronze_data_profile/bronze_profile_f
 - **Evidence:** Bronze and Silver store the three foreign purchase countries in English: `USA` (40,621 rows), `Spain` (40,542) and `Brazil` (40,472). The home countries are in Spanish. Bronze also has 40,515 rows spelled `Mexico`, which Silver canonicalizes to `México` (DF-015). In the design window, purchases in those three foreign countries are 23,110 of 842,103 approved purchases (2.74%, from DF-009).
 - **Impact:** customers name countries in Spanish or Portuguese ("Estados Unidos", "EE.UU.", "EUA", "España", "Brasil"). The written policy compared strings exactly, so a correctly understood "a charge in Brazil I didn't make" never matched its purchase. None of the development fixtures has a purchase country, so the development gate couldn't show this.
 - **Handling:** the policy (`evals/intake/frozen_es_pt_v1/label_rules.py`) compares both sides as ISO 3166-1 codes through a closed ES/PT/EN map, and unknown names never match. Recomputing every committed frozen answer with it changes none. That check runs only locally, where the withheld file exists, and barely exercises the map, since only one frozen situation states a country. Unit tests cover the map itself. It needs the unexposed reviewer's approval (ADR-006, decision 5). Development cases with a purchase country are still missing, and an unexposed author has to write them.
+
+### DF-020 One clock for every country, no daily rhythm
+
+- **Evidence** (design window, run `20261001T020908Z`):
+  - **No daily rhythm.** Transactions are spread almost evenly over the 24 hours in every country: the quietest hour has 98–99% of the busiest hour's count (Mexico 1,872,519 events, Colombia 1,122,261, Argentina 743,726). Complaints are similar, at 84–93% (28,197 / 17,225 / 11,314 events).
+  - **Same rollover everywhere.** The storage partition rolls over at the same stored hour in all three countries: 06:00 for transactions, 08:00 for complaints. Events before that hour are filed under the previous day. The full transaction range runs from 2023-06-17 06:01:30 to 2026-06-18 05:59:41.
+- **Interpretation:** timestamps don't follow each country's local time. Mexico is UTC−6, Colombia UTC−5 and Argentina UTC−3, yet the rollover hour is the same for all three, and the offset depends on the table, not the country. We wrote a test that shifts each country's hourly profile to fit Mexico's, but it has no power here: with a flat profile any shift fits about as well, so it was dropped and is reported here instead. Which clock the source used is not stated by the data.
+- **Handling:** the Gold slice serves the Bronze timestamp string as zone-free source time (`source_occurred_at`), and the interface labels it as such. `process_date` is used only to prune partitions (DF-004).
+
+### DF-021 Disputing customers have few recent purchases
+
+- **Population:** 9,009 `Cargo no reconocido` complaints created between 2023-10-15 and 2025-12-31. Complaints before 2023-10-15 are excluded because their 120-day history would start before the data does.
+- **Numerator:** the same customer's approved purchases in the window (c − W, c] before the complaint, for W = 30, 45, 90 and 120 days.
+- **Evidence:**
+  - **Purchases per customer.** The median is 0 in every window and every country. At 120 days the p90 is 2 and the p99 is 5.
+  - **No purchase at all.** In the 45 days before the complaint, 79.0% of complaints have none; in the 120 days before, 61.1% do.
+  - **Age of the last purchase.** Where one exists, the most recent purchase is 41 days old at the median, 109 days at p95 and 118 days at p99.
+  - **Over the whole dataset,** the median customer has 10 approved purchases in three years.
+- **Impact:**
+  - **Lookback can't be measured.** The age of the disputed charge itself isn't in the data (DF-003). The p95 and p99 above are the closest proxy: how far back a customer would have to look to see anything at all.
+  - **No window passes our rule.** We wrote it before running: at most 5% of complaints with no purchase, and a median of at least 3 purchases. None of the four windows meets it.
+- **Handling:**
+  - **The fallback applies.** The serving window is the 120-day cap. The Gold cohort keeps only customers with at least 3 approved purchases in that window, so every demo customer has a list to choose from.
+  - **This is a selection, not a property of the population.** Most disputing customers in this data would see one purchase or none.
+
+### DF-022 Unrecognized-charge customers by country, segment and accent
+
+- **Evidence:**
+  - **By country.** 10,013 distinct customers filed a `Cargo no reconocido` complaint in the design window: Mexico 5,001 (49.9%), Colombia 3,031 (30.3%) and Argentina 1,981 (19.8%).
+  - **By segment and accent.** The query reports the full country × segment × accent rollup, and missing values are labelled `(none)` so they can't be mistaken for subtotals.
+- **Handling:** these shares are the reference for the Gold cohort's country mix. The cohort's own shares are reported against them in the slice manifest.
 
 ## Disclosure
 
