@@ -79,4 +79,64 @@ describe('CustomerPage focus', () => {
     await fixture.whenStable();
     expect(inert()).toEqual([false, false, false, false]);
   });
+
+  async function home() {
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions'], { client: signal(''), card: signal(null), receipts: signal([]) });
+    service.identities.and.resolveTo([]);
+    service.signIn.and.resolveTo();
+    service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only' });
+    TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] });
+    const fixture = TestBed.createComponent(CustomerPage);
+    document.body.appendChild(fixture.nativeElement);
+    fixture.autoDetectChanges();
+    const page = fixture.componentInstance;
+    page.identity = 'demo-ana';
+    await page.login();
+    return { fixture, page, el: fixture.nativeElement as HTMLElement };
+  }
+
+  it('acts as a modal dialog only at narrow widths, and Escape closes it back to the toggle', async () => {
+    const { fixture, page, el } = await home();
+    page.chatOpen.set(true);
+    page.narrow.set(false);
+    await fixture.whenStable();
+    const chat = () => el.querySelector<HTMLElement>('#intake-chat');
+    expect(chat()!.getAttribute('role')).toBeNull();
+    expect(chat()!.getAttribute('aria-modal')).toBeNull();
+    page.narrow.set(true);
+    await fixture.whenStable();
+    expect(chat()!.getAttribute('role')).toBe('dialog');
+    expect(chat()!.getAttribute('aria-modal')).toBe('true');
+    chat()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await fixture.whenStable();
+    expect(page.chatOpen()).toBeFalse();
+    expect(document.activeElement).toBe(el.querySelector('.chat-toggle'));
+    fixture.nativeElement.remove();
+  });
+
+  it('describes the focused choose step with the guide\'s prompt, so the step change is announced', async () => {
+    const { fixture, page, el } = await home();
+    page.chatOpen.set(true);
+    page.episode.set({ episode_id: 'E-1', state: 'selection_required', language: 'es', mode: 'guided', replayed: false } as never);
+    page.log.update(l => [...l, { from: 'me', text: 'x' }, { from: 'bot', key: 'chatChoose' }]);
+    await fixture.whenStable();
+    const step = el.querySelector<HTMLElement>('#chat-choose')!;
+    const describedBy = step.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    expect(el.querySelector('#' + describedBy)!.textContent).toContain(page.t().chatChoose);
+    fixture.nativeElement.remove();
+  });
+
+  it('focuses the chat heading when the panel is reopened on the choose step', async () => {
+    const { fixture, page, el } = await home();
+    page.chatOpen.set(true);
+    page.episode.set({ episode_id: 'E-1', state: 'selection_required', language: 'es', mode: 'guided', replayed: false } as never);
+    await fixture.whenStable();
+    page.chatOpen.set(false);
+    await fixture.whenStable();
+    page.chatOpen.set(true);
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(el.querySelector('#chat-title'));
+    fixture.nativeElement.remove();
+  });
 });

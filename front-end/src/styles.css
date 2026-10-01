@@ -206,7 +206,7 @@ body { min-height: 100%; }
 .intro-words { position: relative; width: 100%; height: 136px; }
 .intro-word { position: absolute; left: 0; right: 0; text-align: center; margin: 0; font: 600 128px/136px var(--font-sans); letter-spacing: -0.035em; opacity: 0; animation: ar-word 4.2s cubic-bezier(.16, 1, .3, 1) both; } /* one pass, then .is-done shows the current word (2.2.2) */
 .intro-words.is-done .intro-word { display: none; } .intro-words.is-done .intro-word.is-current { display: block; opacity: 1; animation: none; }
-.intro-word { animation-delay: 2.6s; } .intro-word:nth-child(2) { animation-delay: 4s; } .intro-word:nth-child(3) { animation-delay: 5.4s; } /* 1.4 s slots (33% of 4.2 s); motion ends at 6.8 s */
+.intro-word { animation-delay: 2.6s; } .intro-word:nth-child(2) { animation-delay: 4s; } .intro-word:nth-child(3) { animation-delay: 5.4s; } /* 1.4 s slots (33% of 4.2 s); motion ends at 6.8 s, which the introDone timer (6800 ms) in customer.page.ts must match */
 .intro-cta { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 48px; opacity: 0; visibility: hidden; animation: ar-rise .8s cubic-bezier(.16, 1, .3, 1) 4.4s both, ar-show 0s 4.4s forwards; }
 .intro-foot { position: absolute; bottom: 40px; left: 0; right: 0; text-align: center; margin: 0; font: 400 13px/20px var(--font-mono); color: var(--ink-muted); opacity: 0; visibility: hidden; animation: ar-rise .8s cubic-bezier(.16, 1, .3, 1) 4.8s both, ar-show 0s 4.8s forwards; }
 .lang-links { display: flex; gap: 20px; }
@@ -283,6 +283,7 @@ body { min-height: 100%; }
 .case-meta b { font-weight: 500; color: var(--ink); }
 
 /* ---------- Responsive ---------- */
+/* Keep 1180px in sync with narrowQuery in customer.page.ts and the chat rule in customer.page.css. */
 @media (max-width: 1180px) {
   .home-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .home-top .stats { grid-column: 1 / -1; flex-direction: row; }

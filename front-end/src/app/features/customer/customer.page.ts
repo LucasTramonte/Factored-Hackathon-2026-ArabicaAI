@@ -1,4 +1,4 @@
-import { Component, ElementRef, NgZone, OnDestroy, OnInit, Signal, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, Injector, NgZone, OnDestroy, OnInit, Signal, afterNextRender, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -69,6 +69,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly ended = signal(false);
   readonly chatError = signal('');
   readonly log = signal<ChatLine[]>([{ from: 'bot', key: 'chatHello' }]);
+  /** The guide spoke last, so its line (id `chat-prompt`) describes the step that just took focus. */
+  readonly promptLast = computed(() => this.log().at(-1)?.from === 'bot');
   readonly chatStep = computed<ChatStep>(() => this.intakeReceipt() ? 'receipt' : this.ended() ? 'ended' : this.episode() ? 'choose' : 'describe');
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
@@ -83,6 +85,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** The intro words play once (from 2.6 s, three 1.4 s slots: under 5 s of motion, WCAG 2.2.2); then only the current language's word stays. */
   readonly introDone = signal(false);
   /** At the home-top breakpoint and below, the open chat panel covers page controls, so the page behind it is inert (WCAG 2.4.11). */
+  // Keep 1180px in sync with the @media rules in styles.css and customer.page.css.
   private readonly narrowQuery = typeof matchMedia === 'function' ? matchMedia('(max-width: 1180px)') : null;
   readonly narrow = signal(this.narrowQuery?.matches ?? false);
   readonly sourceTime = formatSourceTime;
@@ -94,6 +97,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   private introTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly zone = inject(NgZone);
+  private readonly injector = inject(Injector);
   private shownStep: Step = 'intro';
 
   /** On a step change (not the first render), move focus to the new step's heading so it doesn't fall to <body>. */
@@ -133,6 +137,13 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
   private readonly intakeReceiptEl = viewChild<ElementRef<HTMLElement>>('intakeReceiptEl');
   private readonly chatPanel = viewChild<ElementRef<HTMLElement>>('chatPanel');
+  private readonly chatToggle = viewChild<ElementRef<HTMLElement>>('chatToggle');
+
+  /** Close the guided chat and return focus to its toggle (Escape inside the panel). */
+  closeChat(): void {
+    this.chatOpen.set(false);
+    afterNextRender(() => this.chatToggle()?.nativeElement.focus(), { injector: this.injector });
+  }
   private readonly chooseStep = viewChild<ElementRef<HTMLElement>>('chooseStep');
 
   /** Load the identity choices from the API; they come from the same config as the server allowlist. */
@@ -140,7 +151,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.bootTimer = setTimeout(() => this.booted.set(true), 2400);
     if (this.narrowQuery) this.narrowQuery.onchange = e => this.narrow.set(e.matches);
     // Outside the zone so the app (and tests) can be stable while it waits; the signal still schedules the render.
-    this.introTimer = this.zone.runOutsideAngular(() => setTimeout(() => this.introDone.set(true), 6800));
+    this.introTimer = this.zone.runOutsideAngular(() => setTimeout(() => this.introDone.set(true), 6800)); // must outlast the intro word animation delays in styles.css
     if (this.client()) void this.resume();
     try {
       this.identities.set(await this.service.identities());
