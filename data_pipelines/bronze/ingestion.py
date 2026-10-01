@@ -139,11 +139,14 @@ def update_watermark(con: duckdb.DuckDBPyConnection, table_name: str, loaded_dat
     )
 
 
-def _discover_partitions(con: duckdb.DuckDBPyConnection, base_path: str, table_name: str) -> dict:
+def _discover_partitions(con: duckdb.DuckDBPyConnection, base_path: str, table_name: str,
+                         invalid: Optional[set] = None) -> dict:
     """``{date: {partition directory, ...}}`` for every year=/month=/day= directory holding a .csv.
 
     The directories are kept exactly as discovered, because the path contract has no zero-padding rule
-    (``day=1`` and ``day=01`` both parse); reads use them instead of rebuilding a padded path.
+    (``day=1`` and ``day=01`` both parse); reads use them instead of rebuilding a padded path. A
+    directory that isn't a real date (``day=32``, ``day=xx``) is skipped and, if ``invalid`` is given,
+    added to it, so a full refresh can refuse the source instead of importing it through a wide glob.
     """
     pattern = f"{base_path}/{table_name}/year=*/month=*/day=*/*.csv"
     rows = con.execute("SELECT file FROM glob(?)", [pattern]).fetchall()
@@ -152,11 +155,15 @@ def _discover_partitions(con: duckdb.DuckDBPyConnection, base_path: str, table_n
         y = re.search(r"year=(\d+)", path)
         m = re.search(r"month=(\d+)", path)
         d = re.search(r"day=(\d+)", path)
-        if y and m and d:
-            try:
-                found.setdefault(date(int(y.group(1)), int(m.group(1)), int(d.group(1))), set()).add(path.rsplit("/", 1)[0])
-            except ValueError:
-                logger.warning("[%s] skipping unparseable partition path: %s", table_name, path)
+        directory = path.rsplit("/", 1)[0]
+        try:
+            if not (y and m and d):
+                raise ValueError(path)
+            found.setdefault(date(int(y.group(1)), int(m.group(1)), int(d.group(1))), set()).add(directory)
+        except ValueError:
+            logger.warning("[%s] skipping unparseable partition path: %s", table_name, path)
+            if invalid is not None:
+                invalid.add(directory)
     return found
 
 
@@ -281,7 +288,8 @@ def ingest_fact(
             raise ValueError(f"Scoped ingestion requires an isolated DATA_DIR: {local_dir} already holds "
                              f"{len(other_days)} other partition(s)")
     else:
-        discovered = _discover_partitions(con, base_path, table_name)
+        invalid: set = set()
+        discovered = _discover_partitions(con, base_path, table_name, invalid)
         available = sorted(discovered)
 
     if not available:
@@ -291,6 +299,11 @@ def ingest_fact(
     if full_refresh or not table_exists or last_loaded is None or not os.path.isdir(local_dir):
         dates_to_load = available
         mode = "full refresh"
+        # A full refresh reads one history-wide glob, which would also import the skipped directories and
+        # store partition values that later runs can't turn into dates. Refuse before writing anything.
+        if partition_date is None and invalid:
+            raise ValueError(f"{len(invalid)} invalid partition directories in the source (for example "
+                             f"{sorted(invalid)[0]}); fix the source before a full refresh")
     else:
         # A day at or before the watermark that Bronze has never held is a late arrival, not a
         # correction: load it. A day Bronze already holds is only revisited by --full-refresh.
