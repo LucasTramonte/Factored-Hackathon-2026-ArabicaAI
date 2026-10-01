@@ -1,26 +1,45 @@
-/** Guided reports use authenticated ownership and durable start receipts, without model calls. */
+/** Guided reports use authenticated ownership and durable start receipts; the extractor switch (off by default) only records a shadow call. */
 import { readSession, tokenHash } from '../../auth/session.js';
 import { fail, json, readJsonBody, readCookies } from '../../http.js';
 import { validateStartRequest, validateHandoffRequest } from './validation.js';
+import { APPROVED_EXTRACTOR, extractShadow, readyExtractor } from './ai-transport.js';
 
-/** POST /intake/start: start or replay an explicit guided report; never return a case protocol. */
-export async function startIntake(request, env, store) {
+/**
+ * POST /intake/start: start or replay an explicit guided report; never return a case protocol. With the switch on,
+ * a new start also makes one shadow extraction call (at most 10 s) and records only its usage; the response is
+ * the guided one whatever the call returns. ``ctx`` is the Worker context, so the shadow call runs in waitUntil after
+ * the response; ``approved`` is a test seam: the router never passes it.
+ */
+export async function startIntake(request, env, store, ctx, approved = APPROVED_EXTRACTOR) {
   const current = await readSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
   const body = await readJsonBody(request);
   if (body.error) return body.error;
   const checked = validateStartRequest(body.value);
   if (checked.error) return fail(checked.error.status, checked.error.detail);
+  const extractor = await readyExtractor(env, approved);
   let result;
   try {
     result = await store.startIntake({ ...checked.value, customerId: current.customer_id,
-      now: Date.now(), expiresAt: current.expires_at });
+      now: Date.now(), expiresAt: current.expires_at, ...(extractor && { producer: extractor.modelVersion }) });
   } catch {
     return fail(503, 'Start not confirmed; retry with the same idempotency key');
   }
   if (result.conflict) return fail(409, 'Key already used with different content');
   const { episode, replayed } = result;
   if (!episode) return fail(503, 'Start not confirmed; retry with the same idempotency key');
+  if (extractor && !replayed) {
+    // Shadow only: the answer is discarded, so the customer never waits for it. In the Worker it runs after the
+    // response, in ctx.waitUntil; without a ctx (direct calls in tests) it runs inline.
+    const shadow = async () => {
+      const { usage } = await extractShadow(env, extractor, checked.value);
+      try {
+        await store.recordIntakeExtraction({ customerId: current.customer_id, episodeId: episode.episode_id, producer: extractor.modelVersion, usage });
+      } catch { /* The start already recorded one call with unknown usage. */ }
+    };
+    if (ctx?.waitUntil) ctx.waitUntil(shadow().catch(() => { /* already recorded as one call with unknown usage */ }));
+    else await shadow();
+  }
   return json({ ...JSON.parse(episode.response_json), replayed }, replayed ? 200 : 201);
 }
 

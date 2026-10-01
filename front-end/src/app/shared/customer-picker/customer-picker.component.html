@@ -15,9 +15,9 @@
   @if (pinned(); as person) {
     <div class="picker-pinned"><ng-container *ngTemplateOutlet="row; context: { $implicit: person, pinned: true }" /></div>
   }
-  <p class="ar-small" role="status">
-    @if (matches().length) { {{ matches().length }} {{ matches().length === 1 ? t().pickerMatch : t().pickerMatches }}@if (capped()) {. {{ t().pickerRefine }}} } @else { {{ t().pickerNone }} }
-  </p>
+  <!-- The visible count updates on every keystroke; screen readers hear it from the live region once typing pauses. -->
+  <p class="ar-small picker-count" aria-hidden="true">{{ countText() }}</p>
+  <p class="sr-only" role="status">{{ announced() }}</p>
   <div class="picker-list">
     @for (person of shown(); track person.customer_id) { <ng-container *ngTemplateOutlet="row; context: { $implicit: person }" /> }
   </div>

@@ -22,7 +22,7 @@
 
   @if (loaded()) {
     <section class="box" aria-labelledby="intake-queue-title">
-      <div class="box-head"><h2 id="intake-queue-title">{{ t().intakeQueue }}</h2><span class="ar-caption">{{ intakes().length }}</span></div>
+      <div class="box-head"><h2 #queueHeading id="intake-queue-title" tabindex="-1">{{ t().intakeQueue }}</h2><span class="ar-caption">{{ intakes().length }}</span></div>
       <div class="box-body" style="padding-top: 0">
         @if (intakes().length) {
           <ul class="intake-list">
