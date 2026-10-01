@@ -59,6 +59,8 @@ export type IntakeKind = 'complete' | 'technical' | 'incomplete';
 
 export interface AgentIntake {
   protocol: string;
+  /** Short human reference (AR-XXXX-XXXX) stored 1:1 with the handoff; null for handoffs stored before migration 0008. */
+  reference_short: string | null;
   episode_id: string;
   kind: IntakeKind;
   tool_status: 'ok' | 'failed' | 'timeout';
@@ -150,6 +152,8 @@ export interface IntakeHandoffBody {
 export interface IntakeReceipt {
   episode_id: string;
   protocol: string;
+  /** Short human reference (AR-XXXX-XXXX), the one a customer keeps; the UUID ``protocol`` stays the case id. */
+  reference_short: string | null;
   kind: 'complete' | 'technical' | 'incomplete';
   accepted_at: string;
   replayed: boolean;

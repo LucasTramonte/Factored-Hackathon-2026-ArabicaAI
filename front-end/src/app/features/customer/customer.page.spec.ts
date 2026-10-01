@@ -105,7 +105,7 @@ describe('CustomerPage', () => {
     const started: IntakeStart = { episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false };
     const intakeReceipt: IntakeReceipt = { episode_id: started.episode_id, protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
       accepted_at: '2026-09-30T12:00:00Z', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'],
-      unresolved_questions: [], next_step_code: 'await_human_review' };
+      unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review' };
     let lang: LangService;
 
     beforeEach(async () => {
@@ -388,7 +388,7 @@ describe('CustomerPage', () => {
       expect(link().getAttribute('href')).toBe('/agent');
       service.receipts.set([{ receipt: { episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555',
         kind: 'incomplete', accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'],
-        next_step_code: 'await_human_review' }, transactionId: null }]);
+        reference_short: 'AR-3F9Q-1Z7P', next_step_code: 'await_human_review' }, transactionId: null }]);
       fixture.destroy();
       const again = TestBed.createComponent(CustomerPage);
       await again.componentInstance.ngOnInit();
@@ -396,12 +396,13 @@ describe('CustomerPage', () => {
       again.detectChanges();
       const html = again.nativeElement as HTMLElement;
       expect(again.componentInstance.step()).toBe('home');
-      expect(html.textContent).toContain('99999999-8888-4777-8666-555555555555');
+      expect(html.textContent).toContain('AR-3F9Q-1Z7P'); // the home shows the short code; the UUID lives in the receipt panel as the case id
       expect(html.querySelector('.ar-count')?.textContent).toBe('1');
       const reports = [...html.querySelectorAll('.your-reports li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim());
       expect(reports.length).toBe(1);
       expect(reports[0]).toContain(p.t().receiptIncomplete);
-      expect(reports[0]).toContain('99999999-8888-4777-8666-555555555555');
+      expect(reports[0]).toContain('AR-3F9Q-1Z7P'); // the short code is the reference a customer keeps
+      expect(reports[0]).not.toContain('99999999-8888-4777-8666-555555555555');
     });
 
     it('shows only the greeting, the charges and the report panel; no hero, stats, currency box or floating toggle', async () => {
@@ -458,7 +459,7 @@ describe('CustomerPage', () => {
       expect(el.querySelector('#chat-error')?.textContent).toContain(p.t().chatValidationShort);
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
       service.confirmIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
-        accepted_at: 'x', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'], unresolved_questions: [], next_step_code: 'await_human_review' });
+        accepted_at: 'x', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'], unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review' });
       p.chatStatement = 'No reconozco este cargo.';
       await p.send();
       fixture.detectChanges();
@@ -472,6 +473,8 @@ describe('CustomerPage', () => {
       const receiptEl = el.querySelector('#intake-receipt')!;
       expect(receiptEl.textContent).toContain('99999999-8888-4777-8666-555555555555');
       expect(document.activeElement).toBe(receiptEl);
+      expect(receiptEl.querySelector('.ar-ref-code')?.textContent?.trim()).toBe('AR-7K3M-2Q4X');
+      expect(receiptEl.querySelector('.case-id')?.textContent).toContain('99999999-8888-4777-8666-555555555555'); // the UUID stays, smaller, as the case id
       const checks = [...receiptEl.querySelectorAll('.checks li')].map(li => li.textContent?.trim());
       expect(checks).toEqual([p.t().check_owned_transaction_retrieved, p.t().check_customer_confirmation_recorded]);
       expect(receiptEl.querySelector('.open-questions')).toBeNull();
@@ -482,7 +485,7 @@ describe('CustomerPage', () => {
       p.openChat();
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
       service.handoffIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'incomplete',
-        accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'], next_step_code: 'await_human_review' });
+        accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review' });
       p.chatStatement = 'No reconozco este cargo.';
       await p.send();
       await p.cannotFind();
