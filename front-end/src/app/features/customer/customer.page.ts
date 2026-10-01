@@ -61,6 +61,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly chatOpen = signal(false);
   readonly chosenLang = signal<IntakeLang | null>(null);
   readonly reportLang = computed(() => this.chosenLang() ?? intakeLanguage(this.lang.lang()));
+  /** The report-language choice is shown when the interface has no report language, and stays once the customer has chosen. */
+  readonly askLang = computed(() => !this.reportLang() || this.chosenLang() !== null);
   readonly episode = signal<IntakeStart | null>(null);
   readonly frozen = signal<Frozen | null>(null);
   readonly intakeReceipt = signal<IntakeReceipt | null>(null);
@@ -115,14 +117,16 @@ export class CustomerPage implements OnInit, OnDestroy {
   });
 
   constructor() {
-    // Move focus to the receipt and the chat when each appears.
-    for (const name of ['intakeReceiptEl', 'chatPanel'] as const) {
+    // Move focus to the receipt, the choose step (it replaces the focused Send button) and the chat heading when each appears;
+    // the heading is last, so opening the panel focuses it.
+    for (const name of ['intakeReceiptEl', 'chooseStep', 'chatPanel'] as const) {
       const el: Signal<ElementRef<HTMLElement> | undefined> = this[name];
       effect(() => el()?.nativeElement.focus());
     }
   }
   private readonly intakeReceiptEl = viewChild<ElementRef<HTMLElement>>('intakeReceiptEl');
   private readonly chatPanel = viewChild<ElementRef<HTMLElement>>('chatPanel');
+  private readonly chooseStep = viewChild<ElementRef<HTMLElement>>('chooseStep');
 
   /** Load the identity choices from the API; they come from the same config as the server allowlist. */
   async ngOnInit(): Promise<void> {
@@ -204,7 +208,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       const statement = this.chatStatement.trim();
       const language = this.reportLang();
       if (!language || [...statement].length < 10) {
-        this.chatError.set(this.t().chatValidation);
+        this.chatError.set(this.askLang() ? this.t().chatValidation : this.t().chatValidationShort);
         return;
       }
       this.frozen.set({ path: 'start', body: { customer_statement: statement, idempotency_key: crypto.randomUUID(), language,
