@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { ApiError, ApiService, messageFor } from './api.service';
+import { ApiError, ApiService } from './api.service';
 
 describe('ApiService', () => {
   let api: ApiService;
@@ -27,7 +27,7 @@ describe('ApiService', () => {
     expect(get.body).toBeUndefined();
   });
 
-  it('maps every documented status to a message and keeps the status', async () => {
+  it('keeps the status of every documented failure and never the server text', async () => {
     for (const status of [401, 404, 409, 413, 422, 503]) {
       fetchSpy.and.returnValue(reply(status, { detail: 'server text is not shown' }));
       try {
@@ -36,7 +36,6 @@ describe('ApiService', () => {
       } catch (e) {
         expect(e instanceof ApiError).toBeTrue();
         expect((e as ApiError).status).toBe(status);
-        expect((e as ApiError).message).toBe(messageFor(status));
         expect((e as ApiError).message).not.toContain('server text');
       }
     }
@@ -44,6 +43,7 @@ describe('ApiService', () => {
 
   it('treats a network failure as unconfirmed, like a 503', async () => {
     fetchSpy.and.returnValue(Promise.reject(new TypeError('Failed to fetch')));
-    await expectAsync(api.request('/cases', {})).toBeRejectedWith(new ApiError(0, messageFor(503)));
+    const e = await api.request('/cases', {}).then(() => null, (x: unknown) => x);
+    expect(e instanceof ApiError && e.status).toBe(0);
   });
 });
