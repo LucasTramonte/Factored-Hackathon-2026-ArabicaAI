@@ -489,3 +489,21 @@ def test_digital_events_canonicalizes_ip_country(con):
         r[0] for r in con.execute("SELECT DISTINCT ip_country FROM silver.fact_digital_events").fetchall()
     }
     assert countries == {"México"}  # 'mexico' and 'México' both canonicalize to the same spelling
+
+
+def test_a_fact_row_duplicated_within_one_load_keeps_the_copy_from_the_latest_partition(con):
+    # An incremental Bronze run rereads a whole month, so an original and its re-delivery in a
+    # later day of that month share one _ingested_at. The later partition must win, not a random one.
+    columns = (
+        "transcript_id, interaction_id, process_date, customer_id, agent_id, full_text, "
+        "customer_text, agent_text, detected_language, detected_accent, accent_confidence, "
+        "detected_keywords, mentioned_entities, detected_intents, main_topics, "
+        "transcription_model, audio_quality, duration_seconds, day, month, year, _ingested_at"
+    )
+    copy = lambda i, day, text: (f"('TRS{i}', 'INT1', '2024-01-{day}', 'C1', 'AGT1', 'x', '{text}', 'y', 'es', NULL, '0.9', "
+                                 f"'k', 'e', 'i', 't', 'm', 'High', '1.0', '{day}', '01', 2024, TIMESTAMP '2024-02-01')")
+    # 20 tied pairs, so an arbitrary pick passes by chance about once in a million runs.
+    rows = [copy(i, *pair) for i in range(20) for pair in ((("02", "earlier"), ("09", "later"))[::(1 if i % 2 else -1)])]
+    _create_bronze(con, "call_transcripts", columns, ",".join(rows))
+    build_silver_table(con, call_transcripts_spec)
+    assert con.execute("SELECT DISTINCT customer_text FROM silver.fact_call_transcripts").fetchall() == [("later",)]
