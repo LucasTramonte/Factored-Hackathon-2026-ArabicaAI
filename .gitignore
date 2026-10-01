@@ -6,8 +6,8 @@ data_foundation/runs/
 data_foundation/**/__pycache__/
 data/
 Docs/pdfs/
+Docs/.obsidian/
 Docs/Factored Hackathon - Arabica AI/.obsidian/
-Docs/Factored Hackathon - Arabica AI/latam-bank-architecture-en.excalidraw.md
 
 # Secrets — never commit real credentials
 .env
