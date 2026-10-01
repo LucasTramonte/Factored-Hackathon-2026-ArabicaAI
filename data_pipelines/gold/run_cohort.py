@@ -2,7 +2,7 @@
 
 ``build`` writes ``part-NNN.sql`` files and ``manifest.json`` into one directory under ignored
 ``data/``. ``load`` applies one part with Wrangler, after checking that the file still matches its
-manifest version and that the part isn't already in D1, then compares D1's measured rows written
+manifest version and that its version isn't in D1's ``seed_loads``, then compares D1's measured rows written
 with the manifest estimate (remote only: local Wrangler doesn't report rows written). ``--remote`` is never the default; the remote run is a reviewed,
 manual step (``back-end/README.md``).
 """
@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -83,22 +84,22 @@ def load(out_dir: Path, part: int, target: str, run: Callable[[list[str]], str] 
     if content_version(path.read_text(encoding="utf-8")) != meta["version"]:
         raise ValueError(f"Part {part} no longer matches its manifest version")
     flag = TARGETS[target]
-    ids = ",".join(quote(c) for c in meta["customer_ids"])
+    version = meta["version"]
+    if not re.fullmatch(r"[0-9a-f]{16}", version):
+        raise ValueError(f"Part {part} has a malformed version")
     probe = _json(run(["d1", "execute", DATABASE, flag, "--json", "--command",
-                       f"SELECT count(*) AS n FROM transactions WHERE customer_id IN ({ids})"]))
-    present = probe[0]["results"][0]["n"]
-    if present == meta["transactions"]:
+                       f"SELECT count(*) AS n FROM seed_loads WHERE version='{version}'"]))
+    if probe[0]["results"][0]["n"]:
         return {"part": part, "status": "already_loaded", "rows_written": 0}
-    if present:
-        raise ValueError(f"Part {part} is partly loaded ({present} of {meta['transactions']} rows); inspect before retrying")
+    # The part's upserts are idempotent, so a part left half-applied by an earlier failure loads again safely.
     result = _json(run(["d1", "execute", DATABASE, flag, "--json", "--yes", "--file", str(path.resolve())]))
     # Remote D1 reports rows_written per statement; local Wrangler doesn't, so locally it is unmeasured.
     measured = [r["meta"]["rows_written"] for r in result if "rows_written" in r.get("meta", {})]
-    if not measured:
-        return {"part": part, "status": "loaded", "rows_written": "not_measured"}
-    written = sum(measured)
-    if written > meta["expected_writes"]:
+    written = sum(measured) if measured else "not_measured"
+    if measured and written > meta["expected_writes"]:
         raise ValueError(f"Part {part} wrote {written} rows, over its estimate of {meta['expected_writes']}")
+    run(["d1", "execute", DATABASE, flag, "--json", "--command",
+         f"INSERT INTO seed_loads(version, loaded_at) VALUES ('{version}', datetime('now')) ON CONFLICT(version) DO NOTHING"])
     return {"part": part, "status": "loaded", "rows_written": written}
 
 

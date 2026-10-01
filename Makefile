@@ -135,7 +135,7 @@ intake-cohort-slice:
 # Local only. The remote load is a reviewed, manual step: run_cohort load --target remote, one part per UTC day.
 intake-cohort-seed-local:
 	cd back-end && npx wrangler d1 migrations apply arabica-intake-demo --local
-	for part in "$(COHORT_OUT)"/part-*.sql; do n=$$(basename $$part .sql | sed 's/part-0*//'); \
+	for part in "$(COHORT_OUT)"/part-*.sql; do n=$$(basename "$$part" .sql | sed 's/part-0*//'); \
 	$(PYTHON) -m data_pipelines.gold.run_cohort load --out "$(COHORT_OUT)" --part $$n --target local || exit 1; done
 
 intake-seed-local:

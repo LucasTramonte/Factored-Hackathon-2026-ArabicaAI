@@ -42,15 +42,20 @@ def test_publish_replaces_a_previous_cohort_whole(tmp_path):
 
 
 class FakeWrangler:
-    """Records commands; answers the presence probe and the load with canned JSON."""
-    def __init__(self, present=0, written=10):
-        self.present, self.written, self.calls = present, written, []
+    """Records commands; answers the load-log probe and the load with canned JSON."""
+    def __init__(self, loaded=False, written=10, meta=True):
+        self.loaded, self.written, self.meta, self.calls = loaded, written, meta, []
 
     def __call__(self, args):
         self.calls.append(args)
-        if "--command" in args:
-            return json.dumps([{"results": [{"n": self.present}], "success": True}])
-        return json.dumps([{"results": [], "success": True, "meta": {"rows_written": self.written}}])
+        sql = args[args.index("--command") + 1] if "--command" in args else ""
+        if sql.startswith("SELECT"):
+            return json.dumps([{"results": [{"n": int(self.loaded)}], "success": True}])
+        if sql.startswith("INSERT INTO seed_loads"):
+            self.loaded = True
+            return json.dumps([{"results": [], "success": True}])
+        meta = {"rows_written": self.written} if self.meta else {"duration": 1}
+        return json.dumps([{"results": [], "success": True, "meta": meta}])
 
 
 def published(tmp_path, n=1):
@@ -58,41 +63,38 @@ def published(tmp_path, n=1):
     return cli.publish(parts, manifest, tmp_path / "cohort")
 
 
-def test_load_applies_a_part_and_checks_measured_writes_against_the_estimate(tmp_path):
-    fake = FakeWrangler(present=0, written=9)
-    assert cli.load(published(tmp_path), part=1, target="local", run=fake) == {"part": 1, "status": "loaded", "rows_written": 9}
-    assert any("--file" in c for c in fake.calls) and all("--remote" not in c for c in fake.calls)
+def test_load_applies_a_part_records_its_version_and_checks_measured_writes(tmp_path):
+    fake = FakeWrangler(written=9)
+    out = published(tmp_path)
+    assert cli.load(out, part=1, target="local", run=fake) == {"part": 1, "status": "loaded", "rows_written": 9}
+    version = json.loads((out / "manifest.json").read_text())["parts"][0]["version"]
+    assert any(version in " ".join(c) and "INSERT INTO seed_loads" in " ".join(c) for c in fake.calls)
+    assert all("--remote" not in c for c in fake.calls)
+    assert cli.load(out, part=1, target="local", run=fake)["status"] == "already_loaded"
 
 
-def test_load_skips_a_part_already_present(tmp_path):
-    fake = FakeWrangler(present=2)
-    assert cli.load(published(tmp_path), part=1, target="local", run=fake)["status"] == "already_loaded"
-    assert not any("--file" in c for c in fake.calls)
+def test_a_rebuilt_part_with_a_new_version_is_loaded_even_if_an_older_one_was(tmp_path):
+    fake = FakeWrangler(loaded=False)
+    assert cli.load(published(tmp_path), part=1, target="local", run=fake)["status"] == "loaded"
+    probe = next(c for c in fake.calls if "--command" in c and c[c.index("--command") + 1].startswith("SELECT"))
+    assert "seed_loads" in probe[probe.index("--command") + 1]
 
 
-def test_load_fails_when_measured_writes_exceed_the_estimate(tmp_path):
+def test_load_fails_when_measured_writes_exceed_the_estimate_and_records_nothing(tmp_path):
+    fake = FakeWrangler(written=11)
     with pytest.raises(ValueError, match="estimate"):
-        cli.load(published(tmp_path), part=1, target="local", run=FakeWrangler(written=11))
+        cli.load(published(tmp_path), part=1, target="local", run=fake)
+    assert not fake.loaded
 
 
-def test_load_refuses_a_partly_loaded_part_and_an_unknown_target(tmp_path):
-    out = published(tmp_path)  # the part holds 2 transactions; 1 present means a broken earlier load
-    with pytest.raises(ValueError, match="partly"):
-        cli.load(out, part=1, target="local", run=FakeWrangler(present=1))
+def test_load_refuses_an_unknown_target_and_a_part_edited_after_publication(tmp_path):
+    out = published(tmp_path)
     with pytest.raises(ValueError, match="target"):
         cli.load(out, part=1, target="production", run=FakeWrangler())
-
-
-def test_load_refuses_a_part_edited_after_publication(tmp_path):
-    out = published(tmp_path)
     (out / "part-001.sql").write_text("DELETE FROM customers;\n")
     with pytest.raises(ValueError, match="version"):
         cli.load(out, part=1, target="local", run=FakeWrangler())
 
 
 def test_a_load_without_a_measured_write_count_says_so_instead_of_reporting_zero(tmp_path):
-    class Local(FakeWrangler):
-        def __call__(self, args):
-            out = super().__call__(args)
-            return out if "--command" in args else json.dumps([{"results": [], "success": True, "meta": {"duration": 1}}])
-    assert cli.load(published(tmp_path), part=1, target="local", run=Local())["rows_written"] == "not_measured"
+    assert cli.load(published(tmp_path), part=1, target="local", run=FakeWrangler(meta=False))["rows_written"] == "not_measured"

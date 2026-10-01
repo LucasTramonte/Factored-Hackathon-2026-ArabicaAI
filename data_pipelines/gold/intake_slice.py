@@ -182,8 +182,14 @@ def content_version(seed: str) -> str:
     return hashlib.sha256("\n".join(lines[start:]).encode("utf-8")).hexdigest()[:16]
 
 
-def customer_statement(customer_id: str, display_name: str) -> str:
-    """Idempotent customer upsert; a different stored name makes the rerun fail."""
+def customer_statement(customer_id: str, display_name: str, source: str | None = None) -> str:
+    """Idempotent customer upsert; a different stored name makes the rerun fail.
+
+    ``source='dataset'`` marks a dataset customer (migration 0006). Without it the column keeps its
+    default, which is what the committed fictitious seed relies on.
+    """
+    if source is not None:
+        return dataset_customer_statement(customer_id, display_name, None)
     return ("INSERT INTO customers(customer_id,display_name) VALUES "
             f"({quote(customer_id)},{quote(display_name)}) "
             "ON CONFLICT(customer_id) DO UPDATE SET display_name=CASE "
@@ -243,7 +249,7 @@ def with_header(body: str, first_line: str) -> str:
 def render_seed(rows: list[SliceRow], business_date: date, display_names: dict[str, str],
                 cards: dict[str, dict], snapshot_at: str) -> str:
     """Idempotent D1 seed. A rerun is a no-op; any stored difference sets a NOT NULL column to NULL and fails."""
-    lines = [customer_statement(c, display_names[c]) for c in sorted({r.customer_id for r in rows})]
+    lines = [customer_statement(c, display_names[c], source="dataset") for c in sorted({r.customer_id for r in rows})]
     lines += [transaction_statement(r.transaction_id, r.customer_id, None, r.source_occurred_at, r.merchant_name,
                                     r.amount, r.currency) for r in rows]
     lines += [provenance_statement(r.transaction_id, r.product_id, r.source_file, business_date) for r in rows]

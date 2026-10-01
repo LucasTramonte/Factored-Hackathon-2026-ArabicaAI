@@ -28,14 +28,16 @@ import duckdb
 from intake_agent.context_card import build_context_card
 
 from .intake_slice import (MAPPING, SliceRow, _validated, check_quality_gate, content_version,
-                           context_card_statement, dataset_customer_statement, provenance_statement,
-                           transaction_statement, with_header)
+                           context_card_statement, dataset_allowlist, dataset_customer_statement,
+                           provenance_statement, transaction_statement, with_header)
 
 SUBCATEGORY = "Cargo no reconocido"
 DESIGN_END = date(2026, 1, 1)  # ADR-005
 MAX_WINDOW_DAYS = 120          # the cap DF-021 falls back to
 # D1 counts index writes: a customer row is the table plus its PK index, a context card the same,
 # and a transaction the table, its PK, the unique and order indexes plus its provenance row and PK.
+# Derived from the schema, not yet measured: local Wrangler doesn't report rows written, so the
+# loader checks it against remote D1's count on the first remote load.
 WRITES = {"customer": 2, "card": 2, "transaction": 6}
 
 
@@ -70,7 +72,7 @@ class CohortParams:
 
 
 def estimate_writes(customers: int, cards: int, transactions: int) -> int:
-    """Expected D1 rows written for a load, including index writes (validated on a local D1 load)."""
+    """Expected D1 rows written for a load, including index writes (checked on the remote load)."""
     return WRITES["customer"] * customers + WRITES["card"] * cards + WRITES["transaction"] * transactions
 
 
@@ -208,6 +210,10 @@ def build_cohort(db_path: Path, quality_path: Path, params: CohortParams) -> tup
         if mismatch:
             raise ValueError(f"{mismatch} window purchases fail the product ownership check")
         shares = dict(con.execute(_SHARES, common).fetchall())
+        # Committed identities (the one-day slice's customer) keep their own reviewed seed and name.
+        committed = set(dataset_allowlist())
+        excluded_committed = sum(1 for c in pool if c["customer_id"] in committed)
+        pool = [c for c in pool if c["customer_id"] not in committed]
         dense = [c for c in pool if c["usable"] >= params.min_purchases]
         chosen, sampling = _sample(dense, params, shares)
         ids = [c["customer_id"] for c in chosen]
@@ -253,7 +259,7 @@ def build_cohort(db_path: Path, quality_path: Path, params: CohortParams) -> tup
                        "excluded_customer_status": "Closed", "findings": ["DF-020", "DF-021", "DF-022"]},
         "sampling": sampling, "reference_shares": {k: round(v, 4) for k, v in sorted(shares.items())},
         "by_country": dict(sorted(by_country_stats.items())),
-        "exclusions": {"customers_closed": closed, "window_rows_without_merchant": without_merchant,
+        "exclusions": {"customers_closed": closed, "committed_identities": excluded_committed, "window_rows_without_merchant": without_merchant,
                        "customers_below_min_purchases": len(pool) - len(dense), "rows_over_per_customer_cap": over_cap},
         "expected_writes_total": sum(p["expected_writes"] for _, p in rendered),
         "parts": [p for _, p in rendered],

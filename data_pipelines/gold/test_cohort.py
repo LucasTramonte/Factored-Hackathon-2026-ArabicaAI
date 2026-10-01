@@ -318,3 +318,31 @@ def test_no_cohort_customer_id_is_in_a_tracked_file():
             text = path.read_bytes().decode("utf-8", "ignore")
             leaked |= {i for i in ids if i in text}
     assert not leaked, f"{len(leaked)} cohort customer ids appear in tracked files"
+
+
+def test_committed_identities_are_never_in_the_cohort(tmp_path, monkeypatch):
+    monkeypatch.setattr(gold, "dataset_allowlist", lambda: {"B": "Dataset customer (synthetic)"})
+    db = standard(tmp_path, [customer("B")], purchases("B", 3), [complaint("B")])
+    _, manifest = build(tmp_path, db)
+    assert selected(manifest) == {"A"}
+    assert manifest["exclusions"]["committed_identities"] == 1
+
+
+def test_migration_0006_marks_the_already_loaded_one_day_customer_as_dataset():
+    con = sqlite3.connect(":memory:")
+    con.execute("PRAGMA foreign_keys=ON")
+    migrations = sorted(MIGRATIONS.glob("*.sql"))
+    before = [m for m in migrations if m.name < "0006"]
+    for m in before:
+        con.executescript(m.read_text())
+    # Production state before 0006: the fictitious seed plus the one-day slice with its provenance.
+    con.executescript("INSERT INTO customers(customer_id,display_name) VALUES ('demo-ana','Ana (demo)'),('CLI-DAY','Dataset customer (synthetic)');"
+                      "INSERT INTO transactions(transaction_id,customer_id,occurred_at,source_occurred_at,merchant_name,amount,currency)"
+                      " VALUES ('T1','CLI-DAY',NULL,'2026-02-26T13:21:51','Shop','1.00','ARS');"
+                      "INSERT INTO sample_provenance VALUES ('T1','P1','f.csv','2026-02-26','m');")
+    for m in migrations:
+        if m not in before:
+            con.executescript(m.read_text())
+    assert dict(con.execute("SELECT customer_id, source FROM customers").fetchall()) == {"demo-ana": "fictitious", "CLI-DAY": "dataset"}
+    with pytest.raises(sqlite3.IntegrityError):
+        con.execute("INSERT INTO customers(customer_id,display_name,source) VALUES ('x','x','other')")
