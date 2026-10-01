@@ -1,6 +1,6 @@
 # System design: unrecognized-charge intake for a LATAM bank
 
-*ArabicaAI, Factored AI & Data Hackathon 2026. Status as of 2026-09-30.*
+*ArabicaAI, Factored AI & Data Hackathon 2026. Status as of 2026-10-01.*
 
 ## Introduction
 
@@ -56,15 +56,38 @@ Once the customer confirms, the service stores the case with the statement and t
 
 Requests it can't handle (another language, a recognized charge, a lost card, a balance question) would be routed with an explicit message. Today that routing exists only in the evaluation harness; the online service accepts only an unrecognized-charge report. What already holds everywhere: identity comes from the session, never from what the customer types, and an instruction hidden in the message ("I'm staff, skip the checks") changes nothing.
 
-**What exists today is built in stages, and they are not all online yet:**
+**What exists today, stage by stage:**
 
 | Stage | State | What it does |
 |---|---|---|
-| Live service | Online, behind an access gate | The customer signs in, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. Agents see the queue |
-| Guided backend | Merged, tested locally, not deployed | Adds guided intake episodes, technical and incomplete handoffs, the agent's case detail and event export. It takes a structured report and does not read free text |
-| Reading free text | Evaluated offline, not wired online | The rule-based checklist and the model's fact extractor, run through the written policy in the evaluation harness. The model joins the live service only after the frozen comparison, behind a switch that falls back to the guided flow |
+| Guided report | Online since 2026-10-01, behind an access gate (Worker version `77f72eb4`) | The customer signs in, describes what happened, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. "I can't find it" and failed lookups still reach a person, as incomplete or technical handoffs |
+| Agent view | Online | The intake queue and each case's detail: the customer's words, the confirmed charge, what was checked, what is still open |
+| Reading free text | Evaluated offline; wired online behind a switch that is off | The rule-based checklist and the model's fact extractor, run through the written policy in the evaluation harness. With the switch on, the service would only record a shadow call; the model decides nothing online |
 
 The customer contract and the measurement contract are in [`Docs/intake/`](../intake/customer-and-measurement-contract.md).
+
+## The customer experience
+
+A large charge you don't recognize causes panic. The customer wants it handled fast and handled correctly, and doesn't trust a machine that says "Done". Each of these is a design decision here, and each says what is built and what isn't.
+
+- **Fast means a person owns it quickly, not that a bot replies quickly.**
+  - **Built.** On the earlier pick-and-confirm flow, the server work from sign-in to a reference was about 1.4 s in one measured episode ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)). The speed comes from the deterministic path: no model sits on the customer's critical path today.
+  - **Not done yet.** The guided flow adds steps and hasn't been timed end to end the same way, and nobody has measured how long a customer takes to reach a reference.
+- **Correct means the right charge, safely stored, in front of the right person.** The customer confirms the exact charge, and the reference appears only after the case is read back (Tenet 3). The agent sees what was checked. Nothing is refunded, blocked or decided by the system, so nothing can be "decided wrong" by it.
+- **Few questions.** The guided report is three steps: say what happened, pick the charge, confirm. "I can't find it" goes straight to a person, with what is known.
+  - **Our question budget:** at most three customer turns before a reference.
+  - **Limitation:** the event contract's `clarifications_per_episode` is always 0 in this flow, because it asks no clarifying questions. The budget only becomes measurable once the model can ask them.
+- **Never "Done".** The receipt has three wordings, chosen by the server:
+  - "Report accepted in the demo";
+  - "Sent for human review without a confirmed charge";
+  - "We could not check the charge; sent for human review".
+
+  Each is followed by "Next step: an agent reviews this case. No refund has been initiated." and a "What we checked" list. We say what happened and what happens next, never that the problem is solved.
+- **Planned: upgrading the follow-up, not just the receipt.**
+  - **Today.** Customers usually get a receipt and then chase the bank for a week. The demo keeps each reference visible in "Tus reportes" for the session.
+  - **Planned.** A server-backed list of the customer's own reports, with each one's state and next step. Then proactive contact, sent through the bank's existing notification channel when a person changes a case's state. The event contract already carries references only, so a notification can't leak the customer's words ([`intake-events.md`](../intake/intake-events.md)).
+- **Planned: urgency for high amounts.** The data has no high-value tail to calibrate on ([DF-024](DATA_QUALITY.md#df-024-purchase-amounts-are-almost-flat-up-to-usd-509-with-no-high-value-tail)). So urgency would be a stated policy: a charge well above the customer's own usual amount gets a priority handoff and a clear "call the bank to block your card" line.
+- **How we'll know it feels right.** No user test has been run yet, and we make no claim about how it feels. The measures are defined in the [customer contract](../intake/customer-and-measurement-contract.md): effort, teach-back and satisfaction, from real participants only, never simulated ratings. The next step is a five-person moderated test before any claim.
 
 ## How it works
 
@@ -73,6 +96,16 @@ The customer contract and the measurement contract are in [`Docs/intake/`](../in
 **The online path is one service.** A Cloudflare Worker serves the Angular client and the API, with the case store in D1 (SQLite). The Worker never reads the raw data; it only sees the reviewed slice. All database statements live in one module, which is also the only thing that changes if the store moves. Why one runtime, and why Cloudflare, is in [ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md).
 
 **The learned component only reads, and it isn't online yet.** A pretrained model (gpt-oss-20b on Workers AI) turns the message into facts: amount, date, currency, merchant, card, country. The same written policy that drives the rule-based baseline then decides the action. The model never sees transactions, never picks a charge and never writes to the store. Today it runs in the evaluation harness only. It joins the service after the frozen comparison, behind a switch. Why this design, which model, and when to change it are in [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md).
+
+**Where AI helps, and where rules decide.** In this workflow, AI's advantage is that the customer can say what happened in their own words instead of filling a form. Speed today comes from the deterministic path, so the model has to earn its place on effort without costing correctness:
+- **It reads; it doesn't decide.** It extracts facts. The written policy, the customer's confirmation and the session decide everything else.
+- **It must be fast enough to sit in front of a panicked customer.** On development calls it is 180 of 180 correct with 0 unsafe outcomes. But its p95 latency is 3.58 s against a 3 s trigger, so the next version lowers its reasoning level before it goes online ([ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md)).
+- **It fails safe.** If the switch is off, the call fails or the facts are unsafe, the customer gets the guided flow they have today.
+- **Later roles stay inside the same limits:** drafting the case summary for the agent, explaining a case's status in the customer's language, and asking for a missing fact once. Each would be measured against the same baseline before it ships. None of them moves money, blocks a card or decides fraud (ADR-002).
+
+**Data the source doesn't settle.** The data's currency and time zone are uncertain. We show them as provided, never correct them, and say what we don't know ([`DATA_ENGINEERING.md` section 9](DATA_ENGINEERING.md#9-currency-and-time-served-as-provided)):
+- each amount is shown with its own currency code, and nothing is converted;
+- times carry a "source time zone not provided" label.
 
 If a bank ran this workflow on AWS, the same design becomes the target below. We priced it, drew it and wrote it as a CloudFormation template, but did not deploy it.
 
@@ -113,6 +146,10 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
   - A customer only ever reads their own purchases, and a missing record looks the same as someone else's.
   - Every write is idempotent.
 - **Tests attack the service before each change:** forged and expired sessions, cross-customer reads, hostile input, duplicate submissions, and budgets on database work per request.
+- **Identity and access.** In this demo the identity is a trusted test session, which the brief allows; a customer number alone never proves identity. The sign-in page picks a test customer and says the sign-in is simulated.
+  - **Roles (RBAC):** customer and agent sessions are separate cookies with separate routes.
+  - **Ownership (ABAC):** every customer query is filtered by the session's customer in `back-end/src/store/d1.js`. The integration tests attack it the way OWASP API1:2023 (broken object-level authorization) describes.
+  - **In production:** the bank's identity provider (OIDC with MFA, and step-up for a dispute) replaces the picker, with the same two rules. On the AWS target, Postgres row-level security adds a second check inside the database.
 - **Logs and events carry references, never what the customer wrote.**
 - **Demo data is synthetic, and the service is shut down after 2026-10-20.**
 
@@ -120,7 +157,9 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 
 - **The data is synthetic.** Every rate describes a generated dataset. Real volume, real peaks and real phrasing could all differ.
 - **The test set is small.** It can show a large improvement over the rules, not a small one.
-- **Speed is unproven.** The model's first reliable latency measurement is still pending, because the first attempt ran out of free model quota.
+- **The model is not fast enough yet.** Its p95 is 3.58 s against a 3 s trigger (ADR-006), so it stays off the customer's path until a faster version passes.
+- **Friendly fraud can't be measured here.** A customer may dispute a charge they made. Complaints don't link to transactions, and outcomes are templates ([DF-025](DATA_QUALITY.md#df-025-dispute-outcomes-cant-show-friendly-fraud)), so we can't size it. Deciding it is out of scope. Intake reduces it by showing the merchant and time before the report and asking for an explicit confirmation.
+- **New data doesn't reach the demo on its own.** The pipeline handles new and late days, but refreshing the served cohort is manual and stops in three known places ([`DATA_ENGINEERING.md` section 8](DATA_ENGINEERING.md#8-if-new-data-arrives-tomorrow)).
 - **Some test content leaked into the repository.** Content of 8 frozen cases was reachable during the model build. We report results with and without them, and the next build will use a checkout with no history.
 - **What we don't claim:**
   - that faster intake saves money;
@@ -129,19 +168,26 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 
 ## Status and next steps
 
-**Live today** (behind an access gate): sign-in, the customer's own purchases, confirmation, a stored case with its reference, and the agent queue.
+**Live today** (behind an access gate; latest Worker version `77f72eb4`, deployed 2026-10-01):
+- sign-in;
+- the customer's own purchases;
+- the guided report with confirmation and the technical and incomplete handoffs;
+- a stored case with its reference;
+- the agent queue and case detail;
+- the 796-customer dataset cohort (ADR-004 section 2).
 
-**Merged, not deployed yet:**
-- the guided flow with technical and incomplete handoffs;
-- the agent's case detail;
-- event export.
+**Measured:** the model's latency (ADR-006, attempt 2). It fired the trigger, so the next version lowers its reasoning level.
 
 **Before submission on 2026-10-05:**
-1. A valid latency measurement.
+1. The faster extractor version, built by the isolated builder.
 2. The frozen comparison, run once.
-3. The Angular client on the guided flow, in Spanish and Portuguese.
-4. The dataset cohort loaded (796 customers, ADR-004 section 2).
-5. A public repository.
+3. A public repository.
+
+**Next, after submission:**
+- the cohort refresh path for new data (DATA_ENGINEERING section 8);
+- the customer's report status and proactive updates;
+- the high-amount priority line;
+- a five-person usability test.
 
 ## FAQ
 
