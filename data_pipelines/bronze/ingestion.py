@@ -139,6 +139,16 @@ def update_watermark(con: duckdb.DuckDBPyConnection, table_name: str, loaded_dat
     )
 
 
+def _parent_dir(path: str) -> str:
+    """The directory part of a globbed file path, whichever separator DuckDB returned.
+
+    S3 keys always use ``/``, but on Windows DuckDB's ``glob()`` returns local paths with ``\\``.
+    Splitting on ``/`` alone then keeps the file name, and the day glob becomes ``<file>/*.csv``.
+    """
+    cut = max(path.rfind("/"), path.rfind("\\"))
+    return path[:cut] if cut >= 0 else path
+
+
 def _discover_partitions(con: duckdb.DuckDBPyConnection, base_path: str, table_name: str,
                          invalid: Optional[set] = None) -> dict:
     """``{date: {partition directory, ...}}`` for every year=/month=/day= directory holding a .csv.
@@ -155,7 +165,7 @@ def _discover_partitions(con: duckdb.DuckDBPyConnection, base_path: str, table_n
         y = re.search(r"year=(\d+)", path)
         m = re.search(r"month=(\d+)", path)
         d = re.search(r"day=(\d+)", path)
-        directory = path.rsplit("/", 1)[0]
+        directory = _parent_dir(path)
         try:
             if not (y and m and d):
                 raise ValueError(path)

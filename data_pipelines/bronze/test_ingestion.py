@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from ingestion import (
     IngestResult,
+    _parent_dir,
     _safe_identifier,
     get_last_loaded_date,
     ingest_dimension,
@@ -316,6 +317,19 @@ def test_scoped_load_never_replaces_a_parquet_history_it_does_not_own(con, tmp_p
     with pytest.raises(ValueError, match="isolated DATA_DIR"):
         ingest_fact(fresh, str(base), "transactions", partition_date=date(2026, 2, 26))
     assert sorted(p.relative_to(live).as_posix() for p in live.rglob("*.parquet")) == before
+
+
+@pytest.mark.parametrize(("path", "directory"), [
+    ("s3://bucket/transactions/year=2024/month=01/day=03/t.csv", "s3://bucket/transactions/year=2024/month=01/day=03"),
+    ("/data/transactions/year=2024/month=01/day=03/t.csv", "/data/transactions/year=2024/month=01/day=03"),
+    # DuckDB's glob() on Windows: backslashes, sometimes after a forward-slashed base path.
+    (r"C:\data\transactions\year=2024\month=01\day=03\t.csv", r"C:\data\transactions\year=2024\month=01\day=03"),
+    (r"C:/data/transactions\year=2024\month=01\day=03\t.csv", r"C:/data/transactions\year=2024\month=01\day=03"),
+])
+def test_partition_directory_is_found_whichever_separator_glob_returns(path, directory):
+    """Regression: splitting on "/" alone kept the file name on Windows, so the day glob became
+    ``<file>/*.csv`` and every incremental read found nothing. Runs on any OS, so CI covers it."""
+    assert _parent_dir(path) == directory
 
 
 def test_incremental_run_reads_partitions_whose_paths_are_not_zero_padded(con, tmp_path):
