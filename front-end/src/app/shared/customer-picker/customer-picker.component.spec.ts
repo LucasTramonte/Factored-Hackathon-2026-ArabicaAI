@@ -34,7 +34,9 @@ describe('CustomerPicker', () => {
     expect(names()).toEqual(['Zoë O.']);
     type('input[type=search]', 'mx1', 'input');
     expect(names()).toEqual(['Luis P.']);
-    expect(el().querySelector('[role=status]')?.textContent).toContain('1');
+    expect(el().querySelector('[role=status]')?.textContent?.trim()).toBe(`1 ${picker.t().pickerMatch}`);
+    type('input[type=search]', '', 'input');
+    expect(el().querySelector('[role=status]')?.textContent?.trim()).toBe(`3 ${picker.t().pickerMatches}`);
   });
 
   it('filters by country, and lists identities without one under their own option', () => {
