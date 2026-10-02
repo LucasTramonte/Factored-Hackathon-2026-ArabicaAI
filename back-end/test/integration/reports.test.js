@@ -25,7 +25,6 @@ test('a customer lists only their own acknowledged reports, newest first, withou
     kind: r.kind, status: 'received', next_step: 'review_pending', accepted_at: r.accepted_at })));
   assert.ok(listed.body.items.length <= 20);
   assert.doesNotMatch(listed.text, /customer_statement|reconheço|demo-ana|episode_id/);
-  console.log('D1_REPORTS ' + JSON.stringify(listed.metrics));
 
   const bruno = await customer('demo-bruno');
   const foreign = await bruno.call('/reports');
