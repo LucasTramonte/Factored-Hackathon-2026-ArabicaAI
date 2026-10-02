@@ -84,7 +84,7 @@ test('retained storage per guided episode stays within the ADR-004 capacity inpu
 });
 
 test('the documented demo-activity reset respects intake foreign keys and keeps seed data', async () => {
-  const { db, call } = setup();
+  const { db, store, call } = setup();
   assert.equal((await call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
   for (const complete of [true, false]) {
     const start = await call('/intake/start', { language: 'pt', mode: 'guided', report_type: 'unrecognized_charge', customer_statement: 'Não reconheço esta cobrança.', idempotency_key: crypto.randomUUID() });
@@ -93,13 +93,14 @@ test('the documented demo-activity reset respects intake foreign keys and keeps 
       : await call('/intake/handoff', { episode_id: start.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() });
     assert.equal(done.status, 201);
   }
+  await store.insertChargeView({ viewRef: crypto.randomUUID(), customerId: 'demo-ana', language: 'en', rowCount: 2, hasMore: false, coverage: 'all', now: 1 });
   assert.equal((await call('/cases', { transaction_id: 'demo-tx-002', customer_statement: 'I do not recognize this charge.', customer_confirmed: true, idempotency_key: crypto.randomUUID() })).status, 201);
   // The pre-intake recipe in ADR-004 now violates intake_handoffs.complete_case_id -> cases(case_id).
   assert.throws(() => db.exec('BEGIN; DELETE FROM cases; DELETE FROM sessions; COMMIT'), /FOREIGN KEY/);
   db.exec('ROLLBACK');
   const seed = ['customers', 'transactions', 'context_cards', 'sample_provenance'].map(t => rows(db, t));
   db.exec(readFileSync(new URL('../../scripts/reset-demo-activity.sql', import.meta.url), 'utf8'));
-  for (const table of [...TABLES, 'sessions']) assert.equal(rows(db, table), 0, table);
+  for (const table of [...TABLES, 'sessions', 'charge_views']) assert.equal(rows(db, table), 0, table);
   assert.deepEqual(['customers', 'transactions', 'context_cards', 'sample_provenance'].map(t => rows(db, t)), seed);
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
   db.close();
@@ -136,5 +137,22 @@ test('migration 0014 admits English and keeps every episode, foreign key and ind
   assert.equal(english.status, 201);
   assert.equal(db.prepare('SELECT language FROM intake_episodes WHERE episode_id=?').get(english.body.episode_id).language, 'en');
   assert.throws(() => db.exec("UPDATE intake_episodes SET language='fr'"), /CHECK/);
+  db.close();
+});
+
+test('a charge view is recorded once and acknowledged only by its customer, keeping the first display time', async () => {
+  const { db, store } = setup();
+  const viewRef = crypto.randomUUID();
+  await store.insertChargeView({ viewRef, customerId: 'demo-ana', language: 'es', rowCount: 20, hasMore: true, coverage: 'newest_20', now: 1000 });
+  const row = () => db.prepare('SELECT * FROM charge_views WHERE view_ref=?').get(viewRef);
+  assert.deepEqual({ ...row() }, { view_ref: viewRef, customer_id: 'demo-ana', language: 'es', row_count: 20, has_more: 1,
+    coverage: 'newest_20', retrieved_at: 1000, displayed_at: null });
+  assert.equal(await store.acknowledgeChargeView(viewRef, 'demo-bruno', 1500), null, 'another customer matches nothing');
+  assert.equal(row().displayed_at, null);
+  assert.equal(await store.acknowledgeChargeView(viewRef, 'demo-ana', 2000), 2000);
+  assert.equal(await store.acknowledgeChargeView(viewRef, 'demo-ana', 3000), 2000, 'a replay keeps the first time');
+  assert.equal(await store.acknowledgeChargeView(crypto.randomUUID(), 'demo-ana', 3000), null, 'an unknown view matches nothing');
+  await assert.rejects(store.insertChargeView({ viewRef: crypto.randomUUID(), customerId: 'demo-ana', language: 'fr', rowCount: 0, hasMore: false, coverage: 'all', now: 1 }), /CHECK/);
+  await assert.rejects(store.insertChargeView({ viewRef: crypto.randomUUID(), customerId: 'demo-ana', language: 'en', rowCount: -1, hasMore: false, coverage: 'all', now: 1 }), /CHECK/);
   db.close();
 });
