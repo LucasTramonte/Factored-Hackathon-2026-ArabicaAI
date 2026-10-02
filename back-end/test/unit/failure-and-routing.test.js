@@ -85,7 +85,7 @@ test('/auth/session alone is outside the team gate; /auth/logout and unknown /au
   assert.equal(signIn.status, 422);
   assert.deepEqual(await signIn.json(), { detail: 'Provide the sign-in token' });
   assert.equal((await anon('/auth/session', 'GET')).headers.get('Allow'), 'POST');
-  for (const path of ['/auth/logout', '/auth/session/', '/auth/sessions', '/auth/other', '/auth']) {
+  for (const path of ['/auth/logout', '/auth/session/', '/auth/sessions', '/auth/%73ession', '/auth/other', '/auth']) {
     assert.equal((await anon(path)).status, 401, path);
   }
 });

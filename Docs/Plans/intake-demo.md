@@ -85,6 +85,8 @@ Customers sign in with an email one-time code from the Amazon Cognito user pool 
 
 Production has no demo identity picker once Phase 1 deploys: `/demo/identities` and `/demo/session` exist only when `DEMO_PICKER=1` (local development), so customers sign in with their email code.
 
+`COGNITO_TEST_JWKS` is a local-test variable only; never set it as a Worker var or secret (the deploy guard refuses it in `vars`).
+
 ```bash
 back-end/scripts/cognito/setup.sh                                  # creates or finds pool, attribute, client, groups; prints the vars
 back-end/scripts/cognito/enroll.sh <email> <customer_id> [group]   # customer; no invitation email is sent
