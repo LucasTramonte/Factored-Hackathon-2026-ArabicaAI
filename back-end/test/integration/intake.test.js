@@ -67,7 +67,7 @@ test('guided start gate, path, session-role and malformed-input boundaries', asy
   }
   const ana = await customer();
   const body = startBody();
-  for (const invalid of ['{bad', '[]', 'null', { ...body, customer_id: 'demo-bruno' }, { ...body, language: 'en' },
+  for (const invalid of ['{bad', '[]', 'null', { ...body, customer_id: 'demo-bruno' }, { ...body, language: 'fr' },
     { ...body, mode: 'ai' }, { ...body, report_type: 'recognized_charge' }, { ...body, extra: true },
     { ...body, customer_statement: 'x'.repeat(2001) }, { ...body, customer_statement: '\ud800'.repeat(10) }]) {
     const rejected = await ana.call('/intake/start', invalid);
