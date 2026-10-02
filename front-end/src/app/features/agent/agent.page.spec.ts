@@ -329,7 +329,26 @@ describe('AgentPage', () => {
       service.intakeDetail.and.resolveTo(detail(P1, { status: 'closed' }));
       await loadAndOpen();
       expect(action().length).toBe(0);
-      expect(statusText().textContent).toContain(t().reviewClosed);
+      expect(statusText().textContent).toContain(t().chipClosed);
+    });
+
+    it('shows the detail status as a chip with the queue term, and a compact Close in the header', async () => {
+      service.intakeDetail.and.resolveTo(detail(P1));
+      await loadAndOpen();
+      expect(statusText().classList).toContain('ar-chip');
+      expect(statusText().textContent!.trim()).toBe(el().querySelector(`.intake-row[data-protocol="${P1}"] .status-chip`)!.textContent!.trim());
+      expect(el().querySelector('#intake-detail .box-head button')!.classList).toContain('ar-btn-sm');
+    });
+
+    it('shows urgency as the priority and no legacy priority value', async () => {
+      for (const [urgency, lang, text] of [['high', 'es', 'alta'], ['high', 'pt', 'alta'], ['high', 'en', 'high'], ['normal', 'en', 'normal']] as const) {
+        TestBed.inject(LangService).set(lang);
+        service.intakeDetail.and.resolveTo(detail(P1, { urgency, priority: 'legacy-p' }));
+        await loadAndOpen();
+        const row = [...el().querySelectorAll('#intake-detail .detail-meta div')].find(d => d.querySelector('dt')!.textContent === t().priority)!;
+        expect(row.querySelector('dd')!.textContent!.trim()).toBe(text);
+        expect(el().querySelector('#intake-detail')!.textContent).not.toContain('legacy-p');
+      }
     });
 
     it('shows the status as text on every queue row', async () => {
@@ -368,7 +387,7 @@ describe('AgentPage', () => {
       fixture.detectChanges();
       expect(service.setStatus).toHaveBeenCalledWith(P1, 'closed');
       expect(action().length).toBe(0);
-      expect(statusText().textContent).toContain(t().reviewClosed);
+      expect(statusText().textContent).toContain(t().chipClosed);
       expect(document.activeElement).toBe(statusText());
       el().remove();
     });

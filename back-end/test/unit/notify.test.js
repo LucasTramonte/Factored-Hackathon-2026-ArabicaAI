@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { encrypt, decrypt, sendEmail } from '../../src/notify/email.js';
-import { render } from '../../src/notify/templates.js';
+import { STATUS_TEXT, render } from '../../src/notify/templates.js';
 
 const env = { EMAIL_KEY: Buffer.alloc(32, 7).toString('base64') };
 const ses = { SES_ACCESS_KEY_ID: 'AKIDEXAMPLE', SES_SECRET_ACCESS_KEY: 'secret', SES_REGION: 'us-east-2', SES_FROM: 'Demo <from@example.com>' };
@@ -43,6 +43,7 @@ test('every template in every language names the reference, says no refund start
   assert.ok(render('received', 'es', { reference: 'R', urgent: true }).text.includes('Este servicio no bloquea tarjetas.'));
   assert.ok(!render('received', 'es', { reference: 'R' }).text.includes('bloquea tarjetas'));
   assert.throws(() => render('received', 'fr', { reference: 'R' }));
+  assert.equal(STATUS_TEXT.in_review.en, 'In review by a person'); // the client shows "in review" + "by a person"
 });
 
 test('a send is one signed SES v2 POST with the specified body', async () => {
