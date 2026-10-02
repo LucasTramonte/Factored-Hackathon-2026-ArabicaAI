@@ -62,7 +62,7 @@ Requests it can't handle (another language, a recognized charge, a lost card, a 
 |---|---|---|
 | Guided report | Online since 2026-10-01, behind an access gate (Worker version `3412aff1`, deployed 2026-10-02) | The customer signs in, describes what happened, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. "I can't find it" and failed lookups still reach a person, as incomplete or technical handoffs |
 | Agent view | Online | The intake queue and each case's detail: the customer's words, the confirmed charge, what was checked, what is still open |
-| Reading free text | Evaluated offline; wired online behind a switch that is off | The rule-based checklist and the model's fact extractor, run through the written policy in the evaluation harness. With the switch on, the service would only record a shadow call; the model decides nothing online |
+| Reading free text | Evaluated offline; wired online behind a switch that is off | The rule-based checklist and the model's fact extractor, run through the written policy in the evaluation harness. With the switch on, the service would only record a shadow call; the model decides nothing online. The agent sees whether the model read the case in shadow (call count and version, never its output) |
 
 The customer contract and the measurement contract are in [`Docs/intake/`](../intake/customer-and-measurement-contract.md).
 

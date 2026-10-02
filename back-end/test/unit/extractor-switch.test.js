@@ -411,3 +411,23 @@ test('details shadow: a transport failure leaves the response unchanged and coun
   await Promise.all(on.pending);
   assert.deepEqual(usage(on.episode_id), { tool_calls: 1, model_version: VERSION, llm_calls: 2, known_input_tokens: 2106, known_output_tokens: 273, usage_unavailable_calls: 1 });
 });
+
+test('agent detail: model_reading shows whether the model read the case, as counts and version only', async t => {
+  const { db, store } = await setup(t);
+  const agent = 'c'.repeat(64);
+  db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(agent), 'agent', null, Date.now() + 3600000);
+  const detail = async res => {
+    const { protocol } = await res.json();
+    const got = await route(new Request('https://demo.example/agent/intake-detail?protocol=' + protocol, { headers: { Cookie: `demo_agent_session=${agent}` } }), gate, store());
+    assert.equal(got.status, 200); const body = await got.json(); assertContract('agentIntakeDetail', body); return body;
+  };
+  const off = await detailsHandoff(store, gate, null);
+  assert.deepEqual((await detail(off.res)).model_reading, { mode: 'off', model_version: null, llm_calls: 0 });
+  const on = await detailsHandoff(store, { ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() }, stubExtractor());
+  await Promise.all(on.pending);
+  const body = await detail(on.res);
+  assert.deepEqual(body.model_reading, { mode: 'shadow', model_version: VERSION, llm_calls: 2 });
+  for (const leak of ['stated_facts', 'injection', 'intent', '2106']) assert.ok(!JSON.stringify(body).includes(leak), leak);
+  assert.throws(() => assertContract('agentIntakeDetail', { ...body, model_reading: { ...body.model_reading, stated_facts: {} } }), /violated/);
+  assert.throws(() => assertContract('agentIntakeDetail', { ...body, model_reading: { ...body.model_reading, mode: 'decided' } }), /violated/);
+});

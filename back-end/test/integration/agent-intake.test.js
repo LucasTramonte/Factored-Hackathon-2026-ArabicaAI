@@ -31,6 +31,7 @@ test('agent detail retrieves complete and incomplete evidence and actual ordered
       :['intake_started','handoff_created','intake_ended']);
     assert.equal(detail.body.history.at(-1).outcome,receipt.kind==='complete'?'accepted':'routed');
     assert.equal(detail.body.history_has_more,false); assert.equal(detail.metrics.rows_written,0);
+    assert.deepEqual(detail.body.model_reading,{mode:'off',model_version:null,llm_calls:0},'switch off locally: no model read the case');
     if(receipt.kind==='complete'){
       assert.equal(detail.body.verified_evidence.transaction.transaction_id,'demo-tx-001');
       assert.equal(detail.body.verified_evidence.transaction.amount,'125.50');

@@ -388,11 +388,15 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       + 'EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id) AS has_target '
       + "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
       + 'AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))', customerId, protocol, protocol),
-    /** Optional complete evidence is one-to-one and owner-scoped; missing evidence never drops a handoff. */
+    /**
+     * Optional complete evidence is one-to-one and owner-scoped; missing evidence never drops a handoff. ``model_version``
+     * and ``llm_calls`` come from the episode's usage (set only by shadow extraction), never the model's output.
+     */
     findIntakeHandoff: protocol => first(
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
       + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status,h.evidence_json,h.actions_json,h.questions_json,'
-      + 'e.customer_statement,e.language,t.transaction_id AS verified_transaction_id '
+      + 'e.customer_statement,e.language,t.transaction_id AS verified_transaction_id,'
+      + "json_extract(e.usage_json,'$.model_version') AS model_version,COALESCE(json_extract(e.usage_json,'$.llm_calls'),0) AS llm_calls "
       + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
       + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
       + 'LEFT JOIN transactions t ON t.transaction_id=c.transaction_id AND t.customer_id=e.customer_id '

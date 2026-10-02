@@ -470,7 +470,7 @@
     },
     "agentIntakeDetail": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "scope"],
+      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "model_reading", "scope"],
       "properties": {
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
@@ -489,6 +489,7 @@
         "unresolved_questions": {"type": "array", "items": {"type": "string", "minLength": 1}},
         "history": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/intakeServiceTransition"}},
         "history_has_more": {"type": "boolean"},
+        "model_reading": {"type": "object", "additionalProperties": false, "required": ["mode", "model_version", "llm_calls"], "description": "Whether a model read the case in shadow: version and call count only, never its output; it decides nothing.", "properties": {"mode": {"type": "string", "pattern": "^(off|shadow)$"}, "model_version": {"type": ["string", "null"], "minLength": 1}, "llm_calls": {"type": "integer"}}},
         "scope": {"const": "synthetic_demo_only"}
       }
     }

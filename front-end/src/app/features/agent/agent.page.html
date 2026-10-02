@@ -93,6 +93,8 @@
             <div><dt>{{ t().languageCode }}</dt><dd><code>{{ d.language }}</code></dd></div>
           </dl>
 
+          <p id="model-reading" class="status-line">{{ modelLine(d) }}</p>
+
           <h3>{{ t().statement }}</h3>
           <p class="case-statement" [attr.lang]="d.language">{{ d.customer_statement }}</p>
 

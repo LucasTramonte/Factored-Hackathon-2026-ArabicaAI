@@ -109,6 +109,8 @@ export interface AgentIntakeDetail extends AgentIntake {
   unresolved_questions: string[];
   history: IntakeServiceTransition[];
   history_has_more: boolean;
+  /** Whether a model read the case in shadow: version and call count only, never its output; it decides nothing. */
+  model_reading: { mode: 'off' | 'shadow'; model_version: string | null; llm_calls: number };
   scope: 'synthetic_demo_only';
 }
 
