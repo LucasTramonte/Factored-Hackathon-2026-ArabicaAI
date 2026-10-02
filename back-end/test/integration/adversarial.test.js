@@ -19,7 +19,7 @@ async function loggedIn(customerId = 'demo-ana') {
   return c;
 }
 
-const AGENT = path => path.startsWith('/demo/') || path.startsWith('/agent/');
+const NON_CUSTOMER = path => path.startsWith('/demo/') || path.startsWith('/agent/');
 
 test('agent routes have no Basic gate: without an agent session the handler answers 401, other methods 405', async () => {
   const ana = await loggedIn();
@@ -70,7 +70,7 @@ test('agent sign-in: a verified agent-group token starts an agent session; any o
 });
 
 test('customer routes: without a session the allowed method gets the session 401, others 405', async () => {
-  for (const [path, allowed] of Object.entries(API).filter(([path]) => !AGENT(path))) {
+  for (const [path, allowed] of Object.entries(API).filter(([path]) => !NON_CUSTOMER(path))) {
     for (const authorization of [null, wrong]) {
       for (const method of ['GET', 'POST', 'HEAD', 'OPTIONS', 'DELETE']) {
         const res = await fetch(base + path, { method, headers: authorization ? { Authorization: authorization } : {} });
@@ -305,6 +305,8 @@ test('path tricks on the guided routes never confirm without a session or return
     for (const cookie of path.includes('..') ? ['', ana.cookie] : ['', ana.cookie, agent.cookie]) {
       const res = await fetch(base + path, { redirect: 'manual', headers: cookie ? { Cookie: cookie } : {} });
       assert.doesNotMatch(await res.text(), /customer_statement|"items"|No reconozco/, `${path} ${res.status}`);
+      const loc = res.headers.get('location');
+      assert.ok(loc === null || (new URL(loc, base).origin === base && /^\/(?!\/)/.test(new URL(loc, base).pathname)), path);
     }
   }
   const real = await ana.call('/intake/confirm', JSON.parse(confirm));

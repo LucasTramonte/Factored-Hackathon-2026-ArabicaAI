@@ -85,7 +85,7 @@ Customers sign in with an email one-time code from the Amazon Cognito user pool 
 
 Production has no demo identity picker once Phase 1 deploys: `/demo/identities` and `/demo/session` exist only when `DEMO_PICKER=1` (local development), so customers sign in with their email code.
 
-`COGNITO_TEST_JWKS` is a local-test variable only; never set it as a Worker var or secret (the deploy guard refuses it in `vars`).
+`COGNITO_TEST_JWKS` is a local-test variable only; never set it as a Worker var or secret (the deploy guard refuses it in `vars`). `DEMO_PICKER` must never be set as a Worker var or secret either: with no team gate it would let anyone become any customer or agent (the deploy guard refuses it in `vars`; it cannot see secrets).
 
 ```bash
 back-end/scripts/cognito/setup.sh                                  # creates or finds pool, attribute, client, groups; prints the vars
@@ -95,7 +95,13 @@ back-end/scripts/cognito/enroll.sh <email> - agent                 # agent, admi
 
 Both use `--profile ${AWS_PROFILE:-arabica}` and can be rerun. Judges' and teammates' emails are enrolled with `enroll.sh`; each person who reviews reports on `/agent` is enrolled with `enroll.sh <email> - agent` (a customer-only account gets 403 there); the customer id cannot change after creation, so delete the user first to re-map one. Once Phase 1 deploys, a person removes Cloudflare Access from the hostname in the Zero Trust dashboard; until then Access still fronts the sign-in page.
 
-After the agent sign-in deploys, a person deletes the retired team-password secrets: `cd back-end && npx wrangler secret delete DEMO_ACCESS_USERNAME && npx wrangler secret delete DEMO_ACCESS_PASSWORD`. The Worker no longer reads them.
+#### Before deploying this change (agent sign-in)
+
+1. Enrol each agent with `back-end/scripts/cognito/enroll.sh <email> - agent`; otherwise nobody can open the agent view.
+2. Deploy.
+3. Sign in once as a customer and once as an agent on the live URL.
+4. Remove the Cloudflare Access application in the Zero Trust dashboard.
+5. Delete the `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` Worker secrets (`cd back-end && npx wrangler secret delete DEMO_ACCESS_USERNAME && npx wrangler secret delete DEMO_ACCESS_PASSWORD`); the Worker no longer reads them.
 
 ### Notification email (SES)
 

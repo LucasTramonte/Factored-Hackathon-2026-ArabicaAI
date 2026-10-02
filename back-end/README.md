@@ -142,9 +142,17 @@ Preview builds share the production D1 binding. Keep them disabled until a separ
 
 Smart Placement is on (`placement.mode = "smart"`). It is adaptive: Cloudflare may run the Worker nearer D1 once telemetry shows a benefit, and the `cf-placement` response header shows where it actually ran. Each D1 query from São Paulo took about 150 ms before this change (ADR-004).
 
-The Worker no longer reads `DEMO_ACCESS_USERNAME` or `DEMO_ACCESS_PASSWORD`; delete both secrets after this change deploys (`npx wrangler secret delete DEMO_ACCESS_USERNAME`, then `DEMO_ACCESS_PASSWORD`, a human step). Enrol each agent with `scripts/cognito/enroll.sh <email> - agent`. Cloudflare Access is to be removed from the hostname after this change is deployed (a human step), so customers reach the product with their email code alone. `scripts/predeploy.mjs` refuses to deploy a placeholder D1 ID, and it also refuses while the remote D1 lacks a migration in `migrations/`. It reads `d1_migrations` with the build token, so that token needs D1 read access. If the state can't be read, the deploy stops. Non-production branch builds must stay disabled: a preview would bind the production D1.
+The deploy order for the agent sign-in change is below. `DEMO_PICKER` must never be set as a Worker var or secret: with no team gate it would let anyone become any customer or agent. `scripts/predeploy.mjs` refuses `DEMO_PICKER` and `COGNITO_TEST_JWKS` in `vars` (it cannot see secrets), refuses to deploy a placeholder D1 ID, and it also refuses while the remote D1 lacks a migration in `migrations/`. It reads `d1_migrations` with the build token, so that token needs D1 read access. If the state can't be read, the deploy stops. Non-production branch builds must stay disabled: a preview would bind the production D1.
 
 Schema changes: `npx wrangler d1 migrations apply arabica-intake-demo --remote`, after the same migration has passed the local tests. To load reviewed data, run `npx wrangler d1 execute arabica-intake-demo --remote --file <seed>` for the fictitious seed, or for a Gold slice seed whose manifest has been reviewed. Never upload `data/`, DuckDB, Parquet or credentials.
+
+### Before deploying this change (agent sign-in)
+
+1. Enrol each agent with `back-end/scripts/cognito/enroll.sh <email> - agent`; otherwise nobody can open the agent view.
+2. Deploy.
+3. Sign in once as a customer and once as an agent on the live URL.
+4. Remove the Cloudflare Access application in the Zero Trust dashboard.
+5. Delete the `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` Worker secrets (`cd back-end && npx wrangler secret delete DEMO_ACCESS_USERNAME && npx wrangler secret delete DEMO_ACCESS_PASSWORD`); the Worker no longer reads them.
 
 ## Remote checks after a deploy
 
