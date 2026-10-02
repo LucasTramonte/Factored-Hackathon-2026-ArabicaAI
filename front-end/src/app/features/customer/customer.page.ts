@@ -123,11 +123,10 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** The last list's recorded view; acknowledged once, after a render that shows the home with its rows. */
   private readonly viewRef = signal<string | null>(null);
-  private ackedRef: string | null = null;
   private readonly ackView = afterRenderEffect(() => {
     const ref = this.viewRef();
-    if (!ref || ref === this.ackedRef || this.step() !== 'home') return;
-    this.ackedRef = ref;
+    if (!ref || this.step() !== 'home') return;
+    this.viewRef.set(null);
     this.service.displayed(ref).catch(() => undefined); // best effort: no UI change, no retry, nothing logged
   });
 
@@ -535,6 +534,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.client.set('');
     this.transactions.set([]);
     this.hasMore.set(false);
+    this.viewRef.set(null);
     this.card.set(null);
     this.reports.set(null);
     this.reportsFailed.set(false);
