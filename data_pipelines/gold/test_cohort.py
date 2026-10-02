@@ -431,3 +431,33 @@ def test_a_gold_file_without_usable_lineage_is_refused_cleanly(tmp_path, ddl):
         con.execute(ddl)
     with pytest.raises(ValueError, match="no build lineage"):
         build(tmp_path, gold_path(tmp_path))
+
+# ---------------------------------------------------------------- review follow-ups (#33)
+
+def test_the_manifest_discloses_that_the_holdout_window_selects_members(tmp_path):
+    _, manifest = build(tmp_path, standard(tmp_path))
+    holdout = manifest["holdout"]
+    assert holdout["used_for_selection"] is True and holdout["design_end"] == "2026-01-01"
+    assert holdout["window"] == manifest["window"] and "no metric" in holdout["use"]
+    _, inside = build(tmp_path, gold_path(tmp_path), design_end=date(2027, 1, 1))  # a window wholly before it
+    assert inside["holdout"]["used_for_selection"] is False
+
+
+def test_served_rows_reconcile_with_the_window_counts(tmp_path, monkeypatch):
+    db = standard(tmp_path, [customer("B")], purchases("B", 8), [complaint("B")])
+    _, manifest = build(tmp_path, db, max_per_customer=5)
+    assert manifest["reconciliation"] == {"served_rows": 8, "expected_from_window_counts": 8}  # A 3 + B capped at 5
+    # If the row query and the eligibility counts ever disagree, the build stops instead of serving the gap.
+    monkeypatch.setattr(gold, "_ROWS", gold._ROWS.replace("merchant_name IS NOT NULL", "merchant_name IS NOT NULL AND transaction_id <> 'A-T0'"))
+    with pytest.raises(ValueError, match="Served 7 purchases, but the window counts of the selected customers give 8"):
+        build(tmp_path, db, max_per_customer=5)
+
+
+def test_rows_without_a_merchant_are_reported_for_eligible_and_selected_customers(tmp_path):
+    tx = (purchases("A", 3) + [purchase("A-N", "A", "2026-06-01 10:00:00", merchant=None)]
+          + purchases("B", 2) + [purchase(f"B-N{i}", "B", "2026-06-01 10:00:00", merchant=None) for i in range(2)])
+    db = make_db(tmp_path, [customer("A"), customer("B")], tx, [complaint("A"), complaint("B")])
+    _, manifest = build(tmp_path, db)
+    assert selected(manifest) == {"A"}  # B has 2 purchases with a merchant: below min_purchases
+    assert manifest["exclusions"]["window_rows_without_merchant"] == 3
+    assert manifest["exclusions"]["window_rows_without_merchant_selected"] == 1

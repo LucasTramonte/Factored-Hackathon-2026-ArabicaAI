@@ -86,6 +86,7 @@ The key data risk for the intake service is currency ([DF-023](#df-023-amounts-s
 - **Evidence:** in the design window, 933,847 of 3,738,506 transactions (25%) sit in the partition of the previous day. All of them have event hours 00–06, and the rest have hours 06–23. In complaints, 19,054 of 56,736 (34%) are affected, with hours 00–08. The offset differs by table: about 6 hours for transactions, about 8 for complaints.
 - **Impact:** `process_date` is not an event date, and the timestamps' time zone is unknown. One of the two clocks is shifted, and we can't tell which.
 - **Handling:** event-time filters and every split use the business timestamp, never `process_date` (AGENTS.md, ADR-005). The intake service shows timestamps as time-zone-free wall time.
+- **Related:** [DF-020](#df-020-one-clock-for-every-country-no-daily-rhythm) shows the rollover happens at the same stored hour in every country (06:00 for transactions, 08:00 for complaints). The offset follows the table, not the country's time zone. Which clock is shifted is still not stated by the data, so this finding stays open.
 - **Next step:** check the Bronze files and the source partition layout to confirm the cause.
 
 ### DF-005 Mexican customers transact only in USD
@@ -204,13 +205,13 @@ The [bronze profile findings](../../data_profiles/bronze_data_profile/bronze_pro
   - **Purchases per customer.** The median is 0 in every window and every country. At 120 days the p90 is 2 and the p99 is 5.
   - **No purchase at all.** In the 45 days before the complaint, 79.0% of complaints have none; in the 120 days before, 61.1% do.
   - **Age of the last purchase.** Where one exists, the most recent purchase is 41 days old at the median, 109 days at p95 and 118 days at p99.
-  - **Over the whole dataset,** the median customer has 10 approved purchases in three years.
 - **Impact:**
-  - **Lookback can't be measured.** The age of the disputed charge itself isn't in the data (DF-003). The p95 and p99 above are the closest proxy: how far back a customer would have to look to see anything at all.
+  - **Lookback can't be measured.** The age of the disputed charge itself isn't in the data (DF-003). The age of the last purchase above can't stand in for it either: it exists only for complaints with a purchase inside the 120-day window, so its p95 and p99 can't exceed 120 days by construction.
   - **No window passes our rule.** We wrote it before running: at most 5% of complaints with no purchase, and a median of at least 3 purchases. None of the four windows meets it.
 - **Handling:**
   - **The fallback applies.** The serving window is the 120-day cap. The Gold cohort keeps only customers with at least 3 approved purchases in that window, so every demo customer has a list to choose from.
   - **This is a selection, not a property of the population.** Most disputing customers in this data would see one purchase or none.
+  - **The cohort uses the window differently from this finding.** Here the window ends at each complaint. The cohort anchors it on its `as_of` (2026-06-17), so it runs on holdout-window purchases and never contains the disputed charge. The cohort serves the demo only: no metric is computed on it and nothing is tuned against it (ADR-005).
 
 ### DF-022 Unrecognized-charge customers by country, segment and accent
 

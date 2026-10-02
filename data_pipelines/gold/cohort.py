@@ -4,10 +4,18 @@ The one-day slice in ``intake_slice`` shows a handful of rows. The cohort serves
 workflow is for, defined by the design-window findings in ``Docs/deliverables/DATA_QUALITY.md``:
 
 - **Who** (DF-022): customers with a ``Cargo no reconocido`` complaint created before the design
-  end (ADR-005), excluding closed accounts. Holdout complaints never decide who is served.
+  end (ADR-005), excluding customers whose *current* status is ``Closed`` (a snapshot: closed
+  today, not at the time of the complaint). Complaints after the design end never decide who is served.
 - **Which rows** (DF-021): their approved purchases in the ``window_days`` before ``as_of``, with a
   merchant (D1 requires one), capped per customer at the most recent ``max_per_customer``. Only
   customers with at least ``min_purchases`` such rows are served, so each has a list to choose from.
+- **Holdout disclosure.** The window ends at ``as_of``, which lies in the holdout period, so the
+  purchase rule selects members on holdout-window rows, and it drops most eligible complainants (DF-021).
+  That is fine for serving the demo, but the cohort is not a sample of anything: no metric is
+  computed on it and nothing (policy, thresholds, extractor) is tuned against it (ADR-005). The
+  manifest records this under ``holdout``. The window is anchored on ``as_of``, not on each
+  member's complaint. When it starts after the design end, as with ``as_of`` 2026-06-17, it can't
+  contain a charge disputed in a member's (earlier) complaint, which DF-003 can't identify anyway.
 - **How many**: everyone eligible when the pool fits ``size``; otherwise per-country quotas from the
   design-window shares, filled in a salted md5 order so the sample is reproducible.
 
@@ -117,13 +125,16 @@ _ELIGIBLE = """
         WHERE p.occurred_at > $start AND p.occurred_at < $end
           AND p.customer_id IN (SELECT customer_id FROM eligible)
     ), per AS (
-        SELECT e.customer_id, e.country, count(w.transaction_id) FILTER (WHERE w.merchant_name IS NOT NULL) AS usable
+        SELECT e.customer_id, e.country,
+               count(w.transaction_id) FILTER (WHERE w.merchant_name IS NOT NULL) AS usable,
+               count(w.transaction_id) FILTER (WHERE w.merchant_name IS NULL) AS no_merchant
         FROM eligible e LEFT JOIN win w ON w.customer_id = e.customer_id
         GROUP BY 1, 2
     )
     SELECT (SELECT count(*) FROM complainants WHERE customer_status = 'Closed') AS closed,
            (SELECT count(*) FROM win WHERE merchant_name IS NULL) AS without_merchant,
-           (SELECT list({'customer_id': customer_id, 'country': country, 'usable': usable} ORDER BY customer_id) FROM per) AS pool
+           (SELECT list({'customer_id': customer_id, 'country': country, 'usable': usable, 'no_merchant': no_merchant}
+                        ORDER BY customer_id) FROM per) AS pool
 """
 
 _SHARES = """
@@ -261,6 +272,11 @@ def build_cohort(gold_db: Path, params: CohortParams) -> tuple[list[str], dict]:
         people = {r[0]: r[1:] for r in con.execute(_PEOPLE, {"customers": ids}).fetchall()} if ids else {}
     if any(people.get(cid, (None, None, None))[1] is None for cid in ids):
         raise ValueError("A selected customer has no Gold context card")
+    # Reconciliation: the rows served must be exactly what the eligibility counts promised, each
+    # selected customer's window purchases with a merchant, capped. A gap means the two queries disagree.
+    expected_rows = sum(min(c["usable"], params.max_per_customer) for c in chosen)
+    if len(rows) != expected_rows:
+        raise ValueError(f"Served {len(rows)} purchases, but the window counts of the selected customers give {expected_rows}")
     by_customer: dict[str, list[tuple]] = {}
     for r in rows:
         by_customer.setdefault(r[1], []).append(r)
@@ -297,8 +313,17 @@ def build_cohort(gold_db: Path, params: CohortParams) -> tuple[list[str], dict]:
                        "excluded_customer_status": "Closed", "findings": ["DF-020", "DF-021", "DF-022"]},
         "sampling": sampling, "reference_shares": {k: round(v, 4) for k, v in sorted(shares.items())},
         "by_country": dict(sorted(by_country_stats.items())),
-        "exclusions": {"customers_closed": closed, "committed_identities": excluded_committed, "window_rows_without_merchant": without_merchant,
+        "exclusions": {"customers_closed": closed, "committed_identities": excluded_committed,
+                       # Window rows without a merchant: over every eligible complainant, and over the selected ones.
+                       "window_rows_without_merchant": without_merchant,
+                       "window_rows_without_merchant_selected": sum(c["no_merchant"] for c in chosen),
                        "customers_below_min_purchases": len(pool) - len(dense), "rows_over_per_customer_cap": over_cap},
+        "reconciliation": {"served_rows": len(rows), "expected_from_window_counts": expected_rows},
+        "holdout": {"used_for_selection": end > datetime.combine(params.design_end, datetime.min.time()),
+                    "design_end": str(params.design_end),
+                    "window": {"start_exclusive": start.isoformat(), "end_exclusive": end.isoformat()},
+                    "rule": "min_purchases is applied to window rows; members are chosen by design-window complaints",
+                    "use": "serving only: no metric is computed on the cohort and nothing is tuned against it (ADR-005)"},
         "expected_writes_total": sum(p["expected_writes"] for _, p in rendered),
         "parts": [p for _, p in rendered],
         "customers": [{"customer_id": cid, "country": country[cid], "transactions": len(by_customer.get(cid, []))} for cid in ids],
