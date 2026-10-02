@@ -1,11 +1,10 @@
-import { Component, ElementRef, Injector, OnDestroy, OnInit, Signal, afterNextRender, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, Injector, NgZone, OnDestroy, OnInit, Signal, afterNextRender, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { formatSourceTime } from '../../shared/format/source-time.util';
 import { Lang, LangService, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
-import { Mark } from '../../shared/mark/mark.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
 import { Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
@@ -13,8 +12,8 @@ import { Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeRecei
 import { CustomerService } from './customer.service';
 
 /**
- * The customer flow: sign-in (with the purpose stated on the same screen), then home. Nothing animates and
- * nothing waits on a timer. Sign in, then the guided chat: describe the charge, choose and confirm
+ * The customer flow as one connected screen: intro, sign-in, home. The disc is a single element that
+ * travels between the three steps. Sign in, then the guided chat: describe the charge, choose and confirm
  * one of your own charges, or ask for review without one. A submitted payload and its idempotency key
  * stay frozen until acceptance is known, so a retry
  * can never create a second case or send edited content. A definitive rejection (404, 409, 413 or 422)
@@ -22,7 +21,7 @@ import { CustomerService } from './customer.service';
  */
 /** Rejections that retrying can't fix; 401, 503 and network failures keep the frozen retry. */
 const DEFINITIVE = new Set([404, 409, 413, 422]);
-export type Step = 'login' | 'home';
+export type Step = 'intro' | 'login' | 'home';
 export type ChatStep = 'describe' | 'choose' | 'receipt' | 'ended';
 /** A chat line. Guide lines and FAQ questions are i18n keys, so they follow the interface language; the customer's own words are kept as typed. */
 export type ChatLine = { from: 'bot' | 'me'; key: keyof Strings } | { from: 'me'; text: string };
@@ -39,7 +38,7 @@ const RECEIPT_TITLE = { complete: 'receiptComplete', incomplete: 'receiptIncompl
 
 @Component({
   selector: 'app-customer-page',
-  imports: [DatePipe, FormsModule, RouterLink, LangSwitch, Mark, CustomerPicker],
+  imports: [DatePipe, FormsModule, RouterLink, LangSwitch, CustomerPicker],
   templateUrl: './customer.page.html',
   styleUrl: './customer.page.css'
 })
@@ -79,7 +78,10 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly choosable = computed(() => this.transactions().filter(tx => !this.receipts().some(r => r.receipt.kind === 'complete' && r.transactionId === tx.transaction_id)));
   /** Locked while a request is frozen or a guided report is open: renewing must keep the same customer. */
   readonly identityLocked = computed(() => this.frozen() !== null || this.chatStep() === 'choose');
-  readonly step = signal<Step>('login');
+  readonly step = signal<Step>('intro');
+  readonly booted = signal(false);
+  /** The intro words play once (from 2.6 s, three 1.4 s slots: under 5 s of motion, WCAG 2.2.2); then only the current language's word stays. */
+  readonly introDone = signal(false);
   /** At the home-top breakpoint and below, the open chat panel covers page controls, so the page behind it is inert (WCAG 2.4.11). */
   // Keep 1180px in sync with the @media rules in styles.css and customer.page.css.
   private readonly narrowQuery = typeof matchMedia === 'function' ? matchMedia('(max-width: 1180px)') : null;
@@ -89,9 +91,12 @@ export class CustomerPage implements OnInit, OnDestroy {
   chatStatement = '';
   choice = '';
   chatConfirmed = false;
+  private bootTimer: ReturnType<typeof setTimeout> | undefined;
+  private introTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly zone = inject(NgZone);
   private readonly injector = inject(Injector);
-  private shownStep: Step = 'login';
+  private shownStep: Step = 'intro';
 
   /** On a step change (not the first render), move focus to the new step's heading so it doesn't fall to <body>. */
   private readonly focusStepHeading = afterRenderEffect(() => {
@@ -101,6 +106,13 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.host.nativeElement.querySelector<HTMLElement>('.step h1')?.focus();
   });
 
+  /** Where the disc sits: boot centre, top dot, login form, sidebar mark. */
+  readonly discClass = computed(() => {
+    const step = this.step();
+    if (step === 'login') return 'disc disc--login';
+    if (step === 'home') return 'disc disc--home';
+    return this.booted() ? 'disc disc--top' : 'disc disc--boot';
+  });
   readonly displayName = computed(() => this.identities().find(i => i.customer_id === this.client())?.display_name ?? this.client());
   readonly initials = computed(() => initialsOf(this.displayName()) || 'AA');
 
@@ -126,7 +138,10 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Load the identity choices from the API; they come from the same config as the server allowlist. */
   async ngOnInit(): Promise<void> {
+    this.bootTimer = setTimeout(() => this.booted.set(true), 2400);
     if (this.narrowQuery) this.narrowQuery.onchange = e => this.narrow.set(e.matches);
+    // Outside the zone so the app (and tests) can be stable while it waits; the signal still schedules the render.
+    this.introTimer = this.zone.runOutsideAngular(() => setTimeout(() => this.introDone.set(true), 6800)); // must outlast the intro word animation delays in styles.css
     if (this.client()) void this.resume();
     this.identitiesLoading.set(true);
     try {
@@ -140,7 +155,14 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearTimeout(this.bootTimer);
+    clearTimeout(this.introTimer);
     if (this.narrowQuery) this.narrowQuery.onchange = null;
+  }
+
+  start(): void {
+    this.booted.set(true);
+    this.step.set('login');
   }
 
   /** A server check or open-question code in the interface language. */
@@ -169,6 +191,7 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Back from another in-app view in this tab: show the same customer's home again; the cookie still decides access. */
   private async resume(): Promise<void> {
+    this.booted.set(true);
     this.step.set('home');
     try {
       await this.loadTransactions();

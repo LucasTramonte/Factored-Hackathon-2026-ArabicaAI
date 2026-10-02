@@ -6,8 +6,8 @@ export type Lang = 'es' | 'pt' | 'en';
 /** Every interface string, in the three required languages. Evidence (amounts, IDs, timestamps) is never translated. */
 const es = {
     greeting: 'Hola', tagline: 'Reporta un cargo que no reconoces.',
-    explain1: 'Eliges el cargo que no reconoces y cuentas qué pasó.', explain2: 'Una persona del banco revisa cada reporte.',
-    explain3: 'Nada se reembolsa, bloquea ni se decide aquí.',
+    promise: 'Ves solo tus propios cargos, en tu idioma. Una persona revisa cada caso. Nadie mueve tu dinero.', start: 'Comenzar',
+    promise1: 'Elige el cargo que no reconoces.', promise2: 'Cuéntanos qué pasó.', promise3: 'Una persona lo revisa. Nadie mueve tu dinero.',
     continue: 'Continuar', sandbox: 'sandbox', synthetic: 'Datos sintéticos. Inicio de sesión simulado, en lugar del servicio de identidad del banco.',
     onlyYours: 'Solo verás tus propios cargos.',
     noMoney: 'Datos sintéticos. Nadie mueve tu dinero.',
@@ -87,8 +87,8 @@ const STRINGS: Record<Lang, Strings> = {
   es,
   pt: {
     greeting: 'Olá', tagline: 'Reporte uma cobrança que você não reconhece.',
-    explain1: 'Você escolhe a cobrança que não reconhece e conta o que aconteceu.', explain2: 'Uma pessoa do banco analisa cada relato.',
-    explain3: 'Nada é reembolsado, bloqueado nem decidido aqui.',
+    promise: 'Você vê apenas suas próprias cobranças, no seu idioma. Uma pessoa analisa cada caso. Ninguém mexe no seu dinheiro.', start: 'Começar',
+    promise1: 'Escolha a cobrança que não reconhece.', promise2: 'Conte o que aconteceu.', promise3: 'Uma pessoa analisa. Ninguém mexe no seu dinheiro.',
     continue: 'Continuar', sandbox: 'sandbox', synthetic: 'Dados sintéticos. Login simulado, no lugar do serviço de identidade do banco.',
     onlyYours: 'Você verá apenas suas próprias cobranças.',
     noMoney: 'Dados sintéticos. Ninguém mexe no seu dinheiro.',
@@ -162,8 +162,8 @@ const STRINGS: Record<Lang, Strings> = {
   },
   en: {
     greeting: 'Hello', tagline: 'Report a charge you do not recognize.',
-    explain1: 'You pick the charge you do not recognize and say what happened.', explain2: 'A person at the bank reviews every report.',
-    explain3: 'Nothing is refunded, blocked or decided here.',
+    promise: 'You see only your own charges, in your language. A person reviews every case. Nobody moves your money.', start: 'Start',
+    promise1: 'Pick the charge you do not recognize.', promise2: 'Tell us what happened.', promise3: 'A person reviews it. Nobody moves your money.',
     continue: 'Continue', sandbox: 'sandbox', synthetic: 'Synthetic data. Simulated sign-in standing in for the bank\'s identity service.',
     onlyYours: 'You will only see your own charges.',
     noMoney: 'Synthetic data. Nobody moves your money.',

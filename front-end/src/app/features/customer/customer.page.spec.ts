@@ -25,35 +25,39 @@ describe('CustomerPage', () => {
     page = TestBed.createComponent(CustomerPage).componentInstance;
   });
 
-  it('opens on sign-in with the purpose and the three explanation lines, then goes home once charges are loaded', async () => {
+  it('starts on the intro, moves to sign-in on start, and to the home once charges are loaded', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     const p = fixture.componentInstance;
     await p.ngOnInit();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
+    expect(p.step()).toBe('intro');
+    expect(p.discClass()).toBe('disc disc--boot');
+    expect(el.querySelector('.intro')).not.toBeNull();
+    p.start();
+    fixture.detectChanges();
     expect(p.step()).toBe('login');
-    expect(el.querySelector('h1')?.textContent?.trim()).toBe(p.t().greeting);
-    expect(el.querySelector('.purpose')?.textContent?.trim()).toBe(p.t().tagline);
-    expect([...el.querySelectorAll('.explain li')].map(li => li.textContent?.trim()))
-      .toEqual([p.t().explain1, p.t().explain2, p.t().explain3]);
-    expect(el.querySelector('.intro')).toBeNull();
+    expect(p.discClass()).toBe('disc disc--login');
+    expect(el.querySelector('.step h1')?.textContent?.trim()).toBe(p.t().whoAreYou);
+    expect([...el.querySelectorAll('.login-promise p')].map(li => li.textContent?.trim()))
+      .toEqual([p.t().promise1, p.t().promise2, p.t().promise3]);
     p.identity = 'demo-ana';
     await p.login();
     expect(p.step()).toBe('home');
+    expect(p.discClass()).toBe('disc disc--home');
+    p.ngOnDestroy();
   });
 
-  it('states the purpose before the picker, and that sign-in is simulated and shows only your own charges', async () => {
+  it('says on sign-in that it is simulated and shows only your own charges', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     const p = fixture.componentInstance;
     await p.ngOnInit();
+    p.start();
     fixture.detectChanges();
-    const el = fixture.nativeElement as HTMLElement;
-    const purpose = el.querySelector('.purpose')!;
-    const picker = el.querySelector('app-customer-picker')!;
-    expect(purpose.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const note = el.querySelector('.sign-in-note')?.textContent ?? '';
+    const note = (fixture.nativeElement as HTMLElement).querySelector('.login-form > p.ar-small')?.textContent ?? '';
     expect(note).toContain(p.t().synthetic);
     expect(note).toContain(p.t().onlyYours);
+    p.ngOnDestroy();
   });
 
   it('signs in and lists only what the API returns', async () => {
@@ -65,6 +69,7 @@ describe('CustomerPage', () => {
 
   it('stays on sign-in and shows the mapped error when sign-in fails', async () => {
     service.signIn.and.rejectWith(new ApiError(503, 'unavailable'));
+    page.start();
     page.identity = 'demo-ana';
     await page.login();
     expect(page.step()).toBe('login');
@@ -76,6 +81,7 @@ describe('CustomerPage', () => {
     service.identities.and.returnValue(new Promise<Identity[]>(r => { resolve = r; }));
     const fixture = TestBed.createComponent(CustomerPage);
     const init = fixture.componentInstance.ngOnInit();
+    fixture.componentInstance.start();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('#identities-loading')?.textContent).toContain(fixture.componentInstance.t().working);
@@ -89,6 +95,7 @@ describe('CustomerPage', () => {
   it('loads the identity choices from the API instead of a hard-coded list', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     await fixture.componentInstance.ngOnInit();
+    fixture.componentInstance.start();
     fixture.detectChanges();
     const rows = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.ar-row-name')].map(o => o.textContent?.trim());
     expect(rows).toEqual(['Ana (demo)', 'Bruno (demo)']);
