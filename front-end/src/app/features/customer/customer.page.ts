@@ -234,6 +234,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     try {
       const s = await session();
       if (this.identityLocked() && s.customer_id !== this.client()) {
+        // That sign-in set the other customer's cookie: drop it before anything else can be sent with it.
+        await this.service.logout().catch(() => undefined);
         this.error.set(this.t().errOtherCustomer);
         return;
       }

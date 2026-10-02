@@ -32,6 +32,11 @@ export class CustomerService {
     return this.api.request<CustomerSession>('/auth/session', {}, { Authorization: 'Bearer ' + idToken });
   }
 
+  /** Revoke the browser's customer session cookie (always 204). */
+  logout(): Promise<unknown> {
+    return this.api.request('/auth/logout', {});
+  }
+
   transactions(): Promise<TransactionList> {
     return this.api.request<TransactionList>('/transactions');
   }

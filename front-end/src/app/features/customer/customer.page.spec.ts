@@ -16,13 +16,14 @@ describe('CustomerPage', () => {
     source_occurred_at: '2026-02-26T13:21:51', amount: '125.50', currency: 'BRL' };
 
   beforeEach(async () => {
-    service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'transactions',
+    service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
       'startIntake', 'confirmIntake', 'handoffIntake'], { client: signal(''), card: signal(null), receipts: signal([]) });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null });
     service.transactions.and.resolveTo({ items: [tx], has_more: false, coverage: 'fictitious_demo_data_only' });
     service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', context_card: null });
+    service.logout.and.resolveTo();
     cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
     cognito.requestCode.and.resolveTo();
     cognito.submitCode.and.resolveTo('id.token');
@@ -172,12 +173,22 @@ describe('CustomerPage', () => {
       await toCode(p);
       await p.verify();
       expect([p.step(), p.client(), p.chatStep(), p.error()]).toEqual(['login', 'CLI-1', 'choose', p.t().errOtherCustomer]);
+      expect(service.logout).toHaveBeenCalledTimes(1);
+      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp' });
+      await toCode(p);
+      await p.verify();
+      expect([p.step(), p.chatStep()]).toEqual(['home', 'choose']);
+      expect(service.logout).toHaveBeenCalledTimes(1); // a matching renewal keeps its session
     });
 
-    it('in production renders no picker and never lists identities', async () => {
-      const { el } = await open(false);
+    it('in production renders no picker, never lists identities, and says the sign-in is an email code', async () => {
+      const { p, el } = await open(false);
       expect(service.identities).not.toHaveBeenCalled();
       expect(el.querySelector('app-customer-picker')).toBeNull();
+      const note = el.querySelector('.login-form > p.ar-small')?.textContent ?? '';
+      expect(note).toContain(p.t().emailSignIn);
+      expect(note).not.toContain(p.t().synthetic);
+      expect(note).toContain(p.t().onlyYours);
     });
 
     it('in development keeps the picker under its own heading', async () => {
