@@ -191,6 +191,8 @@ export interface Report {
   status: HandoffStatus;
   next_step: 'review_pending' | 'being_reviewed' | 'closed_by_person';
   accepted_at: string;
+  /** The confirmed charge of a complete report; null for one without a charge. */
+  transaction_id: string | null;
 }
 export interface ReportList {
   items: Report[];

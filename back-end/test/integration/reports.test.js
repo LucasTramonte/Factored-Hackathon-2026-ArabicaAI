@@ -21,8 +21,9 @@ test('a customer lists only their own acknowledged reports, newest first, withou
   assert.equal(incomplete.status, 201);
   const listed = await ana.call('/reports');
   assert.equal(listed.status, 200); assertContract('reportList', listed.body);
-  assert.deepEqual(listed.body.items.slice(0, 2), [incomplete.body, complete.body].map(r => ({ protocol: r.protocol, reference_short: r.reference_short,
-    kind: r.kind, status: 'received', next_step: 'review_pending', accepted_at: r.accepted_at })));
+  // A complete report names its confirmed charge, so the client can show the charge's status; others carry null.
+  assert.deepEqual(listed.body.items.slice(0, 2), [[incomplete.body, null], [complete.body, 'demo-tx-001']].map(([r, tx]) => ({ protocol: r.protocol,
+    reference_short: r.reference_short, kind: r.kind, status: 'received', next_step: 'review_pending', accepted_at: r.accepted_at, transaction_id: tx })));
   assert.ok(listed.body.items.length <= 20);
   assert.doesNotMatch(listed.text, /customer_statement|reconheço|demo-ana|episode_id/);
 
@@ -31,6 +32,7 @@ test('a customer lists only their own acknowledged reports, newest first, withou
   assert.equal(foreign.status, 200); assertContract('reportList', foreign.body);
   const anas = new Set(listed.body.items.map(x => x.protocol));
   assert.ok(!foreign.body.items.some(x => anas.has(x.protocol)), "bruno never sees ana's reports");
+  assert.ok(!foreign.body.items.some(x => x.transaction_id === 'demo-tx-001'), "bruno never sees ana's charge");
   await closeReport(complete.body.protocol);
 });
 

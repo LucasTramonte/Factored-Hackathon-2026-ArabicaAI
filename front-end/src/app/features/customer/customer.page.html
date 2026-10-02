@@ -130,8 +130,12 @@
                         @else { {{ t().dateMissing }} }
                       </span>
                       <span role="cell" class="td td-state">
-                        @if (reportedState(tx.transaction_id); as state) { <span class="ar-chip" [class.ar-chip-ok]="state === 'accepted'" [class.ar-chip-warn]="state === 'chipPending'">{{ t()[state] }}</span> }
-                        @else { <button type="button" class="ar-btn ar-btn-secondary report-btn" (click)="openChat(tx.transaction_id)" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null" [disabled]="!!frozen() || chatStep() === 'receipt'">{{ t().reportCharge }}<span class="sr-only">: {{ tx.merchant_name || t().noMerchant }}, {{ tx.amount }} {{ tx.currency }}</span></button> }
+                        @let report = reportOf(tx.transaction_id);
+                        @if (pending(tx.transaction_id)) { <span class="ar-chip ar-chip-warn">{{ t().chipPending }}</span> }
+                        @else {
+                          @if (report) { <span class="ar-chip" [class.ar-chip-ok]="report.status !== 'closed'">{{ t()[statusChip[report.status]] }} <span class="ar-mono">{{ report.reference_short ?? report.protocol }}</span></span> }
+                          @if ((report?.status ?? 'closed') === 'closed') { <button type="button" class="ar-btn ar-btn-secondary report-btn" (click)="openChat(tx.transaction_id)" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null" [disabled]="!!frozen() || chatStep() === 'receipt'">{{ t().reportCharge }}<span class="sr-only">: {{ tx.merchant_name || t().noMerchant }}, {{ tx.amount }} {{ tx.currency }}</span></button> }
+                        }
                       </span>
                       <span role="cell" class="td td-amount">{{ tx.amount }} {{ tx.currency }}</span>
                       </div>
@@ -150,6 +154,7 @@
                 <h3 id="your-reports-title">{{ t().yourReports }}</h3>
                 <ul>@for (r of reports()!.items; track r.protocol) {
                   <li><span class="ar-mono">{{ r.reference_short ?? r.protocol }}</span> {{ t()[receiptTitleKey[r.kind]] }}
+                    @if (chargeOf(r.transaction_id); as tx) { · {{ tx.merchant_name || t().noMerchant }} {{ tx.amount }} {{ tx.currency }} }
                     <span class="ar-caption report-status">@switch (r.status) { @case ('in_review') { {{ t().statusInReview }} } @case ('closed') { {{ t().statusClosed }} } @default { {{ t().statusReceived }}; {{ t().nextStepReview }} } } · {{ r.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span>
                     <button type="button" class="ar-btn ar-btn-secondary update-btn" (click)="requestUpdate(r.protocol)" [disabled]="updating() !== null"
                       [attr.aria-label]="t().updateMe + ': ' + (r.reference_short ?? r.protocol)">{{ t().updateMe }}</button>

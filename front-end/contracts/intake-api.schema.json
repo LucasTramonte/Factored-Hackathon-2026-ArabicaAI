@@ -425,14 +425,15 @@
       "properties": {
         "items": {"type": "array", "maxItems": 20, "items": {
           "type": "object", "additionalProperties": false,
-          "required": ["protocol", "reference_short", "kind", "status", "next_step", "accepted_at"],
+          "required": ["protocol", "reference_short", "kind", "status", "next_step", "accepted_at", "transaction_id"],
           "properties": {
             "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
             "reference_short": {"type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$"},
             "kind": {"type": "string", "pattern": "^(complete|incomplete|technical)$"},
             "status": {"type": "string", "pattern": "^(received|in_review|closed)$"},
             "next_step": {"type": "string", "pattern": "^(review_pending|being_reviewed|closed_by_person)$"},
-            "accepted_at": {"type": "string", "minLength": 1}
+            "accepted_at": {"type": "string", "minLength": 1},
+            "transaction_id": {"type": ["string", "null"], "minLength": 1}
           }
         }},
         "has_more": {"type": "boolean"}

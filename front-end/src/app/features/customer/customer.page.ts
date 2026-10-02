@@ -8,7 +8,7 @@ import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
-  ReportList, Transaction } from '../../shared/models/intake.model';
+  Report, ReportList, Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { demoPicker } from '../../core/auth/cognito.config';
@@ -24,6 +24,8 @@ import { demoPicker } from '../../core/auth/cognito.config';
 /** Rejections that retrying can't fix; 401, 503 and network failures keep the frozen retry. */
 const DEFINITIVE = new Set([404, 409, 413, 422]);
 export type Step = 'intro' | 'login' | 'home';
+/** Short row-chip text per stored review status; the full sentences stay in "Your reports". */
+const STATUS_CHIP = { received: 'statusReceived', in_review: 'statusInReview', closed: 'chipClosed' } as const;
 export type ChatStep = 'describe' | 'choose' | 'details' | 'receipt' | 'ended';
 /** The statement column holds 10–2000 code points, statement and details together (one newline between). */
 const STATEMENT_MAX = 2000;
@@ -61,8 +63,6 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly error = signal('');
   readonly client = this.service.client;
   readonly card = this.service.card;
-  /** This tab's receipts with their charge ids: only so an accepted charge is not offered again (server reports carry no charge id). */
-  readonly receipts = this.service.receipts;
   /** "Your reports" from GET /reports, so it survives the tab; null until loaded. */
   readonly reports = signal<ReportList | null>(null);
   readonly reportsFailed = signal(false);
@@ -93,8 +93,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
   readonly receiptTitleKey = RECEIPT_TITLE;
-  /** Charges already accepted in this session are not offered again. */
-  readonly choosable = computed(() => this.transactions().filter(tx => !this.receipts().some(r => r.receipt.kind === 'complete' && r.transactionId === tx.transaction_id)));
+  /** A charge whose newest server report is still open is not offered again (the server refuses it with 409). */
+  readonly choosable = computed(() => this.transactions().filter(tx => (this.reportOf(tx.transaction_id)?.status ?? 'closed') === 'closed'));
+  readonly statusChip = STATUS_CHIP;
   /** Locked while a request is frozen or a guided report is open: renewing must keep the same customer. */
   readonly identityLocked = computed(() => this.frozen() !== null || this.chatStep() === 'choose' || this.chatStep() === 'details');
   readonly step = signal<Step>('intro');
@@ -357,11 +358,20 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
-  /** The row chip: accepted in this session, or a confirmation whose acceptance is not yet known. */
-  reportedState(transactionId: string): 'accepted' | 'chipPending' | null {
+  /** A confirmation of this charge whose acceptance is not yet known. */
+  pending(transactionId: string): boolean {
     const frozen = this.frozen();
-    if (frozen?.path === 'confirm' && frozen.body.transaction_id === transactionId) return 'chipPending';
-    return this.receipts().some(r => r.receipt.kind === 'complete' && r.transactionId === transactionId) ? 'accepted' : null;
+    return frozen?.path === 'confirm' && frozen.body.transaction_id === transactionId;
+  }
+
+  /** The charge's newest report from the server list (items are newest first): the only source of a row's report state. */
+  reportOf(transactionId: string): Report | undefined {
+    return this.reports()?.items.find(r => r.transaction_id === transactionId);
+  }
+
+  /** The charge a report names, when it is among the loaded charges. */
+  chargeOf(transactionId: string | null): Transaction | undefined {
+    return transactionId ? this.transactions().find(tx => tx.transaction_id === transactionId) : undefined;
   }
 
   /** Start the guided report: statement and report language only; no reference comes back. */
@@ -483,7 +493,6 @@ export class CustomerPage implements OnInit, OnDestroy {
         this.log.update(l => [...l, { from: 'bot', key: 'chatChoose' }]);
       } else {
         this.intakeReceipt.set(result as IntakeReceipt);
-        this.receipts.update(list => [...list, { receipt: result as IntakeReceipt, transactionId: frozen.path === 'confirm' ? frozen.body.transaction_id : null }]);
         await this.loadReports();
       }
     } catch (e) {
@@ -513,7 +522,6 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.transactions.set([]);
     this.hasMore.set(false);
     this.card.set(null);
-    this.receipts.set([]);
     this.reports.set(null);
     this.reportsFailed.set(false);
     this.chosenLang.set(null);
