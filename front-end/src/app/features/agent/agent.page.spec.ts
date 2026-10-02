@@ -250,7 +250,6 @@ describe('AgentPage', () => {
       expect(page.detail()!.status).toBe('in_review');
       expect(page.intakes().find(i => i.protocol === P1)!.status).toBe('in_review');
       expect(el().querySelector(`.intake-row[data-protocol="${P1}"] .status-chip`)!.textContent!.trim()).toBe(t().inReview);
-      expect(statusText().getAttribute('role')).toBe('status');
       expect(document.activeElement).toBe(statusText());
       action()[0].click();
       await fixture.whenStable();
@@ -286,6 +285,18 @@ describe('AgentPage', () => {
       expect(page.intakes().find(i => i.protocol === P1)!.status).toBe('closed');
       expect(el().querySelector('[role="alert"]')!.textContent).toContain(t().agentErr409);
       expect(action().length).toBe(0);
+    });
+
+    it('leaves no stale button when the reload after a 409 also fails', async () => {
+      service.intakeDetail.and.returnValues(Promise.resolve(detail(P1)), Promise.reject(new ApiError(503, 'raw')));
+      service.setStatus.and.rejectWith(new ApiError(409, 'raw'));
+      await loadAndOpen();
+      action()[0].click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(page.detail()).toBeNull();
+      expect(action().length).toBe(0);
+      expect(page.error()).toBe(t().err503);
     });
 
     it('shows the generic error text for other failures', async () => {

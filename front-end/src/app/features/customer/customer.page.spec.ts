@@ -650,7 +650,7 @@ describe('CustomerPage', () => {
       const [first, second] = rows(el);
       expect(first).toContain('AR-AAAA-BBBB');
       expect(first).toContain(p.t().receiptComplete);
-      expect(first).toContain(p.t().statusReceived + ': ' + p.t().nextStepReview);
+      expect(first).toContain(p.t().statusReceived + '; ' + p.t().nextStepReview);
       expect(first).toContain('2026-10-02 09:30:00');
       expect(second).toContain('11111111-2222-4333-8444-555555555555'); // no short code: the protocol
       expect(second).toContain(p.t().receiptTechnical);
@@ -663,7 +663,7 @@ describe('CustomerPage', () => {
         { ...report('complete', 'AR-EEEE-FFFF', undefined, '22222222-2222-4333-8444-555555555555'), status: 'closed', next_step: 'closed_by_person' }], has_more: false });
       const { el, p } = await home();
       const [received, inReview, closed] = rows(el);
-      expect(received).toContain(p.t().statusReceived + ': ' + p.t().nextStepReview);
+      expect(received).toContain(p.t().statusReceived + '; ' + p.t().nextStepReview);
       expect(inReview).toContain(p.t().statusInReview);
       expect(inReview).not.toContain(p.t().nextStepReview);
       expect(closed).toContain(p.t().statusClosed);

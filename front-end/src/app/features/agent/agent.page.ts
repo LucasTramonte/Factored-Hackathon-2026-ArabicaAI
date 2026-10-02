@@ -73,7 +73,12 @@ export class AgentPage {
         this.detail.update(x => x?.protocol === d.protocol ? fresh : x);
         this.applyStatus(d.protocol, fresh.status);
         this.error.set(this.t().agentErr409);
-      } catch (again) { this.fail(again); }
+      } catch (again) {
+        // No stale button for a status we could not confirm.
+        this.openProtocol.set(null);
+        this.detail.set(null);
+        this.fail(again);
+      }
     } finally {
       this.busy.set(false);
       afterNextRender(() => this.statusText()?.nativeElement.focus(), { injector: this.injector });
