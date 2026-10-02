@@ -39,7 +39,7 @@ make intake-sample-silver
 make intake-sample-quality
 make intake-sample-slice                          # D1 seed + manifest under data/demo_s3/
 make intake-seed-local                            # migrations, fictitious seed and slice into local D1
-make intake-cohort-slice                          # Gold cohort parts + manifest under data/gold_cohort/ (full DuckDB)
+make intake-cohort-slice                          # Gold tables, then cohort parts + manifest under data/gold_cohort/
 make intake-cohort-seed-local                     # load the cohort parts into local D1, skipping loaded parts
 ```
 

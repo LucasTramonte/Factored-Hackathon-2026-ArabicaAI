@@ -105,3 +105,18 @@ def test_a_remote_load_without_a_measured_write_count_is_refused_and_not_recorde
     with pytest.raises(ValueError, match="rows_written"):
         cli.load(published(tmp_path), part=1, target="remote", run=fake)
     assert not fake.loaded, "a remote part with no write count is not recorded as loaded"
+
+
+# ---------------------------------------------------------------- build from the command line
+
+def test_build_from_gold_publishes_and_a_refused_gate_exits_1_without_a_traceback(tmp_path, capsys):
+    from data_pipelines.gold.test_cohort import AS_OF, gold_path, standard
+    missing = ["build", "--gold-db", str(tmp_path / "absent_gold.duckdb"), "--as-of", str(AS_OF), "--out", str(tmp_path / "out")]
+    assert cli.main(missing) == 1
+    assert "Cohort build failed: No Gold DuckDB" in capsys.readouterr().err
+    assert not (tmp_path / "out").exists()
+    standard(tmp_path)
+    assert cli.main(["build", "--gold-db", str(gold_path(tmp_path)), "--as-of", str(AS_OF), "--out", str(tmp_path / "out")]) == 0
+    assert "customers=1 transactions=3" in capsys.readouterr().out
+    assert cli.main(["build", "--gold-db", str(gold_path(tmp_path)), "--as-of", "2026-06-16", "--out", str(tmp_path / "out")]) == 1
+    assert "not as_of 2026-06-16" in capsys.readouterr().err

@@ -11,26 +11,34 @@ workflow is for, defined by the design-window findings in ``Docs/deliverables/DA
 - **How many**: everyone eligible when the pool fits ``size``; otherwise per-country quotas from the
   design-window shares, filled in a salted md5 order so the sample is reproducible.
 
+The cohort reads **only the Gold tables** (``build_gold.py``), never Silver or Bronze. Gold has
+already checked what the seed relies on: the buyer owns the card, one Bronze row per purchase, the
+Bronze amount and wall time verbatim, the display name rule and byte-identical context cards. So
+this module only selects. The gate is the Gold build itself: every table used must come from a
+committed build of one quality run whose transactions watermark is ``as_of``.
+
 Values are the Bronze source amount, currency and timestamp, exactly as the one-day slice serves
 them, and the seed is split into parts that each stay under a D1 write budget.
 
-Memory model: DuckDB read-only, 2 GB, 2 threads, disk spill. Eligibility, windows and counts are
-grouped SQL; Python holds only the selected customers (at most ``size``) and their capped rows.
+Memory model: DuckDB read-only on the Gold file, 2 GB, 2 threads, disk spill. Eligibility, windows
+and counts are grouped SQL; Python holds only the selected customers (at most ``size``), their capped
+rows and their cards.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import duckdb
-from intake_agent.context_card import build_context_card
 
-from .intake_slice import (MAPPING, SliceRow, _validated, check_quality_gate, content_version,
-                           context_card_statement, dataset_allowlist, dataset_customer_statement,
-                           provenance_statement, transaction_statement, with_header)
+from .intake_slice import (MAPPING, content_version, context_card_statement, dataset_allowlist,
+                           dataset_customer_statement, provenance_statement, transaction_statement,
+                           with_header)
 
+GOLD_TABLES = ("customers", "customer_complaints", "card_purchases", "context_cards")
 SUBCATEGORY = "Cargo no reconocido"
 DESIGN_END = date(2026, 1, 1)  # ADR-005
 MAX_WINDOW_DAYS = 120          # the cap DF-021 falls back to
@@ -94,62 +102,91 @@ def allocate_quotas(available: dict[str, int], shares: dict[str, float], size: i
     return {c: min(q, available[c]) for c, q in quotas.items()}
 
 
+# A complaint "before the design end" exists exactly when the customer's first one of that type is.
 _ELIGIBLE = """
     WITH complainants AS (
-        SELECT DISTINCT c.customer_id, cu.country, cu.customer_status
-        FROM silver.fact_complaints c JOIN silver.dim_customers cu ON cu.customer_id = c.customer_id
-        WHERE c.subcategory = $sub AND c.creation_date < $design_end
+        SELECT DISTINCT k.customer_id, c.country, c.customer_status
+        FROM gold.customer_complaints k JOIN gold.customers c USING (customer_id)
+        WHERE k.subcategory = $sub AND k.first_created_at < $design_end
     ), eligible AS (
         SELECT customer_id, country FROM complainants WHERE customer_status IS DISTINCT FROM 'Closed'
     ), win AS (
-        -- N:1 to products; the owner is checked below, never assumed.
-        SELECT t.transaction_id, t.customer_id, t.merchant_name, p.customer_id AS product_owner
-        FROM silver.fact_transactions t
-        LEFT JOIN silver.dim_products p ON p.product_id = t.product_id
-        WHERE t.transaction_type = 'Purchase' AND t.transaction_status = 'Approved'
-          AND t.transaction_date > $start AND t.transaction_date < $end
-          AND t.customer_id IN (SELECT customer_id FROM eligible)
+        -- Gold has already proved every purchase is on a card its buyer owns, so no owner join here.
+        SELECT p.transaction_id, p.customer_id, p.merchant_name
+        FROM gold.card_purchases p
+        WHERE p.occurred_at > $start AND p.occurred_at < $end
+          AND p.customer_id IN (SELECT customer_id FROM eligible)
     ), per AS (
         SELECT e.customer_id, e.country, count(w.transaction_id) FILTER (WHERE w.merchant_name IS NOT NULL) AS usable
         FROM eligible e LEFT JOIN win w ON w.customer_id = e.customer_id
         GROUP BY 1, 2
     )
     SELECT (SELECT count(*) FROM complainants WHERE customer_status = 'Closed') AS closed,
-           (SELECT count(*) FROM win WHERE product_owner IS DISTINCT FROM customer_id) AS owner_mismatch,
            (SELECT count(*) FROM win WHERE merchant_name IS NULL) AS without_merchant,
            (SELECT list({'customer_id': customer_id, 'country': country, 'usable': usable} ORDER BY customer_id) FROM per) AS pool
 """
 
 _SHARES = """
-    SELECT cu.country, count(DISTINCT c.customer_id) * 1.0 / sum(count(DISTINCT c.customer_id)) OVER () AS share
-    FROM silver.fact_complaints c JOIN silver.dim_customers cu ON cu.customer_id = c.customer_id
-    WHERE c.subcategory = $sub AND c.creation_date < $design_end
+    SELECT c.country, count(DISTINCT k.customer_id) * 1.0 / sum(count(DISTINCT k.customer_id)) OVER () AS share
+    FROM gold.customer_complaints k JOIN gold.customers c USING (customer_id)
+    WHERE k.subcategory = $sub AND k.first_created_at < $design_end
     GROUP BY 1 ORDER BY 1
 """
 
 _ROWS = """
     WITH picked AS (
-        SELECT t.transaction_id, t.customer_id, t.product_id, t.transaction_date, t.merchant_name, t.currency,
-               row_number() OVER (PARTITION BY t.customer_id ORDER BY t.transaction_date DESC, t.transaction_id) AS rk
-        FROM silver.fact_transactions t
-        JOIN silver.dim_products p ON p.product_id = t.product_id AND p.customer_id = t.customer_id
-        WHERE t.transaction_type = 'Purchase' AND t.transaction_status = 'Approved'
-          AND t.transaction_date > $start AND t.transaction_date < $end
-          AND t.merchant_name IS NOT NULL
-          AND t.customer_id IN (SELECT unnest($customers::VARCHAR[]))
-    ), kept AS (SELECT * FROM picked WHERE rk <= $cap),
-    raw AS (
-        SELECT transaction_id, count(*) AS n, any_value(amount) AS amount, any_value(_source_file) AS source_file,
-               any_value(transaction_date) AS raw_ts
-        FROM bronze.transactions WHERE transaction_id IN (SELECT transaction_id FROM kept)
-        GROUP BY transaction_id
+        SELECT transaction_id, customer_id, product_id, occurred_at, source_occurred_at, merchant_name, amount,
+               currency, source_file, business_date,
+               row_number() OVER (PARTITION BY customer_id ORDER BY occurred_at DESC, transaction_id) AS rk
+        FROM gold.card_purchases
+        WHERE occurred_at > $start AND occurred_at < $end AND merchant_name IS NOT NULL
+          AND customer_id IN (SELECT unnest($customers::VARCHAR[]))
     )
-    SELECT kept.transaction_id, kept.customer_id, kept.product_id, kept.transaction_date, kept.merchant_name,
-           kept.currency, raw.amount, raw.source_file, coalesce(raw.n, 0), raw.raw_ts,
-           (SELECT count(*) FROM picked WHERE rk > $cap) AS over_cap
-    FROM kept LEFT JOIN raw USING (transaction_id)
-    ORDER BY kept.customer_id, kept.transaction_date DESC, kept.transaction_id
+    SELECT transaction_id, customer_id, product_id, source_occurred_at, merchant_name, amount, currency,
+           source_file, business_date, (SELECT count(*) FROM picked WHERE rk > $cap) AS over_cap
+    FROM picked WHERE rk <= $cap
+    ORDER BY customer_id, occurred_at DESC, transaction_id
 """
+
+_PEOPLE = """
+    SELECT c.customer_id, c.display_name, k.card_json, k.snapshot_at
+    FROM gold.customers c LEFT JOIN gold.context_cards k USING (customer_id)
+    WHERE c.customer_id IN (SELECT unnest($customers::VARCHAR[]))
+"""
+
+
+def check_gold(con: duckdb.DuckDBPyConnection, as_of: date) -> dict:
+    """Require every Gold table the cohort reads from one committed build of one quality run, loaded to ``as_of``.
+
+    ``gold.table_builds`` says which build each table comes from (a ``--tables`` run rebuilds only
+    some); ``gold.builds`` records that build's quality run and watermarks. Tables from different
+    quality runs could mix customers and purchases of different snapshots, so they are refused.
+    """
+    try:
+        rows = con.execute("""
+            SELECT t.table_name, t.build_id, t.quality_generated_at_utc, b.quality_report, b.watermarks, b.silver_database
+            FROM gold.table_builds t JOIN gold.builds b USING (build_id)
+            WHERE t.table_name IN (SELECT unnest(?::VARCHAR[]))
+        """, [list(GOLD_TABLES)]).fetchall()
+    except (duckdb.CatalogException, duckdb.BinderException) as exc:  # no lineage tables, or a pre-lineage layout
+        raise ValueError("The Gold file has no build lineage; run the Gold build first") from exc
+    built = {r[0]: r for r in rows}
+    missing = [t for t in GOLD_TABLES if t not in built]
+    if missing:
+        raise ValueError(f"Gold has no committed build of {', '.join(missing)}")
+    runs = {r[2] for r in rows}
+    if len(runs) != 1:
+        raise ValueError("The Gold tables come from different quality runs; rebuild them together")
+    for name in GOLD_TABLES:  # a fixed order, so the same Gold always gives the same message
+        watermarks = built[name][4]
+        loaded = json.loads(watermarks or "{}").get("transactions")
+        if loaded is None:
+            raise ValueError(f"gold.{name} comes from a build with no recorded transactions watermark; rebuild Gold")
+        if loaded != str(as_of):
+            raise ValueError(f"gold.{name} was built from transactions loaded to {loaded}, not as_of {as_of}")
+    first = built[GOLD_TABLES[0]]
+    return {"quality_generated_at_utc": first[2], "quality_report": first[3], "silver_database": first[5],
+            "watermarks": json.loads(first[4]), "table_builds": {name: built[name][1] for name in GOLD_TABLES}}
 
 
 def _sample(pool: list[dict], params: CohortParams, shares: dict[str, float]) -> tuple[list[dict], str]:
@@ -166,7 +203,11 @@ def _sample(pool: list[dict], params: CohortParams, shares: dict[str, float]) ->
 
 
 def _display_name(first: str, last: str | None) -> str:
-    """First name and last initial: enough to pick a demo customer, no full name served."""
+    """First name and last initial: enough to pick a demo customer, no full name served.
+
+    Gold builds the same label in SQL (``build_gold.DISPLAY_NAME``) and a test pins the two together;
+    the cohort now serves Gold's, so this is the reference rule.
+    """
     first, last = (first or "").strip(), (last or "").strip()
     return f"{first} {last[0]}." if last else first
 
@@ -192,23 +233,21 @@ def _parts(blocks: list[tuple[str, list[str], int, int]], limit: int, as_of: dat
     return rendered
 
 
-def build_cohort(db_path: Path, quality_path: Path, params: CohortParams) -> tuple[list[str], dict]:
-    """Validate the inputs and return ``(seed_parts, manifest)`` without writing anything."""
-    meta = check_quality_gate(db_path, quality_path, params.as_of)
-    if "complaints" not in set(meta.get("tables", [])):
-        raise ValueError("The quality run does not cover complaints, which define the cohort")
+def build_cohort(gold_db: Path, params: CohortParams) -> tuple[list[str], dict]:
+    """Select the cohort from the Gold tables and return ``(seed_parts, manifest)`` without writing anything."""
+    if not gold_db.exists():
+        raise ValueError(f"No Gold DuckDB at {gold_db}; run the Gold build first")
     start, end = params.window
-    temp_dir = db_path.parent / "duckdb_tmp"
+    temp_dir = gold_db.parent / "duckdb_tmp"
     temp_dir.mkdir(parents=True, exist_ok=True)
-    with duckdb.connect(str(db_path), read_only=True) as con:
+    with duckdb.connect(str(gold_db), read_only=True) as con:
         con.execute("SET memory_limit='2GB'")
         con.execute("SET threads=2")
         con.execute("SET temp_directory=?", [str(temp_dir)])
+        gold = check_gold(con, params.as_of)
         common = {"sub": SUBCATEGORY, "design_end": datetime.combine(params.design_end, datetime.min.time())}
-        closed, mismatch, without_merchant, pool = con.execute(
-            _ELIGIBLE, {**common, "start": start, "end": end}).fetchone()
-        if mismatch:
-            raise ValueError(f"{mismatch} window purchases fail the product ownership check")
+        closed, without_merchant, pool = con.execute(_ELIGIBLE, {**common, "start": start, "end": end}).fetchone()
+        pool = pool or []
         shares = dict(con.execute(_SHARES, common).fetchall())
         # Committed identities (the one-day slice's customer) keep their own reviewed seed and name.
         committed = set(dataset_allowlist())
@@ -217,28 +256,27 @@ def build_cohort(db_path: Path, quality_path: Path, params: CohortParams) -> tup
         dense = [c for c in pool if c["usable"] >= params.min_purchases]
         chosen, sampling = _sample(dense, params, shares)
         ids = [c["customer_id"] for c in chosen]
-        raw = con.execute(_ROWS, {"start": start, "end": end, "customers": ids, "cap": params.max_per_customer}).fetchall() if ids else []
-        over_cap = raw[0][-1] if raw else 0
-        rows: list[SliceRow] = [_validated(r[:-1]) for r in raw]
-        names = {cid: _display_name(f, l) for cid, f, l in con.execute(
-            "SELECT customer_id, first_name, last_name FROM silver.dim_customers WHERE customer_id IN (SELECT unnest(?::VARCHAR[]))",
-            [ids]).fetchall()} if ids else {}
-        cards = {cid: build_context_card(con, cid) for cid in ids}
-    if any(card is None or not (card["first_name"] or "").strip() for card in cards.values()):
-        raise ValueError("A selected customer has no context card or no first_name")
-    by_customer: dict[str, list[SliceRow]] = {}
+        rows = con.execute(_ROWS, {"start": start, "end": end, "customers": ids, "cap": params.max_per_customer}).fetchall() if ids else []
+        over_cap = rows[0][-1] if rows else 0
+        people = {r[0]: r[1:] for r in con.execute(_PEOPLE, {"customers": ids}).fetchall()} if ids else {}
+    if any(people.get(cid, (None, None, None))[1] is None for cid in ids):
+        raise ValueError("A selected customer has no Gold context card")
+    by_customer: dict[str, list[tuple]] = {}
     for r in rows:
-        by_customer.setdefault(r.customer_id, []).append(r)
+        by_customer.setdefault(r[1], []).append(r)
     country = {c["customer_id"]: c["country"] for c in chosen}
     blocks = []
     for cid in ids:
+        name, card_json, snapshot_at = people[cid]
         mine = by_customer.get(cid, [])
-        lines = [dataset_customer_statement(cid, names[cid], country[cid]),
-                 context_card_statement(cid, cards[cid], meta["generated_at_utc"])]
-        lines += [transaction_statement(r.transaction_id, cid, None, r.source_occurred_at, r.merchant_name, r.amount, r.currency)
-                  for r in mine]
-        lines += [provenance_statement(r.transaction_id, r.product_id, r.source_file, date.fromisoformat(r.source_occurred_at[:10]))
-                  for r in mine]
+        # Gold's card_json is already the canonical serialization; parsing and re-serializing it
+        # through the shared statement builder gives back the same text.
+        lines = [dataset_customer_statement(cid, name, country[cid]),
+                 context_card_statement(cid, json.loads(card_json), snapshot_at)]
+        lines += [transaction_statement(tid, cid, None, when, merchant, amount, currency)
+                  for tid, _, _, when, merchant, amount, currency, _, _, _ in mine]
+        lines += [provenance_statement(tid, product, source_file, business_date)
+                  for tid, _, product, _, _, _, _, source_file, business_date, _ in mine]
         blocks.append((cid, lines, estimate_writes(1, 1, len(mine)), len(mine)))
     rendered = _parts(blocks, params.part_write_limit, params.as_of)
     seeds = [seed for seed, _ in rendered]
@@ -264,6 +302,7 @@ def build_cohort(db_path: Path, quality_path: Path, params: CohortParams) -> tup
         "expected_writes_total": sum(p["expected_writes"] for _, p in rendered),
         "parts": [p for _, p in rendered],
         "customers": [{"customer_id": cid, "country": country[cid], "transactions": len(by_customer.get(cid, []))} for cid in ids],
-        "mapping": MAPPING, "quality_generated_at_utc": meta["generated_at_utc"],
+        "mapping": MAPPING, "quality_generated_at_utc": gold["quality_generated_at_utc"],
+        "source": {"gold_database": str(gold_db.resolve()), **gold},
     }
     return seeds, manifest

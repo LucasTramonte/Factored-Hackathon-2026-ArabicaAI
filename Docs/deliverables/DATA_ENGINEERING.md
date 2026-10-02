@@ -53,7 +53,7 @@ S3 (organizers, read-only) ─▶ Bronze (raw Parquet) ─▶ Silver (typed tabl
 **Running it:**
 - `make pipeline` runs ingestion, Silver and quality in order.
 - `make bronze-full` rebuilds the source history.
-- `make intake-cohort-slice` builds the Gold cohort.
+- `make gold` builds the Gold tables over every customer; `make intake-cohort-slice` rebuilds them and selects the cohort from them.
 - `make test` runs the offline fixtures.
 - CI (`.github/workflows/quality.yml`) runs the tests on pushes to `main` and on every pull request, without any S3 credentials.
 
@@ -183,12 +183,12 @@ The organizers confirmed that new data would arrive in the same storage pattern 
 | 1. Bronze | `make bronze` | Manual today; one daily job in production (EventBridge and Fargate on the AWS target) | An incremental Docker run took 660 s ([`PARITY.md`](../../data_pipelines/quality/PARITY.md)); a single new day hasn't been timed | Loads new and late days, moves the watermark, refreshes dimensions (section 5) |
 | 2. Silver | `make silver` | Runs after Bronze | Inside the 11-minute full build | Rebuilds typed tables; the latest copy of a key wins |
 | 3. Quality gate | `make quality` | Runs after Silver; a non-zero exit stops the run | Inside the full build | Any error blocks Gold. Warnings stay visible |
-| 4. Gold cohort | `make intake-cohort-slice COHORT_DB=… COHORT_QUALITY=… COHORT_AS_OF=<new watermark>` | Manual, with the data owner's approval of the new `as_of` | Not timed | Picks the cohort, writes versioned seed parts and a manifest with the expected writes |
+| 4. Gold and the cohort | `make intake-cohort-slice COHORT_AS_OF=<new watermark>` (`COHORT_DB` and `COHORT_QUALITY` override the Silver file and quality run) | Manual, with the data owner's approval of the new `as_of` | Gold about 10 s on the full data; the selection not timed | Rebuilds the Gold tables gated on the quality run, then picks the cohort from Gold only and writes versioned seed parts and a manifest with the expected writes and the Gold builds used |
 | 5. D1 load | `python -m data_pipelines.gold.run_cohort load --part N --target remote` | Manual, reviewed, at most one part per UTC day | Not timed; one Wrangler call per part | Skips a part whose version `seed_loads` already holds; fails if D1 wrote more rows than estimated |
 | 6. The demo | none | Automatic | Immediate | The new cohort's customers appear in the picker; each sees their newest 20 charges |
 
 **Where it stops today.** We checked each of these against the code, and reproduced the third in SQLite, which D1 runs on. In each case the build or the load stops with an error, and nothing that was already served changes. The new data doesn't reach the demo until someone acts. One caveat: a remote part is applied statement by statement and isn't atomic. A part that fails partway can leave its earlier statements applied, for example new customers added before the first stored customer that differs. The part is then not recorded in `seed_loads`, and because every statement is an idempotent upsert, it is loaded again once the cause is fixed (`run_cohort.py`).
-1. **Gold needs the new date passed by hand.** The Makefile defaults point at the snapshot's artifacts (`COHORT_DB`, `COHORT_QUALITY`, and `COHORT_AS_OF ?= 2026-06-17`). The quality gate requires `as_of` to equal the transactions watermark, so a default run against new data stops with "The selected Bronze date was not quality checked". It is safe, but manual.
+1. **The cohort needs the new date passed by hand.** `COHORT_AS_OF ?= 2026-06-17` is the snapshot's date. The cohort's gate requires every Gold table it reads to come from one quality run whose transactions watermark equals `as_of`, so a default run against new data stops with "gold.customers was built from transactions loaded to <new date>, not as_of 2026-06-17". It is safe, but manual. (The quality run itself is now the latest one for the Silver file, chosen by timestamp.)
 2. **New disputes don't enter the cohort.** Cohort membership is fixed to complaints created before 2026-01-01 (`DESIGN_END` in `data_pipelines/gold/cohort.py`), which keeps the evaluation's design window clean (ADR-005). New data only moves the 120-day purchase window of customers already in the cohort.
 3. **Reloading over the current D1 fails.** Every context card carries the quality run's timestamp as `snapshot_at`, and the seed's upserts reject any stored value that differs, by design ([section 2](#2-contracts)). A rebuilt cohort therefore fails on its first customer who is already loaded, with `NOT NULL constraint failed: context_cards.card_json`. A corrected amount, merchant or time fails the same way, and no seed deletes rows that left the cohort or the window.
 

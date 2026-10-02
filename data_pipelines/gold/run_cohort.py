@@ -1,7 +1,8 @@
 """Build the Gold cohort seed parts, or load one part into D1, printing only counts and paths.
 
-``build`` writes ``part-NNN.sql`` files and ``manifest.json`` into one directory under ignored
-``data/``. ``load`` applies one part with Wrangler, after checking that the file still matches its
+``build`` selects the cohort from the Gold tables (``run_gold`` must have built them for
+``--as-of``) and writes ``part-NNN.sql`` files and ``manifest.json`` into one directory under ignored
+``data/``. A refused gate or bad input prints one line and exits 1, without a traceback. ``load`` applies one part with Wrangler, after checking that the file still matches its
 manifest version and that its version isn't in D1's ``seed_loads``, then compares D1's measured rows written
 with the manifest estimate (remote only: local Wrangler doesn't report rows written). ``--remote`` is never the default; the remote run is a reviewed,
 manual step (``back-end/README.md``).
@@ -14,16 +15,18 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from datetime import date
 from pathlib import Path
 from typing import Callable
 
+import duckdb
+
 if __package__:
     from .cohort import CohortParams, build_cohort
     from .intake_slice import content_version, quote
 else:  # direct script execution
-    import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from data_pipelines.gold.cohort import CohortParams, build_cohort
     from data_pipelines.gold.intake_slice import content_version, quote
@@ -112,9 +115,9 @@ def main(argv: list[str] | None = None) -> int:
     """``build`` or ``load``; output is counts and paths only, never customer rows."""
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="command", required=True)
-    b = sub.add_parser("build")
-    b.add_argument("--db", type=Path, required=True)
-    b.add_argument("--quality-report", type=Path, required=True)
+    b = sub.add_parser("build", help="Select the cohort from the Gold tables (run the Gold build first).")
+    b.add_argument("--gold-db", type=Path, required=True,
+                   help="Gold DuckDB from run_gold; its build lineage is the quality gate.")
     b.add_argument("--as-of", type=date.fromisoformat, required=True)
     b.add_argument("--window-days", type=int, default=CohortParams.window_days)
     b.add_argument("--min-purchases", type=int, default=CohortParams.min_purchases)
@@ -127,10 +130,14 @@ def main(argv: list[str] | None = None) -> int:
     l.add_argument("--target", choices=sorted(TARGETS), default="local")
     args = p.parse_args(argv)
     if args.command == "build":
-        params = CohortParams(as_of=args.as_of, window_days=args.window_days, min_purchases=args.min_purchases,
-                              size=args.size, salt=args.salt)
-        parts, manifest = build_cohort(args.db, args.quality_report, params)
-        out = publish(parts, manifest, args.out)
+        try:
+            params = CohortParams(as_of=args.as_of, window_days=args.window_days, min_purchases=args.min_purchases,
+                                  size=args.size, salt=args.salt)
+            parts, manifest = build_cohort(args.gold_db, params)
+            out = publish(parts, manifest, args.out)
+        except (ValueError, duckdb.Error) as exc:  # nothing was published; the previous cohort directory stays
+            print(f"Cohort build failed: {exc}", file=sys.stderr)
+            return 1
         print(f"slice_version={manifest['slice_version']} customers={len(manifest['customers'])} "
               f"transactions={sum(c['transactions'] for c in manifest['customers'])} parts={len(parts)} "
               f"expected_writes={manifest['expected_writes_total']} sampling={manifest['sampling']} out={out}")
