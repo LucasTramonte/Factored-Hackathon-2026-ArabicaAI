@@ -16,10 +16,12 @@
 # Run from a clone with full history and `origin` fetched; needs gh and jq.
 set -euo pipefail
 
-merged=$(git rev-parse --verify "${1:?usage: stack-cascade.sh MERGED_SHA [PR_NUMBER] [MERGED_BRANCH]}^{commit}")
+: "${1:?usage: stack-cascade.sh MERGED_SHA [PR_NUMBER] [MERGED_BRANCH]}"
 pr_ref=${2:+ after #$2}
 merged_branch=${3:-}
 git fetch -q origin
+# Unknown after a full fetch: its branch was deleted and no branch contains it.
+merged=$(git rev-parse -q --verify "$1^{commit}") || { echo "nothing to cascade${pr_ref}"; exit 0; }
 
 # "number head base" lines for open PRs whose head contains the merged commit.
 prs=$(gh pr list --state open --limit 200 --json number,headRefName,baseRefName,isCrossRepository |
@@ -27,6 +29,7 @@ prs=$(gh pr list --state open --limit 200 --json number,headRefName,baseRefName,
 pending=$(echo "$prs" | while read -r n head base; do
   if [ -n "$n" ] && git merge-base --is-ancestor "$merged" "origin/$head" 2>/dev/null; then echo "$n $head $base"; fi
 done)
+[ -n "$pending" ] || { echo "nothing to cascade${pr_ref}"; exit 0; }
 heads=" $(echo "$pending" | awk '{print $2}' | tr '\n' ' ') "
 blocked=" "
 
