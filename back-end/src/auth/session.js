@@ -20,26 +20,23 @@ export async function tokenHash(token) {
   return [...new Uint8Array(digest)].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 
-/** The audit request id: Cloudflare's ``cf-ray``, or a fresh UUID where there is none (local). */
-const requestId = request => request.headers.get('cf-ray') ?? crypto.randomUUID();
-
-/** The live session row for ``actor`` (``{ customer_id, expires_at }``; expiry is internal only), or ``null``. */
-async function readSession(request, store, actor) {
-  const token = readCookies(request)[COOKIE[actor]];
-  if (!token || !TOKEN.test(token)) return null;
-  return store.findSession(await tokenHash(token), actor, Date.now());
-}
+/** The audit request id: Cloudflare's ``cf-ray``, or a fresh UUID where there is none (local); at most 64 characters. */
+const requestId = request => (request.headers.get('cf-ray') ?? crypto.randomUUID()).slice(0, 64);
 
 /**
- * ``readSession`` plus the audit trail, for every route that needs a session. A presented cookie with no live row
- * records ``session_expired`` (well formed) or ``session_rejected`` (malformed); no cookie records nothing.
+ * The live session row for ``actor`` (``{ customer_id, expires_at }``; expiry is internal only), or ``null``. A
+ * presented cookie with no live row records ``session_expired`` (well formed) or ``session_rejected`` (malformed);
+ * no cookie records nothing.
  */
 export async function requireSession(request, store, actor) {
-  const session = await readSession(request, store, actor);
   const token = readCookies(request)[COOKIE[actor]];
-  if (session || !token) return session;
-  await store.recordAuthEvent({ now: Date.now(), actor, event: TOKEN.test(token) ? 'session_expired' : 'session_rejected',
-    sessionRef: (await tokenHash(token)).slice(0, 12), requestId: requestId(request) });
+  if (!token) return null;
+  const hash = await tokenHash(token);
+  const wellFormed = TOKEN.test(token);
+  const session = wellFormed ? await store.findSession(hash, actor, Date.now()) : null;
+  if (session) return session;
+  await store.recordAuthEvent({ now: Date.now(), actor, event: wellFormed ? 'session_expired' : 'session_rejected',
+    sessionRef: hash.slice(0, 12), requestId: requestId(request) });
   return null;
 }
 

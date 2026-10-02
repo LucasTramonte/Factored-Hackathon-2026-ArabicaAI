@@ -43,3 +43,13 @@ test('session start, expiry, rejection and logout write one reference-only row e
     assert.match(row.session_ref, /^[0-9a-f]{12}$/);
   }
 });
+
+test('logout records only a real session of the same actor, and never revokes the other actor', async () => {
+  const dead = await call('/auth/logout', { cookie: `demo_session=${'d'.repeat(64)}`, body: {} });
+  const agent = await call('/demo/agent-session', { body: {} });
+  const crossed = await call('/auth/logout', { cookie: 'demo_session=' + agent.cookie.split('=')[1], body: {} });
+  const still = await call('/agent/cases', { cookie: agent.cookie });
+  assert.deepEqual([dead, agent, crossed, still].map(r => r.status), [204, 200, 204, 200], 'the agent session survives a customer logout');
+  const rows = await events();
+  for (const r of [dead, crossed, still]) assert.deepEqual(rows.filter(row => row.request_id === r.ray), [], 'no audit row');
+});

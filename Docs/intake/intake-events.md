@@ -25,6 +25,8 @@ Roberto, 29 September 2026. Proposed for Lucas (backend) and Manoella (tools). I
 | `language` | string | `es` or `pt`, the conversation language chosen at start |
 | `model_version` | string | rule or model identifier, e.g. `checklist-0.1`, `claude-fable-5-1@prompt-v3` |
 
+Authentication audit rows (`session_started`, `logged_out`, `session_expired`, `session_rejected`) live in `auth_events` (migration 0012) and are not intake events.
+
 ## Events
 
 | Event | Extra fields | When |

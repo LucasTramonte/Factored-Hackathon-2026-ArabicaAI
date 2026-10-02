@@ -2,7 +2,7 @@
 -- request id. Written on session start, logout, and on a presented cookie that was malformed or expired; never on a
 -- request with no cookie, so anonymous traffic costs no writes.
 CREATE TABLE auth_events (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id INTEGER PRIMARY KEY,
   ts INTEGER NOT NULL,
   actor TEXT NOT NULL CHECK (actor IN ('customer','agent')),
   event TEXT NOT NULL CHECK (event IN ('session_started','session_rejected','session_expired','logged_out')),

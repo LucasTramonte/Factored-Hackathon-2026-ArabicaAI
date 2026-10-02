@@ -105,9 +105,14 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     findContextCard: customerId => first(
       'SELECT card_version, snapshot_at, card_json FROM context_cards WHERE customer_id=?', customerId),
 
-    /** Revoke one session by token hash and record ``logged_out`` in the same batch. */
-    revokeSession: (hash, actor, now, requestId) => batch([['DELETE FROM sessions WHERE token_hash=?', hash],
-      [AUTH_EVENT, now, actor, 'logged_out', hash.slice(0, 12), requestId]]),
+    /**
+     * Revoke one ``actor`` session by token hash and, only when that session existed, record ``logged_out`` in the same
+     * batch. Another actor's token under this cookie neither logs out nor revokes anything.
+     */
+    revokeSession: (hash, actor, now, requestId) => batch([
+      ["INSERT INTO auth_events(ts,actor,event,session_ref,request_id) SELECT ?,?,'logged_out',?,? "
+        + 'WHERE EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor=?)', now, actor, hash.slice(0, 12), requestId, hash, actor],
+      ['DELETE FROM sessions WHERE token_hash=? AND actor=?', hash, actor]]),
     /** Record a refused presented cookie (``session_expired`` or ``session_rejected``). */
     recordAuthEvent: ({ now, actor, event, sessionRef, requestId }) => all(AUTH_EVENT, now, actor, event, sessionRef, requestId),
     /** Newest audit rows; read only by tests and operators (no route serves them). */

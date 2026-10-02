@@ -22,10 +22,10 @@ const CEILING = {
   // margin), about 800 with the cohort loaded (ADR-004).
   identities: [1, 10, 0, 1],
   // Every session start and logout also writes one auth_events row in its existing batch (migration 0012): one query,
-  // 3 reads and 3 writes (the row, auth_events_time and sqlite_sequence for AUTOINCREMENT), no round trip (ADR-004).
-  login: [6, 10, 7, 3],
+  // 1 read and 2 writes (the row and auth_events_time), no round trip; logout's insert also checks the session (ADR-004).
+  login: [6, 10, 6, 3],
   list: [2, 25, 0, 2],
-  logout: [2, 4, 4, 1],
+  logout: [2, 3, 3, 1],
   create: [4, 12, 6, 4],
   agentLogin: [3, 6, 6, 1],
   agentList: [2, 250, 0, 2],
@@ -64,7 +64,7 @@ const CEILING = {
 const EXPORT_SLACK = 2;
 const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
 // Customer requests of one guided episode (login + list + start + terminal request); ADR-004 sizes capacity on these.
-const EPISODE_CEILING = { complete: [33, 90, 44, 16], incomplete: [28, 69, 35, 14] };
+const EPISODE_CEILING = { complete: [33, 90, 43, 16], incomplete: [28, 67, 34, 14] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);
