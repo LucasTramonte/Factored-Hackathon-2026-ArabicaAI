@@ -184,8 +184,9 @@
                 <fieldset class="chat-form" [disabled]="busy() || !!frozen()">
                   @if (askLang()) {
                     <fieldset class="chat-lang"><legend class="ar-field-label">{{ t().chatLangPrompt }}</legend>
-                      <label class="ar-check" lang="es"><input type="radio" name="report-lang" value="es" [checked]="chosenLang() === 'es'" (change)="chosenLang.set('es')" required> Español</label>
-                      <label class="ar-check" lang="pt"><input type="radio" name="report-lang" value="pt" [checked]="chosenLang() === 'pt'" (change)="chosenLang.set('pt')" required> Português</label>
+                      <label class="ar-check" lang="es"><input type="radio" name="report-lang" value="es" [checked]="reportLang() === 'es'" (change)="chosenLang.set('es')" required> Español</label>
+                      <label class="ar-check" lang="pt"><input type="radio" name="report-lang" value="pt" [checked]="reportLang() === 'pt'" (change)="chosenLang.set('pt')" required> Português</label>
+                      <label class="ar-check" lang="en"><input type="radio" name="report-lang" value="en" [checked]="reportLang() === 'en'" (change)="chosenLang.set('en')" required> English</label>
                     </fieldset>
                   }
                   <label class="ar-field" for="chat-statement"><span class="ar-field-label">{{ t().describe }}</span></label>
