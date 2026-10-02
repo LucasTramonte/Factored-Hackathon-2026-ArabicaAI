@@ -24,7 +24,7 @@ export function jwksFor(env) {
  * is ``null`` unless ``custom:customer_id`` matches ``CUSTOMER_ID``. ``jwks`` may be a local set in tests.
  */
 export async function verifyIdToken(token, { jwks, issuer, clientId }) {
-  const { payload } = await jwtVerify(token, jwks, { issuer, audience: clientId, algorithms: ['RS256'], clockTolerance: 30 });
+  const { payload } = await jwtVerify(token, jwks, { issuer, audience: clientId, algorithms: ['RS256'], clockTolerance: 30, requiredClaims: ['exp', 'iat', 'sub'] });
   if (payload.token_use !== 'id') throw new Error('not an id token');
   if (payload.email_verified !== true || typeof payload.email !== 'string') throw new Error('email not verified');
   const groups = Array.isArray(payload['cognito:groups']) ? payload['cognito:groups'].filter(g => typeof g === 'string') : [];

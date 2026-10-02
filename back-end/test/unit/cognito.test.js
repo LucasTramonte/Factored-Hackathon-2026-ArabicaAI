@@ -56,3 +56,8 @@ test('an unsigned alg:none token is rejected', async () => {
   const token = `${b64({ alg: 'none', typ: 'JWT' })}.${b64({ ...claims, sub: 'sub-1', iss: issuer, aud: clientId, iat: now, exp: now + 3600 })}.`;
   await assert.rejects(verifyIdToken(token, opts));
 });
+test('a validly signed token without exp or sub is rejected', async () => {
+  const base = () => new SignJWT(claims).setProtectedHeader({ alg: 'RS256', kid: 'k1' }).setIssuer(issuer).setAudience(clientId).setIssuedAt();
+  await assert.rejects(verifyIdToken(await base().setSubject('sub-1').sign(ours.privateKey), opts));
+  await assert.rejects(verifyIdToken(await base().setExpirationTime('1h').sign(ours.privateKey), opts));
+});
