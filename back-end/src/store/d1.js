@@ -37,6 +37,9 @@ const shortReferenceTaken = error => /UNIQUE/i.test(String(error?.message)) && /
 const UPSERT_TARGET = 'INSERT INTO notification_targets(customer_id,email_enc,updated_at) VALUES(?,?,?) '
   + 'ON CONFLICT(customer_id) DO UPDATE SET email_enc=excluded.email_enc,updated_at=excluded.updated_at';
 
+/** One authentication audit row (migration 0012): references only, never a customer id, email or token. */
+const AUTH_EVENT = 'INSERT INTO auth_events(ts,actor,event,session_ref,request_id) VALUES(?,?,?,?,?)';
+
 /** At most one ``update`` email per customer and reference in this window; ``enqueueEmail`` enforces it in SQL. */
 export const UPDATE_EVERY_MS = 300000;
 
@@ -102,18 +105,25 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     findContextCard: customerId => first(
       'SELECT card_version, snapshot_at, card_json FROM context_cards WHERE customer_id=?', customerId),
 
-    /** Revoke one session by token hash. */
-    revokeSession: hash => all('DELETE FROM sessions WHERE token_hash=?', hash),
+    /** Revoke one session by token hash and record ``logged_out`` in the same batch. */
+    revokeSession: (hash, actor, now, requestId) => batch([['DELETE FROM sessions WHERE token_hash=?', hash],
+      [AUTH_EVENT, now, actor, 'logged_out', hash.slice(0, 12), requestId]]),
+    /** Record a refused presented cookie (``session_expired`` or ``session_rejected``). */
+    recordAuthEvent: ({ now, actor, event, sessionRef, requestId }) => all(AUTH_EVENT, now, actor, event, sessionRef, requestId),
+    /** Newest audit rows; read only by tests and operators (no route serves them). */
+    listAuthEvents: limit => all('SELECT * FROM auth_events ORDER BY id DESC LIMIT ?', limit),
 
     /**
      * In one atomic batch: purge expired sessions, revoke the presented token, insert the new one and, with
-     * ``emailEnc`` (an email sign-in), upsert the customer's encrypted address in the same round trip.
+     * ``emailEnc`` (an email sign-in), upsert the customer's encrypted address in the same round trip. Records
+     * ``session_started`` in the same batch.
      */
-    rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt, emailEnc }) => batch([
+    rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt, emailEnc, requestId }) => batch([
       ['DELETE FROM sessions WHERE expires_at<=?', now],
       ...(oldHash ? [['DELETE FROM sessions WHERE token_hash=?', oldHash]] : []),
       ['INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)', newHash, actor, customerId, expiresAt],
-      ...(emailEnc ? [[UPSERT_TARGET, customerId, emailEnc, now]] : [])
+      ...(emailEnc ? [[UPSERT_TARGET, customerId, emailEnc, now]] : []),
+      [AUTH_EVENT, now, actor, 'session_started', newHash.slice(0, 12), requestId]
     ]),
     findSession: (hash, actor, now) =>
       first('SELECT customer_id, expires_at FROM sessions WHERE token_hash=? AND actor=? AND expires_at>?', hash, actor, now),

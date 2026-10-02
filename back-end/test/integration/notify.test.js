@@ -8,7 +8,7 @@ test('an email sign-in upserts the target, and an outbox row is queued, marked a
   await withIntakeStore({ config: resolve(process.cwd(), 'wrangler.jsonc') }, async store => {
     const now = Date.now(); const reference = 'AR-' + crypto.randomUUID();
     const signIn = (emailEnc, at) => store.rotateSession({ now: at, oldHash: null, newHash: crypto.randomUUID().replaceAll('-', '').repeat(2),
-      actor: 'customer', customerId: 'demo-ana', expiresAt: at + 3600000, emailEnc });
+      actor: 'customer', customerId: 'demo-ana', expiresAt: at + 3600000, emailEnc, requestId: 'notify-fixture' });
     await signIn('iv.one', now); await signIn('iv.two', now + 1);
     assert.deepEqual(await store.findNotificationTarget('demo-ana'), { email_enc: 'iv.two', updated_at: now + 1 });
     assert.equal(await store.findNotificationTarget('demo-bruno'), null);

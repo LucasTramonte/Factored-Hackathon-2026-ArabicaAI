@@ -1,6 +1,6 @@
 /** Agent routes: a separate simulated session, views of accepted cases and handoffs, and the review status a person sets. */
 import { fail, json, readCookies, readJsonBody } from '../../http.js';
-import { COOKIE, readSession, startSession, tokenHash } from '../../auth/session.js';
+import { COOKIE, requireSession, startSession, tokenHash } from '../../auth/session.js';
 import { bearerClaims, verifyIdToken } from '../../auth/cognito.js';
 import { UUID } from '../intake/validation.js';
 import { createStore } from '../../store/d1.js';
@@ -26,7 +26,7 @@ export async function startAgentSession(request, env, store, ctx, verify = verif
 
 /** GET /agent/cases: newest accepted cases with their transaction evidence. */
 export async function listAgentCases(request, env, store) {
-  if (!await readSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');
+  if (!await requireSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');
   const rows = await store.listAgentCases(PAGE + 1);
   return json({ items: rows.slice(0, PAGE).map(row => ({ ...row, customer_confirmed: row.customer_confirmed === 1 })),
     has_more: rows.length > PAGE, scope: 'synthetic_demo_only' });
@@ -34,14 +34,14 @@ export async function listAgentCases(request, env, store) {
 
 /** GET /agent/intakes: newest acknowledged handoffs, including technical and incomplete receipts. */
 export async function listAgentIntakes(request, env, store) {
-  if (!await readSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');
+  if (!await requireSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');
   const rows = await store.listIntakeHandoffs(PAGE + 1);
   return json({ items: rows.slice(0, PAGE), has_more: rows.length > PAGE, scope: 'synthetic_demo_only' });
 }
 
 /** GET /agent/intake-detail: access-controlled source statement, owned evidence and persisted service history. */
 export async function getAgentIntakeDetail(request, env, store) {
-  if (!await readSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');
+  if (!await requireSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');
   const params = new URL(request.url).searchParams;
   const protocol = params.get('protocol');
   if ([...params.keys()].join() !== 'protocol' || !UUID.test(protocol ?? '')) {
@@ -75,7 +75,7 @@ const PREVIOUS = { in_review: 'received', closed: 'in_review' };
  * email to the customer, sent after the response.
  */
 export async function transitionIntake(request, env, store, ctx) {
-  if (!await readSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');
+  if (!await requireSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');
   const body = await readJsonBody(request);
   if (body.error) return body.error;
   const value = body.value;

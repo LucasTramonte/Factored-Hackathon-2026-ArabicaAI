@@ -4,7 +4,7 @@
  */
 import identities from '../../config/identities.json' with { type: 'json' };
 import { fail, json, readJsonBody } from '../../http.js';
-import { endSession, readSession, startSession } from '../../auth/session.js';
+import { endSession, requireSession, startSession } from '../../auth/session.js';
 import { bearerClaims, verifyIdToken } from '../../auth/cognito.js';
 import { CUSTOMER_ID, validateCaseRequest } from './validation.js';
 import { encrypt } from '../../notify/email.js';
@@ -105,7 +105,7 @@ export async function logout(request, env, store) {
 
 /** GET /transactions: the session customer's charges, newest first, one page. */
 export async function listTransactions(request, env, store) {
-  const current = await readSession(request, store, 'customer');
+  const current = await requireSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
   const rows = await store.listTransactions(current.customer_id, PAGE + 1);
   // Only committed fictitious identities show fictitious rows; everyone else is a dataset customer.
@@ -119,7 +119,7 @@ export async function listTransactions(request, env, store) {
  * content replays the receipt (200); different content is a conflict (409).
  */
 export async function createCase(request, env, store) {
-  const current = await readSession(request, store, 'customer');
+  const current = await requireSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
   const body = await readJsonBody(request);
   if (body.error) return body.error;

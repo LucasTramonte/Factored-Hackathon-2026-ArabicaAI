@@ -20,11 +20,27 @@ export async function tokenHash(token) {
   return [...new Uint8Array(digest)].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 
+/** The audit request id: Cloudflare's ``cf-ray``, or a fresh UUID where there is none (local). */
+const requestId = request => request.headers.get('cf-ray') ?? crypto.randomUUID();
+
 /** The live session row for ``actor`` (``{ customer_id, expires_at }``; expiry is internal only), or ``null``. */
-export async function readSession(request, store, actor) {
+async function readSession(request, store, actor) {
   const token = readCookies(request)[COOKIE[actor]];
   if (!token || !TOKEN.test(token)) return null;
   return store.findSession(await tokenHash(token), actor, Date.now());
+}
+
+/**
+ * ``readSession`` plus the audit trail, for every route that needs a session. A presented cookie with no live row
+ * records ``session_expired`` (well formed) or ``session_rejected`` (malformed); no cookie records nothing.
+ */
+export async function requireSession(request, store, actor) {
+  const session = await readSession(request, store, actor);
+  const token = readCookies(request)[COOKIE[actor]];
+  if (session || !token) return session;
+  await store.recordAuthEvent({ now: Date.now(), actor, event: TOKEN.test(token) ? 'session_expired' : 'session_rejected',
+    sessionRef: (await tokenHash(token)).slice(0, 12), requestId: requestId(request) });
+  return null;
 }
 
 /**
@@ -37,13 +53,13 @@ export async function startSession(request, store, actor, customerId = null, ema
   const previous = readCookies(request)[COOKIE[actor]];
   const token = newToken();
   await store.rotateSession({ now, oldHash: previous && TOKEN.test(previous) ? await tokenHash(previous) : null,
-    newHash: await tokenHash(token), actor, customerId, expiresAt: now + SESSION_MS, emailEnc });
+    newHash: await tokenHash(token), actor, customerId, expiresAt: now + SESSION_MS, emailEnc, requestId: requestId(request) });
   return cookieHeader(COOKIE[actor], token, request, SESSION_MS / 1000);
 }
 
 /** Revoke the presented token for ``actor`` (no-op when absent or malformed) and return the clearing Set-Cookie. */
 export async function endSession(request, store, actor) {
   const token = readCookies(request)[COOKIE[actor]];
-  if (token && TOKEN.test(token)) await store.revokeSession(await tokenHash(token));
+  if (token && TOKEN.test(token)) await store.revokeSession(await tokenHash(token), actor, Date.now(), requestId(request));
   return cookieHeader(COOKIE[actor], '', request, 0);
 }
