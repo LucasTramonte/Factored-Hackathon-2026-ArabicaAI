@@ -5,22 +5,29 @@ import { ApiError } from '../../core/http/api.service';
 import { CustomerPage, initialsOf } from './customer.page';
 import { LangService } from '../../shared/i18n/lang.service';
 import { CustomerService } from './customer.service';
+import { CognitoService } from '../../core/auth/cognito.service';
 import { Identity, IntakeReceipt, IntakeStart, Transaction } from '../../shared/models/intake.model';
 
 describe('CustomerPage', () => {
   let service: jasmine.SpyObj<CustomerService>;
   let page: CustomerPage;
+  let cognito: jasmine.SpyObj<CognitoService>;
   const tx: Transaction = { transaction_id: 'demo-tx-001', merchant_name: 'Mercado', occurred_at: null,
     source_occurred_at: '2026-02-26T13:21:51', amount: '125.50', currency: 'BRL' };
 
   beforeEach(async () => {
-    service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'transactions',
+    service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'transactions',
       'startIntake', 'confirmIntake', 'handoffIntake'], { client: signal(''), card: signal(null), receipts: signal([]) });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null });
     service.transactions.and.resolveTo({ items: [tx], has_more: false, coverage: 'fictitious_demo_data_only' });
-    await TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] })
+    service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', context_card: null });
+    cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
+    cognito.requestCode.and.resolveTo();
+    cognito.submitCode.and.resolveTo('id.token');
+    await TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service },
+      { provide: CognitoService, useValue: cognito }, provideRouter([])] })
       .compileComponents();
     page = TestBed.createComponent(CustomerPage).componentInstance;
   });
@@ -96,6 +103,90 @@ describe('CustomerPage', () => {
     const rows = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.ar-row-name')].map(o => o.textContent?.trim());
     expect(rows).toEqual(['Ana (demo)', 'Bruno (demo)']);
     expect(fixture.componentInstance.identity).toBe('demo-ana');
+  });
+
+  describe('email sign-in', () => {
+    async function open(demoPicker: boolean) {
+      const fixture = TestBed.createComponent(CustomerPage);
+      const p = fixture.componentInstance;
+      p.demoPicker = demoPicker;
+      await p.ngOnInit();
+      p.start();
+      fixture.detectChanges();
+      return { fixture, p, el: fixture.nativeElement as HTMLElement };
+    }
+    async function toCode(p: CustomerPage) {
+      p.email = ' ana@example.com ';
+      await p.requestCode();
+    }
+
+    it('sends a code, shows where it went, and verifies into the home', async () => {
+      const { fixture, p, el } = await open(false);
+      expect(el.querySelector<HTMLInputElement>('input[type=email]')?.labels?.[0].textContent).toContain(p.t().emailLabel);
+      await toCode(p);
+      fixture.detectChanges();
+      expect(cognito.requestCode).toHaveBeenCalledWith('ana@example.com');
+      expect(el.querySelector('#code-sent')?.textContent).toContain('ana@example.com');
+      const code = el.querySelector<HTMLInputElement>('#login-code')!;
+      expect([code.inputMode, code.autocomplete, code.maxLength, code.pattern]).toEqual(['numeric', 'one-time-code', 8, '[0-9]*']);
+      p.code = '12345678';
+      await p.verify();
+      expect(cognito.submitCode).toHaveBeenCalledWith('ana@example.com', '12345678');
+      expect(service.signInWithToken).toHaveBeenCalledWith('id.token');
+      expect(p.client()).toBe('CLI-1');
+      expect(p.step()).toBe('home');
+    });
+
+    it('maps each failure to its own text and keeps the step', async () => {
+      const { p } = await open(false);
+      const t = p.t();
+      cognito.requestCode.and.rejectWith(new ApiError(401));
+      await toCode(p);
+      expect([p.codeSent(), p.error()]).toEqual([false, t.errSendCode]);
+      cognito.requestCode.and.rejectWith(new ApiError(429));
+      await toCode(p);
+      expect(p.error()).toBe(t.errTooMany);
+      cognito.requestCode.and.resolveTo();
+      await toCode(p);
+      const cases: [jasmine.Spy, number, string][] = [[cognito.submitCode, 401, t.errCode], [service.signInWithToken, 403, t.errNotEnrolled],
+        [cognito.submitCode, 429, t.errTooMany], [cognito.submitCode, 0, t.err503], [service.signInWithToken, 503, t.err503]];
+      for (const [spy, status, text] of cases) {
+        cognito.submitCode.and.resolveTo('id.token');
+        service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp' });
+        spy.and.rejectWith(new ApiError(status));
+        await p.verify();
+        expect([p.step(), p.codeSent(), p.error()]).withContext(String(status)).toEqual(['login', true, text]);
+      }
+    });
+
+    it('refuses a renewal that signs in another customer and keeps the open report', async () => {
+      const { p } = await open(false);
+      await toCode(p);
+      await p.verify();
+      service.startIntake.and.resolveTo({ episode_id: 'e', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
+      p.chatStatement = 'No reconozco este cargo.';
+      await p.send();
+      expect(p.identityLocked()).toBeTrue();
+      p.step.set('login');
+      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-2', mode: 'email_otp' });
+      await toCode(p);
+      await p.verify();
+      expect([p.step(), p.client(), p.chatStep(), p.error()]).toEqual(['login', 'CLI-1', 'choose', p.t().errOtherCustomer]);
+    });
+
+    it('in production renders no picker and never lists identities', async () => {
+      const { el } = await open(false);
+      expect(service.identities).not.toHaveBeenCalled();
+      expect(el.querySelector('app-customer-picker')).toBeNull();
+    });
+
+    it('in development keeps the picker under its own heading', async () => {
+      const { p, el } = await open(true);
+      expect(service.identities).toHaveBeenCalled();
+      expect(el.querySelector('app-customer-picker')).not.toBeNull();
+      expect(el.querySelector('#local-identities')?.textContent?.trim()).toBe(p.t().localIdentities);
+      expect(el.querySelector('input[type=email]')).not.toBeNull();
+    });
   });
 
   it('takes initials only from words that start with a letter', () => {

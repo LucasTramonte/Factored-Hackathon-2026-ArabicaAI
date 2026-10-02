@@ -38,16 +38,40 @@
             <div style="display: flex; flex-direction: column; gap: 10px">
               <h1 class="headline" tabindex="-1">{{ t().whoAreYou }}</h1>
             </div>
-            @if (error()) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
-            @if (identitiesLoading()) { <p id="identities-loading" class="status-line" role="status">{{ t().working }}</p> }
-            <app-customer-picker [identities]="identities()" [disabled]="busy() || identityLocked()" [(value)]="identity" />
-            <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap">
-              <button type="button" class="ar-btn" (click)="login()" [disabled]="busy() || !identity">
-                {{ identityLocked() ? t().renew : t().continue }}
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5l7 7-7 7"></path></svg>
-              </button>
-              @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
-            </div>
+            @if (error()) { <div class="ar-alert" role="alert" id="login-error"><p>{{ error() }}</p></div> }
+            @if (!codeSent()) {
+              <form class="login-email" ngNativeValidate (ngSubmit)="requestCode()">
+                <label class="ar-field" for="login-email"><span class="ar-field-label">{{ t().emailLabel }}</span></label>
+                <input class="ar-input" id="login-email" type="email" autocomplete="email" name="email" required [(ngModel)]="email"
+                  [attr.aria-describedby]="error() ? 'login-error' : null">
+                <div class="login-actions"><button type="submit" class="ar-btn" [disabled]="busy()">{{ t().sendCode }}</button></div>
+              </form>
+            } @else {
+              <form class="login-email" ngNativeValidate (ngSubmit)="verify()">
+                <p class="ar-small" id="code-sent">{{ t().codeSentTo }} <b>{{ email.trim() }}</b></p>
+                <label class="ar-field" for="login-code"><span class="ar-field-label">{{ t().codeLabel }}</span></label>
+                <input class="ar-input" id="login-code" #codeField inputmode="numeric" autocomplete="one-time-code" maxlength="8" pattern="[0-9]*"
+                  name="code" required [(ngModel)]="code" [attr.aria-describedby]="error() ? 'code-sent login-error' : 'code-sent'">
+                <div class="login-actions">
+                  <button type="submit" class="ar-btn" [disabled]="busy()">{{ t().verify }}</button>
+                  <button type="button" class="link-btn" (click)="requestCode()" [disabled]="busy()">{{ t().newCode }}</button>
+                  <button type="button" class="link-btn" (click)="anotherEmail()" [disabled]="busy()">{{ t().anotherEmail }}</button>
+                </div>
+              </form>
+            }
+            @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
+            @if (demoPicker) {
+              <section class="login-email" aria-labelledby="local-identities">
+                <h2 class="ar-field-label" id="local-identities">{{ t().localIdentities }}</h2>
+                @if (identitiesLoading()) { <p id="identities-loading" class="status-line" role="status">{{ t().working }}</p> }
+                <app-customer-picker [identities]="identities()" [disabled]="busy() || identityLocked()" [(value)]="identity" />
+                <div class="login-actions">
+                  <button type="button" class="ar-btn ar-btn-secondary" (click)="login()" [disabled]="busy() || !identity">
+                    {{ identityLocked() ? t().renew : t().continue }}
+                  </button>
+                </div>
+              </section>
+            }
           </div>
           <p class="ar-small" style="display: flex; align-items: center; gap: 10px"><span class="ar-chip ar-chip-warn">{{ t().sandbox }}</span>{{ t().synthetic }} {{ t().onlyYours }}</p>
         </div>
@@ -202,7 +226,7 @@
             }
             @if (frozen()) {
               <div class="ar-panel ar-panel-warn" role="status"><p>{{ t().pending }}</p></div>
-              <div class="report-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="login()" [disabled]="busy()">{{ t().renew }}</button></div>
+              <div class="report-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="demoPicker ? login() : step.set('login')" [disabled]="busy()">{{ t().renew }}</button></div>
             }
             @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
             <div class="chat-faq" role="group" [attr.aria-label]="t().chatFaq">

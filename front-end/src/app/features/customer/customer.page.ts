@@ -7,9 +7,11 @@ import { Lang, LangService, Strings, checkText, errorText } from '../../shared/i
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
-import { Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
+import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
   Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
+import { CognitoService } from '../../core/auth/cognito.service';
+import { demoPicker } from '../../core/auth/cognito.config';
 
 /**
  * The customer flow as one connected screen: intro, sign-in, home. The disc is a single element that
@@ -46,6 +48,13 @@ const RECEIPT_TITLE = { complete: 'receiptComplete', incomplete: 'receiptIncompl
 })
 export class CustomerPage implements OnInit, OnDestroy {
   private readonly service = inject(CustomerService);
+  private readonly cognito = inject(CognitoService);
+  /** Local demo identities under the email form; development builds only. */
+  demoPicker = demoPicker;
+  /** The email one-time code was sent: the code field replaces the email field. */
+  readonly codeSent = signal(false);
+  email = '';
+  code = '';
   readonly lang = inject(LangService);
   readonly t = this.lang.t;
   readonly busy = signal(false);
@@ -124,11 +133,12 @@ export class CustomerPage implements OnInit, OnDestroy {
   constructor() {
     // Move focus to the receipt, the choose step (it replaces the focused Send button), the details field (it replaces the
     // focused "can't find" button) and the chat heading when each appears; the heading is last, so opening the panel focuses it.
-    for (const name of ['intakeReceiptEl', 'chooseStep', 'detailsField', 'chatPanel'] as const) {
+    for (const name of ['codeField', 'intakeReceiptEl', 'chooseStep', 'detailsField', 'chatPanel'] as const) {
       const el: Signal<ElementRef<HTMLElement> | undefined> = this[name];
       effect(() => el()?.nativeElement.focus());
     }
   }
+  private readonly codeField = viewChild<ElementRef<HTMLElement>>('codeField');
   private readonly intakeReceiptEl = viewChild<ElementRef<HTMLElement>>('intakeReceiptEl');
   private readonly chatPanel = viewChild<ElementRef<HTMLElement>>('chatPanel');
   /** The control that opened the panel (a charge row's Report button), so closing can return focus to it. */
@@ -149,6 +159,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     // Outside the zone so the app (and tests) can be stable while it waits; the signal still schedules the render.
     this.introTimer = this.zone.runOutsideAngular(() => setTimeout(() => this.introDone.set(true), 6800)); // must outlast the intro word animation delays in styles.css
     if (this.client()) void this.resume();
+    if (!this.demoPicker) return;
     this.identitiesLoading.set(true);
     try {
       this.identities.set(await this.service.identities());
@@ -176,23 +187,75 @@ export class CustomerPage implements OnInit, OnDestroy {
     return checkText(this.t(), code);
   }
 
-  /** Sign in; while a request is pending, re-authenticate as the same identity. */
-  async login(): Promise<void> {
+  /** Local demo sign-in; while a request is pending, re-authenticate as the same identity. */
+  login(): Promise<void> {
+    const identity = this.identityLocked() ? this.client() : this.identity;
+    return this.enter(async () => ({ ...await this.service.signIn(identity), customer_id: identity }), e => this.fail(e));
+  }
+
+  /** Email the one-time code. A 401 reads as "could not send", so the UI never says whether the address exists. */
+  async requestCode(): Promise<void> {
     if (this.busy()) return;
     this.busy.set(true);
     this.error.set('');
-    const identity = this.identityLocked() ? this.client() : this.identity;
-    if (!this.identityLocked() && identity !== this.client()) this.reset();
     try {
-      this.card.set((await this.service.signIn(identity))?.context_card ?? null);
-      this.client.set(identity);
-      await this.loadTransactions();
-      this.step.set('home');
+      await this.cognito.requestCode(this.email.trim());
+      this.codeSent.set(true);
     } catch (e) {
-      this.fail(e);
+      this.error.set(this.signInError(e, 'errSendCode'));
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /** Code → Cognito ID token → Worker session, then the same home path as the demo sign-in. */
+  verify(): Promise<void> {
+    return this.enter(async () => this.service.signInWithToken(await this.cognito.submitCode(this.email.trim(), this.code.trim())),
+      e => this.error.set(this.signInError(e, 'errCode')));
+  }
+
+  /** Back to the email field; the pending challenge is forgotten. */
+  anotherEmail(): void {
+    this.cognito.forget();
+    this.codeSent.set(false);
+    this.code = '';
+    this.error.set('');
+    afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('#login-email')?.focus(), { injector: this.injector });
+  }
+
+  /**
+   * Start a session and go home. While a report is open (``identityLocked``) a different customer is refused and
+   * nothing changes; otherwise a new customer starts from a clean state.
+   */
+  private async enter(session: () => Promise<CustomerSession>, onError: (e: unknown) => void): Promise<void> {
+    if (this.busy()) return;
+    this.busy.set(true);
+    this.error.set('');
+    try {
+      const s = await session();
+      if (this.identityLocked() && s.customer_id !== this.client()) {
+        this.error.set(this.t().errOtherCustomer);
+        return;
+      }
+      if (s.customer_id !== this.client()) this.reset();
+      this.card.set(s.context_card ?? null);
+      this.client.set(s.customer_id);
+      this.codeSent.set(false);
+      this.code = '';
+      await this.loadTransactions();
+      this.step.set('home');
+    } catch (e) {
+      onError(e);
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  /** Sign-in failures: 401 gets the step's own vague text, 403 not enrolled, 429 wait; the rest the generic text. */
+  private signInError(e: unknown, on401: 'errSendCode' | 'errCode'): string {
+    const status = e instanceof ApiError ? e.status : -1;
+    const key = status === 401 ? on401 : status === 403 ? 'errNotEnrolled' : status === 429 ? 'errTooMany' : null;
+    return key ? this.t()[key] : errorText(this.t(), e);
   }
 
   /** Back from another in-app view in this tab: show the same customer's home again; the cookie still decides access. */
@@ -335,7 +398,8 @@ export class CustomerPage implements OnInit, OnDestroy {
       try {
         result = await this.call(frozen);
       } catch (e) {
-        if (!(e instanceof ApiError && e.status === 401)) throw e;
+        // Email sign-in can't renew silently (it needs a new code): the 401 stays for the manual Renew.
+        if (!(e instanceof ApiError && e.status === 401) || !this.demoPicker) throw e;
         try {
           this.card.set((await this.service.signIn(this.client()))?.context_card ?? null);
         } catch (renewal) {

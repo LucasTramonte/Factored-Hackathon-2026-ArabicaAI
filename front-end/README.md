@@ -1,6 +1,6 @@
 # Intake web client (Angular)
 
-The customer and agent views for the synthetic charge-intake demo. The client doesn't decide fraud, block a card or issue a refund; customer and agent sign-ins are simulated. The API is the Cloudflare Worker in [`back-end/`](../back-end/README.md), and the response shapes it relies on are in [`contracts/`](contracts/intake-api.schema.json).
+The customer and agent views for the synthetic charge-intake demo. The client doesn't decide fraud, block a card or issue a refund; customers sign in with an email one-time code from Amazon Cognito (`src/app/core/auth/`; the browser calls `cognito-idp.us-east-2.amazonaws.com` directly and keeps no token), and the agent sign-in is simulated. Development builds (`ng serve`) also show the local demo identity picker, which calls `/demo/*` and needs `DEMO_PICKER=1` on the Worker; production builds never render it. The API is the Cloudflare Worker in [`back-end/`](../back-end/README.md), and the response shapes it relies on are in [`contracts/`](contracts/intake-api.schema.json).
 
 | Path | Responsibility |
 |---|---|

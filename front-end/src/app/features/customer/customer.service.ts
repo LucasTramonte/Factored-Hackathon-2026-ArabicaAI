@@ -9,7 +9,7 @@ export interface ReceiptEntry {
   transactionId: string | null;
 }
 
-/** Customer calls: simulated sign-in, own charges and the guided intake. */
+/** Customer calls: email sign-in (simulated in local development), own charges and the guided intake. */
 @Injectable({ providedIn: 'root' })
 export class CustomerService {
   private readonly api = inject(ApiService);
@@ -25,6 +25,11 @@ export class CustomerService {
   /** The session response; its context card is a snapshot and never sets the report language. */
   signIn(customerId: string): Promise<CustomerSession> {
     return this.api.request<CustomerSession>('/demo/session', { customer_id: customerId });
+  }
+
+  /** Exchange a verified Cognito ID token for the session cookie. POST with an empty JSON body: the token travels only in the header. */
+  signInWithToken(idToken: string): Promise<CustomerSession> {
+    return this.api.request<CustomerSession>('/auth/session', {}, { Authorization: 'Bearer ' + idToken });
   }
 
   transactions(): Promise<TransactionList> {
