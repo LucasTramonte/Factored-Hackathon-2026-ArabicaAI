@@ -217,7 +217,7 @@ body { min-height: 100%; }
   .intro-word { display: none; } .intro-word.is-current { display: block; opacity: 1; }
   .disc--boot { transform: translate(calc(50vw - 32px), 36px) scale(1); }
 }
-@media (prefers-reduced-motion: reduce) and (max-width: 720px) { .disc--boot { transform: translate(calc(50vw - 24px), 24px) scale(0.75); } }
+@media (prefers-reduced-motion: reduce) and (max-width: 720px) { .disc.disc--boot { /* more specific than the mobile .disc--boot rule below */ transform: translate(calc(50vw - 24px), 24px) scale(0.75); } }
 
 /* Login */
 .login { display: flex; }
@@ -267,8 +267,9 @@ body { min-height: 100%; }
 }
 @media (max-width: 960px) {
   .disc--login { transform: translate(calc(100vw - 130px), calc(100dvh - 130px)) scale(4); }
-  .login-form { width: 100%; padding: 24px 24px 32px; }
-  .login-promise { display: none; }
+  .login { flex-direction: column; }
+  .login-form { width: 100%; flex: 1; padding: 24px 24px 32px; }
+  .login-promise { position: static; width: auto; padding: 24px 24px 0; gap: 4px; } .login-promise p { font: 500 15px/22px var(--font-sans); } /* compact, still visible: the assurances precede sign-in on every width */
   .headline { font-size: 40px; line-height: 44px; }
   .home { flex-direction: column; }
   .ar-sidebar { width: auto; flex-direction: row; align-items: center; padding: 12px 16px; border-right: 0; border-bottom: var(--hairline) solid var(--line); position: sticky; top: 0; z-index: 4; }

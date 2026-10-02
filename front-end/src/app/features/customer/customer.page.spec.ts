@@ -28,7 +28,6 @@ describe('CustomerPage', () => {
   it('starts on the intro, moves to sign-in on start, and to the home once charges are loaded', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     const p = fixture.componentInstance;
-    await p.ngOnInit();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     expect(p.step()).toBe('intro');
@@ -45,19 +44,16 @@ describe('CustomerPage', () => {
     await p.login();
     expect(p.step()).toBe('home');
     expect(p.discClass()).toBe('disc disc--home');
-    p.ngOnDestroy();
   });
 
   it('says on sign-in that it is simulated and shows only your own charges', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     const p = fixture.componentInstance;
-    await p.ngOnInit();
     p.start();
     fixture.detectChanges();
     const note = (fixture.nativeElement as HTMLElement).querySelector('.login-form > p.ar-small')?.textContent ?? '';
     expect(note).toContain(p.t().synthetic);
     expect(note).toContain(p.t().onlyYours);
-    p.ngOnDestroy();
   });
 
   it('signs in and lists only what the API returns', async () => {
