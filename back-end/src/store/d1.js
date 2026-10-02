@@ -383,11 +383,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     markEmail: (messageId, status, providerMessageId) => all(
       'UPDATE email_outbox SET provider_status=?,provider_message_id=? WHERE message_id=?', status, providerMessageId ?? null, messageId),
     /**
-     * ``{ count, latest }`` of this customer's ``template`` emails for a reference created at or after ``sinceMs``, for
+     * ``{ count, latest }`` of this customer's ``template`` emails for a reference created after ``sinceMs``, for
      * rate limits (index ``email_outbox_recent``); ``latest`` is the newest ``created_at`` or null.
      */
     recentEmails: async (customerId, reference, sinceMs, template) => first(
-      'SELECT COUNT(*) AS count,MAX(created_at) AS latest FROM email_outbox WHERE customer_id=? AND reference=? AND created_at>=? AND template=?',
+      'SELECT COUNT(*) AS count,MAX(created_at) AS latest FROM email_outbox WHERE customer_id=? AND reference=? AND created_at>? AND template=?',
       customerId, reference, sinceMs, template),
 
     listAgentCases: limit => all(

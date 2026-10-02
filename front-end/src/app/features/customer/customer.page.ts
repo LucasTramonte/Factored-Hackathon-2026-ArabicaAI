@@ -66,7 +66,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** "Your reports" from GET /reports, so it survives the tab; null until loaded. */
   readonly reports = signal<ReportList | null>(null);
   readonly reportsFailed = signal(false);
-  /** The report whose update request is in flight, and the last answer shown under its row. */
+  /** The report whose update request is in flight (one at a time: every row's button waits), and the last answer shown under its row. */
   readonly updating = signal<string | null>(null);
   readonly updateNote = signal<{ protocol: string; text: string } | null>(null);
   readonly transactions = signal<Transaction[]>([]);
@@ -326,7 +326,9 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** "Email me an update" on a report row; the button keeps focus and the answer is announced under the row. */
   async requestUpdate(protocol: string): Promise<void> {
+    if (this.updating()) return;
     this.updating.set(protocol);
+    this.updateNote.set(null); // cleared while the request runs, so the same answer is announced again
     let text: string;
     try {
       await this.service.requestUpdate(protocol);

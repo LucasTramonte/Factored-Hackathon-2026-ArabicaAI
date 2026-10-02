@@ -87,7 +87,7 @@ const es = {
     check_matching_transaction: 'Cargo sin identificar', check_customer_confirmation: 'Confirmación del cargo pendiente',
     yourReports: 'Tus reportes', statusReceived: 'Recibido', nextStepReview: 'una persona lo revisará',
     moreReports: 'Hay más reportes que no se muestran aquí.', reportsFailed: 'No se pudieron cargar tus reportes.',
-    updateMe: 'Enviarme una actualización', updateSent: 'Te enviamos un correo con el estado.',
+    updateMe: 'Enviarme una actualización por correo', updateSent: 'Te enviamos un correo con el estado.',
     updateRecent: 'Ya te enviamos una actualización hace poco.', updateNoEmail: 'No hay un correo asociado a este inicio de sesión.',
     sessionRenewed: 'Tu sesión había expirado. La renovamos con la misma identidad y reenviamos la misma solicitud.'
 };
@@ -180,7 +180,7 @@ const STRINGS: Record<Lang, Strings> = {
     check_matching_transaction: 'Cobrança não identificada', check_customer_confirmation: 'Confirmação da cobrança pendente',
     yourReports: 'Seus relatos', statusReceived: 'Recebido', nextStepReview: 'uma pessoa vai analisá-lo',
     moreReports: 'Há mais relatos que não aparecem aqui.', reportsFailed: 'Não foi possível carregar seus relatos.',
-    updateMe: 'Enviar uma atualização', updateSent: 'Enviamos um e-mail com o status.',
+    updateMe: 'Receber atualização por e-mail', updateSent: 'Enviamos um e-mail com o status.',
     updateRecent: 'Já enviamos uma atualização há pouco.', updateNoEmail: 'Não há um e-mail associado a este login.',
     sessionRenewed: 'Sua sessão tinha expirado. Nós a renovamos com a mesma identidade e reenviamos o mesmo pedido.'
   },

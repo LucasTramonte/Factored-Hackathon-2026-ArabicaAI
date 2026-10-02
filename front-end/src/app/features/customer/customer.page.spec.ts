@@ -700,6 +700,21 @@ describe('CustomerPage', () => {
       }
     });
 
+    it('one update request at a time: every row waits, and a second click sends nothing', async () => {
+      service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB'),
+        report('technical', null, '2026-10-01T08:00:00Z', '11111111-2222-4333-8444-555555555555')], has_more: false });
+      const { fixture, el, p } = await home();
+      let finish!: () => void;
+      service.requestUpdate.and.returnValue(new Promise(done => { finish = () => done({ queued: true }); }));
+      const first = p.requestUpdate('99999999-8888-4777-8666-555555555555'); fixture.detectChanges();
+      const buttons = [...el.querySelectorAll<HTMLButtonElement>('.your-reports li .update-btn')];
+      expect(buttons.map(b => b.disabled)).toEqual([true, true]);
+      await p.requestUpdate('11111111-2222-4333-8444-555555555555');
+      expect(service.requestUpdate).toHaveBeenCalledTimes(1);
+      finish(); await first; fixture.detectChanges();
+      expect(buttons.map(b => b.disabled)).toEqual([false, false]);
+    });
+
     it('says when more reports exist than are listed', async () => {
       service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB')], has_more: true });
       const { el, p } = await home();
