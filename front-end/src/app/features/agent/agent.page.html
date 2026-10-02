@@ -9,7 +9,7 @@
 
   <div style="display: flex; flex-direction: column; gap: 8px">
     <h1 class="ar-h1">{{ t().agentTitle }}</h1>
-    <p class="ar-lead" style="font-size: 17px; line-height: 26px">{{ t().agentIntro }}</p>
+    <p class="ar-lead">{{ t().agentIntro }}</p>
   </div>
 
   @if (error()) { <div class="ar-alert" role="alert"><p>{{ error() }}</p></div> }
@@ -27,10 +27,10 @@
         <label class="ar-field" for="agent-code"><span class="ar-field-label">{{ t().codeLabel }}</span></label>
         <input class="ar-input" id="agent-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" pattern="[0-9]*"
           name="code" required [(ngModel)]="code" aria-describedby="agent-code-sent">
-        <div class="sign-in-actions">
+        <div class="login-actions">
           <button type="submit" class="ar-btn" [disabled]="busy()">{{ t().verify }}</button>
-          <button type="button" class="ar-btn ar-btn-secondary" (click)="requestCode()" [disabled]="busy()">{{ t().newCode }}</button>
-          <button type="button" class="ar-btn ar-btn-secondary" (click)="anotherEmail()" [disabled]="busy()">{{ t().anotherEmail }}</button>
+          <button type="button" class="link-btn" (click)="requestCode()" [disabled]="busy()">{{ t().newCode }}</button>
+          <button type="button" class="link-btn" (click)="anotherEmail()" [disabled]="busy()">{{ t().anotherEmail }}</button>
         </div>
       </form>
     }
@@ -74,11 +74,11 @@
       <section id="intake-detail" class="box" aria-labelledby="intake-detail-title">
         <div class="box-head">
           <h2 #detailHeading id="intake-detail-title" tabindex="-1">{{ t().intakeDetail }}: {{ kindLabel(d.kind) }}</h2>
-          <button type="button" class="ar-btn ar-btn-secondary" (click)="close()">{{ t().close }}</button>
+          <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm" (click)="close()">{{ t().close }}</button>
         </div>
         <div class="box-body detail">
           <div class="status-bar">
-            <p #statusText id="intake-status" class="status-line" tabindex="-1">{{ statusLabel(d.status) }}</p>
+            <span #statusText id="intake-status" class="ar-chip" tabindex="-1">{{ statusLabel(d.status) }}</span>
             @if (d.status !== 'closed') {
               <button type="button" class="ar-btn status-action" (click)="advance(d)" [disabled]="busy()">{{ d.status === 'received' ? t().takeCase : t().closeReview }}</button>
             }
@@ -89,7 +89,7 @@
             <div><dt>{{ t().acceptedAt }}</dt><dd>{{ d.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</dd></div>
             <div><dt>{{ t().toolStatus }}</dt><dd><code>{{ d.tool_status }}</code></dd></div>
             <div><dt>{{ t().destination }}</dt><dd><code>{{ d.destination }}</code></dd></div>
-            <div><dt>{{ t().priority }}</dt><dd><code>{{ d.priority }}</code></dd></div>
+            <div><dt>{{ t().priority }}</dt><dd>{{ d.urgency === 'high' ? t().prioHigh : 'normal' }}</dd></div>
             <div><dt>{{ t().languageCode }}</dt><dd><code>{{ d.language }}</code></dd></div>
           </dl>
 

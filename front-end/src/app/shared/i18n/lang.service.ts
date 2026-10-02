@@ -22,7 +22,7 @@ const es = {
     emailSignIn: 'Datos sintéticos. Inicio de sesión con código por correo (Amazon Cognito), no con el servicio de identidad del banco.',
     hello: 'Hola', charges: 'Cargos', agentView: 'Vista de agente',
     guideTitle: 'Reporte guiado',
-    none: 'ninguno',
+    none: 'ninguna',
     recent: 'Cargos recientes', merchant: 'Comercio', date: 'Fecha', state: 'Estado', amount: 'Monto',
     selected: 'seleccionado', noMerchant: 'Comercio: no consta en la fuente',
     tzMissing: 'zona horaria no indicada', dateMissing: 'fecha no disponible', utc: 'UTC',
@@ -58,11 +58,11 @@ const es = {
     transactionId: 'ID de transacción', evidence: 'Evidencia verificada', noEvidence: 'Sin transacción verificada.',
     openQuestions: 'Preguntas abiertas', history: 'Historial',
     modelOff: 'Lectura del modelo: apagada.', modelShadow: 'Lectura del modelo: en sombra, {n} {calls}, versión {v}. El modelo no decide nada.', callOne: 'llamada', callMany: 'llamadas',
-    toolStatus: 'Estado de la consulta', destination: 'Destino', priority: 'Prioridad', urgencyHigh: 'Prioridad alta', close: 'Cerrar',
+    toolStatus: 'Estado de la consulta', destination: 'Destino', priority: 'Prioridad', prioHigh: 'alta', urgencyHigh: 'Prioridad alta', close: 'Cerrar',
     statement: 'Relato del cliente', languageCode: 'Idioma del reporte',
     agentErr401: 'La sesión de agente expiró. Vuelve a entrar como agente.', agentErr404: 'No se encontró el reporte.',
     // Guided intake chat
-    chatClose: 'Cerrar el reporte guiado', chatYou: 'Tú', chatGuide: 'Guía',
+    chatClose: 'Cerrar', chatYou: 'Tú', chatGuide: 'Guía',
     chatHello: 'Cuéntame qué pasó con el cargo que no reconoces. Después eliges el cargo y confirmas.',
     chatLangPrompt: 'Idioma del reporte', chatSend: 'Enviar',
     chatValidation: 'Elige el idioma del reporte y describe lo que pasó en al menos 10 caracteres.',
@@ -90,8 +90,8 @@ const es = {
     check_transaction_lookup_failed: 'La búsqueda del cargo falló',
     check_matching_transaction: 'Cargo sin identificar', check_customer_confirmation: 'Confirmación del cargo pendiente',
     yourReports: 'Tus reportes', statusReceived: 'Recibido', nextStepReview: 'una persona lo revisará',
-    statusInReview: 'En revisión por una persona', statusClosed: 'Revisión terminada; el banco te contactará por su canal habitual',
-    inReview: 'En revisión', reviewClosed: 'Revisión cerrada', takeCase: 'Tomar el caso', closeReview: 'Cerrar la revisión',
+    statusInReview: 'por una persona', statusClosed: 'el banco te contactará por su canal habitual',
+    inReview: 'En revisión', takeCase: 'Tomar el caso', closeReview: 'Cerrar la revisión',
     agentErr409: 'Otra persona ya cambió este caso.',
     moreReports: 'Hay más reportes que no se muestran aquí.', reportsFailed: 'No se pudieron cargar tus reportes.',
     updateMe: 'Enviarme una actualización por correo', updateSent: 'Te enviamos un correo con el estado.',
@@ -122,7 +122,7 @@ const STRINGS: Record<Lang, Strings> = {
     emailSignIn: 'Dados sintéticos. Login com código por e-mail (Amazon Cognito), não com o serviço de identidade do banco.',
     hello: 'Olá', charges: 'Cobranças', agentView: 'Visão do agente',
     guideTitle: 'Relato guiado',
-    none: 'nenhum',
+    none: 'nenhuma',
     recent: 'Cobranças recentes', merchant: 'Estabelecimento', date: 'Data', state: 'Estado', amount: 'Valor',
     selected: 'selecionado', noMerchant: 'Estabelecimento: não consta na fonte',
     tzMissing: 'fuso horário não informado', dateMissing: 'data indisponível', utc: 'UTC',
@@ -158,11 +158,11 @@ const STRINGS: Record<Lang, Strings> = {
     transactionId: 'ID da transação', evidence: 'Evidência verificada', noEvidence: 'Sem transação verificada.',
     openQuestions: 'Perguntas em aberto', history: 'Histórico',
     modelOff: 'Leitura do modelo: desligada.', modelShadow: 'Leitura do modelo: em sombra, {n} {calls}, versão {v}. O modelo não decide nada.', callOne: 'chamada', callMany: 'chamadas',
-    toolStatus: 'Status da consulta', destination: 'Destino', priority: 'Prioridade', urgencyHigh: 'Prioridade alta', close: 'Fechar',
+    toolStatus: 'Status da consulta', destination: 'Destino', priority: 'Prioridade', prioHigh: 'alta', urgencyHigh: 'Prioridade alta', close: 'Fechar',
     statement: 'Relato do cliente', languageCode: 'Idioma do relato',
     agentErr401: 'A sessão de agente expirou. Entre novamente como agente.', agentErr404: 'Relato não encontrado.',
     // Guided intake chat
-    chatClose: 'Fechar o relato guiado', chatYou: 'Você', chatGuide: 'Guia',
+    chatClose: 'Fechar', chatYou: 'Você', chatGuide: 'Guia',
     chatHello: 'Conte o que aconteceu com a cobrança que você não reconhece. Depois você escolhe a cobrança e confirma.',
     chatLangPrompt: 'Idioma do relato', chatSend: 'Enviar',
     chatValidation: 'Escolha o idioma do relato e descreva o que aconteceu em pelo menos 10 caracteres.',
@@ -190,8 +190,8 @@ const STRINGS: Record<Lang, Strings> = {
     check_transaction_lookup_failed: 'A busca da cobrança falhou',
     check_matching_transaction: 'Cobrança não identificada', check_customer_confirmation: 'Confirmação da cobrança pendente',
     yourReports: 'Seus relatos', statusReceived: 'Recebido', nextStepReview: 'uma pessoa vai analisá-lo',
-    statusInReview: 'Em análise por uma pessoa', statusClosed: 'Análise concluída; o banco vai entrar em contato pelo canal habitual',
-    inReview: 'Em análise', reviewClosed: 'Análise encerrada', takeCase: 'Assumir o caso', closeReview: 'Encerrar a análise',
+    statusInReview: 'por uma pessoa', statusClosed: 'o banco vai entrar em contato pelo canal habitual',
+    inReview: 'Em análise', takeCase: 'Assumir o caso', closeReview: 'Encerrar a análise',
     agentErr409: 'Outra pessoa já mudou este caso.',
     moreReports: 'Há mais relatos que não aparecem aqui.', reportsFailed: 'Não foi possível carregar seus relatos.',
     updateMe: 'Receber atualização por e-mail', updateSent: 'Enviamos um e-mail com o status.',
@@ -252,11 +252,11 @@ const STRINGS: Record<Lang, Strings> = {
     transactionId: 'Transaction ID', evidence: 'Verified evidence', noEvidence: 'No verified transaction.',
     openQuestions: 'Open questions', history: 'History',
     modelOff: 'Model reading: off.', modelShadow: 'Model reading: in shadow, {n} {calls}, version {v}. The model decides nothing.', callOne: 'call', callMany: 'calls',
-    toolStatus: 'Lookup status', destination: 'Destination', priority: 'Priority', urgencyHigh: 'High priority', close: 'Close',
+    toolStatus: 'Lookup status', destination: 'Destination', priority: 'Priority', prioHigh: 'high', urgencyHigh: 'High priority', close: 'Close',
     statement: 'Customer statement', languageCode: 'Report language',
     agentErr401: 'The agent session expired. Sign in as an agent again.', agentErr404: 'Report not found.',
     // Guided intake chat
-    chatClose: 'Close the guided report', chatYou: 'You', chatGuide: 'Guide',
+    chatClose: 'Close', chatYou: 'You', chatGuide: 'Guide',
     chatHello: 'Tell me what happened with the charge you do not recognize. Then you choose the charge and confirm.',
     chatLangPrompt: 'Report language. Reports are reviewed in Spanish or Portuguese; English is not supported yet, so write yours in the one you choose.', chatSend: 'Send',
     chatValidation: 'Choose the report language and describe what happened in at least 10 characters.',
@@ -284,8 +284,8 @@ const STRINGS: Record<Lang, Strings> = {
     check_transaction_lookup_failed: 'Charge lookup failed',
     check_matching_transaction: 'Charge not identified', check_customer_confirmation: 'Charge confirmation pending',
     yourReports: 'Your reports', statusReceived: 'Received', nextStepReview: 'a person will review it',
-    statusInReview: 'Being reviewed by a person', statusClosed: 'Review finished; the bank will contact you through its usual channel',
-    inReview: 'In review', reviewClosed: 'Review closed', takeCase: 'Take the case', closeReview: 'Close the review',
+    statusInReview: 'by a person', statusClosed: 'the bank will contact you through its usual channel',
+    inReview: 'In review', takeCase: 'Take the case', closeReview: 'Close the review',
     agentErr409: 'Someone else already changed this case.',
     moreReports: 'There are more reports that are not shown here.', reportsFailed: 'Your reports could not be loaded.',
     updateMe: 'Email me an update', updateSent: 'We emailed you the status.',
@@ -320,6 +320,9 @@ export class LangService {
     return nav === 'pt' ? 'pt' : nav === 'en' ? 'en' : 'es';
   }
 }
+
+/** One chip term per review status, shared by the charge row, "Your reports" and the agent queue and detail. */
+export const STATUS_CHIP = { received: 'statusReceived', in_review: 'inReview', closed: 'chipClosed' } as const;
 
 const ERROR_KEYS: Record<number, keyof Strings> = { 0: 'err503', 401: 'err401', 404: 'err404', 409: 'err409', 413: 'err413', 422: 'err422', 503: 'err503' };
 
