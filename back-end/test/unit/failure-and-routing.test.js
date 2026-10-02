@@ -66,39 +66,44 @@ test('oversized and non-JSON bodies are rejected before any store call', async (
   assert.deepEqual(small.value, body);
 });
 
-test('known paths answer 405 with Allow after the gate, unknown API paths 404', async () => {
+test('known paths answer 405 with Allow, unknown API paths 404', async () => {
   const store = await fakeStore();
   const get = path => new Request('https://d.example' + path, { headers: { Authorization: auth } });
   const wrong = await route(get('/cases'), env, store);
   assert.equal(wrong.status, 405);
   assert.equal(wrong.headers.get('Allow'), 'POST');
   assert.equal((await route(get('/agent/unknown'), env, store)).status, 404);
-  const anonymous = await route(new Request('https://d.example/cases', { method: 'OPTIONS' }), env, store);
+  const anonymous = await route(new Request('https://d.example/agent/cases', { method: 'OPTIONS' }), env, store);
   assert.equal(anonymous.status, 401);
-  assert.equal(anonymous.headers.get('Allow'), null);
+  assert.equal(anonymous.headers.get('Allow'), null, 'team paths reveal no methods before the gate');
 });
 
-test('/auth/session alone is outside the team gate; /auth/logout and unknown /auth/* stay gated', async () => {
-  const store = await fakeStore();
-  const anon = (path, method = 'POST') => route(new Request('https://d.example' + path, { method }), env, store);
-  const signIn = await anon('/auth/session');
-  assert.equal(signIn.status, 422);
-  assert.deepEqual(await signIn.json(), { detail: 'Provide the sign-in token' });
-  assert.equal((await anon('/auth/session', 'GET')).headers.get('Allow'), 'POST');
-  for (const path of ['/auth/logout', '/auth/session/', '/auth/sessions', '/auth/%73ession', '/auth/other', '/auth']) {
-    assert.equal((await anon(path)).status, 401, path);
-  }
-});
-
-test('HTML documents require the gate before assets are served', async () => {
+test('the team gate covers only /agent, /agent/* and /demo/*; customer paths reach routing and their session check', async () => {
   const served = [];
   const assetsEnv = { ...env, ASSETS: { fetch: async r => { served.push(new URL(r.url).pathname); return new Response('<app-root>'); } } };
-  const store = await fakeStore();
-  for (const path of ['/', '/index.html', '/agent']) {
-    assert.equal((await route(new Request('https://d.example' + path), assetsEnv, store)).status, 401);
-    assert.equal((await route(new Request('https://d.example' + path, { headers: { Authorization: auth } }), assetsEnv, store)).status, 200);
+  const store = await fakeStore({ findSession: async () => null });
+  const anon = (path, method = 'GET') => route(new Request('https://d.example' + path, { method }), assetsEnv, store);
+  const gated = res => res.status === 401 && res.headers.get('WWW-Authenticate') !== null;
+  for (const [method, path, status] of [['GET', '/', 200], ['GET', '/index.html', 200], ['GET', '/transactions', 401],
+    ['POST', '/intake/start', 401], ['POST', '/auth/logout', 204], ['POST', '/auth/session', 422], ['GET', '/cases/nope', 404], ['GET', '/intake', 404],
+    ['DELETE', '/transactions', 405]]) {
+    const res = await anon(path, method);
+    assert.equal(gated(res), false, `${method} ${path}`);
+    assert.equal(res.status, status, `${method} ${path}`);
   }
-  assert.deepEqual(served, ['/', '/index.html', '/agent']);
+  assert.deepEqual(served, ['/', '/index.html']);
+  for (const [method, path] of [['GET', '/agent'], ['GET', '/demo/identities'], ['POST', '/demo/session'], ['POST', '/demo/agent-session'],
+    ['GET', '/agent/intakes'], ['GET', '/agent/cases'], ['OPTIONS', '/agent/cases'], ['POST', '/agent']]) {
+    assert.ok(gated(await anon(path, method)), `${method} ${path}`);
+  }
+  // Case and encoding tricks never reach an agent handler: they fall to the static app shell.
+  const agentStore = new Proxy({}, { get: (_, name) => { throw new Error(`store.${String(name)} touched`); } });
+  for (const path of ['/AGENT', '/%61gent/intakes', '//agent/intakes', '/Agent/cases']) {
+    const res = await route(new Request('https://d.example' + path), assetsEnv, agentStore);
+    assert.equal(await res.text(), '<app-root>', path);
+  }
+  const page = await route(new Request('https://d.example/agent', { headers: { Authorization: auth } }), assetsEnv, store);
+  assert.equal(page.status, 200);
 });
 
 test('database metrics are exposed only when explicitly enabled', () => {

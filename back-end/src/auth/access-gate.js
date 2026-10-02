@@ -1,6 +1,6 @@
 /**
- * Team access gate for API routes (HTTP Basic). It is a second layer behind Cloudflare Access,
- * not customer authentication. It fails closed with 503 when its secrets are not configured.
+ * Team access gate (HTTP Basic) for the agent and demo paths only; customers sign in with email codes.
+ * It is not customer authentication. It fails closed with 503 when its secrets are not configured.
  */
 import { fail } from '../http.js';
 

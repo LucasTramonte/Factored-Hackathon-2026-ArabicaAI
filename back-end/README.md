@@ -15,9 +15,9 @@ The service does not decide fraud, issue refunds or authenticate bank customers.
 | Path | Responsibility |
 |---|---|
 | `src/index.js` | Entry point. It turns any unexpected error into a generic 503. It adds D1 counters only when `DEMO_EXPOSE_DB_METRICS=1`, which is set in local tests only. |
-| `src/router.js` | Exact route table. The access gate runs before method checks and also covers the HTML documents (`/`, `/index.html`, `/agent`). Other methods on API paths get 405, unknown API paths get 404. Hashed bundles are served without the Worker. |
+| `src/router.js` | Exact route table. The team gate covers only `/agent`, `/agent/*` and `/demo/*` and runs before method checks there; customer routes rely on each handler's session check. Other methods on API paths get 405, unknown API paths get 404. Hashed bundles are served without the Worker. |
 | `src/http.js` | JSON responses, cookies, and body parsing capped at 16 KB. |
-| `src/auth/access-gate.js` | Basic gate for API routes, second to Cloudflare Access. It fails closed when not configured. |
+| `src/auth/access-gate.js` | Basic team gate for the agent and demo paths only. It fails closed when not configured. |
 | `src/auth/session.js` | Random 256-bit tokens. Only their SHA-256 is stored, and customer and agent sessions are kept separate. |
 | `src/modules/customer/` | Login, own charges, and case creation with validation. |
 | `src/modules/intake/` | Guided intake: start, confirm and incomplete handoff, with strict validation. No free-text classification. |
@@ -62,7 +62,7 @@ npx wrangler dev --local
 
 ## API routes
 
-Every route except `GET /healthz` needs the team gate (HTTP Basic, below Cloudflare Access). Without it the response is 401, before method checks; with the gate secrets unset it is 503. A known path with another method returns 405 and an `Allow` header. An unknown path under `/demo/`, `/agent/`, `/transactions/`, `/cases/` or `/intake` returns a JSON 404 and is never served as the app. Bodies are capped at 16 KB (413). After the simulated login, identity comes only from the session cookie, never from a request body. Every JSON body matches `front-end/contracts/intake-api.schema.json`.
+The team gate (HTTP Basic) covers only `/agent`, `/agent/*` and `/demo/*`. Without it those paths answer 401, before method checks; with the gate secrets unset they answer 503. Customers sign in with an email one-time code (`POST /auth/session`); the customer routes and the `/` and `/index.html` documents are not behind the gate, and each customer route answers 401 without a valid customer session. A known path with another method returns 405 and an `Allow` header. An unknown path under `/demo/`, `/agent/`, `/transactions/`, `/cases/` or `/intake` returns a JSON 404 and is never served as the app. Bodies are capped at 16 KB (413). After the simulated login, identity comes only from the session cookie, never from a request body. Every JSON body matches `front-end/contracts/intake-api.schema.json`.
 
 | Method and path | Session | Purpose | Main statuses |
 |---|---|---|---|
@@ -142,7 +142,7 @@ Preview builds share the production D1 binding. Keep them disabled until a separ
 
 Smart Placement is on (`placement.mode = "smart"`). It is adaptive: Cloudflare may run the Worker nearer D1 once telemetry shows a benefit, and the `cf-placement` response header shows where it actually ran. Each D1 query from São Paulo took about 150 ms before this change (ADR-004).
 
-Runtime secrets `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` live only in the Worker's settings, never in the repository or build logs. Without them, every API route returns 503. Cloudflare Access, with an email allowlist or one-time PIN, must protect the whole hostname, static files included. That is a deployment requirement, confirmed by check 1 of the remote checklist below for a document, a bundle and an API route. `scripts/predeploy.mjs` refuses to deploy a placeholder D1 ID, and it also refuses while the remote D1 lacks a migration in `migrations/`. It reads `d1_migrations` with the build token, so that token needs D1 read access. If the state can't be read, the deploy stops. Non-production branch builds must stay disabled: a preview would bind the production D1.
+Runtime secrets `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` live only in the Worker's settings, never in the repository or build logs. Without them, the agent and demo paths return 503; customer routes are unaffected. Cloudflare Access is to be removed from the hostname after this change is deployed (a human step), so customers reach the product with their email code alone. `scripts/predeploy.mjs` refuses to deploy a placeholder D1 ID, and it also refuses while the remote D1 lacks a migration in `migrations/`. It reads `d1_migrations` with the build token, so that token needs D1 read access. If the state can't be read, the deploy stops. Non-production branch builds must stay disabled: a preview would bind the production D1.
 
 Schema changes: `npx wrangler d1 migrations apply arabica-intake-demo --remote`, after the same migration has passed the local tests. To load reviewed data, run `npx wrangler d1 execute arabica-intake-demo --remote --file <seed>` for the fictitious seed, or for a Gold slice seed whose manifest has been reviewed. Never upload `data/`, DuckDB, Parquet or credentials.
 
@@ -150,8 +150,8 @@ Schema changes: `npx wrangler d1 migrations apply arabica-intake-demo --remote`,
 
 Record the date and the results of each check in ADR-004's implementation notes:
 
-1. Cloudflare Access denies an email that isn't on the allowlist.
-2. A missing Basic credential returns 401 on `/transactions`.
+1. Cloudflare Access is no longer on the hostname: `/` loads without any credential.
+2. A missing Basic credential returns 401 on `/agent` and `/agent/cases`; `/transactions` without a session returns 401 `Start a demo session first`.
 3. Each customer sees only their own charges.
 4. A confirmed case returns a reference, and a retry returns the same one.
 5. The agent view shows the case.

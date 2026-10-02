@@ -19,14 +19,37 @@ async function loggedIn(customerId = 'demo-ana') {
   return c;
 }
 
-test('gate matrix: no API route answers data without the team credential', async () => {
-  for (const path of Object.keys(API)) {
+const TEAM = path => path.startsWith('/demo/') || path.startsWith('/agent/');
+
+test('gate matrix: no agent or demo route answers without the team credential', async () => {
+  for (const path of Object.keys(API).filter(TEAM)) {
     for (const authorization of [null, wrong, 'Bearer x', 'Basic', 'Basic %%%']) {
       for (const method of ['GET', 'POST', 'HEAD', 'OPTIONS', 'DELETE']) {
         const res = await fetch(base + path, { method, headers: authorization ? { Authorization: authorization } : {} });
         assert.equal(res.status, 401, `${method} ${path} with ${authorization}`);
         assert.equal(res.headers.get('Allow'), null, 'methods are not revealed before the gate');
         assert.equal(res.headers.get('set-cookie'), null);
+      }
+    }
+  }
+});
+
+test('customer routes have no team gate: without a session the allowed method gets the session 401, others 405', async () => {
+  for (const [path, allowed] of Object.entries(API).filter(([path]) => !TEAM(path))) {
+    for (const authorization of [null, wrong]) {
+      for (const method of ['GET', 'POST', 'HEAD', 'OPTIONS', 'DELETE']) {
+        const res = await fetch(base + path, { method, headers: authorization ? { Authorization: authorization } : {} });
+        assert.equal(res.headers.get('WWW-Authenticate'), null, `${method} ${path}`);
+        if (method !== allowed) {
+          assert.equal(res.status, 405, `${method} ${path}`);
+          assert.equal(res.headers.get('Allow'), allowed);
+        } else if (path === '/auth/logout') {
+          assert.equal(res.status, 204, 'logout without a session reveals nothing');
+        } else {
+          assert.equal(res.status, 401, `${method} ${path}`);
+          assert.deepEqual(await res.json(), { detail: 'Start a demo session first' });
+          assert.equal(res.headers.get('set-cookie'), null);
+        }
       }
     }
   }
@@ -91,14 +114,18 @@ test('email sign-in: only a correctly signed token for a loaded customer starts 
   assert.equal(forged.headers.get('set-cookie'), null);
 });
 
-test('path tricks never reach a handler without the gate or create a case', async () => {
+test('path tricks never create a case without a session, nor through a non-canonical path with one', async () => {
   const ana = await loggedIn();
   const body = JSON.stringify({ transaction_id: 'demo-tx-001', customer_statement: 'I do not recognize this charge.',
     customer_confirmed: true, idempotency_key: uuid() });
   for (const path of ['//cases', '/CASES', '/cases?x=1', '/transactions/../cases', '/./cases', '/cases%2F']) {
-    const res = await fetch(base + path, { method: 'POST', headers: { Cookie: ana.cookie, 'Content-Type': 'application/json' }, body });
-    assert.notEqual(res.status, 201, path);
-    assert.doesNotMatch(await res.text(), /"protocol"/, path);
+    // fetch normalises dot segments, so those reach /cases itself: with a session that is the real route.
+    const canonical = new URL(base + path).pathname === '/cases';
+    for (const cookie of canonical ? [''] : ['', ana.cookie]) {
+      const res = await fetch(base + path, { method: 'POST', headers: { ...(cookie ? { Cookie: cookie } : {}), 'Content-Type': 'application/json' }, body });
+      assert.notEqual(res.status, 201, path);
+      assert.doesNotMatch(await res.text(), /"protocol"/, path);
+    }
   }
 });
 
@@ -221,23 +248,28 @@ test('concurrent submissions with one key create exactly one case', async () => 
 const guidedStart = (c, language = 'es') => c.call('/intake/start', { language, mode: 'guided', report_type: 'unrecognized_charge',
   customer_statement: language === 'es' ? 'No reconozco este cargo.' : 'Não reconheço esta cobrança.', idempotency_key: uuid() });
 
-test('path tricks on the guided routes never reach a handler without the gate or return evidence', async () => {
+test('path tricks on the guided routes never confirm without a session or return evidence without the gate', async () => {
   const ana = await loggedIn();
   const episode = (await guidedStart(ana)).body.episode_id;
   const confirm = JSON.stringify({ episode_id: episode, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: uuid() });
   for (const path of ['//intake/confirm', '/INTAKE/confirm', '/intake/confirm?x=1', '/intake/../intake/confirm', '/./intake/confirm',
     '/intake/confirm%2F', '/intake//confirm', '/intake/handoff?kind=incomplete']) {
-    const res = await fetch(base + path, { method: 'POST', headers: { Cookie: ana.cookie, 'Content-Type': 'application/json' }, body: confirm });
-    assert.notEqual(res.status, 201, path);
-    assert.doesNotMatch(await res.text(), /"protocol"/, path);
+    // Dot segments and query strings reach the real route, where only a session may confirm.
+    const canonical = ['/intake/confirm', '/intake/handoff'].includes(new URL(base + path).pathname);
+    for (const cookie of canonical ? [''] : ['', ana.cookie]) {
+      const res = await fetch(base + path, { method: 'POST', headers: { ...(cookie ? { Cookie: cookie } : {}), 'Content-Type': 'application/json' }, body: confirm });
+      assert.notEqual(res.status, 201, path);
+      assert.doesNotMatch(await res.text(), /"protocol"/, path);
+    }
   }
   const agent = client(); await agent.call('/demo/agent-session', {});
-  for (const path of ['//agent/intake-detail?protocol=' + episode, '/AGENT/intakes', '/agent/../agent/intakes', '/agent/intakes%2F']) {
+  for (const path of ['//agent/intake-detail?protocol=' + episode, '/AGENT/intakes', '/%61gent/intakes', '//agent/intakes', '/agent/../agent/intakes',
+    '/agent/intakes%2F']) {
     // Paths outside the API namespaces may get the static app shell; none may return intake data without the gate.
     const res = await fetch(base + path, { headers: { Cookie: agent.cookie } });
     assert.doesNotMatch(await res.text(), /customer_statement|"items"|No reconozco/, path);
   }
-  assert.equal((await ana.call('/intake/confirm', JSON.parse(confirm))).status, 201, 'the real route still works with the gate');
+  assert.equal((await ana.call('/intake/confirm', JSON.parse(confirm))).status, 201, 'the real route still works with the session');
 });
 
 test('isolation on guided routes: foreign and missing episodes or transactions look identical', async () => {

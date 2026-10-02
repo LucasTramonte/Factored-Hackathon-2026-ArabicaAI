@@ -50,11 +50,11 @@ test('guided_start_is_owned_and_idempotent against local D1', async () => {
 test('guided start gate, path, session-role and malformed-input boundaries', async () => {
   for (const path of ['/intake/start', '/intake', '/intake/', '/intake/unknown', '/intake/start/extra']) {
     for (const method of ['GET', 'POST', 'HEAD', 'OPTIONS', 'DELETE', 'PUT']) {
-      const denied = await fetch(base + path, { method });
-      assert.equal(denied.status, 401, `${method} ${path}`);
-      assert.equal(denied.headers.get('Allow'), null);
-      const gated = await fetch(base + path, { method, headers: { Authorization: auth } });
-      assert.equal(gated.status, path === '/intake/start' ? (method === 'POST' ? 401 : 405) : 404, `${method} ${path}`);
+      for (const headers of [{}, { Authorization: auth }]) {
+        const res = await fetch(base + path, { method, headers });
+        assert.equal(res.status, path === '/intake/start' ? (method === 'POST' ? 401 : 405) : 404, `${method} ${path}`);
+        assert.equal(res.headers.get('WWW-Authenticate'), null, 'no team gate on customer paths');
+      }
     }
   }
   const agent = client();

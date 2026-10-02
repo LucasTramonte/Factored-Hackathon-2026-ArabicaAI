@@ -83,11 +83,11 @@ test('invalid starts, roles, expiry, gate, methods and paths never write intake 
   assert.equal((await route(request(), env, store)).status, 401);
   for (const method of ['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']) {
     assert.equal((await route(request(body, { method }), env, store)).status, 405);
-    assert.equal((await route(request(body, { method, authorization: null }), env, store)).status, 401);
+    assert.equal((await route(request(body, { method, authorization: null }), env, store)).status, 405, 'no team gate on customer paths');
   }
   for (const path of ['/intake', '/intake/', '/intake/unknown', '/intake/start/extra']) {
     assert.equal((await route(request(body, { path }), env, store)).status, 404);
-    assert.equal((await route(request(body, { path, authorization: null }), env, store)).status, 401);
+    assert.equal((await route(request(body, { path, authorization: null }), env, store)).status, 404, 'no team gate on customer paths');
   }
   assert.equal(db.prepare('SELECT count(*) AS n FROM intake_episodes').get().n, 0);
 });

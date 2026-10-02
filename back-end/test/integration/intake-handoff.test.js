@@ -25,7 +25,7 @@ test('terminal_incomplete_handoff_recovery_uses_new_episode on real D1',async()=
 
 test('handoff endpoints gate methods paths roles expiry and malformed bodies',async()=>{
  for(const path of ['/intake/confirm','/intake/handoff','/intake/confirm/extra','/intake/handoff/extra'])for(const method of ['GET','POST','HEAD','OPTIONS','PUT','DELETE']){
- assert.equal((await fetch(base+path,{method})).status,401);assert.equal((await fetch(base+path,{method,headers:{Authorization:auth}})).status,path.endsWith('/extra')?404:method==='POST'?401:405);}
+ const expected=path.endsWith('/extra')?404:method==='POST'?401:405;for(const headers of [{},{Authorization:auth}])assert.equal((await fetch(base+path,{method,headers})).status,expected,`${method} ${path} (no team gate on customer paths)`);}
  const agent=client();await agent.call('/demo/agent-session',{});agent.cookie=agent.cookie.replace('demo_agent_session=','demo_session=');assert.equal((await agent.call('/intake/handoff',{})).status,401);
  for(const token of ['f'.repeat(64),process.env.EXPIRED_TOKEN]){const c=client();c.cookie=`demo_session=${token}`;assert.equal((await c.call('/intake/confirm',{})).status,401);}
  const ana=await customer();for(const invalid of ['{bad','[]','null',{},'x'.repeat(20000)])assert.equal((await ana.call('/intake/confirm',invalid)).status,typeof invalid==='string'&&invalid.length>16000?413:422);
