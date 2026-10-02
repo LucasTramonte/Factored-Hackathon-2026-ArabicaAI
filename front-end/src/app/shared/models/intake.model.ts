@@ -19,6 +19,8 @@ export interface TransactionList {
   items: Transaction[];
   has_more: boolean;
   coverage: string;
+  /** The recorded view (ADR-009) to acknowledge once the rows are on screen; null when nothing was recorded. */
+  view_ref: string | null;
 }
 
 export interface CaseBody {

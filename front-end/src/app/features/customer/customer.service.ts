@@ -1,5 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/http/api.service';
+import { LangService } from '../../shared/i18n/lang.service';
 import { ContextCard, CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeReceipt, IntakeStart, IntakeStartBody,
   ReportList, TransactionList } from '../../shared/models/intake.model';
 
@@ -7,6 +8,7 @@ import { ContextCard, CustomerSession, Identity, IntakeConfirmBody, IntakeHandof
 @Injectable({ providedIn: 'root' })
 export class CustomerService {
   private readonly api = inject(ApiService);
+  private readonly lang = inject(LangService);
   /** Tab-scoped state that survives in-app navigation: the signed-in customer and their card. */
   readonly client = signal('');
   readonly card = signal<ContextCard | null>(null);
@@ -30,8 +32,14 @@ export class CustomerService {
     return this.api.request('/auth/logout', {});
   }
 
+  /** The customer's charges in the interface language; the server records the view and returns its ``view_ref`` (ADR-009). */
   transactions(): Promise<TransactionList> {
-    return this.api.request<TransactionList>('/transactions');
+    return this.api.request<TransactionList>(`/transactions?lang=${this.lang.lang()}`);
+  }
+
+  /** Acknowledge that a recorded view's rows are on screen (idempotent on the server). */
+  displayed(viewRef: string): Promise<unknown> {
+    return this.api.request('/transactions/displayed', { view_ref: viewRef });
   }
 
   reports(): Promise<ReportList> {

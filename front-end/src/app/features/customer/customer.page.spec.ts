@@ -17,14 +17,15 @@ describe('CustomerPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate'], { client: signal(''), card: signal(null) });
+      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed'], { client: signal(''), card: signal(null) });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null });
-    service.transactions.and.resolveTo({ items: [tx], has_more: false, coverage: 'fictitious_demo_data_only' });
+    service.transactions.and.resolveTo({ items: [tx], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
     service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', context_card: null });
     service.logout.and.resolveTo();
     service.reports.and.resolveTo({ items: [], has_more: false });
+    service.displayed.and.resolveTo({});
     cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
     cognito.requestCode.and.resolveTo();
     cognito.submitCode.and.resolveTo('id.token');
@@ -849,7 +850,7 @@ describe('CustomerPage', () => {
   });
 
   it('says when more charges exist than are listed', async () => {
-      service.transactions.and.resolveTo({ items: [tx], has_more: true, coverage: 'fictitious_demo_data_only' });
+      service.transactions.and.resolveTo({ items: [tx], has_more: true, coverage: 'fictitious_demo_data_only', view_ref: null });
       const { el, p } = await home();
       expect(el.textContent).toContain(p.t().moreCharges);
     });
@@ -962,7 +963,7 @@ describe('CustomerPage', () => {
 
     it('after a receipt, another row\'s Report starts a new report on that charge; a frozen request still disables the rows', async () => {
       const tx2: Transaction = { ...tx, transaction_id: 'demo-tx-002', merchant_name: 'Loja' };
-      service.transactions.and.resolveTo({ items: [tx, tx2], has_more: false, coverage: 'fictitious_demo_data_only' });
+      service.transactions.and.resolveTo({ items: [tx, tx2], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
       const { fixture, p, el } = await home();
       p.openChat('demo-tx-001');
       p.intakeReceipt.set({ episode_id: 'E', protocol: 'P', kind: 'complete', accepted_at: 'x', replayed: false, urgency: 'normal',
@@ -979,6 +980,35 @@ describe('CustomerPage', () => {
       p.frozen.set({ path: 'start', body: {} as never });
       fixture.detectChanges();
       expect(buttons().map(b => b.disabled)).toEqual([true, true]);
+    });
+
+    it('acknowledges a recorded view once, after the rows are on screen', async () => {
+      const ref = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+      service.transactions.and.resolveTo({ items: [tx], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: ref });
+      const { fixture, el } = await home();
+      await fixture.whenStable();
+      expect(el.querySelectorAll('.td-state .ar-btn').length).toBe(1);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(service.displayed.calls.allArgs()).toEqual([[ref]]);
+    });
+
+    it('sends no acknowledgement when no view was recorded', async () => {
+      const { fixture } = await home();
+      await fixture.whenStable();
+      expect(service.displayed).not.toHaveBeenCalled();
+    });
+
+    it('keeps the page as it is when the acknowledgement fails', async () => {
+      service.transactions.and.resolveTo({ items: [tx], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' });
+      service.displayed.and.rejectWith(new ApiError(503));
+      const { fixture, p, el } = await home();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(service.displayed).toHaveBeenCalledTimes(1);
+      expect(p.error()).toBe('');
+      expect(el.querySelector('.ar-alert')).toBeNull();
+      expect(el.querySelectorAll('.td-state .ar-btn').length).toBe(1);
     });
 
     it('gives every charge a compact Report button named after its merchant that opens the chat on it', async () => {
