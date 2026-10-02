@@ -40,3 +40,32 @@ test('the policy names every served currency with a positive round amount and a 
   assert.equal(config.relative_min_others, 5);
   assert.match(config.demo_block_line, /\(demo\)$/);
 });
+
+test('a failed read of the served purchases still accepts the report, with only the fixed amount applied', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const { createStore } = await import('../../src/store/d1.js');
+  const { route } = await import('../../src/router.js');
+  const db = new DatabaseSync(':memory:'); db.exec('PRAGMA foreign_keys=ON');
+  const dir = new URL('../../migrations/', import.meta.url);
+  for (const file of readdirSync(dir).sort()) db.exec(readFileSync(new URL(file, dir), 'utf8'));
+  db.exec(readFileSync(new URL('../../seeds/seed_fictitious.sql', import.meta.url), 'utf8'));
+  const store = { ...createStore({ prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
+    batch: async statements => { db.exec('BEGIN'); try { const r = statements.map(s => s.all()); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } } }),
+  listTransactions: async () => { throw new Error('D1 unavailable'); } };
+  let cookie = '';
+  const call = async (path, body) => {
+    const response = await route(new Request('https://demo.example' + path, { method: 'POST', body: JSON.stringify(body),
+      headers: cookie ? { Cookie: cookie } : {} }), { DEMO_PICKER: '1' }, store);
+    const set = response.headers.get('set-cookie'); if (set) cookie = set.split(';', 1)[0];
+    return { status: response.status, body: await response.json() };
+  };
+  assert.equal((await call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
+  const confirm = async transaction_id => call('/intake/confirm', { transaction_id, customer_confirmed: true, idempotency_key: crypto.randomUUID(),
+    episode_id: (await call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
+      customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() })).body.episode_id });
+  const normal = await confirm('demo-tx-001');
+  assert.equal(normal.status, 201); assert.equal(normal.body.kind, 'complete'); assert.equal(normal.body.urgency, 'normal');
+  const high = await confirm('demo-tx-006');
+  assert.equal(high.status, 201); assert.equal(high.body.urgency, 'high', 'the fixed amount needs no purchase history');
+});

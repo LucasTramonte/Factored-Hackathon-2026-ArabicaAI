@@ -53,6 +53,10 @@ const CEILING = {
   // Agent session, then one batch: history row (+ unique index), the customer's email (row, primary key,
   // email_outbox_recent) and the status update; each statement resolves the handoff by its unique keys (ADR-004).
   agentTransition: [5, 26, 6, 2],
+  // A high-priority charge (Task 5.1): its confirm writes one more row, the entry in the partial index
+  // intake_handoffs_urgent; closing it writes what a normal close writes, since D1 counts no write for leaving that index.
+  intakeConfirmHigh: [21, 77, 28, 10],
+  agentTransitionHigh: [5, 26, 6, 2],
   completeDetail: [3, 15, 0, 3],
   incompleteDetail: [3, 10, 0, 3],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
@@ -168,6 +172,18 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   assert.equal(transition.status, 200); assertContract('intakeTransition', transition.body);
   measured.agentTransition = within('agentTransition', transition.metrics);
   assert.equal(transition.metrics.rows_written, CEILING.agentTransition[2], 'the in_review email was queued');
+  // A high-priority charge (BRL 3,890.00, above the stated BRL 2,500): urgency.test.js closed its earlier report, so this
+  // confirm is new (201, not 409). Ana has a notification target, so both requests queue an email (the worst case).
+  const high = await c.call('/intake/confirm', { episode_id: (await c.call('/intake/start', startBody())).body.episode_id,
+    transaction_id: 'demo-tx-006', customer_confirmed: true, idempotency_key: crypto.randomUUID() });
+  assert.equal(high.status, 201); assertContract('intakeReceipt', high.body); assert.equal(high.body.urgency, 'high');
+  measured.confirmHigh = within('intakeConfirmHigh', high.metrics);
+  assert.equal(high.metrics.rows_written, CEILING.intakeConfirmHigh[2], 'the urgent index entry and the received email were written');
+  assert.equal((await agent.call('/agent/intake-status', { protocol: high.body.protocol, status: 'in_review' })).status, 200);
+  const closing = await agent.call('/agent/intake-status', { protocol: high.body.protocol, status: 'closed' });
+  assert.equal(closing.status, 200); assertContract('intakeTransition', closing.body);
+  measured.agentTransitionHigh = within('agentTransitionHigh', closing.metrics);
+  assert.equal(closing.metrics.rows_written, CEILING.agentTransitionHigh[2], 'closing queued the email (D1 counts no write for leaving the partial index)');
   const completeEpisode = sum(measured, ['login', 'list', 'start', 'confirm']);
   const incompleteEpisode = sum({ ...measured, start: measured.start2 }, ['login', 'list', 'start', 'incomplete']);
   within('complete episode', completeEpisode, EPISODE_CEILING.complete);

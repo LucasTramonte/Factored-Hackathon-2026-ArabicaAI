@@ -88,8 +88,10 @@ async function finishIntake(request, env, store, ctx, complete) {
     // Only a new confirmation is checked: a replay has a prior reservation and returns its receipt above this branch.
     // ponytail: check-then-write, so two confirms within the same instant can still open two reports; the agent queue shows both.
     if (kind === 'complete' && await store.openReportForTransaction(customerId, transactionId)) return fail(409, 'This charge already has an open report');
-    // Stated policy, not a fitted threshold (DF-024); one read of the customer's served purchases, up to 20 others.
-    if (kind === 'complete') urgency = urgencyOf(evidence, (await store.listTransactions(customerId, 21)).filter(t => t.transaction_id !== transactionId), URGENCY);
+    // Stated policy, not a fitted threshold (DF-024): the relative rule uses the p95 of the customer's most recent 21
+    // served purchases (newest first), without the chosen one. A failed read leaves only the fixed amount; the report is still accepted.
+    if (kind === 'complete') urgency = urgencyOf(evidence, (await store.listTransactions(customerId, 21).catch(() => []))
+      .filter(t => t.transaction_id !== transactionId), URGENCY);
   }
   const live = await requireSession(request, store, 'customer');
   if (!live || live.customer_id !== customerId) return fail(401, 'Start a demo session first');
