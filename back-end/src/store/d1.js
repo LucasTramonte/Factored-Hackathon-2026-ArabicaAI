@@ -372,12 +372,17 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       const [high, rest] = await batch([[lane(true), Math.min(limit, 51)], [lane(false), Math.min(limit, 51)]]);
       return [...high.results, ...rest.results].slice(0, Math.min(limit, 51));
     },
-    /** The session customer's acknowledged handoffs, newest first. Only handoffs whose receipt was read back appear. */
+    /**
+     * The session customer's acknowledged handoffs, newest first, with the charge of a complete one when its case is this customer's and confirmed (null
+     * otherwise; ``cases`` is one row per primary key). Only handoffs whose receipt was read back appear.
+     */
     // ponytail: reads ~1 + 2 rows per episode of the customer (all states) then a temp sort; LIMIT does not cap it.
     // Upgrade: an index on handoffs keyed by customer and accepted_at, which needs a customer column there.
     listCustomerHandoffs: (customerId, limit) => all(
-      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,h.kind,h.status,h.accepted_at '
-      + "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
+      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,h.kind,h.status,h.accepted_at,c.transaction_id '
+      + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+      + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
+      + "WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
       + 'ORDER BY h.accepted_at DESC,protocol LIMIT ?', customerId, limit),
     /**
      * One acknowledged report of this customer (same predicate as ``listCustomerHandoffs``) with its episode language

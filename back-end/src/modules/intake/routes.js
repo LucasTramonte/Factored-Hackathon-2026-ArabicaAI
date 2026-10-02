@@ -169,14 +169,14 @@ async function unreserved(request, store, { customerId, episodeId, toolCalls, st
 const REPORTS_PAGE = 20;
 /** What happens next for the customer, per stored review status. */
 const NEXT_STEP = { received: 'review_pending', in_review: 'being_reviewed', closed: 'closed_by_person' };
-/** GET /reports: the session customer's own acknowledged reports, newest first; no statement, evidence or episode id. */
+/** GET /reports: the session customer's own acknowledged reports, newest first, each with its confirmed charge id or null; no statement, evidence or episode id. */
 export async function listReports(request, env, store) {
   const current = await requireSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
   if (new URL(request.url).search) return fail(422, 'Unexpected parameters');
   const rows = await store.listCustomerHandoffs(current.customer_id, REPORTS_PAGE + 1);
-  return json({ items: rows.slice(0, REPORTS_PAGE).map(({ protocol, reference_short, kind, status, accepted_at }) =>
-    ({ protocol, reference_short: reference_short ?? null, kind, status, next_step: NEXT_STEP[status], accepted_at })),
+  return json({ items: rows.slice(0, REPORTS_PAGE).map(({ protocol, reference_short, kind, status, accepted_at, transaction_id }) =>
+    ({ protocol, reference_short: reference_short ?? null, kind, status, next_step: NEXT_STEP[status], accepted_at, transaction_id: transaction_id ?? null })),
     has_more: rows.length > REPORTS_PAGE });
 }
 

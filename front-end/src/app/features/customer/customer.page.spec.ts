@@ -6,7 +6,7 @@ import { CustomerPage, initialsOf } from './customer.page';
 import { LangService, errorText } from '../../shared/i18n/lang.service';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
-import { Identity, IntakeReceipt, IntakeStart, Transaction } from '../../shared/models/intake.model';
+import { Identity, IntakeReceipt, IntakeStart, Report, Transaction } from '../../shared/models/intake.model';
 
 describe('CustomerPage', () => {
   let service: jasmine.SpyObj<CustomerService>;
@@ -17,7 +17,7 @@ describe('CustomerPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate'], { client: signal(''), card: signal(null), receipts: signal([]) });
+      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate'], { client: signal(''), card: signal(null) });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null });
@@ -299,6 +299,8 @@ describe('CustomerPage', () => {
     const intakeReceipt: IntakeReceipt = { episode_id: started.episode_id, protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
       accepted_at: '2026-09-30T12:00:00Z', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'],
       unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review', urgency: 'normal' };
+    const openReport: Report = { protocol: intakeReceipt.protocol, reference_short: 'AR-7K3M-2Q4X', kind: 'complete', status: 'received',
+      next_step: 'review_pending', accepted_at: intakeReceipt.accepted_at, transaction_id: 'demo-tx-001' };
     let lang: LangService;
 
     beforeEach(async () => {
@@ -531,6 +533,7 @@ describe('CustomerPage', () => {
     it('does not send twice while busy or after a receipt', async () => {
       await startEpisode();
       service.confirmIntake.and.resolveTo(intakeReceipt);
+      service.reports.and.resolveTo({ items: [openReport], has_more: false });
       page.choice = 'demo-tx-001';
       page.chatConfirmed = true;
       await Promise.all([page.confirmCharge(), page.confirmCharge()]);
@@ -538,7 +541,7 @@ describe('CustomerPage', () => {
       await page.cannotFind();
       expect(service.confirmIntake).toHaveBeenCalledTimes(1);
       expect(service.handoffIntake).not.toHaveBeenCalled();
-      expect(page.reportedState('demo-tx-001')).toBe('accepted');
+      expect(page.reportOf('demo-tx-001')?.status).toBe('received');
     });
 
     it('a charge row opens the chat with that charge preselected but unconfirmed', async () => {
@@ -549,24 +552,22 @@ describe('CustomerPage', () => {
       expect(page.chatConfirmed).toBeFalse();
     });
 
-    it('keeps every receipt of the session after a new report; an accepted charge is not offered again', async () => {
+    it('a charge with an open server report is not offered again after a new report; a closed one is', async () => {
       await startEpisode();
       service.confirmIntake.and.resolveTo(intakeReceipt);
+      service.reports.and.resolveTo({ items: [openReport], has_more: false });
       page.choice = 'demo-tx-001';
       page.chatConfirmed = true;
       await page.confirmCharge();
       page.newReport();
-      expect(page.receipts().length).toBe(1);
-      expect(page.reportedState('demo-tx-001')).toBe('accepted');
       expect(page.choosable()).toEqual([]);
       await startEpisode();
       page.choice = 'demo-tx-001';
       page.chatConfirmed = true;
       await page.confirmCharge();
       expect(service.confirmIntake).toHaveBeenCalledTimes(1);
-      service.handoffIntake.and.resolveTo({ ...intakeReceipt, protocol: '77777777-8888-4777-8666-555555555555', kind: 'incomplete' });
-      await review();
-      expect(page.receipts().map(r => [r.receipt.kind, r.transactionId])).toEqual([['complete', 'demo-tx-001'], ['incomplete', null]]);
+      page.reports.set({ items: [{ ...openReport, status: 'closed', next_step: 'closed_by_person' }], has_more: false });
+      expect(page.choosable()).toEqual([tx]);
     });
 
     it('marks a pending confirmation as not confirmed, never as accepted', async () => {
@@ -575,7 +576,8 @@ describe('CustomerPage', () => {
       page.choice = 'demo-tx-001';
       page.chatConfirmed = true;
       await page.confirmCharge();
-      expect(page.reportedState('demo-tx-001')).toBe('chipPending');
+      expect(page.pending('demo-tx-001')).toBeTrue();
+      expect(page.reportOf('demo-tx-001')).toBeUndefined();
     });
 
     it('answers FAQs from fixed translated text only', () => {
@@ -652,7 +654,7 @@ describe('CustomerPage', () => {
     });
 
     const report = (kind: 'complete' | 'incomplete' | 'technical', ref: string | null, at = '2026-10-01T12:00:00Z', protocol = '99999999-8888-4777-8666-555555555555') =>
-      ({ protocol, reference_short: ref, kind, status: 'received', next_step: 'review_pending', accepted_at: at } as const);
+      ({ protocol, reference_short: ref, kind, status: 'received', next_step: 'review_pending', accepted_at: at, transaction_id: null } as const);
     const rows = (el: HTMLElement) => [...el.querySelectorAll('.your-reports li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim() ?? '');
 
     it('after sign-in lists the server reports in server order (newest first), with reference, kind and status as text', async () => {
@@ -669,6 +671,42 @@ describe('CustomerPage', () => {
       expect(second).toContain('11111111-2222-4333-8444-555555555555'); // no short code: the protocol
       expect(second).toContain(p.t().receiptTechnical);
       expect(el.textContent).not.toContain(p.t().moreReports);
+    });
+
+    describe('after a fresh sign-in, each charge row follows its server report', () => {
+      const chip = (el: HTMLElement) => el.querySelector('.td-state .ar-chip')?.textContent?.replace(/\s+/g, ' ').trim();
+      const listed = (status: 'received' | 'in_review' | 'closed') => service.reports.and.resolveTo({ items: [{ ...report('complete', 'AR-AAAA-BBBB'),
+        status, next_step: status === 'received' ? 'review_pending' : status === 'in_review' ? 'being_reviewed' : 'closed_by_person', transaction_id: 'demo-tx-001' }], has_more: false });
+
+      it('an open report shows its status and reference and no Report button; the chat does not offer the charge', async () => {
+        listed('received');
+        const { el, p } = await home();
+        expect(chip(el)).toBe(p.t().statusReceived + ' AR-AAAA-BBBB');
+        expect(el.querySelector('.report-btn')).toBeNull();
+        expect(p.choosable()).toEqual([]);
+      });
+
+      it('in review shows the in-review text', async () => {
+        listed('in_review');
+        const { el, p } = await home();
+        expect(chip(el)).toBe(p.t().statusInReview + ' AR-AAAA-BBBB');
+        expect(el.querySelector('.report-btn')).toBeNull();
+      });
+
+      it('a closed report shows the closed chip and the Report button again', async () => {
+        listed('closed');
+        const { el, p } = await home();
+        expect(chip(el)).toBe(p.t().chipClosed + ' AR-AAAA-BBBB');
+        expect(el.querySelector('.report-btn')).not.toBeNull();
+        expect(p.choosable()).toEqual([tx]);
+      });
+
+      it('"Your reports" names the charge by merchant and amount', async () => {
+        listed('received');
+        const { el } = await home();
+        expect(rows(el)[0]).toContain('Mercado');
+        expect(rows(el)[0]).toContain('125.50 BRL');
+      });
     });
 
     it('shows the status a person set: received, in review, closed; never resolved', async () => {

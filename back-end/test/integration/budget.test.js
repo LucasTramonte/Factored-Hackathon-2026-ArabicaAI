@@ -45,7 +45,8 @@ const CEILING = {
   // Pending density is not bounded in general, so this is a fixture workload, not a universal scan bound.
   // Open high-urgency reports come first: one more query in the same batch, through the partial index intake_handoffs_urgent.
   intakeQueue: [3, 225, 0, 2],
-  // 1 session row + about 2 rows per episode of the customer, measured on a customer with one report.
+  // 1 session row + about 2 rows per episode of the customer + the case row (primary key) of a complete report.
+  // Measured on a customer with one complete report: 2 queries, 5 rows read, 0 written, 2 round trips (ceiling 7 rows read).
   reports: [2, 7, 0, 2],
   // Session, owned report with its target flag, the outbox insert that checks the 5-minute window itself (row, primary
   // key, email_outbox_recent); the send marks the row from its own store after the response (Task 3.3).
