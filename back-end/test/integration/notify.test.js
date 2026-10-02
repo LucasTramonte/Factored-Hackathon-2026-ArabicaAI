@@ -3,12 +3,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 
-test('a target upserts, and an outbox row is queued, marked and counted per customer and reference', async () => {
+test('an email sign-in upserts the target, and an outbox row is queued, marked and counted per customer and reference', async () => {
   const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
   await withIntakeStore({ config: resolve(process.cwd(), 'wrangler.jsonc') }, async store => {
     const now = Date.now(); const reference = 'AR-' + crypto.randomUUID();
-    await store.upsertNotificationTarget({ customerId: 'demo-ana', emailEnc: 'iv.one', now });
-    await store.upsertNotificationTarget({ customerId: 'demo-ana', emailEnc: 'iv.two', now: now + 1 });
+    const signIn = (emailEnc, at) => store.rotateSession({ now: at, oldHash: null, newHash: crypto.randomUUID().replaceAll('-', '').repeat(2),
+      actor: 'customer', customerId: 'demo-ana', expiresAt: at + 3600000, emailEnc });
+    await signIn('iv.one', now); await signIn('iv.two', now + 1);
     assert.deepEqual(await store.findNotificationTarget('demo-ana'), { email_enc: 'iv.two', updated_at: now + 1 });
     assert.equal(await store.findNotificationTarget('demo-bruno'), null);
     const messageId = crypto.randomUUID();

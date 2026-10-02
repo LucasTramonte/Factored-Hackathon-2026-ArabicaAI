@@ -33,6 +33,7 @@ export function newShortReference() {
 const SHORT_REFERENCE_ATTEMPTS = 3;
 const shortReferenceTaken = error => /UNIQUE/i.test(String(error?.message)) && /reference_short/i.test(String(error?.message));
 
+/** One encrypted address per customer (AES-GCM blob from ``notify/email.js``); a new email sign-in replaces it. */
 const UPSERT_TARGET = 'INSERT INTO notification_targets(customer_id,email_enc,updated_at) VALUES(?,?,?) '
   + 'ON CONFLICT(customer_id) DO UPDATE SET email_enc=excluded.email_enc,updated_at=excluded.updated_at';
 
@@ -233,7 +234,8 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + "SELECT ?,?,e.customer_id,'received',e.language,?,'queued' FROM intake_episodes e "
           + "WHERE e.customer_id=? AND e.episode_id=? AND e.state='handoff_pending' "
           + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=e.episode_id) '
-          + 'AND EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id)' + authority + ' RETURNING message_id',
+          // A language the templates lack skips the email instead of failing the outbox CHECK and rolling back the handoff.
+          + "AND e.language IN ('es','pt','en') AND EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id)" + authority + ' RETURNING message_id',
           emailId,now,receipt.reference_short ?? reference,customerId,episode.episode_id,receipt.handoff_id,...authorityParams],
         ['UPDATE intake_episodes SET state=?,updated_at=? WHERE customer_id=? AND episode_id=? '
           + "AND state='handoff_pending' AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=intake_episodes.episode_id)" + authority,
@@ -350,8 +352,6 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     listIntakeHistory: episodeId => all(
       'SELECT event_json FROM intake_events WHERE episode_id=? ORDER BY seq LIMIT 101', episodeId),
 
-    /** One encrypted address per customer (AES-GCM blob from ``notify/email.js``); a new sign-in replaces it. */
-    upsertNotificationTarget: ({ customerId, emailEnc, now }) => all(UPSERT_TARGET, customerId, emailEnc, now),
     findNotificationTarget: customerId => first(
       'SELECT email_enc,updated_at FROM notification_targets WHERE customer_id=?', customerId),
     /** Outbox rows hold template, language and reference only, never a body; they start ``queued``. */

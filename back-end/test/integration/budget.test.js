@@ -99,6 +99,7 @@ const startBody = () => ({ language: 'es', mode: 'guided', report_type: 'unrecog
   customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() });
 
 test('guided endpoints and complete and incomplete customer episodes preserve measured D1 budgets', async () => {
+  assert.equal((await client({ authorization: 'Bearer ' + await idToken('demo-ana') }).call('/auth/session', {})).status, 200); // target present: worst case
   const c = client(); const measured = {};
   measured.login = within('login', (await c.call('/demo/session', { customer_id: 'demo-ana' })).metrics);
   measured.list = within('list', (await c.call('/transactions')).metrics);
@@ -111,6 +112,7 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   const complete = await c.call('/intake/confirm', confirmation);
   assert.equal(complete.status, 201); assertContract('intakeReceipt', complete.body);
   measured.confirm = within('intakeConfirm', complete.metrics);
+  assert.equal(complete.metrics.rows_written, CEILING.intakeConfirm[2], 'the received email was queued');
   const confirmReplay = await c.call('/intake/confirm', confirmation);
   assert.equal(confirmReplay.status, 200); assert.equal(confirmReplay.body.protocol, complete.body.protocol);
   measured.confirmReplay = within('intakeConfirmReplay', confirmReplay.metrics);
@@ -120,6 +122,7 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   const incomplete = await c.call('/intake/handoff', handoff);
   assert.equal(incomplete.status, 201); assertContract('intakeReceipt', incomplete.body);
   measured.incomplete = within('intakeIncomplete', incomplete.metrics);
+  assert.equal(incomplete.metrics.rows_written, CEILING.intakeIncomplete[2], 'the received email was queued');
   const incompleteReplay = await c.call('/intake/handoff', handoff);
   assert.equal(incompleteReplay.status, 200); assert.equal(incompleteReplay.body.protocol, incomplete.body.protocol);
   measured.incompleteReplay = within('intakeIncompleteReplay', incompleteReplay.metrics);

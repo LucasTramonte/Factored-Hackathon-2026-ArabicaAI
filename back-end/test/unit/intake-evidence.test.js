@@ -89,7 +89,7 @@ test('a real pending reservation is never abandoned and only a live same-owner s
   assert.equal((await store.finishIntakeHandoff({customerId:'ana',episode,receipt,sessionHash:other,now,operationDuration:0,toolCalls:0})).acknowledged,false);
   assert.equal((await store.finishIntakeHandoff({customerId:'ana',episode,receipt,sessionHash:await tokenHash('x'.repeat(64)),now,operationDuration:0,toolCalls:0})).acknowledged,false);
   assert.equal((await store.findIntake('ana',episode.episode_id)).state,'handoff_pending');
-  await store.upsertNotificationTarget({customerId:'ana',emailEnc:'iv.ct',now});
+  await store.rotateSession({now,oldHash:null,newHash:'t'.repeat(64),actor:'customer',customerId:'ana',expiresAt:now+3600000,emailEnc:'iv.ct'});
   const first = await store.finishIntakeHandoff({customerId:'ana',episode,receipt,sessionHash:owner,now,operationDuration:0,toolCalls:0});
   assert.equal(first.acknowledged,true); assert.ok(first.emailId,'the first acknowledgement queues one email');
   assert.deepEqual(await store.finishIntakeHandoff({customerId:'ana',episode,receipt,sessionHash:owner,now,operationDuration:0,toolCalls:0}),{acknowledged:true,emailId:null},'a replay queues nothing');
