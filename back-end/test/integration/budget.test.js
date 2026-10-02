@@ -36,6 +36,8 @@ const CEILING = {
   // 1 session row + 2 rows per scanned handoff; qualified for a 50-row page behind 50 tied pending reservations.
   // Pending density is not bounded in general, so this is a fixture workload, not a universal scan bound.
   intakeQueue: [2, 225, 0, 2],
+  // 1 session row + about 2 rows per episode of the customer, measured on a customer with one report.
+  reports: [2, 7, 0, 2],
   completeDetail: [3, 15, 0, 3],
   incompleteDetail: [3, 10, 0, 3],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
@@ -128,6 +130,13 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
     assert.equal(detail.status, 200); assertContract('agentIntakeDetail', detail.body); assert.equal(detail.body.kind, receipt.kind);
     measured[name] = within(name, detail.metrics);
   }
+  // CLI-COHORT-2 exists only in the cohort fixture and no other test signs in as it, so its history is this one report.
+  const cohort = client(); assert.equal((await cohort.call('/demo/session', { customer_id: 'CLI-COHORT-2' })).status, 200);
+  const cohortStart = await cohort.call('/intake/start', startBody()); assert.equal(cohortStart.status, 201);
+  assert.equal((await cohort.call('/intake/handoff', { episode_id: cohortStart.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() })).status, 201);
+  const reports = await cohort.call('/reports'); assert.equal(reports.status, 200); assertContract('reportList', reports.body);
+  assert.equal(reports.body.items.length, 1); assert.equal(reports.body.has_more, false);
+  measured.reports = within('reports', reports.metrics);
   const completeEpisode = sum(measured, ['login', 'list', 'start', 'confirm']);
   const incompleteEpisode = sum({ ...measured, start: measured.start2 }, ['login', 'list', 'start', 'incomplete']);
   within('complete episode', completeEpisode, EPISODE_CEILING.complete);

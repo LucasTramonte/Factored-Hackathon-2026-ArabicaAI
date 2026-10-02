@@ -8,7 +8,7 @@ import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
-  Transaction } from '../../shared/models/intake.model';
+  ReportList, Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { demoPicker } from '../../core/auth/cognito.config';
@@ -61,8 +61,11 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly error = signal('');
   readonly client = this.service.client;
   readonly card = this.service.card;
-  /** Every receipt from this tab's session, newest last; kept across new reports and in-app navigation. */
+  /** This tab's receipts with their charge ids: only so an accepted charge is not offered again (server reports carry no charge id). */
   readonly receipts = this.service.receipts;
+  /** "Your reports" from GET /reports, so it survives the tab; null until loaded. */
+  readonly reports = signal<ReportList | null>(null);
+  readonly reportsFailed = signal(false);
   readonly transactions = signal<Transaction[]>([]);
   readonly hasMore = signal(false);
   readonly identities = signal<Identity[]>([]);
@@ -274,6 +277,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       this.codeSent.set(false);
       this.code = '';
       await this.loadTransactions();
+      await this.loadReports();
       this.step.set('home');
     } catch (e) {
       onError(e);
@@ -293,6 +297,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   private async resume(): Promise<void> {
     this.booted.set(true);
     this.step.set('home');
+    void this.loadReports();
     try {
       await this.loadTransactions();
     } catch (e) {
@@ -304,6 +309,16 @@ export class CustomerPage implements OnInit, OnDestroy {
     const list = await this.service.transactions();
     this.transactions.set(list.items);
     this.hasMore.set(list.has_more);
+  }
+
+  /** Never throws: a failed load leaves the home usable with one muted line. */
+  private async loadReports(): Promise<void> {
+    try {
+      this.reports.set(await this.service.reports());
+      this.reportsFailed.set(false);
+    } catch {
+      this.reportsFailed.set(true);
+    }
   }
 
   /** Open the chat; from a charge row, that charge is preselected (the customer still confirms it). */
@@ -448,6 +463,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       } else {
         this.intakeReceipt.set(result as IntakeReceipt);
         this.receipts.update(list => [...list, { receipt: result as IntakeReceipt, transactionId: frozen.path === 'confirm' ? frozen.body.transaction_id : null }]);
+        await this.loadReports();
       }
     } catch (e) {
       if (e instanceof ApiError && DEFINITIVE.has(e.status)) {
@@ -477,6 +493,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.hasMore.set(false);
     this.card.set(null);
     this.receipts.set([]);
+    this.reports.set(null);
+    this.reportsFailed.set(false);
     this.chosenLang.set(null);
     this.clearChat();
   }

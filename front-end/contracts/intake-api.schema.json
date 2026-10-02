@@ -415,6 +415,25 @@
         "scope": {"const": "synthetic_demo_only"}
       }
     },
+    "reportList": {
+      "type": "object", "additionalProperties": false,
+      "required": ["items", "has_more"],
+      "properties": {
+        "items": {"type": "array", "maxItems": 20, "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["protocol", "reference_short", "kind", "status", "next_step", "accepted_at"],
+          "properties": {
+            "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+            "reference_short": {"type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$"},
+            "kind": {"type": "string", "pattern": "^(complete|incomplete|technical)$"},
+            "status": {"const": "received"},
+            "next_step": {"const": "review_pending"},
+            "accepted_at": {"type": "string", "minLength": 1}
+          }
+        }},
+        "has_more": {"type": "boolean"}
+      }
+    },
     "intakeServiceTransition": {
       "type": "object", "additionalProperties": false,
       "required": ["seq", "event", "ts"],

@@ -234,7 +234,7 @@ body { min-height: 100%; }
 .home { display: flex; min-height: 100dvh; }
 .home-main { flex-grow: 1; display: flex; flex-direction: column; gap: 24px; padding: 28px 40px 40px; min-width: 0; }
 .home-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
-.your-reports { margin: 0; } .your-reports h3 { margin: 0 0 8px; font: 600 14px/20px var(--font-sans); } .your-reports ul { margin: 0; padding-left: 20px; font: 400 14px/22px var(--font-sans); }
+.your-reports { margin: 0; } .your-reports h3 { margin: 0 0 8px; font: 600 14px/20px var(--font-sans); } .your-reports ul { margin: 0; padding-left: 20px; font: 400 14px/22px var(--font-sans); overflow-wrap: anywhere; } /* a protocol UUID fits at 320px */
 .box { display: flex; flex-direction: column; background: var(--surface-raised); border: var(--hairline) solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
 .box-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: var(--hairline) solid var(--line); }
 .box-head h2 { margin: 0; font: 600 16px/24px var(--font-sans); letter-spacing: -0.01em; }
