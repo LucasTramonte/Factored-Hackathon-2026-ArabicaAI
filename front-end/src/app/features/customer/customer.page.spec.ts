@@ -647,7 +647,7 @@ describe('CustomerPage', () => {
       expect(el.querySelectorAll('.report-btn').length).toBe(1);
     });
 
-    it('captions the charges with the window they come from', async () => {
+    it('captions the charges with what every data source supports: recent purchases in the demo data, newest first, no risk scores', async () => {
     const { el, p } = await home();
     expect(el.querySelector('#cargos .box-body > .ar-caption')?.textContent?.trim()).toBe(p.t().windowCaption);
   });
