@@ -192,6 +192,32 @@ rm -f data/charge-views/authored.jsonl && mkdir -p back-end/public && (cd back-e
 
 **Live page loads** are reported separately, as descriptive counts and display rates only, never as resolutions: a page load is not an explicit request. A person reads them with `cd back-end && npx wrangler d1 execute arabica-intake-demo --remote --json --command "SELECT language, row_count, has_more, coverage, retrieved_at, displayed_at FROM charge_views"`. Those figures are pending until the path is deployed.
 
+## 9. Live service, as measured
+
+The deployed Worker's own record, exported on 2026-10-02 at 23:10 UTC from remote D1 (`back-end/scripts/export-intake-events.mjs`, which validates every event with `evals/intake/episodes.py` and publishes all of them or nothing). **Population:** every report episode in the live store at export, 5 of them, between 2026-10-01 12:40 and 2026-10-02 14:57 UTC. The demo reset clears episodes, so this is the traffic since the last reset: team and reviewer sessions, not a sample of customers. The live flow is `guided-0.1`, which calls no model.
+
+| | Started (denominator) | Reached the handoff (`accepted`) | Routed | Unsafe | Safety not assessed | Episode span p50 / p95 |
+|---|---|---|---|---|---|---|
+| All | 5 | 4 | 1 | 0 | 5 | 11.6 s / 14.7 s |
+| Spanish | 1 | 1 | 0 | 0 | 1 | 14.7 s / 14.7 s |
+| Portuguese | 4 | 3 | 1 | 0 | 4 | 10.9 s / 12.9 s |
+| English | 0 | 0 | 0 | 0 | 0 | none |
+
+- **Safe accepted is 0 by contract, not by failure.** Production records `safety = not_assessed` unless a check ran ([`intake-events.md`](../intake/intake-events.md)), and an unassessed episode is never counted as safe. The 4 accepted handoffs are reported as they are.
+- **Episode span is not service latency.** It runs from the start of a report to its handoff, including the customer's reading and typing. Per-request service latency is not reported here.
+- **Cost per attempted case** is $0 on Workers Free (ADR-004): 0 model calls and 0 tokens over the 5 episodes, 24 tool calls. **Cost per successful automated resolution** is `not defined` for intake, because a handoff is not a resolution (ADR-002).
+- **English** shows 0 started because it became a report language after these episodes (ADR-008). It is listed so the column is never silently missing.
+- Five episodes support no rate. With one Spanish episode, its p50 and p95 are the same value.
+
+To reproduce, a person runs this from `back-end/` with the Worker's Cloudflare account selected (`CLOUDFLARE_ACCOUNT_ID`). The first command closes idle episodes at the export's cutoff (a remote write), and the second only reads:
+
+```bash
+node scripts/close-idle-intakes.mjs --remote --max-pages 100
+node scripts/export-intake-events.mjs --remote --max-pages 100 --output ../data/intake-events/live.jsonl > ../data/intake-events/live.out.json
+```
+
+The summary in `live.out.json` holds every figure above. The files stay in ignored `data/`.
+
 ## Where to look
 
 - Harness, baselines and splits: [`evals/intake/`](../../evals/intake/README.md)
