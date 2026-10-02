@@ -78,7 +78,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 
 **Status (2026-10-01):**
 
-- The guided intake is deployed (latest Worker version `77f72eb4`, 2026-10-01) and tested by the adversarial gate, session, isolation, idempotency and D1 budget suites:
+- The guided intake is deployed (latest Worker version `3412aff1`, 2026-10-02, from `main` 093e0e7) and tested by the adversarial gate, session, isolation, idempotency and D1 budget suites:
   - owned ES/PT guided reports, with complete, incomplete and technical handoffs;
   - the agent intake queue and detail with service history;
   - a validated event export and a manual idle sweep;

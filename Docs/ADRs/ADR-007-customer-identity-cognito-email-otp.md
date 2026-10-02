@@ -57,5 +57,7 @@ Commits on `feat/cognito-email-signin`:
 - `d4ccb52` A failed Worker exchange asks for a new code; a failed logout drops the open report.
 - `95661a6` Customer paths are public behind the session; the team gate stays on agent and demo paths.
 - `b79b0c2` Per-IP rate limit on the public API paths.
+- `b898a9e` The promise is the first line on the first screen; the charges caption cites the window.
+- `474b27b` The charges caption says only what every data source supports.
 
 Removing Cloudflare Access is a manual step in the Zero Trust dashboard after this branch deploys ([runbook](../Plans/intake-demo.md#customer-sign-in-cognito)).

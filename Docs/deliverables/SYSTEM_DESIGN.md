@@ -60,7 +60,7 @@ Requests it can't handle (another language, a recognized charge, a lost card, a 
 
 | Stage | State | What it does |
 |---|---|---|
-| Guided report | Online since 2026-10-01, behind an access gate (Worker version `77f72eb4`) | The customer signs in, describes what happened, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. "I can't find it" and failed lookups still reach a person, as incomplete or technical handoffs |
+| Guided report | Online since 2026-10-01, behind an access gate (Worker version `3412aff1`, deployed 2026-10-02) | The customer signs in, describes what happened, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. "I can't find it" and failed lookups still reach a person, as incomplete or technical handoffs |
 | Agent view | Online | The intake queue and each case's detail: the customer's words, the confirmed charge, what was checked, what is still open |
 | Reading free text | Evaluated offline; wired online behind a switch that is off | The rule-based checklist and the model's fact extractor, run through the written policy in the evaluation harness. With the switch on, the service would only record a shadow call; the model decides nothing online |
 
@@ -168,7 +168,7 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 
 ## Status and next steps
 
-**Live today** (behind an access gate; latest Worker version `77f72eb4`, deployed 2026-10-01):
+**Live today** (behind Cloudflare Access with simulated sign-in; latest Worker version `3412aff1`, deployed 2026-10-02):
 - sign-in;
 - the customer's own purchases;
 - the guided report with confirmation and the technical and incomplete handoffs;
