@@ -37,6 +37,9 @@ const shortReferenceTaken = error => /UNIQUE/i.test(String(error?.message)) && /
 const UPSERT_TARGET = 'INSERT INTO notification_targets(customer_id,email_enc,updated_at) VALUES(?,?,?) '
   + 'ON CONFLICT(customer_id) DO UPDATE SET email_enc=excluded.email_enc,updated_at=excluded.updated_at';
 
+/** At most one ``update`` email per customer and reference in this window; ``enqueueEmail`` enforces it in SQL. */
+export const UPDATE_EVERY_MS = 300000;
+
 /** ``shortReference`` is injectable so tests can force collisions. */
 export function createStore(db, { shortReference = newShortReference } = {}) {
   const totals = { queries: 0, rowsRead: 0, rowsWritten: 0, roundTrips: 0 };
@@ -363,10 +366,17 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
 
     findNotificationTarget: customerId => first(
       'SELECT email_enc,updated_at FROM notification_targets WHERE customer_id=?', customerId),
-    /** Outbox rows hold template, language and reference only, never a body; they start ``queued``. */
-    enqueueEmail: ({ messageId, now, customerId, template, language, reference }) => all(
-      "INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) VALUES(?,?,?,?,?,?,'queued')",
-      messageId, now, customerId, template, language, reference),
+    /**
+     * Outbox rows hold template, language and reference only, never a body; they start ``queued``. An ``update`` is
+     * inserted only when no ``update`` for that customer and reference is newer than ``UPDATE_EVERY_MS``, in the same
+     * statement, so concurrent requests queue one. An ``update`` returns the inserted ``[{ message_id }]``, empty when refused.
+     */
+    enqueueEmail: ({ messageId, now, customerId, template, language, reference }) => template === 'update'
+      ? all("INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) SELECT ?,?,?,'update',?,?,'queued' "
+        + "WHERE NOT EXISTS(SELECT 1 FROM email_outbox WHERE customer_id=? AND reference=? AND template='update' AND created_at>?) RETURNING message_id",
+        messageId, now, customerId, language, reference, customerId, reference, now - UPDATE_EVERY_MS)
+      : all("INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) VALUES(?,?,?,?,?,?,'queued')",
+        messageId, now, customerId, template, language, reference),
     /** One customer's outbox rows for a reference (index ``email_outbox_recent``); no address, no body. */
     findEmails: (customerId, reference) => all(
       'SELECT template,language,provider_status FROM email_outbox WHERE customer_id=? AND reference=? ORDER BY created_at', customerId, reference),

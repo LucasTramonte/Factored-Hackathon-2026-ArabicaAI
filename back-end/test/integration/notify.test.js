@@ -15,7 +15,8 @@ test('an email sign-in upserts the target, and an outbox row is queued, marked a
     const messageId = crypto.randomUUID();
     await store.enqueueEmail({ messageId, now, customerId: 'demo-ana', template: 'received', language: 'es', reference });
     await store.markEmail(messageId, 'skipped', null);
-    await store.enqueueEmail({ messageId: crypto.randomUUID(), now: now - 120000, customerId: 'demo-ana', template: 'update', language: 'es', reference });
+    assert.equal((await store.enqueueEmail({ messageId: crypto.randomUUID(), now: now - 120000, customerId: 'demo-ana', template: 'update', language: 'es', reference })).length, 1);
+    assert.deepEqual(await store.enqueueEmail({ messageId: crypto.randomUUID(), now, customerId: 'demo-ana', template: 'update', language: 'es', reference }), [], 'inside the window');
     assert.deepEqual(await store.recentEmails('demo-ana', reference, now - 60000, 'update'), { count: 0, latest: null });
     assert.deepEqual(await store.recentEmails('demo-ana', reference, now - 600000, 'update'), { count: 1, latest: now - 120000 });
     assert.deepEqual(await store.recentEmails('demo-ana', reference, now - 600000, 'received'), { count: 1, latest: now });
@@ -99,4 +100,20 @@ test('POST /reports/update: the owner gets one "update" email per report per 5 m
   assert.equal(get.status, 405); assert.equal(get.headers.get('Allow'), 'POST');
   const none = await client().call('/reports/update', { protocol: receipt.protocol });
   assert.equal(none.status, 401); assert.deepEqual(none.body, { detail: 'Start a demo session first' });
+});
+
+test('two concurrent update requests for one report queue exactly one email', async () => {
+  const { client, idToken } = await import('../support/client.js');
+  const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
+  const ana = client({ authorization: 'Bearer ' + await idToken('demo-ana') });
+  assert.equal((await ana.call('/auth/session', {})).status, 200);
+  const episode = (await ana.call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
+    customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() })).body.episode_id;
+  const receipt = (await ana.call('/intake/handoff', { episode_id: episode, kind: 'incomplete', idempotency_key: crypto.randomUUID() })).body;
+  const results = await Promise.all([1, 2].map(() => ana.call('/reports/update', { protocol: receipt.protocol })));
+  assert.deepEqual(results.map(r => r.status).sort(), [202, 429]);
+  assert.ok(Number(results.find(r => r.status === 429).headers.get('Retry-After')) > 0);
+  await withIntakeStore({ config: resolve(process.cwd(), 'wrangler.jsonc') }, async store => {
+    assert.equal((await store.findEmails('demo-ana', receipt.reference_short)).filter(r => r.template === 'update').length, 1);
+  });
 });

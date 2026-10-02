@@ -3,7 +3,7 @@ import { readSession, tokenHash } from '../../auth/session.js';
 import { fail, json, readJsonBody, readCookies } from '../../http.js';
 import { UUID, validateStartRequest, validateHandoffRequest } from './validation.js';
 import { APPROVED_EXTRACTOR, extractShadow, readyExtractor } from './ai-transport.js';
-import { createStore } from '../../store/d1.js';
+import { UPDATE_EVERY_MS, createStore } from '../../store/d1.js';
 import { deliver } from '../../notify/dispatch.js';
 import { STATUS_TEXT } from '../../notify/templates.js';
 
@@ -150,7 +150,6 @@ export async function listReports(request, env, store) {
     has_more: rows.length > REPORTS_PAGE });
 }
 
-const UPDATE_EVERY_MS = 300000;
 /**
  * POST /reports/update ``{ protocol }``: email the session customer the status of one of their acknowledged reports.
  * Foreign and missing reports get the same 404; no target 409; one ``update`` email per report per 5 minutes (429).
@@ -169,11 +168,12 @@ export async function requestUpdate(request, env, store, ctx) {
   if (!report.has_target) return fail(409, 'No email on file for this sign-in');
   const reference = report.reference_short ?? report.protocol;
   const now = Date.now();
-  // ponytail: check-then-insert, so two simultaneous requests can both queue; a conditional INSERT closes it if that matters.
-  const { count, latest } = await store.recentEmails(customerId, reference, now - UPDATE_EVERY_MS, 'update');
-  if (count) return fail(429, 'An update was sent recently', { 'Retry-After': String(Math.max(1, Math.ceil((latest + UPDATE_EVERY_MS - now) / 1000))) });
   const messageId = crypto.randomUUID();
-  await store.enqueueEmail({ messageId, now, customerId, template: 'update', language: report.language, reference });
+  // The window is checked inside the insert, so concurrent requests queue one; only a refusal reads the newest row.
+  if (!(await store.enqueueEmail({ messageId, now, customerId, template: 'update', language: report.language, reference })).length) {
+    const { latest } = await store.recentEmails(customerId, reference, now - UPDATE_EVERY_MS, 'update');
+    return fail(429, 'An update was sent recently', { 'Retry-After': String(Math.max(1, Math.ceil(((latest ?? now) + UPDATE_EVERY_MS - now) / 1000))) });
+  }
   // Status is a constant until Phase 4 stores a review status per handoff; same as listReports.
   ctx?.waitUntil?.(deliver(env, createStore(env.DB), { messageId, customerId, language: report.language, reference,
     template: 'update', status: STATUS_TEXT.received[report.language] }));

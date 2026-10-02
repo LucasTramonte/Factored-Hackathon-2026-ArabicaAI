@@ -40,9 +40,9 @@ const CEILING = {
   intakeQueue: [2, 225, 0, 2],
   // 1 session row + about 2 rows per episode of the customer, measured on a customer with one report.
   reports: [2, 7, 0, 2],
-  // Session, owned report with its target flag, the rate-limit count, the outbox insert (row, primary key,
-  // email_outbox_recent); the send marks the row from its own store after the response (Task 3.3).
-  reportsUpdate: [4, 12, 3, 4],
+  // Session, owned report with its target flag, the outbox insert that checks the 5-minute window itself (row, primary
+  // key, email_outbox_recent); the send marks the row from its own store after the response (Task 3.3).
+  reportsUpdate: [3, 14, 3, 3],
   completeDetail: [3, 15, 0, 3],
   incompleteDetail: [3, 10, 0, 3],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
