@@ -130,6 +130,7 @@
                         @else { {{ t().dateMissing }} }
                       </span>
                       <span role="cell" class="td td-state">
+                        <!-- ponytail: a failed reports() reload offers the charge again until the next load; the server's 409 is the backstop. -->
                         @let report = reportOf(tx.transaction_id);
                         @if (pending(tx.transaction_id)) { <span class="ar-chip ar-chip-warn">{{ t().chipPending }}</span> }
                         @else {

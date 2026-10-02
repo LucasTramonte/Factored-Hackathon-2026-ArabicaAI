@@ -365,6 +365,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   /** The charge's newest report from the server list (items are newest first): the only source of a row's report state. */
+  // ponytail: sees only the 20 newest reports; an older open report falls back to the server's 409. Upgrade: a per-charge lookup.
   reportOf(transactionId: string): Report | undefined {
     return this.reports()?.items.find(r => r.transaction_id === transactionId);
   }
