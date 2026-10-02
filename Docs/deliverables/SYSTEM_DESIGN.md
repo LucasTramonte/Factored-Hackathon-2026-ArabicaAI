@@ -92,7 +92,7 @@ A large charge you don't recognize causes panic. The customer wants it handled f
 - **Built, not yet deployed: the follow-up, not just the receipt.** Customers usually get a receipt and then chase the bank for a week.
   - "Tus reportes" lists the customer's own reports from the server, with each one's status and next step, after the tab closes.
   - An email goes out when a report is received and when a person moves it to in review or closed. The customer can also ask for one. The email carries the short reference and the status, not the customer's words.
-  - **Limit:** the SES account is in the sandbox, so only verified recipient addresses receive mail. A production-access request was filed on 2026-10-02 and is pending.
+  - **Limit:** production access was requested and denied on 2026-10-02. The account stays in the SES sandbox, so each recipient's address must be a verified SES identity: its owner clicks AWS's verification email. Re-filing with more detail from the SES console is optional.
 - **Built, not yet deployed: urgency for high amounts.** The data has no high-value tail to calibrate on ([DF-024](DATA_QUALITY.md#df-024-purchase-amounts-are-almost-flat-up-to-usd-509-with-no-high-value-tail)). So urgency is a stated policy in `back-end/src/config/urgency.json`. A high charge leads the agent queue, and the receipt and the "received" email tell the customer to call their bank to block the card. The service still never blocks a card.
   - **Limit:** the thresholds are round policy values, not learned or validated on outcomes.
 - **How we'll know it feels right.** No user test has been run yet, and we make no claim about how it feels. The measures are defined in the [customer contract](../intake/customer-and-measurement-contract.md): effort, teach-back and satisfaction, from real participants only, never simulated ratings. The next step is a five-person moderated test before any claim.
@@ -204,7 +204,7 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 
 **Next, after submission:**
 - the cohort refresh path for new data (DATA_ENGINEERING section 8);
-- SES production access, so mail reaches unverified addresses;
+- optionally, re-filing for SES production access with more detail from the SES console, so mail reaches unverified addresses;
 - a five-person usability test.
 
 ## FAQ

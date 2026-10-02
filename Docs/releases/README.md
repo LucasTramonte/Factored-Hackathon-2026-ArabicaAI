@@ -52,17 +52,18 @@ This is a proposal; nothing has been tagged.
   - #65: agents on Cognito, no team password, audit events, the route-to-role table;
   - #66: the urgency lane and the shadow reading the agent sees.
 - **Decisions:** ADR-007 (customer identity), and dated budget notes in ADR-004 for each change.
-- **Migrations:** 0009–0013, applied to remote D1 before each PR merges (the deploy guard refuses otherwise).
+- **Migrations:** 0009–0013. They are not yet on remote D1, and each must be applied there before its PR merges (the deploy guard refuses otherwise).
 - **Worker secrets that must exist:** `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` and `EMAIL_KEY`.
 - **Human steps** (details in the [runbook](../Plans/intake-demo.md#customer-sign-in-cognito)):
-  1. verify the SES sender identity and set the three secrets;
-  2. enrol each agent in the Cognito `agent` group;
-  3. deploy, then sign in once as a customer and once as an agent;
-  4. remove the Cloudflare Access application and delete the `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` secrets;
-  5. while the account is in the SES sandbox, verify each judge's address as an SES identity.
+  1. apply migrations 0009–0013 to remote D1, which holds only 0001–0008 today;
+  2. verify the SES sender identity and set the three secrets;
+  3. enrol each agent in the Cognito `agent` group;
+  4. deploy, then sign in once as a customer and once as an agent;
+  5. remove the Cloudflare Access application and delete the `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` secrets;
+  6. the account stays in the SES sandbox, so create each judge's address as an SES identity and ask them to click AWS's verification email.
 - **Deployed state to record:** the Worker version, migrations 0001–0013, the extractor off.
 - **Known limitations:**
-  - the SES account is in the sandbox, so only verified recipients receive mail (production access requested 2026-10-02, pending);
+  - production access was requested and denied on 2026-10-02; the account stays in the SES sandbox, so each recipient's address must be a verified SES identity (re-filing with more detail from the SES console is optional);
   - urgency thresholds are a stated policy, not fitted;
   - the extractor is off;
   - the frozen comparison hasn't run;
