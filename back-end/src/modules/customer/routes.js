@@ -16,8 +16,10 @@ const NOT_CONFIRMED = 'Acceptance not confirmed; retry with the same idempotency
 /**
  * GET /demo/identities: the committed (mostly fictitious) identities, then the dataset cohort loaded in D1.
  * Cohort ids and names are never committed; a D1 row never overrides a committed identity.
+ * Both picker routes exist only when ``DEMO_PICKER=1`` (local development); production has no global customer listing.
  */
 export async function listIdentities(request, env, store) {
+  if (env.DEMO_PICKER !== '1') return fail(404, 'Not found');
   let cohort;
   try { cohort = await store.listDatasetIdentities(COHORT_LIMIT); } catch { return fail(503, 'Demo identities are unavailable'); }
   const items = identities.customers.map(({ customer_id, display_name }) => ({ customer_id, display_name, country: null }));
@@ -59,6 +61,7 @@ function contextCard(row) {
 
 /** POST /demo/session: start a simulated session for a committed identity or a loaded dataset customer. */
 export async function startCustomerSession(request, env, store) {
+  if (env.DEMO_PICKER !== '1') return fail(404, 'Not found');
   const body = await readJsonBody(request);
   if (body.error) return body.error;
   const customerId = body.value?.customer_id;

@@ -48,7 +48,7 @@ try {
   Object.assign(testEnv, { COGNITO_TEST_PRIVATE_JWK: JSON.stringify({ ...(await exportJWK(privateKey)), kid }),
     COGNITO_TEST_ISSUER: issuerFor(vars), COGNITO_TEST_CLIENT_ID: vars.COGNITO_CLIENT_ID });
   await writeFile(join(temp, '.dev.vars'),
-    'DEMO_ACCESS_USERNAME="local-reviewer"\nDEMO_ACCESS_PASSWORD="local-test-password"\nDEMO_EXPOSE_DB_METRICS="1"\n'
+    'DEMO_ACCESS_USERNAME="local-reviewer"\nDEMO_ACCESS_PASSWORD="local-test-password"\nDEMO_EXPOSE_DB_METRICS="1"\nDEMO_PICKER="1"\n'
     + `COGNITO_TEST_JWKS='${jwks}'\n`);
   run(['d1', 'migrations', 'apply', 'arabica-intake-demo', '--local']);
   run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file', 'seed_fictitious.sql']);

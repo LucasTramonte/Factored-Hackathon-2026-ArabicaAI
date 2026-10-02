@@ -3,11 +3,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { withMetrics } from '../../src/index.js';
 import { route } from '../../src/router.js';
+import { listIdentities, startCustomerSession } from '../../src/modules/customer/routes.js';
 import { readJsonBody, MAX_BODY_BYTES } from '../../src/http.js';
 import { tokenHash } from '../../src/auth/session.js';
 import { assertContract } from '../support/contract.js';
 
-const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p' };
+const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p', DEMO_PICKER: '1' };
 const auth = 'Basic ' + Buffer.from('u:p').toString('base64');
 const token = 'a'.repeat(64);
 const body = { transaction_id: 'tx-1', customer_statement: 'I do not recognize this charge.',
@@ -115,6 +116,17 @@ test('the body limit stops reading a stream without Content-Length', async () =>
   const result = await readJsonBody(request);
   assert.equal(result.error.status, 413);
   assert.ok(pulled <= 20, `read ${pulled} KB before stopping`);
+});
+
+test('the demo picker exists only when DEMO_PICKER=1 and otherwise never touches the store', async () => {
+  const store = new Proxy({}, { get: (_, name) => { throw new Error(`store.${String(name)} touched`); } });
+  for (const picker of [{}, { DEMO_PICKER: '0' }, { DEMO_PICKER: 1 }]) {
+    for (const res of [await listIdentities(new Request('https://d.example/demo/identities'), picker, store),
+      await startCustomerSession(post('/demo/session', { customer_id: 'demo-ana' }, ''), picker, store)]) {
+      assert.equal(res.status, 404);
+      assert.deepEqual(await res.json(), { detail: 'Not found' });
+    }
+  }
 });
 
 test('identity list joins the committed fictitious identities with dataset customers loaded in D1', async () => {
