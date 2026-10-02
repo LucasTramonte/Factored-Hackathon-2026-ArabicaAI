@@ -2,7 +2,7 @@
  * Verifies Cognito ID tokens and returns the trusted claims the Worker uses. Identity comes only
  * from a verified token, never from a request body or message text.
  */
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createLocalJWKSet, createRemoteJWKSet, jwtVerify } from 'jose';
 import { CUSTOMER_ID } from '../modules/customer/validation.js';
 
 let remote;
@@ -12,8 +12,12 @@ export function issuerFor(env) {
   return `https://cognito-idp.${env.COGNITO_REGION}.amazonaws.com/${env.COGNITO_USER_POOL_ID}`;
 }
 
-/** The pool's JWKS, fetched and cached by jose for the isolate's lifetime (one pool per deployment). */
+/**
+ * The pool's JWKS, fetched and cached by jose for the isolate's lifetime (one pool per deployment).
+ * Local tests set ``COGNITO_TEST_JWKS`` (a JWKS JSON) instead; predeploy refuses it in ``vars``.
+ */
 export function jwksFor(env) {
+  if (env.COGNITO_TEST_JWKS) return createLocalJWKSet(JSON.parse(env.COGNITO_TEST_JWKS));
   remote ??= createRemoteJWKSet(new URL(`${issuerFor(env)}/.well-known/jwks.json`));
   return remote;
 }

@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assertContract } from '../support/contract.js';
-import { auth, base, client } from '../support/client.js';
+import { auth, base, client, idToken } from '../support/client.js';
 
 const API = { '/demo/identities': 'GET', '/demo/session': 'POST', '/auth/logout': 'POST', '/transactions': 'GET', '/cases': 'POST', '/intake/start': 'POST',
   '/intake/confirm': 'POST', '/intake/handoff': 'POST', '/demo/agent-session': 'POST', '/agent/cases': 'GET', '/agent/intakes': 'GET',
@@ -45,6 +45,50 @@ test('with the credential, wrong methods get 405 and unknown API paths get JSON 
     assert.equal(res.status, 404, path);
     assertContract('error', await res.json());
   }
+});
+
+test('/auth/session: outside the gate, POST only, and a token-less call never reaches verification', async () => {
+  const none = await fetch(base + '/auth/session', { method: 'POST' });
+  assert.equal(none.status, 422);
+  assertContract('error', await none.json());
+  const get = await fetch(base + '/auth/session', { headers: { Authorization: auth } });
+  assert.equal(get.status, 405);
+  assert.equal(get.headers.get('Allow'), 'POST');
+});
+
+test('email sign-in: only a correctly signed token for a loaded customer starts a session, and only for that customer', async () => {
+  const ana = client({ authorization: 'Bearer ' + await idToken('demo-ana') });
+  const signedIn = await ana.call('/auth/session', { customer_id: 'demo-carla' });
+  assert.equal(signedIn.status, 200);
+  assertContract('emailSession', signedIn.body);
+  assert.equal(signedIn.body.customer_id, 'demo-ana');
+  assert.doesNotMatch(signedIn.text, /test@example|eyJ/);
+  const gated = client();
+  gated.cookie = ana.cookie;
+  const own = await gated.call('/transactions');
+  assert.equal(own.status, 200);
+  assert.ok(own.body.items.some(t => t.transaction_id === 'demo-tx-001'));
+  assert.deepEqual(own.body, (await (await loggedIn('demo-ana')).call('/transactions')).body, 'same rows as Ana');
+  const asAgent = client();
+  asAgent.cookie = `demo_agent_session=${ana.cookie.split('=')[1]}`;
+  assert.equal((await asAgent.call('/agent/cases')).status, 401, 'customer token used as agent');
+  gated.cookie = ana.cookie.replace('demo_session', 'demo_agent_session');
+  assert.equal((await gated.call('/agent/intakes')).status, 401);
+
+  const unknown = await client({ authorization: 'Bearer ' + await idToken('CLI-NOT-LOADED') }).call('/auth/session', {});
+  assert.equal(unknown.status, 403);
+  assert.deepEqual(unknown.body, { detail: 'This account is not enrolled in the demo' });
+  assert.equal(unknown.headers.get('set-cookie'), null);
+  const agentGroup = await client({ authorization: 'Bearer ' + await idToken('demo-ana', { groups: ['agent'] }) }).call('/auth/session', {});
+  assert.equal(agentGroup.status, 403);
+
+  const token = await idToken('demo-ana');
+  const at = token.length - 5;
+  const tampered = token.slice(0, at) + (token[at] === 'A' ? 'B' : 'A') + token.slice(at + 1);
+  const forged = await client({ authorization: 'Bearer ' + tampered }).call('/auth/session', {});
+  assert.equal(forged.status, 401);
+  assert.deepEqual(forged.body, { detail: 'Sign-in could not be verified' });
+  assert.equal(forged.headers.get('set-cookie'), null);
 });
 
 test('path tricks never reach a handler without the gate or create a case', async () => {

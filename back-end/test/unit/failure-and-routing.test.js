@@ -77,6 +77,18 @@ test('known paths answer 405 with Allow after the gate, unknown API paths 404', 
   assert.equal(anonymous.headers.get('Allow'), null);
 });
 
+test('/auth/session alone is outside the team gate; /auth/logout and unknown /auth/* stay gated', async () => {
+  const store = await fakeStore();
+  const anon = (path, method = 'POST') => route(new Request('https://d.example' + path, { method }), env, store);
+  const signIn = await anon('/auth/session');
+  assert.equal(signIn.status, 422);
+  assert.deepEqual(await signIn.json(), { detail: 'Provide the sign-in token' });
+  assert.equal((await anon('/auth/session', 'GET')).headers.get('Allow'), 'POST');
+  for (const path of ['/auth/logout', '/auth/session/', '/auth/sessions', '/auth/other', '/auth']) {
+    assert.equal((await anon(path)).status, 401, path);
+  }
+});
+
 test('HTML documents require the gate before assets are served', async () => {
   const served = [];
   const assetsEnv = { ...env, ASSETS: { fetch: async r => { served.push(new URL(r.url).pathname); return new Response('<app-root>'); } } };

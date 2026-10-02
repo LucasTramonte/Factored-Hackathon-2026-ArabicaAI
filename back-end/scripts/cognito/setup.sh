@@ -13,7 +13,7 @@ pool_id=$("${AWS[@]}" list-user-pools --max-results 60 \
   --query "UserPools[?Name=='$POOL_NAME'].Id | [0]")
 if [ "$pool_id" = "None" ] || [ -z "$pool_id" ]; then
   # Cognito refuses a SignInPolicy whose first factors omit PASSWORD, so it is listed, but no user
-  # is ever given a known password and the Worker asks for EMAIL_OTP only.
+  # is ever given a known password: the client requests EMAIL_OTP and the Worker accepts only Cognito ID tokens.
   pool_id=$("${AWS[@]}" create-user-pool --pool-name "$POOL_NAME" --user-pool-tier ESSENTIALS \
     --username-attributes email --auto-verified-attributes email \
     --admin-create-user-config AllowAdminCreateUserOnly=true \

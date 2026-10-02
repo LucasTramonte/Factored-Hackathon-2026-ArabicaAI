@@ -11,7 +11,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
-import { client } from '../support/client.js';
+import { client, idToken } from '../support/client.js';
 import { assertContract } from '../support/contract.js';
 import { tokenHash } from '../../src/auth/session.js';
 
@@ -22,6 +22,7 @@ const CEILING = {
   // margin), about 800 with the cohort loaded (ADR-004).
   identities: [1, 10, 0, 1],
   login: [5, 10, 6, 3],
+  emailLogin: [5, 10, 6, 3],
   list: [2, 25, 0, 2],
   logout: [1, 1, 1, 1],
   create: [4, 12, 6, 4],
@@ -77,6 +78,8 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
   const measured = {};
   measured.identities = within('identities', (await c.call('/demo/identities')).metrics);
   measured.login = within('login', (await c.call('/demo/session', { customer_id: 'demo-ana' })).metrics);
+  measured.emailLogin = within('emailLogin', (await client({ authorization: 'Bearer ' + await idToken('demo-ana') })
+    .call('/auth/session', {})).metrics);
   measured.list = within('list', (await c.call('/transactions')).metrics);
   measured.create = within('create', (await c.call('/cases', { transaction_id: 'demo-tx-001',
     customer_statement: 'Budget probe: I do not recognize this charge.', customer_confirmed: true,

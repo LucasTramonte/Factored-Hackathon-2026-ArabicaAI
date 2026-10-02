@@ -5,13 +5,14 @@
  */
 import { checkAccessGate } from './auth/access-gate.js';
 import { fail, json } from './http.js';
-import { createCase, listIdentities, listTransactions, logout, startCustomerSession } from './modules/customer/routes.js';
+import { createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession } from './modules/customer/routes.js';
 import { startIntake, confirmIntake, handoffIntake } from './modules/intake/routes.js';
 import { listAgentCases, listAgentIntakes, getAgentIntakeDetail, startAgentSession } from './modules/agent/routes.js';
 
 export const API_ROUTES = {
   '/demo/identities': { GET: listIdentities },
   '/demo/session': { POST: startCustomerSession },
+  '/auth/session': { POST: startEmailSession },
   '/auth/logout': { POST: logout },
   '/transactions': { GET: listTransactions },
   '/cases': { POST: createCase },
@@ -26,6 +27,8 @@ export const API_ROUTES = {
 export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/transactions/', '/cases/', '/intake/'];
 /** Bare API namespace paths that have no handler but must still answer JSON 404 behind the gate. */
 export const API_NAMESPACES = new Set(['/intake', '/auth']);
+/** Exact paths outside the team gate: sign-in carries its own, stronger credential (Task 1.4 opens the customer routes). */
+export const UNGATED = new Set(['/auth/session']);
 /** HTML documents go through the gate so the browser asks for the team credential once; hashed bundles do not. */
 export const DOCUMENT_PATHS = new Set(['/', '/index.html', '/agent']);
 
@@ -39,7 +42,7 @@ export async function route(request, env, store, ctx) {
   }
   const methods = API_ROUTES[pathname];
   if (methods || API_NAMESPACES.has(pathname) || API_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
-    const denied = checkAccessGate(request, env);
+    const denied = !UNGATED.has(pathname) && checkAccessGate(request, env);
     if (denied) return denied;
     if (!methods) return fail(404, 'Not found');
     const handler = methods[request.method];
