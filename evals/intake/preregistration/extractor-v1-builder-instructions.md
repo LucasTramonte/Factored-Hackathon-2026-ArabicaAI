@@ -98,3 +98,17 @@ Report:
 - anything you couldn't do.
 
 Don't claim a result you didn't run. If API access fails, stop and report the error.
+
+---
+
+## Revision 2026-10-02: latency (ADR-006 amendments 1 and 2)
+
+On development the latency trigger fired: over the 160 model-calling executions, the p95 interval's upper bound was 4,432 ms (> 3,000 ms); quality was 180/180, 0 unsafe. Keep the model, the prompt and the parsing. Change only the documented reasoning level of `@cf/openai/gpt-oss-20b`:
+
+1. Read Cloudflare's current model page and API schema for the reasoning parameter. Record the URL, the date, the exact request field and its documented default in `DEV_LOG.md`. Don't guess; if the REST API doesn't accept it, stop and report.
+2. Send the lowest documented level (`low`) explicitly, with a unit test in `test_workers_ai.py` asserting the request body carries it. Keep `MAX_TOKENS`, temperature, the timeout and the retry.
+3. Right after a 00:00 UTC reset, in one go, run amendment 1's protocol on development only:
+   `python -m evals.intake.run --split development --repetitions 10 --system extractor-v1=intake_agent.extractor.workers_ai:extract --output data_foundation/runs/latency-v1-low/results.json`
+   Decide latency on the 160 model-calling executions (as attempt 2 did); report the runner's pooled 180 as supplemental.
+4. Report against every ADR-006 trigger: ≥16/18 correct, 0 unsafe, ≥95% schema-valid, p95 interval upper bound ≤3,000 ms, ≤10% instability. If a trigger fails, stop and report; don't change the prompt or try another level without the orchestrator.
+5. If all pass, copy `TEMPLATE.md` to `extractor-v1.md` and fill in every field (add `reasoning=low` to the parameters). This replaces step 2 of "Pre-register" above: don't run `prereg fill` and don't tag. `fill` records the commit it runs on, so it runs in the team's branch.
