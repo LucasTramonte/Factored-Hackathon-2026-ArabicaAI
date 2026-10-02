@@ -1,6 +1,6 @@
 # ADR-002 — V1 workflow: unrecognized-charge intake with human handoff
 
-- **Status:** Accepted (2026-09-29): Lucas Tramonte, Roberto Z and Manoella R agreed in the status PR
+- **Status:** Accepted (2026-09-29): Lucas Tramonte, Roberto Z and Manoella R agreed in the status PR. Decision 3 superseded for English by [ADR-008](ADR-008-english-report-language.md).
 - **Date:** 2026-09-29
 - **Deciders:** Lucas Tramonte, Roberto Z, Manoella R
 - **Related:** [ADR-001](ADR-001-workflow-prioritization.md) (recommended a read-only inquiry as the primary path; this record narrows V1 to intake)
