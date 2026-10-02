@@ -5,7 +5,7 @@ The customer and agent views for the synthetic charge-intake demo. The client do
 | Path | Responsibility |
 |---|---|
 | `src/app/core/http/api.service.ts` | Same-origin JSON client. Maps each HTTP status to a user message and never shows server text. |
-| `src/app/features/customer/` | One connected screen under `/`: intro, sign-in and home as in-page steps (the Worker only serves documents at `/` and `/agent`); one disc travels between them. Then home, with the charges and one Report button per row. The report panel opens from a row: describe what happened, confirm the charge or ask for review without one. After a failure, a retry resends the frozen request with the same key. |
+| `src/app/features/customer/` | One connected screen under `/`: intro, email-code sign-in and home as in-page steps (the Worker only serves documents at `/` and `/agent`); one disc travels between them. Then home, with the charges and one Report button per row. The report panel opens from a row: describe what happened, confirm the charge or ask for review without one. After a failure, a retry resends the frozen request with the same key. |
 | `src/app/features/agent/` | Separate simulated agent session and a read-only case queue. |
 | `src/app/shared/` | API models, `formatSourceTime` (source wall time, never shifted), `i18n/` (every interface string in ES, PT and EN; the `Strings` type makes a missing translation a compile error) and `mark/` (the disc-and-slit mark). |
 | `contracts/` | JSON Schema for API responses, validated by the back-end integration tests. |
@@ -28,6 +28,6 @@ The interface language comes from the visitor's choice (`localStorage` key `arab
 
 `angular.json` sets `optimization.fonts: false` for production: Angular's default downloads Google Fonts at build time to inline them, and the Workers Builds runner does not always have egress to `fonts.googleapis.com`, which failed the build. The browser still loads the fonts from the `<link>` in `index.html`.
 
-Loading the fonts that way is a third-party request: every visitor's browser contacts `fonts.googleapis.com` and `fonts.gstatic.com`, which sees the visitor's IP address. That is acceptable for the synthetic demo behind Cloudflare Access. A deployment with real customers should self-host the Geist files instead, and add a `font-src 'self'` Content-Security-Policy.
+Loading the fonts that way is a third-party request: every visitor's browser contacts `fonts.googleapis.com` and `fonts.gstatic.com`, which sees the visitor's IP address. That is acceptable for the synthetic demo. A deployment with real customers should self-host the Geist files instead, and add a `font-src 'self'` Content-Security-Policy.
 
 The interface copy describes what V1 does: a deterministic guided report reviewed by a person. It makes no claim of an AI agent, because the MVP calls no model ([ADR-002](../Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). API failures are shown in the interface language, keyed by HTTP status (`errorText` in `shared/i18n/`); server text is never shown.

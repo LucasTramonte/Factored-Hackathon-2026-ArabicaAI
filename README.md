@@ -74,7 +74,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 | Data quality register | [`DATA_QUALITY.md`](Docs/deliverables/DATA_QUALITY.md), `data_profiles/findings/` | Every dataset finding that changes or limits a decision, with its query, impact and handling |
 | Decisions | `Docs/ADRs/` | Scope, runtime, capacity, cost and cloud placement, each with its limitations and exit triggers |
 
-**Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/, behind Cloudflare Access (ask the team to be allowlisted) and a Basic gate. Sign-ins are simulated.
+**Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Customers sign in with an email one-time code from Amazon Cognito; ask the team to enrol your email. The team gate covers only the agent view ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). Until this branch deploys, the live link still has Cloudflare Access and simulated sign-ins.
 
 **Status (2026-10-01):**
 
@@ -82,7 +82,8 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
   - owned ES/PT guided reports, with complete, incomplete and technical handoffs;
   - the agent intake queue and detail with service history;
   - a validated event export and a manual idle sweep;
-  - the 796-customer dataset cohort loaded into D1.
+  - the 796-customer dataset cohort loaded into D1;
+  - customer sign-in with a Cognito email code, built and tested, not yet deployed.
 - The AI extraction step is wired behind a switch that is off. Its latency fired the trigger, so a faster version comes first ([ADR-006](Docs/ADRs/ADR-006-learned-extractor-workers-ai.md)).
 - It runs on the Cloudflare Free plan ($0). [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes the guided flow at about 2,380 complete episodes a day, against measured volumes of 17–818 a day. The same record prices a production target on AWS at $86.36 a month and explains each service choice.
 - **Not done yet:**
