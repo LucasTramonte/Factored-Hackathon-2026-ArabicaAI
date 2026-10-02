@@ -71,7 +71,7 @@ export class AgentPage {
 
   /** One line: whether a model read the case in shadow (count and version only; it decides nothing). */
   modelLine({ model_reading: m }: AgentIntakeDetail): string {
-    return m.mode === 'shadow' ? this.t().modelShadow.replace('{n}', String(m.llm_calls)).replace('{v}', m.model_version ?? '') : this.t().modelOff;
+    return m.mode === 'shadow' ? this.t().modelShadow.replace('{n}', String(m.llm_calls)).replace('{calls}', m.llm_calls === 1 ? this.t().callOne : this.t().callMany).replace('{v}', m.model_version ?? '') : this.t().modelOff;
   }
 
   statusLabel(status: HandoffStatus): string {

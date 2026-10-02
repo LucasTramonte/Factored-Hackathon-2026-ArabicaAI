@@ -160,6 +160,17 @@ describe('AgentPage', () => {
     expect(line()).toBe('Leitura do modelo: em sombra, 2 chamadas, versão extractor-v1@a270773600cf. O modelo não decide nada.');
   });
 
+  it('says 1 call in the singular', async () => {
+    service.intakeDetail.and.resolveTo(detail(P1, { model_reading: { mode: 'shadow', model_version: 'v1', llm_calls: 1 } }));
+    await loadAndOpen();
+    const line = () => el().querySelector('#model-reading')!.textContent!.trim();
+    expect(line()).toBe('Model reading: in shadow, 1 call, version v1. The model decides nothing.');
+    TestBed.inject(LangService).set('es'); fixture.detectChanges();
+    expect(line()).toBe('Lectura del modelo: en sombra, 1 llamada, versión v1. El modelo no decide nada.');
+    TestBed.inject(LangService).set('pt'); fixture.detectChanges();
+    expect(line()).toBe('Leitura do modelo: em sombra, 1 chamada, versão v1. O modelo não decide nada.');
+  });
+
   it('says so when there is no verified transaction', async () => {
     service.intakeDetail.and.resolveTo(detail(P1, { verified_evidence: { transaction: null }, history_has_more: true }));
     await loadAndOpen();

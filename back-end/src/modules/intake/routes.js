@@ -2,7 +2,7 @@
 import { requireSession, tokenHash } from '../../auth/session.js';
 import { fail, json, readJsonBody, readCookies } from '../../http.js';
 import { UUID, validateStartRequest, validateHandoffRequest } from './validation.js';
-import { APPROVED_EXTRACTOR, extractShadow, readyExtractor } from './ai-transport.js';
+import { APPROVED_EXTRACTOR, UNKNOWN, extractShadow, readyExtractor } from './ai-transport.js';
 import { UPDATE_EVERY_MS, createStore } from '../../store/d1.js';
 import { deliver } from '../../notify/dispatch.js';
 import { STATUS_TEXT } from '../../notify/templates.js';
@@ -127,8 +127,13 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
     // Only an episode the same extractor started; its events already carry that producer. A replay never calls again.
     const extractor = details && !result.replayed ? await readyExtractor(env, approved) : null;
     if (extractor && JSON.parse(episode.usage_json ?? '{}').model_version === extractor.modelVersion) await inShadow(ctx, async () => {
+      // Counted as one unknown call before it runs, so an interrupted Worker never makes it free; then measured − unknown.
+      // A store of its own, so these writes never count in this response's metrics.
+      const shadowStore = createStore(env.DB);
+      const record = usage => shadowStore.recordDetailsExtraction({ customerId, episodeId, producer: extractor.modelVersion, usage });
+      await record(UNKNOWN);
       const { usage } = await extractShadow(env, extractor, { statement: details, language: episode.language });
-      await store.recordDetailsExtraction({ customerId, episodeId, producer: extractor.modelVersion, usage });
+      await record(Object.fromEntries(Object.keys(UNKNOWN).map(k => [k, usage[k] - UNKNOWN[k]])));
     });
     // A store of its own, so the send's queries never count in this response's metrics; skipped without a ctx.
     if (emailId && ctx?.waitUntil) ctx.waitUntil(deliver(env, createStore(env.DB),

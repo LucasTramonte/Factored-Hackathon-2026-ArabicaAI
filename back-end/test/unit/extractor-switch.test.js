@@ -43,8 +43,10 @@ async function setup(t) {
   for (const file of readdirSync(dir).sort()) db.exec(readFileSync(new URL(file, dir), 'utf8'));
   db.exec("INSERT INTO customers(customer_id,display_name) VALUES('ana','Ana'),('bruno','Bruno'); INSERT INTO transactions VALUES('tx-ana','ana',NULL,'2026-06-17 12:00:00','Shop','10.00','ARS'),('tx-bruno','bruno',NULL,'2026-06-17 12:00:00','Other','20.00','ARS')");
   db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(token), 'customer', 'ana', Date.now() + 3600000);
-  const store = () => createStore({ prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p.map(asD1)) }) }) }),
-    batch: async statements => { db.exec('BEGIN'); try { const results = statements.map(s => s.all()); db.exec('COMMIT'); return results; } catch (e) { db.exec('ROLLBACK'); throw e; } } });
+  const d1 = { prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p.map(asD1)) }) }) }),
+    batch: async statements => { db.exec('BEGIN'); try { const results = statements.map(s => s.all()); db.exec('COMMIT'); return results; } catch (e) { db.exec('ROLLBACK'); throw e; } } };
+  // ``store.d1`` is the raw binding, for work that opens a store of its own (env.DB).
+  const store = Object.assign(() => createStore(d1), { d1 });
   const events = () => db.prepare('SELECT event_json FROM intake_events ORDER BY episode_id,seq').all().map(r => r.event_json);
   const usage = id => JSON.parse(db.prepare('SELECT usage_json FROM intake_episodes WHERE episode_id=?').get(id).usage_json);
   return { db, store, events, usage };
@@ -348,6 +350,7 @@ test('on: a customer who confirms before the shadow call finishes gets unknown u
 const DETAILS = 'Fue en una farmacia, unos 10 dólares, el martes.';
 /** Start with ``extractor`` (or guided), then hand off incomplete with details; shadow work is collected, not awaited. */
 async function detailsHandoff(store, env, extractor, key = crypto.randomUUID()) {
+  env = { ...env, DB: store.d1 };
   const started = await startIntake(post('/intake/start', startBody()), env, store(), undefined, extractor ?? undefined);
   const { episode_id } = await started.json();
   const pending = [];
@@ -363,19 +366,12 @@ const normalized = async res => ({ status: res.status, type: res.headers.get('co
 test('details shadow: switch off never calls the model on a details handoff', async t => {
   const { store } = await setup(t);
   const extractor = stubExtractor(() => { throw new Error('called'); });
-  const { res, pending } = await detailsHandoff(store, gate, null);
+  // Switch off with an adapter supplied: the guard is readyExtractor, not the adapter.
+  const { res, pending } = await detailsHandoff(store, gate, extractor);
   assert.equal(res.status, 201);
   const off = await detailsHandoff(store, { ...gate, AI: stubAI() }, null);
   assert.equal(off.res.status, 201);
-  // Switch off with an adapter supplied: the guard is readyExtractor, not the adapter.
-  const { res: r2, pending: p2 } = await (async () => {
-    const started = await startIntake(post('/intake/start', startBody()), gate, store());
-    const { episode_id } = await started.json(); const pending = [];
-    const res = await handoffIntake(post('/intake/handoff', { episode_id, kind: 'incomplete', details: DETAILS, idempotency_key: crypto.randomUUID() }), gate, store(), { waitUntil: w => pending.push(w) }, extractor);
-    return { res, pending };
-  })();
-  assert.equal(r2.status, 201);
-  assert.equal(pending.length + off.pending.length + p2.length, 0);
+  assert.equal(pending.length + off.pending.length, 0);
   assert.equal(extractor.calls.length, 0);
 });
 
@@ -430,4 +426,23 @@ test('agent detail: model_reading shows whether the model read the case, as coun
   for (const leak of ['stated_facts', 'injection', 'intent', '2106']) assert.ok(!JSON.stringify(body).includes(leak), leak);
   assert.throws(() => assertContract('agentIntakeDetail', { ...body, model_reading: { ...body.model_reading, stated_facts: {} } }), /violated/);
   assert.throws(() => assertContract('agentIntakeDetail', { ...body, model_reading: { ...body.model_reading, mode: 'decided' } }), /violated/);
+});
+
+test('details shadow: the call is counted as unknown before it runs, so an interrupted Worker never makes it free', async t => {
+  const { store, usage } = await setup(t);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let reached;
+  const called = new Promise(resolve => { reached = resolve; });
+  let n = 0;
+  const extractor = stubExtractor(async () => { if (n++) { reached(); return new Promise(() => {}); } return { extracted: EXTRACTED, usage: USAGE }; });
+  const on = await detailsHandoff(store, { ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() }, extractor);
+  try {
+    assert.equal(on.res.status, 201);
+    await called;
+    assert.deepEqual(usage(on.episode_id), { tool_calls: 1, model_version: VERSION, llm_calls: 2, known_input_tokens: 2106, known_output_tokens: 273, usage_unavailable_calls: 1 });
+  } finally {
+    t.mock.timers.tick(EXTRACTION_TIMEOUT_MS);
+    await Promise.all(on.pending);
+  }
+  assert.deepEqual(usage(on.episode_id), { tool_calls: 1, model_version: VERSION, llm_calls: 2, known_input_tokens: 2106, known_output_tokens: 273, usage_unavailable_calls: 1 }, 'the deadline keeps it unknown');
 });
