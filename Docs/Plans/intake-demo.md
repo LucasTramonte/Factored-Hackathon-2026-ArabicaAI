@@ -95,6 +95,29 @@ back-end/scripts/cognito/enroll.sh <email> - agent                 # agent, admi
 
 Both use `--profile ${AWS_PROFILE:-arabica}` and can be rerun. Judges' and teammates' emails are enrolled with `enroll.sh`; the customer id cannot change after creation, so delete the user first to re-map one. Once Phase 1 deploys, a person removes Cloudflare Access from the hostname in the Zero Trust dashboard; until then Access still fronts the sign-in page.
 
+### Notification email (SES)
+
+The Worker will send notification emails through Amazon SES v2 (`us-east-2`, account `arabica`) from `rzuniga@aptsny.co`; the team has no verified domain, so the sender is a single verified email identity. `SES_REGION` and `SES_FROM` are plain `vars` in `back-end/wrangler.jsonc`. The IAM user `arabicaai-worker-ses` has one inline policy, `ses-send-only`, allowing only `ses:SendEmail` on `arn:aws:ses:us-east-2:849110176017:identity/rzuniga@aptsny.co`, and no managed policies.
+
+The account is in the SES sandbox (200 emails a day, 1 a second): until production access is granted, SES delivers only to verified addresses, so each judge's address must also be created as an SES email identity and its owner must click AWS's verification email, or production access must arrive first. On 2026-10-02 a production-access request was filed (`put-account-details`, mail type `TRANSACTIONAL`, under 50 emails a day, recipients limited to Cognito-enrolled users, bounces and complaints stop sends to that address); its review status was `PENDING`. Check it with `aws sesv2 get-account --profile arabica --region us-east-2 --query '[ProductionAccessEnabled,Details.ReviewDetails.Status]'`.
+
+```bash
+back-end/scripts/ses/setup.sh   # creates or finds the sender identity and the send-only user; prints verification status and the user ARN
+```
+
+Human steps (the access key never passes through an agent or the repository):
+
+1. Open the AWS verification email sent to `rzuniga@aptsny.co` and click its link; `setup.sh` then prints `verified=True`.
+2. Create the access key and set the three Worker secrets:
+
+   ```bash
+   aws iam create-access-key --user-name arabicaai-worker-ses --profile arabica   # copy the two values once
+   cd back-end && npx wrangler secret put SES_ACCESS_KEY_ID && npx wrangler secret put SES_SECRET_ACCESS_KEY
+   npx wrangler secret put EMAIL_KEY   # 32 random bytes, base64: openssl rand -base64 32
+   ```
+
+3. If the account is still in the sandbox when judging starts, for each judge run `aws sesv2 create-email-identity --email-identity <judge email> --profile arabica --region us-east-2` and ask them to click AWS's verification email.
+
 ## Known limits
 
 - Customer identity is a Cognito email code mapped to one demo customer; it is not bank authentication. Agents still share the team password.

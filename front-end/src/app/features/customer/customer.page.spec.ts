@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerPage, initialsOf } from './customer.page';
-import { LangService } from '../../shared/i18n/lang.service';
+import { LangService, errorText } from '../../shared/i18n/lang.service';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { Identity, IntakeReceipt, IntakeStart, Transaction } from '../../shared/models/intake.model';
@@ -17,7 +17,7 @@ describe('CustomerPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake', 'reports'], { client: signal(''), card: signal(null), receipts: signal([]) });
+      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate'], { client: signal(''), card: signal(null), receipts: signal([]) });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null });
@@ -672,6 +672,47 @@ describe('CustomerPage', () => {
       fixture.detectChanges();
       expect(service.reports.calls.count()).toBe(before + 1);
       expect(rows(el)[0]).toContain('AR-CCCC-DDDD');
+    });
+
+    it('each report row has an update button labelled with its reference; each answer maps to its own text, focus stays', async () => {
+      service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB'),
+        report('technical', null, '2026-10-01T08:00:00Z', '11111111-2222-4333-8444-555555555555')], has_more: false });
+      const { fixture, el, p } = await home();
+      const buttons = [...el.querySelectorAll<HTMLButtonElement>('.your-reports li .update-btn')];
+      expect(buttons.map(b => b.textContent?.trim())).toEqual([p.t().updateMe, p.t().updateMe]);
+      expect(buttons.map(b => b.getAttribute('aria-label'))).toEqual([p.t().updateMe + ': AR-AAAA-BBBB', p.t().updateMe + ': 11111111-2222-4333-8444-555555555555']);
+      let finish!: () => void;
+      service.requestUpdate.and.returnValue(new Promise(done => { finish = () => done({ queued: true }); }));
+      await fixture.whenStable();
+      buttons[0].focus(); buttons[0].click(); fixture.detectChanges();
+      expect(service.requestUpdate).toHaveBeenCalledWith('99999999-8888-4777-8666-555555555555');
+      expect(buttons[0].disabled).toBeTrue();
+      finish(); await fixture.whenStable(); fixture.detectChanges();
+      expect(buttons[0].disabled).toBeFalse();
+      expect(document.activeElement).toBe(buttons[0]);
+      const status = (row = 0) => el.querySelectorAll('.your-reports [role="status"]')[row]?.textContent?.trim();
+      expect(status()).toBe(p.t().updateSent);
+      for (const [error, key] of [[429, 'updateRecent'], [409, 'updateNoEmail'], [503, null]] as const) {
+        service.requestUpdate.and.rejectWith(new ApiError(error, 'x'));
+        await p.requestUpdate('11111111-2222-4333-8444-555555555555'); fixture.detectChanges();
+        expect(status(0)).toBe('', 'the answer belongs to the other row');
+        expect(status(1)).toBe(key ? p.t()[key] : errorText(p.t(), new ApiError(error, 'x')));
+      }
+    });
+
+    it('one update request at a time: every row waits, and a second click sends nothing', async () => {
+      service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB'),
+        report('technical', null, '2026-10-01T08:00:00Z', '11111111-2222-4333-8444-555555555555')], has_more: false });
+      const { fixture, el, p } = await home();
+      let finish!: () => void;
+      service.requestUpdate.and.returnValue(new Promise(done => { finish = () => done({ queued: true }); }));
+      const first = p.requestUpdate('99999999-8888-4777-8666-555555555555'); fixture.detectChanges();
+      const buttons = [...el.querySelectorAll<HTMLButtonElement>('.your-reports li .update-btn')];
+      expect(buttons.map(b => b.disabled)).toEqual([true, true]);
+      await p.requestUpdate('11111111-2222-4333-8444-555555555555');
+      expect(service.requestUpdate).toHaveBeenCalledTimes(1);
+      finish(); await first; fixture.detectChanges();
+      expect(buttons.map(b => b.disabled)).toEqual([false, false]);
     });
 
     it('says when more reports exist than are listed', async () => {

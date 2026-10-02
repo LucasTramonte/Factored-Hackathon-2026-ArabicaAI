@@ -29,15 +29,20 @@ const CEILING = {
   agentList: [2, 250, 0, 2],
   intakeStart: [6, 8, 11, 2],
   intakeStartReplay: [6, 6, 2, 2],
-  intakeConfirm: [18, 60, 23, 8],
-  intakeConfirmReplay: [17, 45, 0, 7],
-  intakeIncomplete: [14, 42, 15, 7],
-  intakeIncompleteReplay: [14, 36, 0, 7],
+  // The first acknowledgement queues one "received" email for a customer with a notification target (Task 3.2):
+  // one more statement in the acknowledgement batch, 3 writes (row, primary key, email_outbox_recent).
+  intakeConfirm: [19, 72, 26, 8],
+  intakeConfirmReplay: [18, 54, 0, 7],
+  intakeIncomplete: [15, 55, 18, 7],
+  intakeIncompleteReplay: [15, 44, 0, 7],
   // 1 session row + 2 rows per scanned handoff; qualified for a 50-row page behind 50 tied pending reservations.
   // Pending density is not bounded in general, so this is a fixture workload, not a universal scan bound.
   intakeQueue: [2, 225, 0, 2],
   // 1 session row + about 2 rows per episode of the customer, measured on a customer with one report.
   reports: [2, 7, 0, 2],
+  // Session, owned report with its target flag, the outbox insert that checks the 5-minute window itself (row, primary
+  // key, email_outbox_recent); the send marks the row from its own store after the response (Task 3.3).
+  reportsUpdate: [3, 14, 3, 3],
   completeDetail: [3, 15, 0, 3],
   incompleteDetail: [3, 10, 0, 3],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
@@ -52,7 +57,7 @@ const CEILING = {
 const EXPORT_SLACK = 2;
 const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
 // Customer requests of one guided episode (login + list + start + terminal request); ADR-004 sizes capacity on these.
-const EPISODE_CEILING = { complete: [30, 72, 37, 15], incomplete: [26, 56, 29, 14] };
+const EPISODE_CEILING = { complete: [31, 82, 40, 15], incomplete: [27, 66, 32, 14] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);
@@ -97,6 +102,7 @@ const startBody = () => ({ language: 'es', mode: 'guided', report_type: 'unrecog
   customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() });
 
 test('guided endpoints and complete and incomplete customer episodes preserve measured D1 budgets', async () => {
+  assert.equal((await client({ authorization: 'Bearer ' + await idToken('demo-ana') }).call('/auth/session', {})).status, 200); // target present: worst case
   const c = client(); const measured = {};
   measured.login = within('login', (await c.call('/demo/session', { customer_id: 'demo-ana' })).metrics);
   measured.list = within('list', (await c.call('/transactions')).metrics);
@@ -109,6 +115,7 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   const complete = await c.call('/intake/confirm', confirmation);
   assert.equal(complete.status, 201); assertContract('intakeReceipt', complete.body);
   measured.confirm = within('intakeConfirm', complete.metrics);
+  assert.equal(complete.metrics.rows_written, CEILING.intakeConfirm[2], 'the received email was queued');
   const confirmReplay = await c.call('/intake/confirm', confirmation);
   assert.equal(confirmReplay.status, 200); assert.equal(confirmReplay.body.protocol, complete.body.protocol);
   measured.confirmReplay = within('intakeConfirmReplay', confirmReplay.metrics);
@@ -118,6 +125,7 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   const incomplete = await c.call('/intake/handoff', handoff);
   assert.equal(incomplete.status, 201); assertContract('intakeReceipt', incomplete.body);
   measured.incomplete = within('intakeIncomplete', incomplete.metrics);
+  assert.equal(incomplete.metrics.rows_written, CEILING.intakeIncomplete[2], 'the received email was queued');
   const incompleteReplay = await c.call('/intake/handoff', handoff);
   assert.equal(incompleteReplay.status, 200); assert.equal(incompleteReplay.body.protocol, incomplete.body.protocol);
   measured.incompleteReplay = within('intakeIncompleteReplay', incompleteReplay.metrics);
@@ -131,12 +139,18 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
     measured[name] = within(name, detail.metrics);
   }
   // CLI-COHORT-2 exists only in the cohort fixture and no other test signs in as it, so its history is this one report.
-  const cohort = client(); assert.equal((await cohort.call('/demo/session', { customer_id: 'CLI-COHORT-2' })).status, 200);
+  // Signed in by email, so it has a notification target and the update request reaches the outbox.
+  const cohort = client({ authorization: 'Bearer ' + await idToken('CLI-COHORT-2') });
+  assert.equal((await cohort.call('/auth/session', {})).status, 200);
   const cohortStart = await cohort.call('/intake/start', startBody()); assert.equal(cohortStart.status, 201);
-  assert.equal((await cohort.call('/intake/handoff', { episode_id: cohortStart.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() })).status, 201);
+  const cohortReceipt = await cohort.call('/intake/handoff', { episode_id: cohortStart.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() });
+  assert.equal(cohortReceipt.status, 201);
   const reports = await cohort.call('/reports'); assert.equal(reports.status, 200); assertContract('reportList', reports.body);
   assert.equal(reports.body.items.length, 1); assert.equal(reports.body.has_more, false);
   measured.reports = within('reports', reports.metrics);
+  const update = await cohort.call('/reports/update', { protocol: cohortReceipt.body.protocol });
+  assert.equal(update.status, 202); assertContract('updateQueued', update.body);
+  measured.reportsUpdate = within('reportsUpdate', update.metrics);
   const completeEpisode = sum(measured, ['login', 'list', 'start', 'confirm']);
   const incompleteEpisode = sum({ ...measured, start: measured.start2 }, ['login', 'list', 'start', 'incomplete']);
   within('complete episode', completeEpisode, EPISODE_CEILING.complete);
@@ -192,7 +206,7 @@ test('50-row queue scan budget is qualified against 50 terminal and 50 pending t
       assert.ok(handoff);
       if (i % 2) return;
       const receipt = await store.readIntakeReceipt('demo-ana', episode.episode_id, { sessionHash, now });
-      assert.equal(await store.finishIntakeHandoff({ customerId: 'demo-ana', episode, receipt, sessionHash, now, operationDuration: 0, toolCalls: 0 }), true);
+      assert.equal((await store.finishIntakeHandoff({ customerId: 'demo-ana', episode, receipt, sessionHash, now, operationDuration: 0, toolCalls: 0 })).acknowledged, true);
       receipts.push(receipt.handoff_id);
     };
     for (let i = 0; i < 100; i += 20) await Promise.all(Array.from({ length: 20 }, (_, j) => reserve(i + j)));

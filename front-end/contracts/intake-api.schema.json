@@ -434,6 +434,11 @@
         "has_more": {"type": "boolean"}
       }
     },
+    "updateQueued": {
+      "type": "object", "additionalProperties": false,
+      "required": ["queued"],
+      "properties": { "queued": {"const": true} }
+    },
     "intakeServiceTransition": {
       "type": "object", "additionalProperties": false,
       "required": ["seq", "event", "ts"],

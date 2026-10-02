@@ -45,6 +45,11 @@ export class CustomerService {
     return this.api.request<ReportList>('/reports');
   }
 
+  /** Ask for a status email about one of the customer's reports (202; 409 no email on file; 429 sent recently). */
+  requestUpdate(protocol: string): Promise<{ queued: true }> {
+    return this.api.request<{ queued: true }>('/reports/update', { protocol });
+  }
+
   startIntake(body: IntakeStartBody): Promise<IntakeStart> {
     return this.api.request<IntakeStart>('/intake/start', body);
   }

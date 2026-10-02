@@ -1,6 +1,6 @@
 /** Run the Worker against a fresh, isolated local D1 and compiled UI assets. */
 import { cp, mkdtemp, readdir, rm, symlink, writeFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -52,7 +52,9 @@ try {
     COGNITO_TEST_ISSUER: issuerFor(vars), COGNITO_TEST_CLIENT_ID: vars.COGNITO_CLIENT_ID });
   await writeFile(join(temp, '.dev.vars'),
     'DEMO_ACCESS_USERNAME="local-reviewer"\nDEMO_ACCESS_PASSWORD="local-test-password"\nDEMO_EXPOSE_DB_METRICS="1"\nDEMO_PICKER="1"\n'
-    + `COGNITO_TEST_JWKS='${jwks}'\n`);
+    + `COGNITO_TEST_JWKS='${jwks}'\n`
+    // A throwaway address key; no SES secrets are written, so every local send is skipped.
+    + `EMAIL_KEY="${randomBytes(32).toString('base64')}"\n`);
   run(['d1', 'migrations', 'apply', 'arabica-intake-demo', '--local']);
   run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file', 'seed_fictitious.sql']);
   run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file', 'seed_fictitious.sql']);
