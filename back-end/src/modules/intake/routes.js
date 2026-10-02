@@ -3,6 +3,8 @@ import { readSession, tokenHash } from '../../auth/session.js';
 import { fail, json, readJsonBody, readCookies } from '../../http.js';
 import { validateStartRequest, validateHandoffRequest } from './validation.js';
 import { APPROVED_EXTRACTOR, extractShadow, readyExtractor } from './ai-transport.js';
+import { createStore } from '../../store/d1.js';
+import { deliver } from '../../notify/dispatch.js';
 
 /**
  * POST /intake/start: start or replay an explicit guided report; never return a case protocol. With the switch on,
@@ -44,12 +46,15 @@ export async function startIntake(request, env, store, ctx, approved = APPROVED_
 }
 
 /** POST /intake/confirm: confirm current owned evidence, then verify the durable receipt. */
-export const confirmIntake = (request, env, store) => finishIntake(request, store, true);
+export const confirmIntake = (request, env, store, ctx) => finishIntake(request, env, store, ctx, true);
 /** POST /intake/handoff: explicitly request human review without inventing a confirmed transaction. */
-export const handoffIntake = (request, env, store) => finishIntake(request, store, false);
+export const handoffIntake = (request, env, store, ctx) => finishIntake(request, env, store, ctx, false);
 
-/** Reserve immutable handoff content; a failed write/read keeps the original key and never promises a reference. */
-async function finishIntake(request, store, complete) {
+/**
+ * Reserve immutable handoff content; a failed write/read keeps the original key and never promises a reference.
+ * The first acknowledgement may queue a "received" email; it is sent in ctx.waitUntil after the response.
+ */
+async function finishIntake(request, env, store, ctx, complete) {
   const started = performance.now();
   const current = await readSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
@@ -95,12 +100,16 @@ async function finishIntake(request, store, complete) {
     const receipt = await store.readIntakeReceipt(customerId, episodeId, { sessionHash, now: Date.now() });
     if (!receipt) throw new Error('Receipt not read back');
     toolCalls++;
-    const acknowledged = await store.finishIntakeHandoff({ customerId, episode, receipt, sessionHash, now: Date.now(), operationDuration: Math.floor(performance.now() - started), toolCalls });
+    const { acknowledged, emailId } = await store.finishIntakeHandoff({ customerId, episode, receipt, sessionHash, now: Date.now(), operationDuration: Math.floor(performance.now() - started), toolCalls });
     if (!acknowledged) {
       await store.recordIntakeAttempt({ customerId, episodeId, toolCalls, operationDuration: Math.floor(performance.now() - started) });
       return fail(401, 'Session expired; renew the same customer session and retry with the same idempotency key');
     }
-    return json({ episode_id: episodeId, protocol: receipt.complete_case_id ?? receipt.handoff_id,
+    const protocol = receipt.complete_case_id ?? receipt.handoff_id;
+    // A store of its own, so the send's queries never count in this response's metrics; skipped without a ctx.
+    if (emailId && ctx?.waitUntil) ctx.waitUntil(deliver(env, createStore(env.DB),
+      { messageId: emailId, customerId, language: episode.language, reference: receipt.reference_short ?? protocol }));
+    return json({ episode_id: episodeId, protocol,
       reference_short: receipt.reference_short ?? null, kind: receipt.kind, accepted_at: receipt.accepted_at, replayed: result.replayed,
       // From the read-back row, so the customer sees only what was durably recorded.
       actions_taken: JSON.parse(receipt.actions_json), unresolved_questions: JSON.parse(receipt.questions_json),

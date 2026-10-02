@@ -33,6 +33,9 @@ export function newShortReference() {
 const SHORT_REFERENCE_ATTEMPTS = 3;
 const shortReferenceTaken = error => /UNIQUE/i.test(String(error?.message)) && /reference_short/i.test(String(error?.message));
 
+const UPSERT_TARGET = 'INSERT INTO notification_targets(customer_id,email_enc,updated_at) VALUES(?,?,?) '
+  + 'ON CONFLICT(customer_id) DO UPDATE SET email_enc=excluded.email_enc,updated_at=excluded.updated_at';
+
 /** ``shortReference`` is injectable so tests can force collisions. */
 export function createStore(db, { shortReference = newShortReference } = {}) {
   const totals = { queries: 0, rowsRead: 0, rowsWritten: 0, roundTrips: 0 };
@@ -98,11 +101,15 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /** Revoke one session by token hash. */
     revokeSession: hash => all('DELETE FROM sessions WHERE token_hash=?', hash),
 
-    /** In one atomic batch: purge expired sessions, revoke the presented token, insert the new one. */
-    rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt }) => batch([
+    /**
+     * In one atomic batch: purge expired sessions, revoke the presented token, insert the new one and, with
+     * ``emailEnc`` (an email sign-in), upsert the customer's encrypted address in the same round trip.
+     */
+    rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt, emailEnc }) => batch([
       ['DELETE FROM sessions WHERE expires_at<=?', now],
       ...(oldHash ? [['DELETE FROM sessions WHERE token_hash=?', oldHash]] : []),
-      ['INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)', newHash, actor, customerId, expiresAt]
+      ['INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)', newHash, actor, customerId, expiresAt],
+      ...(emailEnc ? [[UPSERT_TARGET, customerId, emailEnc, now]] : [])
     ]),
     findSession: (hash, actor, now) =>
       first('SELECT customer_id, expires_at FROM sessions WHERE token_hash=? AND actor=? AND expires_at>?', hash, actor, now),
@@ -182,7 +189,12 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         + "AND EXISTS(SELECT 1 FROM intake_episodes WHERE episode_id=? AND customer_id=? AND state='handoff_pending')",
         toolCalls,operationDuration,episodeId,episodeId,customerId]
     ]),
-    /** After read-back, require live authority to atomically append one terminal chain and freeze state; concurrent acknowledgments are no-ops. */
+    /**
+     * After read-back, require live authority to atomically append one terminal chain and freeze state; concurrent
+     * acknowledgments are no-ops. The first acknowledgement also queues one ``received`` email when the customer has
+     * a notification target (reference: the short one when present, else the protocol). Returns
+     * ``{ acknowledged, emailId }``; ``emailId`` is null on a replay or without a target.
+     */
     finishIntakeHandoff: async ({ customerId, episode, receipt, sessionHash, now, operationDuration, toolCalls }) => {
       const authority = " AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=? AND expires_at>?)";
       const authorityParams = [sessionHash, customerId, now];
@@ -191,6 +203,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       const base = { version: '2', case_id: episode.episode_id, ts: new Date(now).toISOString(),
         session_ref: episode.session_ref,language: episode.language,model_version:model.model_version ?? 'guided-0.1' };
       const reference = receipt.complete_case_id ?? receipt.handoff_id;
+      const emailId = crypto.randomUUID();
       const complete = receipt.kind === 'complete';
       const extras = [
         ...(complete ? [{ event:'transaction_confirmed',transaction_ref:receipt.handoff_id }] : []),
@@ -215,6 +228,13 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=e.episode_id) '
           + authority + ' ON CONFLICT(episode_id,seq) DO NOTHING', receipt.next_seq+index,JSON.stringify({...base,seq:receipt.next_seq+index,...extra}),customerId,episode.episode_id,receipt.handoff_id,...authorityParams
         ]),
+        // Before the state change, so only the acknowledgement that moves the episode out of handoff_pending queues it.
+        ["INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) "
+          + "SELECT ?,?,e.customer_id,'received',e.language,?,'queued' FROM intake_episodes e "
+          + "WHERE e.customer_id=? AND e.episode_id=? AND e.state='handoff_pending' "
+          + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=e.episode_id) '
+          + 'AND EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id)' + authority + ' RETURNING message_id',
+          emailId,now,receipt.reference_short ?? reference,customerId,episode.episode_id,receipt.handoff_id,...authorityParams],
         ['UPDATE intake_episodes SET state=?,updated_at=? WHERE customer_id=? AND episode_id=? '
           + "AND state='handoff_pending' AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=intake_episodes.episode_id)" + authority,
           complete ? 'complete_handoff' : receipt.kind === 'technical' ? 'technical_handoff' : 'incomplete_handoff',now,customerId,episode.episode_id,receipt.handoff_id,...authorityParams],
@@ -222,7 +242,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + "WHERE e.customer_id=? AND e.episode_id=? AND h.handoff_id=? AND e.state IN ('complete_handoff','technical_handoff','incomplete_handoff')" + authority,
           customerId,episode.episode_id,receipt.handoff_id,...authorityParams]
       ]);
-      return Boolean(results.at(-1).results[0]);
+      return { acknowledged: Boolean(results.at(-1).results[0]), emailId: results.at(-3).results[0]?.message_id ?? null };
     },
 
     /**
@@ -331,15 +351,16 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       'SELECT event_json FROM intake_events WHERE episode_id=? ORDER BY seq LIMIT 101', episodeId),
 
     /** One encrypted address per customer (AES-GCM blob from ``notify/email.js``); a new sign-in replaces it. */
-    upsertNotificationTarget: ({ customerId, emailEnc, now }) => all(
-      'INSERT INTO notification_targets(customer_id,email_enc,updated_at) VALUES(?,?,?) '
-      + 'ON CONFLICT(customer_id) DO UPDATE SET email_enc=excluded.email_enc,updated_at=excluded.updated_at', customerId, emailEnc, now),
+    upsertNotificationTarget: ({ customerId, emailEnc, now }) => all(UPSERT_TARGET, customerId, emailEnc, now),
     findNotificationTarget: customerId => first(
       'SELECT email_enc,updated_at FROM notification_targets WHERE customer_id=?', customerId),
     /** Outbox rows hold template, language and reference only, never a body; they start ``queued``. */
     enqueueEmail: ({ messageId, now, customerId, template, language, reference }) => all(
       "INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) VALUES(?,?,?,?,?,?,'queued')",
       messageId, now, customerId, template, language, reference),
+    /** One customer's outbox rows for a reference (index ``email_outbox_recent``); no address, no body. */
+    findEmails: (customerId, reference) => all(
+      'SELECT template,language,provider_status FROM email_outbox WHERE customer_id=? AND reference=? ORDER BY created_at', customerId, reference),
     markEmail: (messageId, status, providerMessageId) => all(
       'UPDATE email_outbox SET provider_status=?,provider_message_id=? WHERE message_id=?', status, providerMessageId ?? null, messageId),
     /** Emails for this customer and reference created at or after ``sinceMs``, for rate limits (index ``email_outbox_recent``). */

@@ -29,10 +29,12 @@ const CEILING = {
   agentList: [2, 250, 0, 2],
   intakeStart: [6, 8, 11, 2],
   intakeStartReplay: [6, 6, 2, 2],
-  intakeConfirm: [18, 60, 23, 8],
-  intakeConfirmReplay: [17, 45, 0, 7],
-  intakeIncomplete: [14, 42, 15, 7],
-  intakeIncompleteReplay: [14, 36, 0, 7],
+  // The first acknowledgement queues one "received" email for a customer with a notification target (Task 3.2):
+  // one more statement in the acknowledgement batch, 3 writes (row, primary key, email_outbox_recent).
+  intakeConfirm: [19, 72, 26, 8],
+  intakeConfirmReplay: [18, 54, 0, 7],
+  intakeIncomplete: [15, 55, 18, 7],
+  intakeIncompleteReplay: [15, 44, 0, 7],
   // 1 session row + 2 rows per scanned handoff; qualified for a 50-row page behind 50 tied pending reservations.
   // Pending density is not bounded in general, so this is a fixture workload, not a universal scan bound.
   intakeQueue: [2, 225, 0, 2],
@@ -52,7 +54,7 @@ const CEILING = {
 const EXPORT_SLACK = 2;
 const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
 // Customer requests of one guided episode (login + list + start + terminal request); ADR-004 sizes capacity on these.
-const EPISODE_CEILING = { complete: [30, 72, 37, 15], incomplete: [26, 56, 29, 14] };
+const EPISODE_CEILING = { complete: [31, 82, 40, 15], incomplete: [27, 66, 32, 14] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);
@@ -192,7 +194,7 @@ test('50-row queue scan budget is qualified against 50 terminal and 50 pending t
       assert.ok(handoff);
       if (i % 2) return;
       const receipt = await store.readIntakeReceipt('demo-ana', episode.episode_id, { sessionHash, now });
-      assert.equal(await store.finishIntakeHandoff({ customerId: 'demo-ana', episode, receipt, sessionHash, now, operationDuration: 0, toolCalls: 0 }), true);
+      assert.equal((await store.finishIntakeHandoff({ customerId: 'demo-ana', episode, receipt, sessionHash, now, operationDuration: 0, toolCalls: 0 })).acknowledged, true);
       receipts.push(receipt.handoff_id);
     };
     for (let i = 0; i < 100; i += 20) await Promise.all(Array.from({ length: 20 }, (_, j) => reserve(i + j)));

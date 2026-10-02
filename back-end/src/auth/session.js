@@ -29,14 +29,15 @@ export async function readSession(request, store, actor) {
 
 /**
  * Create a session and return its Set-Cookie value. The presented token for this actor is revoked
- * and expired sessions are purged in the same atomic store call (one D1 round trip).
+ * and expired sessions are purged in the same atomic store call (one D1 round trip), which also stores
+ * ``emailEnc`` (an encrypted address) when given.
  */
-export async function startSession(request, store, actor, customerId = null) {
+export async function startSession(request, store, actor, customerId = null, emailEnc = null) {
   const now = Date.now();
   const previous = readCookies(request)[COOKIE[actor]];
   const token = newToken();
   await store.rotateSession({ now, oldHash: previous && TOKEN.test(previous) ? await tokenHash(previous) : null,
-    newHash: await tokenHash(token), actor, customerId, expiresAt: now + SESSION_MS });
+    newHash: await tokenHash(token), actor, customerId, expiresAt: now + SESSION_MS, emailEnc });
   return cookieHeader(COOKIE[actor], token, request, SESSION_MS / 1000);
 }
 

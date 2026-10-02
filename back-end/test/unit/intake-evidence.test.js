@@ -86,10 +86,15 @@ test('a real pending reservation is never abandoned and only a live same-owner s
   assert.equal((await store.findIntake('ana',episode.episode_id)).state,'handoff_pending');
   assert.equal(db.prepare('SELECT count(*) n FROM intake_events WHERE episode_id=?').get(episode.episode_id).n,1,'no end event without authority');
   const receipt = await store.readIntakeReceipt('ana',episode.episode_id,{sessionHash:owner,now});
-  assert.equal(await store.finishIntakeHandoff({customerId:'ana',episode,receipt,sessionHash:other,now,operationDuration:0,toolCalls:0}),false);
-  assert.equal(await store.finishIntakeHandoff({customerId:'ana',episode,receipt,sessionHash:await tokenHash('x'.repeat(64)),now,operationDuration:0,toolCalls:0}),false);
+  assert.equal((await store.finishIntakeHandoff({customerId:'ana',episode,receipt,sessionHash:other,now,operationDuration:0,toolCalls:0})).acknowledged,false);
+  assert.equal((await store.finishIntakeHandoff({customerId:'ana',episode,receipt,sessionHash:await tokenHash('x'.repeat(64)),now,operationDuration:0,toolCalls:0})).acknowledged,false);
   assert.equal((await store.findIntake('ana',episode.episode_id)).state,'handoff_pending');
-  assert.equal(await store.finishIntakeHandoff({customerId:'ana',episode,receipt,sessionHash:owner,now,operationDuration:0,toolCalls:0}),true);
+  await store.upsertNotificationTarget({customerId:'ana',emailEnc:'iv.ct',now});
+  const first = await store.finishIntakeHandoff({customerId:'ana',episode,receipt,sessionHash:owner,now,operationDuration:0,toolCalls:0});
+  assert.equal(first.acknowledged,true); assert.ok(first.emailId,'the first acknowledgement queues one email');
+  assert.deepEqual(await store.finishIntakeHandoff({customerId:'ana',episode,receipt,sessionHash:owner,now,operationDuration:0,toolCalls:0}),{acknowledged:true,emailId:null},'a replay queues nothing');
+  assert.deepEqual(db.prepare('SELECT message_id,customer_id,template,language,reference,provider_status FROM email_outbox').all().map(r=>({...r})),
+    [{message_id:first.emailId,customer_id:'ana',template:'received',language:'es',reference:receipt.reference_short,provider_status:'queued'}]);
   assert.equal((await store.findIntake('ana',episode.episode_id)).state,'complete_handoff');
   assert.equal((await store.closeIdleIntakes({now:now + 86400000,limit:100,...FAKE_CLOCK})).length,0);
 });

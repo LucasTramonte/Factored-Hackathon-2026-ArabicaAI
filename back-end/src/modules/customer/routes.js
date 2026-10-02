@@ -7,6 +7,7 @@ import { fail, json, readJsonBody } from '../../http.js';
 import { endSession, readSession, startSession } from '../../auth/session.js';
 import { issuerFor, jwksFor, verifyIdToken } from '../../auth/cognito.js';
 import { CUSTOMER_ID, validateCaseRequest } from './validation.js';
+import { encrypt } from '../../notify/email.js';
 
 const COMMITTED = new Map(identities.customers.map(c => [c.customer_id, c]));
 const COHORT_LIMIT = 1000;
@@ -82,8 +83,9 @@ const JWKS_DOWN = new Set(['ERR_JWKS_TIMEOUT', 'ERR_JWKS_INVALID', 'ERR_JOSE_GEN
 
 /**
  * POST /auth/session: a customer session from a verified Cognito ID token in ``Authorization: Bearer``.
- * Identity comes only from the verified claims; any body is ignored. The token and email are never
- * logged, echoed or stored, and an unverified token never reaches the store.
+ * Identity comes only from the verified claims; any body is ignored. The token is never logged, echoed or
+ * stored, and an unverified token never reaches the store. The email is stored only AES-GCM encrypted (for
+ * notifications), and only when ``EMAIL_KEY`` is valid; without it sign-in proceeds and nothing is stored.
  */
 export async function startEmailSession(request, env, store, ctx, verify = verifyIdToken) {
   const token = BEARER.exec(request.headers.get('Authorization') || '')?.[1];
@@ -100,8 +102,9 @@ export async function startEmailSession(request, env, store, ctx, verify = verif
     return fail(403, NOT_ENROLLED);
   }
   const card = contextCard(await store.findContextCard(customerId));
+  const emailEnc = await encrypt(claims.email, env).catch(() => null);
   return json({ customer_id: customerId, mode: 'email_otp', context_card: card }, 200,
-    { 'Set-Cookie': await startSession(request, store, 'customer', customerId) });
+    { 'Set-Cookie': await startSession(request, store, 'customer', customerId, emailEnc) });
 }
 
 /** POST /auth/logout: revoke the presented customer session; always 204, so it reveals nothing. */
