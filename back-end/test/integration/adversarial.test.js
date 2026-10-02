@@ -9,7 +9,7 @@ import { auth, base, client, idToken } from '../support/client.js';
 
 const API = { '/demo/identities': 'GET', '/demo/session': 'POST', '/auth/logout': 'POST', '/transactions': 'GET', '/cases': 'POST', '/intake/start': 'POST',
   '/intake/confirm': 'POST', '/intake/handoff': 'POST', '/demo/agent-session': 'POST', '/agent/cases': 'GET', '/agent/intakes': 'GET',
-  '/agent/intake-detail': 'GET' };
+  '/agent/intake-detail': 'GET', '/reports': 'GET' };
 const wrong = 'Basic ' + Buffer.from('local-reviewer:wrong').toString('base64');
 const uuid = () => crypto.randomUUID();
 
@@ -63,7 +63,7 @@ test('with the credential, wrong methods get 405 and unknown API paths get JSON 
     assert.equal(res.headers.get('Allow'), allowed);
   }
   for (const path of ['/cases/', '/cases/x', '/agent/', '/agent/cases/extra', '/demo/other', '/transactions/1', '/intake', '/intake/',
-    '/intake/confirm/extra', '/agent/intakes/extra', '/agent/intake-detail/x']) {
+    '/intake/confirm/extra', '/agent/intakes/extra', '/agent/intake-detail/x', '/reports/', '/reports/x']) {
     const res = await fetch(base + path, { headers: { Authorization: auth } });
     assert.equal(res.status, 404, path);
     assertContract('error', await res.json());

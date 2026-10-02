@@ -310,6 +310,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
       + 'h.destination,h.priority,h.accepted_at,h.reference_short FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
       + "WHERE e.state=h.kind||'_handoff' ORDER BY h.accepted_at DESC,protocol LIMIT ?", Math.min(limit, 51)),
+    /** The session customer's acknowledged handoffs, newest first. Only handoffs whose receipt was read back appear. */
+    listCustomerHandoffs: (customerId, limit) => all(
+      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,h.kind,h.accepted_at '
+      + "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
+      + 'ORDER BY h.accepted_at DESC,protocol LIMIT ?', customerId, limit),
     /** Optional complete evidence is one-to-one and owner-scoped; missing evidence never drops a handoff. */
     findIntakeHandoff: protocol => first(
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'

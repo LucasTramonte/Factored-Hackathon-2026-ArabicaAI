@@ -6,7 +6,7 @@
 import { checkAccessGate } from './auth/access-gate.js';
 import { fail, json } from './http.js';
 import { createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession } from './modules/customer/routes.js';
-import { startIntake, confirmIntake, handoffIntake } from './modules/intake/routes.js';
+import { startIntake, confirmIntake, handoffIntake, listReports } from './modules/intake/routes.js';
 import { listAgentCases, listAgentIntakes, getAgentIntakeDetail, startAgentSession } from './modules/agent/routes.js';
 
 export const API_ROUTES = {
@@ -19,12 +19,13 @@ export const API_ROUTES = {
   '/intake/start': { POST: startIntake },
   '/intake/confirm': { POST: confirmIntake },
   '/intake/handoff': { POST: handoffIntake },
+  '/reports': { GET: listReports },
   '/demo/agent-session': { POST: startAgentSession },
   '/agent/cases': { GET: listAgentCases },
   '/agent/intakes': { GET: listAgentIntakes },
   '/agent/intake-detail': { GET: getAgentIntakeDetail }
 };
-export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/transactions/', '/cases/', '/intake/'];
+export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/transactions/', '/cases/', '/intake/', '/reports/'];
 /** Bare API namespace paths that have no handler but must still answer JSON 404. */
 export const API_NAMESPACES = new Set(['/intake', '/auth']);
 /** HTML documents the Worker sees first; of these only ``/agent`` is gated. Hashed bundles skip the Worker. */
