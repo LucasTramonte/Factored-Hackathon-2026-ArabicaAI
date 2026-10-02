@@ -330,6 +330,22 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     listIntakeHistory: episodeId => all(
       'SELECT event_json FROM intake_events WHERE episode_id=? ORDER BY seq LIMIT 101', episodeId),
 
+    /** One encrypted address per customer (AES-GCM blob from ``notify/email.js``); a new sign-in replaces it. */
+    upsertNotificationTarget: ({ customerId, emailEnc, now }) => all(
+      'INSERT INTO notification_targets(customer_id,email_enc,updated_at) VALUES(?,?,?) '
+      + 'ON CONFLICT(customer_id) DO UPDATE SET email_enc=excluded.email_enc,updated_at=excluded.updated_at', customerId, emailEnc, now),
+    findNotificationTarget: customerId => first(
+      'SELECT email_enc,updated_at FROM notification_targets WHERE customer_id=?', customerId),
+    /** Outbox rows hold template, language and reference only, never a body; they start ``queued``. */
+    enqueueEmail: ({ messageId, now, customerId, template, language, reference }) => all(
+      "INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) VALUES(?,?,?,?,?,?,'queued')",
+      messageId, now, customerId, template, language, reference),
+    markEmail: (messageId, status, providerMessageId) => all(
+      'UPDATE email_outbox SET provider_status=?,provider_message_id=? WHERE message_id=?', status, providerMessageId ?? null, messageId),
+    /** Emails for this customer and reference created at or after ``sinceMs``, for rate limits (index ``email_outbox_recent``). */
+    recentEmails: async (customerId, reference, sinceMs) => (await first(
+      'SELECT COUNT(*) AS n FROM email_outbox WHERE customer_id=? AND reference=? AND created_at>=?', customerId, reference, sinceMs)).n,
+
     listAgentCases: limit => all(
       'SELECT c.case_id AS protocol, c.customer_id, u.display_name, c.transaction_id, t.merchant_name, '
       + 't.occurred_at, t.source_occurred_at, t.amount, t.currency, c.customer_statement, '
