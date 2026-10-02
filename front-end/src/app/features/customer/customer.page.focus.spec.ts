@@ -12,7 +12,7 @@ describe('CustomerPage focus', () => {
     service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' }]);
     service.signIn.and.resolveTo();
-    service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only' });
+    service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] });
     const fixture = TestBed.createComponent(CustomerPage);
     document.body.appendChild(fixture.nativeElement);
@@ -39,7 +39,7 @@ describe('CustomerPage focus', () => {
     service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([]);
     service.signIn.and.resolveTo();
-    service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only' });
+    service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] });
     const fixture = TestBed.createComponent(CustomerPage);
     document.body.appendChild(fixture.nativeElement);
@@ -64,7 +64,7 @@ describe('CustomerPage focus', () => {
     service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([]);
     service.signIn.and.resolveTo();
-    service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only' });
+    service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] });
     const fixture = TestBed.createComponent(CustomerPage);
     fixture.autoDetectChanges();
@@ -89,7 +89,7 @@ describe('CustomerPage focus', () => {
     service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([]);
     service.signIn.and.resolveTo();
-    service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only' });
+    service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] });
     const fixture = TestBed.createComponent(CustomerPage);
     document.body.appendChild(fixture.nativeElement);
@@ -187,7 +187,7 @@ describe('CustomerPage focus', () => {
     service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([]);
     service.signIn.and.resolveTo();
-    service.transactions.and.resolveTo({ items: [{ transaction_id: 'demo-tx-001', merchant_name: 'Mercado', occurred_at: null, source_occurred_at: '2026-02-26T13:21:51', amount: '125.50', currency: 'BRL' }], has_more: false, coverage: 'fictitious_demo_data_only' });
+    service.transactions.and.resolveTo({ items: [{ transaction_id: 'demo-tx-001', merchant_name: 'Mercado', occurred_at: null, source_occurred_at: '2026-02-26T13:21:51', amount: '125.50', currency: 'BRL' }], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] });
     const fixture = TestBed.createComponent(CustomerPage);
     document.body.appendChild(fixture.nativeElement);

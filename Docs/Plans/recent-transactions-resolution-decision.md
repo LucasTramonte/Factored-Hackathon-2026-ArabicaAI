@@ -1,6 +1,6 @@
 # Recent-transactions resolution path: decision proposal
 
-- **Status:** Draft proposal. It is not an ADR, has not been accepted, and has no ADR number.
+- **Status:** Draft proposal, now decided in [ADR-009](../ADRs/ADR-009-recent-charges-resolution.md) (Proposed). Kept for its coverage and eligibility detail; where they differ, ADR-009 wins.
 - **Date:** 2026-09-30
 - **Deciders when it is proposed as an ADR:** Lucas Tramonte, Roberto Z, Manoella R
 - **Related:** [ADR-001](../ADRs/ADR-001-workflow-prioritization.md), [ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md), [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md), [intake events](../intake/intake-events.md), [online completion design](../archive/superpowers/specs/2026-09-29-intake-online-completion-design.md)

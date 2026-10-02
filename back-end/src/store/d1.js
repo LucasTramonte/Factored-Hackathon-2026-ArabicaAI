@@ -345,6 +345,14 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     listTransactions: (customerId, limit) => all(
       'SELECT transaction_id, occurred_at, source_occurred_at, merchant_name, amount, currency FROM transactions '
       + 'WHERE customer_id=? ORDER BY occurred_at DESC, source_occurred_at DESC, transaction_id LIMIT ?', customerId, limit),
+    /** Record one served charges page (migration 0015, ADR-009); ``viewRef`` is random and never derived from the customer. */
+    insertChargeView: ({ viewRef, customerId, language, rowCount, hasMore, coverage, now }) => all(
+      'INSERT INTO charge_views(view_ref,customer_id,language,row_count,has_more,coverage,retrieved_at) VALUES(?,?,?,?,?,?,?)',
+      viewRef, customerId, language, rowCount, hasMore ? 1 : 0, coverage, now),
+    /** The view's ``displayed_at`` after acknowledging it: a replay keeps the first time; another customer's or a missing view is null. */
+    acknowledgeChargeView: async (viewRef, customerId, now) => (await first(
+      'UPDATE charge_views SET displayed_at=COALESCE(displayed_at,?) WHERE view_ref=? AND customer_id=? RETURNING displayed_at',
+      now, viewRef, customerId))?.displayed_at ?? null,
     ownsTransaction: async (customerId, transactionId) => Boolean(await first(
       'SELECT 1 AS ok FROM transactions WHERE customer_id=? AND transaction_id=?', customerId, transactionId)),
 
