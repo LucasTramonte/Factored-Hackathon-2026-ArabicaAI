@@ -51,7 +51,7 @@ export const TEMPLATES = {
 /** The ``{status}`` text of an ``update`` email, per stored report status. */
 export const STATUS_TEXT = {
   received: { es: 'Recibido; una persona lo revisará', pt: 'Recebido; uma pessoa vai analisá-lo', en: 'Received; a person will review it' },
-  in_review: { es: 'En revisión por una persona', pt: 'Em análise por uma pessoa', en: 'Being reviewed by a person' },
+  in_review: { es: 'En revisión por una persona', pt: 'Em análise por uma pessoa', en: 'In review by a person' },
   closed: { es: 'Revisión terminada; el banco te contactará por su canal habitual',
     pt: 'Análise concluída; o banco vai entrar em contato pelo canal habitual',
     en: 'Review finished; the bank will contact you through its usual channel' }

@@ -166,10 +166,11 @@ describe('CustomerPage focus', () => {
     page.narrow.set(true);
     page.chatOpen.set(true);
     await fixture.whenStable();
-    const close = el.querySelector<HTMLButtonElement>('#intake-chat .chat-close');
-    expect(close).withContext('a close control inside the dialog').not.toBeNull();
-    expect(close!.textContent!.trim()).toBe(page.t().chatClose);
-    expect([...close!.classList]).toEqual(jasmine.arrayContaining(['ar-btn', 'ar-btn-secondary', 'ar-btn-sm']));
+    const close = el.querySelector<HTMLButtonElement>(`#intake-chat .chat-head button[aria-label="${page.t().chatClose}"]`);
+    expect(close).withContext('an icon close in the panel header, named by its label').not.toBeNull();
+    expect(close!.textContent!.trim()).toBe('');
+    expect(close!.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect([...close!.classList]).toEqual(jasmine.arrayContaining(['ar-btn', 'ar-btn-secondary', 'ar-btn-icon']));
     close!.click();
     await fixture.whenStable();
     expect(page.chatOpen()).toBeFalse();
@@ -177,7 +178,7 @@ describe('CustomerPage focus', () => {
     page.narrow.set(false);
     page.chatOpen.set(true);
     await fixture.whenStable();
-    expect(el.querySelector('#intake-chat .chat-close')).withContext('wide: the panel still carries its own close').not.toBeNull();
+    expect(el.querySelector(`#intake-chat button[aria-label="${page.t().chatClose}"]`)).withContext('wide: the panel still carries its own close').not.toBeNull();
     fixture.nativeElement.remove();
   });
 

@@ -5,7 +5,7 @@
   overflow-y: auto; scroll-padding-bottom: 72px; display: flex; flex-direction: column; gap: 12px; padding: 20px; /* scroll-padding: a focused receipt lands above the sticky actions bar */
   background: var(--surface-raised); border: var(--hairline) solid var(--line-strong); border-radius: var(--radius-lg);
 }
-.chat-close { align-self: flex-end; }
+.chat-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .chat-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .chat-log li { max-width: 85%; padding: 8px 12px; border-radius: var(--radius-md); overflow-wrap: anywhere; font: 400 14px/20px var(--font-sans); }
 .chat-bot { align-self: flex-start; background: var(--surface-sunken); }

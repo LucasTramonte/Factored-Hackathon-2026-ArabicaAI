@@ -154,9 +154,11 @@
               <section class="your-reports" aria-labelledby="your-reports-title">
                 <h3 id="your-reports-title">{{ t().yourReports }}</h3>
                 <ul>@for (r of reports()!.items; track r.protocol) {
-                  <li><span class="ar-mono">{{ r.reference_short ?? r.protocol }}</span> {{ t()[receiptTitleKey[r.kind]] }}
+                  <li><span class="ar-mono">{{ r.reference_short ?? r.protocol }}</span>
                     @if (chargeOf(r.transaction_id); as tx) { · {{ tx.merchant_name || t().noMerchant }} {{ tx.amount }} {{ tx.currency }} }
                     <span class="report-status"><span class="ar-chip" [class.ar-chip-ok]="r.status !== 'closed'">{{ t()[statusChip[r.status]] }}</span>
+                      @if (r.kind === 'incomplete') { <span class="ar-chip ar-chip-warn report-kind">{{ t().kindIncomplete }}</span> }
+                      @else if (r.kind === 'technical') { <span class="ar-chip ar-chip-err report-kind">{{ t().kindTechnical }}</span> }
                       <span class="ar-caption">@switch (r.status) { @case ('in_review') { {{ t().statusInReview }} } @case ('closed') { {{ t().statusClosed }} } @default { {{ t().nextStepReview }} } } · {{ r.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span></span>
                     <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm update-btn" (click)="requestUpdate(r.protocol)" [disabled]="updating() !== null"
                       [attr.aria-label]="t().updateMe + ': ' + (r.reference_short ?? r.protocol)">{{ t().updateMe }}</button>
@@ -172,8 +174,12 @@
           <!-- At narrow widths the page behind is inert, so the panel is a modal dialog there; Escape closes it at any width. -->
           <section class="chat" id="intake-chat" aria-labelledby="chat-title" [attr.role]="narrow() ? 'dialog' : null"
             [attr.aria-modal]="narrow() ? 'true' : null" (keydown.escape)="closeChat()">
-            <h2 class="ar-panel-title" id="chat-title" #chatPanel tabindex="-1">{{ t().guideTitle }}</h2>
-            <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm chat-close" (click)="closeChat()">{{ t().chatClose }}</button>
+            <div class="chat-head">
+              <h2 class="ar-panel-title" id="chat-title" #chatPanel tabindex="-1">{{ t().guideTitle }}</h2>
+              <button type="button" class="ar-btn ar-btn-secondary ar-btn-icon chat-close" (click)="closeChat()" [attr.aria-label]="t().chatClose" [attr.title]="t().chatClose">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18"></path><path d="M6 6l12 12"></path></svg>
+              </button>
+            </div>
             <ol class="chat-log" role="log" aria-live="polite">
               @for (line of log(); track $index) {
                 <li [class]="'chat-' + line.from" [attr.id]="$last && line.from === 'bot' ? 'chat-prompt' : null"><span class="sr-only">{{ line.from === 'me' ? t().chatYou : t().chatGuide }}: </span>{{ 'key' in line ? t()[line.key] : line.text }}</li>

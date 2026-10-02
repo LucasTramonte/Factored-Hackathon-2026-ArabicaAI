@@ -90,7 +90,6 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly chatStep = computed<ChatStep>(() => this.intakeReceipt() ? 'receipt' : this.ended() ? 'ended' : !this.episode() ? 'describe' : this.asking() ? 'details' : 'choose');
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
-  readonly receiptTitleKey = RECEIPT_TITLE;
   /** A charge whose newest server report is still open is not offered again (the server refuses it with 409). */
   readonly choosable = computed(() => this.transactions().filter(tx => (this.reportOf(tx.transaction_id)?.status ?? 'closed') === 'closed'));
   readonly statusChip = STATUS_CHIP;

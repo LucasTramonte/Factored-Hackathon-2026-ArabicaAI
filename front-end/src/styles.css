@@ -129,6 +129,7 @@ button, input, select, textarea { font: inherit; }
 .ar-btn-secondary { background: var(--surface-raised); color: var(--ink); border-color: var(--line-strong); } .ar-btn-secondary:hover { background: var(--surface-sunken); border-color: var(--line-strong); }
 .ar-btn-block { width: 100%; }
 .ar-btn-sm { min-height: 36px; padding: 0 14px; font-size: 14px; } /* compact secondary actions inside rows, lists and panel headers */
+.ar-btn-icon { flex: none; width: 36px; min-height: 36px; height: 36px; padding: 0; } /* square icon-only button; needs an aria-label */
 
 /* Chip (status and sandbox): word + colour, lowercase mono */
 .ar-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: var(--radius-sm); font: 500 12px/18px var(--font-mono); background: var(--surface-sunken); color: var(--ink-muted); white-space: nowrap; text-transform: lowercase; }

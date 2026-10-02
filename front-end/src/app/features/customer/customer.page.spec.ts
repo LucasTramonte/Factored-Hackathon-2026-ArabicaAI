@@ -648,7 +648,7 @@ describe('CustomerPage', () => {
       expect(html.querySelector('.ar-count')).withContext('no receipt badge on the agent link: it read as a queue count').toBeNull();
       const reports = [...html.querySelectorAll('.your-reports li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim());
       expect(reports.length).toBe(1);
-      expect(reports[0]).toContain(p.t().receiptIncomplete);
+      expect(reports[0]).toContain(p.t().kindIncomplete);
       expect(reports[0]).toContain('AR-3F9Q-1Z7P'); // the short code is the reference a customer keeps
       expect(reports[0]).not.toContain('99999999-8888-4777-8666-555555555555');
     });
@@ -665,12 +665,13 @@ describe('CustomerPage', () => {
       expect(el.querySelector('.your-reports h3')?.textContent?.trim()).toBe(p.t().yourReports);
       const [first, second] = rows(el);
       expect(first).toContain('AR-AAAA-BBBB');
-      expect(first).toContain(p.t().receiptComplete);
+      expect(first).not.toContain(p.t().receiptComplete); // a complete report needs no kind word
+      expect(el.querySelectorAll('.your-reports .report-kind').length).toBe(1);
       expect(first).toContain(p.t().statusReceived);
       expect(first).toContain(p.t().nextStepReview);
       expect(first).toContain('2026-10-02 09:30:00');
       expect(second).toContain('11111111-2222-4333-8444-555555555555'); // no short code: the protocol
-      expect(second).toContain(p.t().receiptTechnical);
+      expect(second).toContain(p.t().kindTechnical);
       expect(el.textContent).not.toContain(p.t().moreReports);
     });
 
