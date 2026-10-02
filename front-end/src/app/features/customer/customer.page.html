@@ -150,7 +150,7 @@
                 <h3 id="your-reports-title">{{ t().yourReports }}</h3>
                 <ul>@for (r of reports()!.items; track r.protocol) {
                   <li><span class="ar-mono">{{ r.reference_short ?? r.protocol }}</span> {{ t()[receiptTitleKey[r.kind]] }}
-                    <span class="ar-caption" style="display: block">{{ t().statusReceived }}: {{ t().nextStepReview }} · {{ r.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span></li>
+                    <span class="ar-caption report-status">{{ t().statusReceived }}: {{ t().nextStepReview }} · {{ r.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span></li>
                 }</ul>
                 @if (reports()!.has_more) { <span class="ar-caption">{{ t().moreReports }}</span> }
               </section>

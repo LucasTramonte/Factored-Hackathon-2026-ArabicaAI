@@ -23,3 +23,4 @@
 .report-btn { min-height: 36px; padding: 0 14px; font-size: 14px; }
 .login-email { display: flex; flex-direction: column; gap: 10px; margin: 0; }
 .login-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.report-status { display: block; }
