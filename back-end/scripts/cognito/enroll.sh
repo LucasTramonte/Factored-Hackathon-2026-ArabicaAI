@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Enrols one email in the arabicaai-demo pool: creates the user (no invitation email, email
-# verified, custom:customer_id set) and adds it to a group. Rerunning updates group and attribute.
+# verified, custom:customer_id set) and adds it to a group. Rerunning compares the immutable
+# custom:customer_id and refuses if it differs; it adds the user to the given group and does not
+# remove earlier groups.
 # Usage: enroll.sh <email> <customer_id> [group]     group defaults to customer
 #        enroll.sh <email> - agent                    no customer id (agents, admins, auditors)
 set -euo pipefail
