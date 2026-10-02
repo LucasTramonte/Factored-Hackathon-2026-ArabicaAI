@@ -82,22 +82,22 @@
     @case ('home') {
       <div class="step home">
         <nav class="ar-sidebar" [attr.aria-label]="t().mainNav" [inert]="chatOpen() && narrow()">
-          <div style="display: flex; flex-direction: column; gap: 28px">
-            <div style="padding: 0 8px"><span class="ar-lockup"><span class="sidebar-mark-slot"></span><span class="ar-wordmark" style="font-size: 20px">Arabica<b>AI</b></span></span></div>
+          <div class="sidebar-top">
+            <div style="padding: 0 8px"><span class="ar-lockup"><span class="sidebar-mark-slot"></span><span class="ar-wordmark">Arabica<b>AI</b></span></span></div>
             <div class="ar-nav">
               <a [routerLink]="frozen() ? null : '/agent'" [attr.aria-disabled]="frozen() ? true : null" [attr.aria-label]="t().agentView"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M8 9h8"></path><path d="M8 13h8"></path><path d="M8 17h5"></path></svg><span class="label">{{ t().agentView }}</span></a>
             </div>
           </div>
-          <div style="display: flex; flex-direction: column; gap: 16px">
+          <div class="sidebar-foot">
             <div class="ar-note"><span class="ar-chip ar-chip-warn">{{ t().sandbox }}</span><span class="ar-small">{{ t().noMoney }}</span></div>
-            <div class="user"><span class="avatar" aria-hidden="true">{{ initials() }}</span><span style="display: flex; flex-direction: column"><span style="font: 500 14px/20px var(--font-sans)">{{ displayName() }}</span><span class="ar-mono" style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">{{ client() }}</span></span></div>
+            <div class="user"><span class="avatar" aria-hidden="true">{{ initials() }}</span><span class="user-name"><span>{{ displayName() }}</span><span class="mono-meta">{{ client() }}</span></span></div>
           </div>
         </nav>
 
         <main class="home-main" id="inicio" [inert]="chatOpen() && narrow()">
           <div class="topbar">
             <div style="display: flex; flex-direction: column; gap: 4px">
-              <h1 class="ar-h1" tabindex="-1" style="font-size: 28px; line-height: 36px">{{ t().hello }}, {{ card()?.first_name || displayName() }}</h1>
+              <h1 class="ar-h1" tabindex="-1">{{ t().hello }}, {{ card()?.first_name || displayName() }}</h1>
               @if (card()?.products?.length) {
                 <ul class="products" [attr.aria-label]="t().products">
                   @for (p of card()!.products; track $index) {
@@ -122,7 +122,7 @@
                       <div role="row" style="display: contents" [class.tr-last]="last">
                       <span role="cell" class="td td-merchant">
                         @if (tx.merchant_name) { <span class="ar-tile" aria-hidden="true">{{ merchantInitials(tx) }}</span> } @else { <span class="ar-tile ar-tile-missing" aria-hidden="true"></span> }
-                        <span style="display: flex; flex-direction: column; min-width: 0"><span class="name">{{ tx.merchant_name || t().noMerchant }}</span><span class="ar-mono" style="font-size: 12px; line-height: 16px; color: var(--ink-muted)">{{ tx.transaction_id }}</span></span>
+                        <span style="display: flex; flex-direction: column; min-width: 0"><span class="name">{{ tx.merchant_name || t().noMerchant }}</span><span class="mono-meta">{{ tx.transaction_id }}</span></span>
                       </span>
                       <span role="cell" class="td td-date">
                         @if (tx.source_occurred_at) { {{ sourceTime(tx.source_occurred_at) }} ({{ t().tzMissing }}) }
@@ -135,15 +135,15 @@
                         @if (pending(tx.transaction_id)) { <span class="ar-chip ar-chip-warn">{{ t().chipPending }}</span> }
                         @else {
                           @if (report) { <span class="ar-chip" [class.ar-chip-ok]="report.status !== 'closed'">{{ t()[statusChip[report.status]] }} <span class="ar-mono">{{ report.reference_short ?? report.protocol }}</span></span> }
-                          @if ((report?.status ?? 'closed') === 'closed') { <button type="button" class="ar-btn ar-btn-secondary report-btn" (click)="openChat(tx.transaction_id)" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null" [disabled]="!!frozen() || chatStep() === 'receipt'">{{ t().reportCharge }}<span class="sr-only">: {{ tx.merchant_name || t().noMerchant }}, {{ tx.amount }} {{ tx.currency }}</span></button> }
+                          @if ((report?.status ?? 'closed') === 'closed') { <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm" (click)="openChat(tx.transaction_id)" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null" [disabled]="!!frozen()">{{ t().reportCharge }}<span class="sr-only">: {{ tx.merchant_name || t().noMerchant }}, {{ tx.amount }} {{ tx.currency }}</span></button> }
                         }
                       </span>
                       <span role="cell" class="td td-amount">{{ tx.amount }} {{ tx.currency }}</span>
                       </div>
                     }
                   </div>
-                  <span class="ar-caption" style="display: block; margin-top: 12px">{{ t().windowCaption }}</span>
-                  @if (hasMore()) { <span class="ar-caption" style="display: block; margin-top: 4px">{{ t().moreCharges }}</span> }
+                  <span class="ar-caption">{{ t().windowCaption }}</span>
+                  @if (hasMore()) { <span class="ar-caption">{{ t().moreCharges }}</span> }
                 } @else {
                   <div class="ar-empty"><p>{{ t().empty }}</p><span class="ar-caption">{{ t().emptyCaveat }}</span></div>
                 }
@@ -156,8 +156,9 @@
                 <ul>@for (r of reports()!.items; track r.protocol) {
                   <li><span class="ar-mono">{{ r.reference_short ?? r.protocol }}</span> {{ t()[receiptTitleKey[r.kind]] }}
                     @if (chargeOf(r.transaction_id); as tx) { · {{ tx.merchant_name || t().noMerchant }} {{ tx.amount }} {{ tx.currency }} }
-                    <span class="ar-caption report-status">@switch (r.status) { @case ('in_review') { {{ t().statusInReview }} } @case ('closed') { {{ t().statusClosed }} } @default { {{ t().statusReceived }}; {{ t().nextStepReview }} } } · {{ r.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span>
-                    <button type="button" class="ar-btn ar-btn-secondary update-btn" (click)="requestUpdate(r.protocol)" [disabled]="updating() !== null"
+                    <span class="report-status"><span class="ar-chip" [class.ar-chip-ok]="r.status !== 'closed'">{{ t()[statusChip[r.status]] }}</span>
+                      <span class="ar-caption">@switch (r.status) { @case ('in_review') { {{ t().statusInReview }} } @case ('closed') { {{ t().statusClosed }} } @default { {{ t().nextStepReview }} } } · {{ r.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span></span>
+                    <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm update-btn" (click)="requestUpdate(r.protocol)" [disabled]="updating() !== null"
                       [attr.aria-label]="t().updateMe + ': ' + (r.reference_short ?? r.protocol)">{{ t().updateMe }}</button>
                     <span class="ar-caption" role="status">@if (updateNote()?.protocol === r.protocol) { {{ updateNote()!.text }} }</span></li>
                 }</ul>
@@ -172,7 +173,7 @@
           <section class="chat" id="intake-chat" aria-labelledby="chat-title" [attr.role]="narrow() ? 'dialog' : null"
             [attr.aria-modal]="narrow() ? 'true' : null" (keydown.escape)="closeChat()">
             <h2 class="ar-panel-title" id="chat-title" #chatPanel tabindex="-1">{{ t().guideTitle }}</h2>
-            <button type="button" class="ar-btn-secondary chat-close" (click)="closeChat()">{{ t().chatClose }}</button>
+            <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm chat-close" (click)="closeChat()">{{ t().chatClose }}</button>
             <ol class="chat-log" role="log" aria-live="polite">
               @for (line of log(); track $index) {
                 <li [class]="'chat-' + line.from" [attr.id]="$last && line.from === 'bot' ? 'chat-prompt' : null"><span class="sr-only">{{ line.from === 'me' ? t().chatYou : t().chatGuide }}: </span>{{ 'key' in line ? t()[line.key] : line.text }}</li>
@@ -222,7 +223,7 @@
                     <h3 class="ar-panel-title">{{ receiptTitle() }}</h3>
                     <div class="ar-ref"><span class="ar-ref-label">{{ t().reference }}</span><span class="ar-ref-code">{{ r.reference_short ?? r.protocol }}</span></div>
                     <p class="next-step">{{ t().nextStep }}</p>
-                    @if (r.urgency === 'high' && r.block_card_line) { <p class="urgent-line"><strong>{{ t().blockCardCall }} <span class="ar-mono">{{ r.block_card_line }}</span>.</strong> {{ t().blockCardNote }}</p> }
+                    @if (r.urgency === 'high' && r.block_card_line) { <p class="ar-panel ar-panel-warn urgent-line"><strong>{{ t().blockCardCall }} <span class="ar-mono">{{ r.block_card_line }}</span>.</strong> {{ t().blockCardNote }}</p> }
                     @if (r.reference_short) { <p class="ar-small case-id">{{ t().caseId }}: <span class="ar-mono">{{ r.protocol }}</span></p> }
                     <h4>{{ t().whatWeChecked }}</h4>
                     <ul class="checks">@for (a of r.actions_taken; track $index) { <li>{{ check(a) }}</li> } @empty { <li>{{ t().none }}</li> }</ul>

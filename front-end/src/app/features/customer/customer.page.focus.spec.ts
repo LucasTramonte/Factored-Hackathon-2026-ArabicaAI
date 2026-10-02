@@ -169,6 +169,7 @@ describe('CustomerPage focus', () => {
     const close = el.querySelector<HTMLButtonElement>('#intake-chat .chat-close');
     expect(close).withContext('a close control inside the dialog').not.toBeNull();
     expect(close!.textContent!.trim()).toBe(page.t().chatClose);
+    expect([...close!.classList]).toEqual(jasmine.arrayContaining(['ar-btn', 'ar-btn-secondary', 'ar-btn-sm']));
     close!.click();
     await fixture.whenStable();
     expect(page.chatOpen()).toBeFalse();
@@ -195,7 +196,7 @@ describe('CustomerPage focus', () => {
     await page.login();
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
-    const button = el.querySelector<HTMLButtonElement>('.report-btn')!;
+    const button = el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!;
     button.focus();
     button.click();
     await fixture.whenStable();

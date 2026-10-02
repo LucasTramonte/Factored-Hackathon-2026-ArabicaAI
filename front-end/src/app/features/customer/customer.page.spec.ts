@@ -666,7 +666,8 @@ describe('CustomerPage', () => {
       const [first, second] = rows(el);
       expect(first).toContain('AR-AAAA-BBBB');
       expect(first).toContain(p.t().receiptComplete);
-      expect(first).toContain(p.t().statusReceived + '; ' + p.t().nextStepReview);
+      expect(first).toContain(p.t().statusReceived);
+      expect(first).toContain(p.t().nextStepReview);
       expect(first).toContain('2026-10-02 09:30:00');
       expect(second).toContain('11111111-2222-4333-8444-555555555555'); // no short code: the protocol
       expect(second).toContain(p.t().receiptTechnical);
@@ -682,24 +683,34 @@ describe('CustomerPage', () => {
         listed('received');
         const { el, p } = await home();
         expect(chip(el)).toBe(p.t().statusReceived + ' AR-AAAA-BBBB');
-        expect(el.querySelector('.report-btn')).toBeNull();
+        expect(el.querySelector('.td-state .ar-btn')).toBeNull();
         expect(p.choosable()).toEqual([]);
       });
 
       it('in review shows the in-review text', async () => {
         listed('in_review');
         const { el, p } = await home();
-        expect(chip(el)).toBe(p.t().statusInReview + ' AR-AAAA-BBBB');
-        expect(el.querySelector('.report-btn')).toBeNull();
+        expect(chip(el)).toBe(p.t().inReview + ' AR-AAAA-BBBB');
+        expect(el.querySelector('.td-state .ar-btn')).toBeNull();
       });
 
       it('a closed report shows the closed chip and the Report button again', async () => {
         listed('closed');
         const { el, p } = await home();
         expect(chip(el)).toBe(p.t().chipClosed + ' AR-AAAA-BBBB');
-        expect(el.querySelector('.report-btn')).not.toBeNull();
+        expect(el.querySelector('.td-state .ar-btn')).not.toBeNull();
         expect(p.choosable()).toEqual([tx]);
       });
+
+      for (const status of ['received', 'in_review', 'closed'] as const) {
+        it(`"Your reports" shows the ${status} status as the same chip term as the charge row`, async () => {
+          listed(status);
+          const { el, p } = await home();
+          const term = el.querySelector('.your-reports li .report-status .ar-chip')?.textContent?.trim();
+          expect(term).toBe(p.t()[p.statusChip[status]]);
+          expect(chip(el)).toBe(term + ' AR-AAAA-BBBB');
+        });
+      }
 
       it('"Your reports" names the charge by merchant and amount', async () => {
         listed('received');
@@ -715,7 +726,9 @@ describe('CustomerPage', () => {
         { ...report('complete', 'AR-EEEE-FFFF', undefined, '22222222-2222-4333-8444-555555555555'), status: 'closed', next_step: 'closed_by_person' }], has_more: false });
       const { el, p } = await home();
       const [received, inReview, closed] = rows(el);
-      expect(received).toContain(p.t().statusReceived + '; ' + p.t().nextStepReview);
+      expect([...el.querySelectorAll('.your-reports .report-status .ar-chip')].map(c => c.textContent!.trim()))
+        .toEqual([p.t().statusReceived, p.t().inReview, p.t().chipClosed]);
+      expect(received).toContain(p.t().nextStepReview);
       expect(inReview).toContain(p.t().statusInReview);
       expect(inReview).not.toContain(p.t().nextStepReview);
       expect(closed).toContain(p.t().statusClosed);
@@ -746,6 +759,7 @@ describe('CustomerPage', () => {
       const { fixture, el, p } = await home();
       const buttons = [...el.querySelectorAll<HTMLButtonElement>('.your-reports li .update-btn')];
       expect(buttons.map(b => b.textContent?.trim())).toEqual([p.t().updateMe, p.t().updateMe]);
+      expect(buttons.every(b => b.classList.contains('ar-btn-sm'))).withContext('the same compact size as the row Report button').toBeTrue();
       expect(buttons.map(b => b.getAttribute('aria-label'))).toEqual([p.t().updateMe + ': AR-AAAA-BBBB', p.t().updateMe + ': 11111111-2222-4333-8444-555555555555']);
       let finish!: () => void;
       service.requestUpdate.and.returnValue(new Promise(done => { finish = () => done({ queued: true }); }));
@@ -793,7 +807,7 @@ describe('CustomerPage', () => {
       expect(p.step()).toBe('home');
       expect(el.textContent).toContain(p.t().reportsFailed);
       expect(el.querySelector('.your-reports')).toBeNull();
-      expect(el.querySelectorAll('.report-btn').length).toBe(1);
+      expect(el.querySelectorAll('.td-state .ar-btn').length).toBe(1);
       expect(el.querySelector('.ar-alert')).toBeNull();
     });
 
@@ -803,7 +817,7 @@ describe('CustomerPage', () => {
       expect(el.querySelector('#cargos')).not.toBeNull();
       for (const gone of ['.ar-card', '.agent-panel', '.stats', '.chat-toggle', '.home-top', '.your-reports']) expect(el.querySelector(gone)).withContext(gone).toBeNull(); // the hero is .ar-card; there is no .hero class
       expect(el.querySelectorAll('.box').length).toBe(1);
-      expect(el.querySelectorAll('.report-btn').length).toBe(1);
+      expect(el.querySelectorAll('.td-state .ar-btn').length).toBe(1);
     });
 
     it('captions the charges with what every data source supports: recent purchases in the demo data, newest first, no risk scores', async () => {
@@ -819,7 +833,7 @@ describe('CustomerPage', () => {
 
     it('points aria-controls at the chat only while it exists, and does not repeat the choose prompt as the legend', async () => {
       const { fixture, p, el } = await home();
-      const button = el.querySelector<HTMLButtonElement>('.report-btn')!;
+      const button = el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!;
       expect(button.hasAttribute('aria-controls')).toBeFalse();
       button.click();
       fixture.detectChanges();
@@ -844,7 +858,7 @@ describe('CustomerPage', () => {
 
     it('opens the chat from a charge row, links the textarea to its error, and focuses the receipt', async () => {
       const { fixture, p, el } = await home();
-      el.querySelector<HTMLButtonElement>('.report-btn')!.click();
+      el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!.click();
       fixture.detectChanges();
       expect(p.choice).toBe('demo-tx-001');
       p.chatStatement = 'short';
@@ -923,9 +937,31 @@ describe('CustomerPage', () => {
       expect(line.querySelector('a')).toBeNull();
     });
 
-    it('gives every charge a Report button named after its merchant that opens the chat on it', async () => {
+    it('after a receipt, another row\'s Report starts a new report on that charge; a frozen request still disables the rows', async () => {
+      const tx2: Transaction = { ...tx, transaction_id: 'demo-tx-002', merchant_name: 'Loja' };
+      service.transactions.and.resolveTo({ items: [tx, tx2], has_more: false, coverage: 'fictitious_demo_data_only' });
       const { fixture, p, el } = await home();
-      const button = el.querySelector<HTMLButtonElement>('.report-btn')!;
+      p.openChat('demo-tx-001');
+      p.intakeReceipt.set({ episode_id: 'E', protocol: 'P', kind: 'complete', accepted_at: 'x', replayed: false, urgency: 'normal',
+        actions_taken: [], unresolved_questions: [], reference_short: 'AR-AAAA-BBBB', next_step_code: 'await_human_review' });
+      fixture.detectChanges();
+      const buttons = () => [...el.querySelectorAll<HTMLButtonElement>('.td-state .ar-btn')];
+      expect(buttons().map(b => b.disabled)).toEqual([false, false]);
+      buttons()[1].click();
+      fixture.detectChanges();
+      expect(p.chatStep()).toBe('describe');
+      expect(p.intakeReceipt()).toBeNull();
+      expect(p.choice).toBe('demo-tx-002');
+      expect(p.log()).toEqual([{ from: 'bot', key: 'chatHello' }]);
+      p.frozen.set({ path: 'start', body: {} as never });
+      fixture.detectChanges();
+      expect(buttons().map(b => b.disabled)).toEqual([true, true]);
+    });
+
+    it('gives every charge a compact Report button named after its merchant that opens the chat on it', async () => {
+      const { fixture, p, el } = await home();
+      const button = el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!;
+      expect(button.classList).toContain('ar-btn-sm');
       expect(button.textContent).toContain(p.t().reportCharge);
       expect(button.textContent).toContain('Mercado');
       button.click();

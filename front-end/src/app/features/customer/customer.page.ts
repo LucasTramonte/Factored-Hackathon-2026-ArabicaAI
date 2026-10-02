@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { formatSourceTime } from '../../shared/format/source-time.util';
-import { Lang, LangService, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
+import { Lang, LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
@@ -24,8 +24,6 @@ import { demoPicker } from '../../core/auth/cognito.config';
 /** Rejections that retrying can't fix; 401, 503 and network failures keep the frozen retry. */
 const DEFINITIVE = new Set([404, 409, 413, 422]);
 export type Step = 'intro' | 'login' | 'home';
-/** Short row-chip text per stored review status; the full sentences stay in "Your reports". */
-const STATUS_CHIP = { received: 'statusReceived', in_review: 'statusInReview', closed: 'chipClosed' } as const;
 export type ChatStep = 'describe' | 'choose' | 'details' | 'receipt' | 'ended';
 /** The statement column holds 10–2000 code points, statement and details together (one newline between). */
 const STATEMENT_MAX = 2000;
@@ -343,9 +341,17 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.updateNote.set({ protocol, text });
   }
 
-  /** Open the chat; from a charge row, that charge is preselected (the customer still confirms it). */
+  /**
+   * Open the chat; from a charge row, that charge is preselected (the customer still confirms it). A row's Report on a
+   * finished chat (receipt or ended) starts a new report on that charge; nothing changes while a request is frozen.
+   */
   openChat(transactionId?: string): void {
     this.opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+    const restart = !!transactionId && !this.busy() && !this.frozen() && (this.chatStep() === 'receipt' || this.chatStep() === 'ended');
+    if (restart) {
+      this.clearChat();
+      this.chatPanel()?.nativeElement.focus(); // the panel stays open, so the heading would not take focus on its own
+    }
     this.chatOpen.set(true);
     if (transactionId && !this.frozen() && this.chatStep() !== 'receipt' && this.chatStep() !== 'ended') {
       this.choice = transactionId;

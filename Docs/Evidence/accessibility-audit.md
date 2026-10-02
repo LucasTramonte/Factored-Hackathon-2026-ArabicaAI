@@ -141,8 +141,9 @@ Measured from the tokens in `front-end/src/styles.css` with `Docs/Evidence/contr
 | link / accent text on raised box (`--accent` on `--surface-raised`) | 6.08 | 7.25 | 4.5 | pass |
 | ok chip text (`--ok` on `--ok-soft`) | 4.58 | 6.98 | 4.5 | pass |
 | warn chip text (`--warn` on `--warn-soft`) | 5.06 | 7.81 | 4.5 | pass |
-| text on accent-soft (selected row, chat bubble) (`--ink` on `--accent-soft`) | 15.33 | 13.03 | 4.5 | pass |
-| muted text on accent-soft (`--ink-muted` on `--accent-soft`) | 5.03 | 5.75 | 4.5 | pass |
+| err chip text (high priority, technical failure) (`--err` on `--err-soft`) | 5.40 | 6.83 | 4.5 | pass |
+| text on accent-soft (selected row, open or hovered queue row, chat bubble) (`--ink` on `--accent-soft`) | 15.33 | 13.03 | 4.5 | pass |
+| muted text on accent-soft (open or hovered queue row) (`--ink-muted` on `--accent-soft`) | 5.03 | 5.75 | 4.5 | pass |
 | button label on accent button (`--surface` on `--accent`) | 5.71 | 7.85 | 4.5 | pass |
 
 ### Adjacent surfaces (non-text)
@@ -151,10 +152,13 @@ Measured from the tokens in `front-end/src/styles.css` with `Docs/Evidence/contr
 |---|---|---|---|---|
 | raised box on page (`--surface-raised` on `--surface`) | 1.06 | 1.08 | 3.0 | FAIL |
 | sunken chip on raised box (`--surface-sunken` on `--surface-raised`) | 1.13 | 1.11 | 3.0 | FAIL |
+| sunken chip on open or hovered queue row (`--surface-sunken` on `--accent-soft`) | 1.04 | 1.32 | 3.0 | FAIL |
 | hairline on page (`--line` on `--surface`) | 1.16 | 1.34 | 3.0 | FAIL |
 | strong line (inputs) on page (`--line-strong` on `--surface`) | 3.17 | 4.03 | 3.0 | pass |
 
 Reading the surface rows: card and chip edges against the page do not reach 3:1 in either theme. WCAG 1.4.11 asks that of boundaries needed to identify a control or its state, not of decorative container edges whose content identifies them, so they are recorded, not treated as failures. The input boundary, which does matter, passes in both themes (`--line-strong`, 3.17 light and 4.03 dark).
+
+Agent queue row, 2026-10-02: the open or hovered row used `--surface-sunken`, the same token as its status chip, so the chip had no edge at all (1.00:1 in both themes). The row now uses `--accent-soft`, the selected-row token: the chip edge is 1.04:1 light and 1.32:1 dark, and the hue differs (grey chip on a blue-tinted row). The chip's word identifies it, so the edge is recorded, not counted as a failure. Chip text sits on the chip's own fill, so its ratios are unchanged (muted 5.20 and 7.59; ok 4.58 and 6.98; err 5.40 and 6.83); the row's own text on `--accent-soft` is 15.33 and 13.03 (ink) and 5.03 and 5.75 (muted).
 
 The promise line on the intro is visible from the first frame: the intro step has no rise animation, so it is never transparent, and the line sits below the Start button visually (after it in layout order, before it in reading order) so it clears the large boot disc. Measured in headless Chrome from `styles.css`, with the line's top against the disc circle's bottom: at least 41 px clear from 961 to 1440 px wide, 26 px at 721 px (two lines in PT and EN), and 31 to 57 px from 320 to 720 px wide (ES, PT, EN; 320×568 to 600×800). No horizontal overlap check was needed: the line is below the disc at every width.
 

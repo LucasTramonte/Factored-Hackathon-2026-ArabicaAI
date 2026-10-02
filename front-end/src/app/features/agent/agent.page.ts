@@ -7,13 +7,12 @@ import { ApiError } from '../../core/http/api.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { demoPicker } from '../../core/auth/cognito.config';
 import { formatSourceTime } from '../../shared/format/source-time.util';
-import { LangService, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
+import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
 import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind } from '../../shared/models/intake.model';
 import { AgentService } from './agent.service';
 
-const STATUS_KEYS: Record<HandoffStatus, keyof Strings> = { received: 'statusReceived', in_review: 'inReview', closed: 'reviewClosed' };
 const KIND_KEYS: Record<IntakeKind, keyof Strings> = { complete: 'kindComplete', technical: 'kindTechnical', incomplete: 'kindIncomplete' };
 
 /**
@@ -75,7 +74,7 @@ export class AgentPage {
   }
 
   statusLabel(status: HandoffStatus): string {
-    return this.t()[STATUS_KEYS[status]];
+    return this.t()[STATUS_CHIP[status]];
   }
 
   /** Take the next status step for the open report. On 409 someone else moved it: reload the detail and say so. Focus lands on the status text. */
