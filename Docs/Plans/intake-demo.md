@@ -79,6 +79,18 @@ The Worker `factored-hackathon-2026-arabicaai` runs at https://factored-hackatho
 - On 2026-10-02, the migration was applied by hand at 02:35 UTC and a manual `npm run deploy` at 02:40 UTC published `3412aff1` from `main` `093e0e7`; remote D1 holds migrations 0001-0008.
 - Build settings and the post-deploy checklist are in [back-end/README.md](../../back-end/README.md).
 
+### Customer sign-in (Cognito)
+
+Customers sign in with an email one-time code from the Amazon Cognito user pool `arabicaai-demo` (`us-east-2`, Essentials tier, account `arabica`). Email is the username, self sign-up is off, and each customer user carries the immutable attribute `custom:customer_id`, which the Worker maps to a committed identity. The pool id and the public app client id (`arabicaai-web`, no secret) are plain `vars` in `back-end/wrangler.jsonc`. Cognito requires `PASSWORD` in the pool's allowed first factors, so it is listed, but no user is ever given a known password and the Worker asks for `EMAIL_OTP` only; an admin-created user stays in `FORCE_CHANGE_PASSWORD`, and on 2026-10-01 that status did not block the `EMAIL_OTP` challenge (no `admin-set-user-password` workaround was needed). Groups: `customer`, `agent`, `admin`, `auditor`.
+
+```bash
+back-end/scripts/cognito/setup.sh                                  # creates or finds pool, attribute, client, groups; prints the vars
+back-end/scripts/cognito/enroll.sh <email> <customer_id> [group]   # customer; no invitation email is sent
+back-end/scripts/cognito/enroll.sh <email> - agent                 # agent, admin or auditor: no customer id
+```
+
+Both use `--profile ${AWS_PROFILE:-arabica}` and can be rerun. Judges' and teammates' emails are enrolled with `enroll.sh`; the customer id cannot change after creation, so delete the user first to re-map one. Once Phase 1 deploys, a person removes Cloudflare Access from the hostname in the Zero Trust dashboard; until then Access still fronts the sign-in page.
+
 ## Known limits
 
 - Simulated identities: anyone who passes Access can act as any demo customer.

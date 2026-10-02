@@ -10,6 +10,11 @@
     "not_found_handling": "single-page-application"
   },
   "placement": { "mode": "smart" },
+  "vars": {
+    "COGNITO_REGION": "us-east-2",
+    "COGNITO_USER_POOL_ID": "us-east-2_Lo7KrT6MT",
+    "COGNITO_CLIENT_ID": "5ak5cbjgdddso1c3h3i2aha7sn"
+  },
   "observability": {
     "logs": { "enabled": true, "head_sampling_rate": 1, "invocation_logs": true, "persist": true },
     "traces": { "enabled": true, "head_sampling_rate": 1, "persist": true }
