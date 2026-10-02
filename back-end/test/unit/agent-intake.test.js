@@ -164,3 +164,13 @@ test('POST /agent/intake-status validates its body, moves forward one step only 
   assert.deepEqual(db.prepare("SELECT template FROM email_outbox WHERE template<>'received' ORDER BY rowid").all().map(r => r.template), ['in_review', 'closed']);
   assert.equal(db.prepare('SELECT status FROM intake_handoffs WHERE handoff_id=?').get(p).status, 'closed');
 });
+
+test('a reserved but unacknowledged handoff cannot be moved and gets no history', async t => {
+  const { db, store, finish } = await setup(t);
+  const pending = await finish('complete', { ...store, readIntakeReceipt: async () => { throw new Error('readback unavailable'); } });
+  assert.equal(pending.response.status, 503);
+  const protocol = db.prepare('SELECT complete_case_id FROM intake_handoffs WHERE episode_id=?').get(pending.episode_id).complete_case_id;
+  const res = await route(request('/agent/intake-status', { method: 'POST', body: { protocol, status: 'in_review' } }), env, store);
+  assert.equal(res.status, 404);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM handoff_status_history').get().n, 0);
+});

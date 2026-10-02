@@ -444,7 +444,7 @@
         "changed_at": {"type": "string", "minLength": 1}
       }
     },
-        "updateQueued": {
+    "updateQueued": {
       "type": "object", "additionalProperties": false,
       "required": ["queued"],
       "properties": { "queued": {"const": true} }
