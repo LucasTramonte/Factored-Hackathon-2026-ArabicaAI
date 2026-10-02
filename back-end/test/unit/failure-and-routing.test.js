@@ -223,3 +223,30 @@ test('a malformed stored context card degrades to null and login still works', a
   assert.deepEqual(card, { version: 1, snapshot_at: '2026-09-29T00:00:00+00:00', first_name: 'Ana',
     locale_hint: 'es-AR', products: [] });
 });
+
+test('public API paths are limited per IP before any store call; documents and team paths are not', async () => {
+  const keys = [];
+  const limiter = success => ({ limit: async ({ key }) => { keys.push(key); return { success }; } });
+  const untouched = new Proxy({}, { get: (_, name) => { throw new Error(`store.${String(name)} touched`); } });
+  const req = (path, method = 'GET', headers = {}) => new Request('https://d.example' + path,
+    { method, headers: { 'CF-Connecting-IP': '203.0.113.7', ...headers } });
+  const limited = { ...env, API_LIMIT: limiter(false), ASSETS: { fetch: async () => new Response('<app-root>') } };
+  for (const [method, path] of [['GET', '/transactions'], ['POST', '/auth/session'], ['POST', '/intake/start'], ['GET', '/cases/nope']]) {
+    const res = await route(req(path, method), limited, untouched);
+    assert.equal(res.status, 429, `${method} ${path}`);
+    assert.equal(res.headers.get('Retry-After'), '60');
+    assertContract('error', await res.json());
+  }
+  assert.deepEqual(keys, Array(4).fill('203.0.113.7'));
+  keys.length = 0;
+  assert.equal((await route(req('/'), limited, untouched)).status, 200);
+  const agentStore = await fakeStore({ findSession: async () => null });
+  assert.equal((await route(req('/agent/intakes', 'GET', { Authorization: auth }), limited, agentStore)).status, 401, 'reaches the agent session check');
+  assert.deepEqual(keys, [], 'documents and team-gated paths never call the limiter');
+  const store = await fakeStore({ findSession: async () => null });
+  for (const e of [{ ...env, API_LIMIT: limiter(true) }, env]) {
+    const res = await route(new Request('https://d.example/transactions'), e, store);
+    assert.equal(res.status, 401);
+  }
+  assert.deepEqual(keys, ['unknown']);
+});

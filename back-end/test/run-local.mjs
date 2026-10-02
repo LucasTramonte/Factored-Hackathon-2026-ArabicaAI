@@ -36,7 +36,10 @@ try {
   for (const name of ['src', 'migrations', 'public']) {
     await cp(join(project, name), join(temp, name), { recursive: true });
   }
-  await cp(join(project, 'wrangler.jsonc'), join(temp, 'wrangler.jsonc'));
+  // Miniflare enforces the rate limit binding locally with one shared key, so the local-D1 suites run without it;
+  // the 429 path is covered by the unit test (failure-and-routing.test.js).
+  const { ratelimits, ...localConfig } = await readWranglerConfig(join(project, 'wrangler.jsonc'));
+  await writeFile(join(temp, 'wrangler.jsonc'), JSON.stringify(localConfig));
   await symlink(join(project, 'node_modules'), join(temp, 'node_modules'), 'dir'); // the Worker bundles jose
   await cp(join(project, 'seeds/seed_fictitious.sql'), join(temp, 'seed_fictitious.sql'));
   // Tests sign ID tokens with a throwaway key for the real pool's issuer and client id (wrangler.jsonc vars);

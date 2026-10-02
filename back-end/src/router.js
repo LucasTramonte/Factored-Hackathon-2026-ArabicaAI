@@ -1,7 +1,7 @@
 /**
  * Exact route table. The team gate covers only the agent and demo paths (``/agent``, ``/agent/*``,
  * ``/demo/*``) and runs before method checks there; customer routes are protected by each handler's
- * session check. Unknown paths under API prefixes return JSON 404 and are never served as the app.
+ * session check, behind a per-IP limit (60 a minute). Unknown paths under API prefixes return JSON 404 and are never served as the app.
  */
 import { checkAccessGate } from './auth/access-gate.js';
 import { fail, json } from './http.js';
@@ -38,12 +38,18 @@ export async function route(request, env, store, ctx) {
     await store.ping();
     return json({ status: 'ok' });
   }
-  if (pathname === '/agent' || pathname.startsWith('/agent/') || pathname.startsWith('/demo/')) {
+  const team = pathname === '/agent' || pathname.startsWith('/agent/') || pathname.startsWith('/demo/');
+  if (team) {
     const denied = checkAccessGate(request, env);
     if (denied) return denied;
   }
   const methods = API_ROUTES[pathname];
   if (methods || API_NAMESPACES.has(pathname) || API_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
+    // Public API paths cost a D1 read or a JWKS check per cookie or bearer, so they are limited per IP (ADR-004).
+    // A missing binding (unit tests) allows the request.
+    if (!team && (await env.API_LIMIT?.limit({ key: request.headers.get('cf-connecting-ip') ?? 'unknown' }))?.success === false) {
+      return fail(429, 'Too many requests', { 'Retry-After': '60' });
+    }
     if (!methods) return fail(404, 'Not found');
     const handler = methods[request.method];
     if (!handler) return fail(405, 'Method not allowed', { Allow: Object.keys(methods).join(', ') });
