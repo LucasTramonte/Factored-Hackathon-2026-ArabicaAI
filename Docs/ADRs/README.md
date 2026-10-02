@@ -7,7 +7,7 @@ Technical and product-scope decisions for the ArabicaAI hackathon solution. Each
 | ADR | Title | Status |
 |---|---|---|
 | [001](ADR-001-workflow-prioritization.md) | Prioritize a read-only inquiry workflow for evaluation (comparison of the four official workflows) | Superseded by 002 for the V1 choice |
-| [002](ADR-002-v1-workflow-unrecognized-charge-intake.md) | V1 workflow: unrecognized-charge intake with human handoff | Accepted (2026-09-29); decision 3 superseded for English by 008 |
+| [002](ADR-002-v1-workflow-unrecognized-charge-intake.md) | V1 workflow: unrecognized-charge intake with human handoff | Accepted (2026-09-29); 008 proposes to supersede decision 3 for English |
 | [003](ADR-003-intake-single-runtime-worker-d1.md) | Intake runtime: one online API on Cloudflare Workers + D1, Python for batch | Proposed (2026-09-29); decision 5 superseded by 007 |
 | [004](ADR-004-intake-capacity-and-cost.md) | Capacity, cost and where each layer runs (the single record for cloud cost and sizing) | Proposed (revised 2026-09-30) |
 | [005](ADR-005-evaluation-data-protocol.md) | Evaluation data protocol: design and holdout windows, and a blind frozen set | Proposed (2026-09-29) |
