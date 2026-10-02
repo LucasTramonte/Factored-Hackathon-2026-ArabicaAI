@@ -39,3 +39,10 @@ export async function startSession(request, store, actor, customerId = null) {
     newHash: await tokenHash(token), actor, customerId, expiresAt: now + SESSION_MS });
   return cookieHeader(COOKIE[actor], token, request, SESSION_MS / 1000);
 }
+
+/** Revoke the presented token for ``actor`` (no-op when absent or malformed) and return the clearing Set-Cookie. */
+export async function endSession(request, store, actor) {
+  const token = readCookies(request)[COOKIE[actor]];
+  if (token && TOKEN.test(token)) await store.revokeSession(await tokenHash(token));
+  return cookieHeader(COOKIE[actor], '', request, 0);
+}

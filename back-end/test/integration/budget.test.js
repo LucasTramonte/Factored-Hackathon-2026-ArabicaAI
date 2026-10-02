@@ -23,6 +23,7 @@ const CEILING = {
   identities: [1, 10, 0, 1],
   login: [5, 10, 6, 3],
   list: [2, 25, 0, 2],
+  logout: [1, 1, 1, 1],
   create: [4, 12, 6, 4],
   agentLogin: [3, 6, 6, 1],
   agentList: [2, 250, 0, 2],
@@ -80,6 +81,7 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
   measured.create = within('create', (await c.call('/cases', { transaction_id: 'demo-tx-001',
     customer_statement: 'Budget probe: I do not recognize this charge.', customer_confirmed: true,
     idempotency_key: crypto.randomUUID() })).metrics);
+  measured.logout = within('logout', (await c.call('/auth/logout', {})).metrics);
   const agent = client();
   measured.agentLogin = within('agentLogin', (await agent.call('/demo/agent-session', {})).metrics);
   measured.agentList = within('agentList', (await agent.call('/agent/cases')).metrics);

@@ -12,6 +12,8 @@
 | `Docs/deliverables/DATA_QUALITY.md`, `data_profiles/findings/` | Data quality and findings register; each finding has a query. Design-scope facts come from the design window only (ADR-005, Proposed). |
 | `Docs/ADRs/` | Decision records (format and index in `Docs/ADRs/README.md`). Read ADR-002 to ADR-004 before changing intake scope, runtime or capacity. |
 | `Docs/Plans/` | Runbooks and roadmaps (`intake-demo.md`, `intake-roadmap.md`). |
+| `Docs/superpowers/plans/` | Implementation plans executed by agent orchestration (one task per coder agent, two QA agents per task). Archived to `Docs/archive/superpowers/` when done. |
+| `intake_agent/` | The context card and the learned extractor (offline; online only behind a switch that is off). |
 
 ## Current data workflow
 
@@ -42,12 +44,21 @@
 
 - One online runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md), Proposed). Don't add a second API implementation. Route handlers never build SQL, and new statements go in `back-end/src/store/d1.js`.
 - Identity comes from the session only, never from a request body or message text. Customer and agent sessions stay separate. Committed identities (fictitious, plus the one-day slice's customer) live in `back-end/src/config/identities.json`, which the Worker and the Gold slice both read. Dataset cohort customers are listed from D1 (`customers.source = 'dataset'`) and are never committed.
-- Schema changes go through `wrangler d1 migrations`, are additive, and are applied to local D1 in tests before `--remote`. Alembic is not used; ADR-003 explains why and what would change that.
+- Schema changes go through `wrangler d1 migrations`, are additive, and are applied to local D1 in tests before `--remote`. **A PR that adds a migration applies it to remote D1 before it merges and says so in its body**: the deploy guard (`back-end/scripts/predeploy.mjs`) refuses to deploy while remote D1 lacks a migration the code ships with, and every Workers Build from `main` fails until someone runs it (this blocked all deploys on 2026-10-01). Alembic is not used; ADR-003 explains why and what would change that.
 - The Worker never reads S3, DuckDB or Silver. Online data arrives only as a reviewed Gold slice seed. The slice keeps the Bronze source amount and currency and the timezone-free source timestamp.
 - Any API change comes with adversarial tests: the gate, method and path matrix; session swap, forgery and expiry; the isolation oracle; hostile input; concurrent idempotency; contract validation against `front-end/contracts/`; and the D1 budget ceilings. A budget increase must be justified in ADR-004.
 - A reference is returned only after the case row has been read back. A handoff is not a resolution. Nothing refunds, blocks a card or decides fraud. The MVP calls no model ([ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)), and adding one needs its own ADR.
 - Events and logs carry references, never customer statements or identifiers (`Docs/intake/intake-events.md`).
 - The Worker and client need Node 22 or newer.
+
+## Agent orchestration
+
+When a plan in `Docs/superpowers/plans/` is executed by agents:
+
+- The orchestrating session holds the hackathon briefing. **A subagent that receives a task brief from an orchestrator skips the Mandatory Session Startup below**; it reads `AGENTS.md`, the code it touches in full, and its brief, and asks the orchestrator instead of guessing.
+- Every agent works in ponytail ultra mode: does it need to exist, is it already in the repo, stdlib, platform feature, installed dependency, one line, then the minimum code. Deletion before addition. One runnable check per non-trivial change.
+- One coder agent per task, strictly sequential, on one branch per phase created from `main`. Two QA agents per task (spec compliance, then code quality), at most three rounds each, then escalate to a person.
+- Agents never run `--remote`, deploy, tag, merge or change permissions. Each phase PR ends with a section **"Human steps before merge"** listing only what agents cannot do: remote migrations and Worker secrets (exact commands), dashboard changes, external approvals, and the PR review itself.
 
 ## Interfaces
 
@@ -63,7 +74,7 @@ See `Docs/deliverables/ARCHITECTURE.md`, `Docs/deliverables/REPRODUCIBILITY.md` 
 
 ## Mandatory Session Startup: Hackathon Context
 
-At the start of every new session working in this repository, before planning, analysis, or implementation:
+At the start of every new session working in this repository, before planning, analysis, or implementation (subagents with an orchestrator's brief are exempt; see "Agent orchestration"):
 
 1. Use the project agent `hackathon-context` defined in `.codex/agents/hackathon-context.toml` to read the challenge sources and return a task-specific briefing. While it reads, the main agent may inspect Git status and relevant code, but must receive the briefing before making challenge-dependent decisions. This instruction requests that delegation. If custom agents or delegation are unavailable, perform the same reading in the main session; do not skip it.
 2. Read `Docs/sources/README.md` and **all four original challenge PDFs indexed there, in full**, including the complete data dictionary. Also read any additional official challenge documents subsequently added to that index. Extract all pages and visually inspect image-only pages, tables or diagrams that extraction misses. Existing Markdown summaries do not replace the PDFs.

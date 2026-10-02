@@ -5,13 +5,14 @@
  */
 import { checkAccessGate } from './auth/access-gate.js';
 import { fail, json } from './http.js';
-import { createCase, listIdentities, listTransactions, startCustomerSession } from './modules/customer/routes.js';
+import { createCase, listIdentities, listTransactions, logout, startCustomerSession } from './modules/customer/routes.js';
 import { startIntake, confirmIntake, handoffIntake } from './modules/intake/routes.js';
 import { listAgentCases, listAgentIntakes, getAgentIntakeDetail, startAgentSession } from './modules/agent/routes.js';
 
 export const API_ROUTES = {
   '/demo/identities': { GET: listIdentities },
   '/demo/session': { POST: startCustomerSession },
+  '/auth/logout': { POST: logout },
   '/transactions': { GET: listTransactions },
   '/cases': { POST: createCase },
   '/intake/start': { POST: startIntake },
@@ -22,9 +23,9 @@ export const API_ROUTES = {
   '/agent/intakes': { GET: listAgentIntakes },
   '/agent/intake-detail': { GET: getAgentIntakeDetail }
 };
-export const API_PREFIXES = ['/demo/', '/agent/', '/transactions/', '/cases/', '/intake/'];
+export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/transactions/', '/cases/', '/intake/'];
 /** Bare API namespace paths that have no handler but must still answer JSON 404 behind the gate. */
-export const API_NAMESPACES = new Set(['/intake']);
+export const API_NAMESPACES = new Set(['/intake', '/auth']);
 /** HTML documents go through the gate so the browser asks for the team credential once; hashed bundles do not. */
 export const DOCUMENT_PATHS = new Set(['/', '/index.html', '/agent']);
 

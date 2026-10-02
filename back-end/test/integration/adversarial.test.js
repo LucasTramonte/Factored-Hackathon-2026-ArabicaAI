@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { assertContract } from '../support/contract.js';
 import { auth, base, client } from '../support/client.js';
 
-const API = { '/demo/identities': 'GET', '/demo/session': 'POST', '/transactions': 'GET', '/cases': 'POST', '/intake/start': 'POST',
+const API = { '/demo/identities': 'GET', '/demo/session': 'POST', '/auth/logout': 'POST', '/transactions': 'GET', '/cases': 'POST', '/intake/start': 'POST',
   '/intake/confirm': 'POST', '/intake/handoff': 'POST', '/demo/agent-session': 'POST', '/agent/cases': 'GET', '/agent/intakes': 'GET',
   '/agent/intake-detail': 'GET' };
 const wrong = 'Basic ' + Buffer.from('local-reviewer:wrong').toString('base64');
@@ -258,4 +258,16 @@ test('divergent concurrent confirmations and handoff on one episode leave exactl
       assert.equal(again.status, body === winner.body ? 200 : 409, 'retries agree with the outcome');
     }
   }
+});
+
+test('logout revokes the session server-side, for every holder of the token', async () => {
+  const c = await loggedIn();
+  const copy = client();
+  copy.cookie = c.cookie;
+  assert.equal((await c.call('/transactions')).status, 200);
+  const out = await c.call('/auth/logout', {});
+  assert.equal(out.status, 204);
+  assert.match(out.headers.get('set-cookie'), /Max-Age=0/);
+  assert.equal((await c.call('/transactions')).status, 401);
+  assert.equal((await copy.call('/transactions')).status, 401);
 });
