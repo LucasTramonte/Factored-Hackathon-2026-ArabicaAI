@@ -57,15 +57,18 @@ async function finishIntake(request, store, complete) {
   if (body.error) return body.error;
   const checked = validateHandoffRequest(body.value, complete);
   if (checked.error) return fail(checked.error.status, checked.error.detail);
-  const { episodeId, turnKey, transactionId } = checked.value;
+  const { episodeId, turnKey, transactionId, details } = checked.value;
   const customerId = current.customer_id;
   const episode = await store.findIntake(customerId, episodeId);
   if (!episode) return fail(404, 'Episode not found for this session');
   if (turnKey === episode.start_key) return fail(409, 'Key already used with different content');
-  const payloadHash = await tokenHash(JSON.stringify([complete ? 'complete' : 'incomplete', transactionId]));
+  // Details join the hash only when sent, so handoffs reserved before they existed still replay.
+  const payloadHash = await tokenHash(JSON.stringify([complete ? 'complete' : 'incomplete', transactionId, ...(details ? [details] : [])]));
   const prior = await store.findOwnedIntakeHandoff(customerId, episodeId);
   if (prior && (prior.turn_key !== turnKey || prior.payload_hash !== payloadHash)) return fail(409, 'Episode already submitted with different content or key');
   if (!prior && episode.state !== 'selection_required') return fail(409, 'Episode is no longer open');
+  // The statement column holds 10–2000 code points; the appended details must fit (one newline between).
+  if (!prior && details && [...episode.customer_statement].length + 1 + [...details].length > 2000) return fail(422, 'Statement and details exceed 2000 characters together');
   let kind = complete ? 'complete' : 'incomplete';
   let evidence = null;
   let toolCalls = 0;
@@ -80,7 +83,7 @@ async function finishIntake(request, store, complete) {
   try {
     toolCalls++;
     const result = await store.persistIntakeHandoff({ customerId, episodeId, turnKey, payloadHash,
-      sessionHash,
+      sessionHash, details,
       completeCase: kind === 'complete' ? evidence : null, kind,
       evidence: { transaction: evidence, tool_status: kind === 'technical' ? 'failed' : 'ok' },
       actions: kind === 'complete' ? ['owned_transaction_retrieved', 'customer_confirmation_recorded'] : kind === 'technical' ? ['transaction_lookup_failed'] : [],

@@ -1,11 +1,10 @@
-import { Component, ElementRef, Injector, OnDestroy, OnInit, Signal, afterNextRender, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, Injector, NgZone, OnDestroy, OnInit, Signal, afterNextRender, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { formatSourceTime } from '../../shared/format/source-time.util';
 import { Lang, LangService, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
-import { Mark } from '../../shared/mark/mark.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
 import { Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
@@ -13,8 +12,8 @@ import { Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeRecei
 import { CustomerService } from './customer.service';
 
 /**
- * The customer flow: sign-in (with the purpose stated on the same screen), then home. Nothing animates and
- * nothing waits on a timer. Sign in, then the guided chat: describe the charge, choose and confirm
+ * The customer flow as one connected screen: intro, sign-in, home. The disc is a single element that
+ * travels between the three steps. Sign in, then the guided chat: describe the charge, choose and confirm
  * one of your own charges, or ask for review without one. A submitted payload and its idempotency key
  * stay frozen until acceptance is known, so a retry
  * can never create a second case or send edited content. A definitive rejection (404, 409, 413 or 422)
@@ -22,8 +21,10 @@ import { CustomerService } from './customer.service';
  */
 /** Rejections that retrying can't fix; 401, 503 and network failures keep the frozen retry. */
 const DEFINITIVE = new Set([404, 409, 413, 422]);
-export type Step = 'login' | 'home';
-export type ChatStep = 'describe' | 'choose' | 'receipt' | 'ended';
+export type Step = 'intro' | 'login' | 'home';
+export type ChatStep = 'describe' | 'choose' | 'details' | 'receipt' | 'ended';
+/** The statement column holds 10–2000 code points, statement and details together (one newline between). */
+const STATEMENT_MAX = 2000;
 /** A chat line. Guide lines and FAQ questions are i18n keys, so they follow the interface language; the customer's own words are kept as typed. */
 export type ChatLine = { from: 'bot' | 'me'; key: keyof Strings } | { from: 'me'; text: string };
 type Frozen = { path: 'start'; body: IntakeStartBody } | { path: 'confirm'; body: IntakeConfirmBody } | { path: 'handoff'; body: IntakeHandoffBody };
@@ -39,7 +40,7 @@ const RECEIPT_TITLE = { complete: 'receiptComplete', incomplete: 'receiptIncompl
 
 @Component({
   selector: 'app-customer-page',
-  imports: [DatePipe, FormsModule, RouterLink, LangSwitch, Mark, CustomerPicker],
+  imports: [DatePipe, FormsModule, RouterLink, LangSwitch, CustomerPicker],
   templateUrl: './customer.page.html',
   styleUrl: './customer.page.css'
 })
@@ -71,15 +72,20 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly log = signal<ChatLine[]>([{ from: 'bot', key: 'chatHello' }]);
   /** The guide spoke last, so its line (id `chat-prompt`) describes the step that just took focus. */
   readonly promptLast = computed(() => this.log().at(-1)?.from === 'bot');
-  readonly chatStep = computed<ChatStep>(() => this.intakeReceipt() ? 'receipt' : this.ended() ? 'ended' : this.episode() ? 'choose' : 'describe');
+  /** "I can't find it" was pressed: the guide asks once what the customer remembers before anything is sent. */
+  readonly asking = signal(false);
+  readonly chatStep = computed<ChatStep>(() => this.intakeReceipt() ? 'receipt' : this.ended() ? 'ended' : !this.episode() ? 'describe' : this.asking() ? 'details' : 'choose');
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
   readonly receiptTitleKey = RECEIPT_TITLE;
   /** Charges already accepted in this session are not offered again. */
   readonly choosable = computed(() => this.transactions().filter(tx => !this.receipts().some(r => r.receipt.kind === 'complete' && r.transactionId === tx.transaction_id)));
   /** Locked while a request is frozen or a guided report is open: renewing must keep the same customer. */
-  readonly identityLocked = computed(() => this.frozen() !== null || this.chatStep() === 'choose');
-  readonly step = signal<Step>('login');
+  readonly identityLocked = computed(() => this.frozen() !== null || this.chatStep() === 'choose' || this.chatStep() === 'details');
+  readonly step = signal<Step>('intro');
+  readonly booted = signal(false);
+  /** The intro words play once (from 2.6 s, three 1.4 s slots: under 5 s of motion, WCAG 2.2.2); then only the current language's word stays. */
+  readonly introDone = signal(false);
   /** At the home-top breakpoint and below, the open chat panel covers page controls, so the page behind it is inert (WCAG 2.4.11). */
   // Keep 1180px in sync with the @media rules in styles.css and customer.page.css.
   private readonly narrowQuery = typeof matchMedia === 'function' ? matchMedia('(max-width: 1180px)') : null;
@@ -87,11 +93,15 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly sourceTime = formatSourceTime;
   identity = '';
   chatStatement = '';
+  chatDetails = '';
   choice = '';
   chatConfirmed = false;
+  private bootTimer: ReturnType<typeof setTimeout> | undefined;
+  private introTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly zone = inject(NgZone);
   private readonly injector = inject(Injector);
-  private shownStep: Step = 'login';
+  private shownStep: Step = 'intro';
 
   /** On a step change (not the first render), move focus to the new step's heading so it doesn't fall to <body>. */
   private readonly focusStepHeading = afterRenderEffect(() => {
@@ -101,13 +111,20 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.host.nativeElement.querySelector<HTMLElement>('.step h1')?.focus();
   });
 
+  /** Where the disc sits: boot centre, top dot, login form, sidebar mark. */
+  readonly discClass = computed(() => {
+    const step = this.step();
+    if (step === 'login') return 'disc disc--login';
+    if (step === 'home') return 'disc disc--home';
+    return this.booted() ? 'disc disc--top' : 'disc disc--boot';
+  });
   readonly displayName = computed(() => this.identities().find(i => i.customer_id === this.client())?.display_name ?? this.client());
   readonly initials = computed(() => initialsOf(this.displayName()) || 'AA');
 
   constructor() {
-    // Move focus to the receipt, the choose step (it replaces the focused Send button) and the chat heading when each appears;
-    // the heading is last, so opening the panel focuses it.
-    for (const name of ['intakeReceiptEl', 'chooseStep', 'chatPanel'] as const) {
+    // Move focus to the receipt, the choose step (it replaces the focused Send button), the details field (it replaces the
+    // focused "can't find" button) and the chat heading when each appears; the heading is last, so opening the panel focuses it.
+    for (const name of ['intakeReceiptEl', 'chooseStep', 'detailsField', 'chatPanel'] as const) {
       const el: Signal<ElementRef<HTMLElement> | undefined> = this[name];
       effect(() => el()?.nativeElement.focus());
     }
@@ -123,10 +140,14 @@ export class CustomerPage implements OnInit, OnDestroy {
     afterNextRender(() => (this.opener?.isConnected ? this.opener : this.host.nativeElement.querySelector<HTMLElement>('.step h1'))?.focus(), { injector: this.injector });
   }
   private readonly chooseStep = viewChild<ElementRef<HTMLElement>>('chooseStep');
+  private readonly detailsField = viewChild<ElementRef<HTMLElement>>('detailsField');
 
   /** Load the identity choices from the API; they come from the same config as the server allowlist. */
   async ngOnInit(): Promise<void> {
+    this.bootTimer = setTimeout(() => this.booted.set(true), 2400);
     if (this.narrowQuery) this.narrowQuery.onchange = e => this.narrow.set(e.matches);
+    // Outside the zone so the app (and tests) can be stable while it waits; the signal still schedules the render.
+    this.introTimer = this.zone.runOutsideAngular(() => setTimeout(() => this.introDone.set(true), 6800)); // must outlast the intro word animation delays in styles.css
     if (this.client()) void this.resume();
     this.identitiesLoading.set(true);
     try {
@@ -140,7 +161,14 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    clearTimeout(this.bootTimer);
+    clearTimeout(this.introTimer);
     if (this.narrowQuery) this.narrowQuery.onchange = null;
+  }
+
+  start(): void {
+    this.booted.set(true);
+    this.step.set('login');
   }
 
   /** A server check or open-question code in the interface language. */
@@ -169,6 +197,7 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Back from another in-app view in this tab: show the same customer's home again; the cookie still decides access. */
   private async resume(): Promise<void> {
+    this.booted.set(true);
     this.step.set('home');
     try {
       await this.loadTransactions();
@@ -190,6 +219,11 @@ export class CustomerPage implements OnInit, OnDestroy {
     if (transactionId && !this.frozen() && this.chatStep() !== 'receipt' && this.chatStep() !== 'ended') {
       this.choice = transactionId;
       this.chatConfirmed = false;
+      // The customer found the charge after all: back to choosing, with the guide's choose prompt as the current line.
+      if (this.asking()) {
+        this.asking.set(false);
+        this.log.update(l => [...l, { from: 'bot', key: 'chatChoose' }]);
+      }
     }
   }
 
@@ -234,13 +268,31 @@ export class CustomerPage implements OnInit, OnDestroy {
     await this.run();
   }
 
-  /** Ask for human review without a confirmed charge. */
-  async cannotFind(): Promise<void> {
+  /** Code points left for the details once the sent statement and a newline are counted. */
+  get room(): number {
+    return STATEMENT_MAX - 1 - [...this.chatStatement.trim()].length;
+  }
+
+  /** "I can't find it": nothing is sent yet; the guide asks once what the customer remembers (one extra turn, no more). */
+  cannotFind(): Promise<void> | void {
+    if (this.busy() || this.chatStep() !== 'choose' || this.frozen()) return;
+    if (this.room < 10) return this.handoff(); // no room for an answer: the statement already carries the detail
+    this.asking.set(true);
+    this.log.update(l => [...l, { from: 'me', key: 'chatCannotFind' }, { from: 'bot', key: 'chatDetailsPrompt' }]);
+  }
+
+  /** Ask for human review without a confirmed charge; what the customer remembers travels with the handoff and is appended to the statement. */
+  async handoff(): Promise<void> {
     const episode = this.episode();
-    if (this.busy() || !episode || this.chatStep() !== 'choose' || this.frozen()?.path === 'confirm') return;
+    if (this.busy() || !episode || (this.chatStep() !== 'choose' && this.chatStep() !== 'details') || this.frozen()?.path === 'confirm') return;
     if (!this.frozen()) {
-      this.frozen.set({ path: 'handoff', body: { episode_id: episode.episode_id, idempotency_key: crypto.randomUUID(), kind: 'incomplete' } });
-      this.log.update(l => [...l, { from: 'me', key: 'chatCannotFind' }]);
+      const details = this.asking() ? this.chatDetails.trim() : '';
+      if (this.asking() && [...details].length < 10) {
+        this.chatError.set(this.t().chatValidationShort);
+        return;
+      }
+      this.frozen.set({ path: 'handoff', body: { ...(details && { details }), episode_id: episode.episode_id, idempotency_key: crypto.randomUUID(), kind: 'incomplete' } });
+      this.log.update(l => [...l, details ? { from: 'me', text: details } : { from: 'me', key: 'chatCannotFind' }]);
     }
     await this.run();
   }
@@ -257,8 +309,10 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.episode.set(null);
     this.intakeReceipt.set(null);
     this.ended.set(false);
+    this.asking.set(false);
     this.chatError.set('');
     this.chatStatement = '';
+    this.chatDetails = '';
     this.choice = '';
     this.chatConfirmed = false;
     this.log.set([{ from: 'bot', key: 'chatHello' }]);

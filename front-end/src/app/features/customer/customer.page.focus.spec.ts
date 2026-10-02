@@ -6,7 +6,7 @@ import { CustomerService } from './customer.service';
 import { IntakeReceipt } from '../../shared/models/intake.model';
 
 describe('CustomerPage focus', () => {
-  it('leaves focus alone on first render, then moves it to the home heading after sign-in', async () => {
+  it('leaves focus alone on first render, then moves it to each new step heading', async () => {
     const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions'], { client: signal(''), card: signal(null), receipts: signal([]) }); // untyped: only what this flow calls
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' }]);
     service.signIn.and.resolveTo();
@@ -18,7 +18,11 @@ describe('CustomerPage focus', () => {
     await fixture.whenStable();
     expect(document.activeElement).toBe(document.body);
     const heading = () => fixture.nativeElement.querySelector('.step h1') as HTMLElement;
-    expect(heading().textContent?.trim()).toBe(fixture.componentInstance.t().greeting); // the sign-in screen's only h1
+
+    fixture.componentInstance.start();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(heading());
+    expect(heading().classList).toContain('headline');
 
     fixture.componentInstance.identity = 'demo-ana';
     await fixture.componentInstance.login();
@@ -120,6 +124,22 @@ describe('CustomerPage focus', () => {
     const describedBy = step.getAttribute('aria-describedby');
     expect(describedBy).toBeTruthy();
     expect(el.querySelector('#' + describedBy)!.textContent).toContain(page.t().chatChoose);
+    fixture.nativeElement.remove();
+  });
+
+  it('moves focus to the details field when "can\'t find it" replaces the choose step, described by the guide\'s question', async () => {
+    const { fixture, page, el } = await home();
+    page.chatOpen.set(true);
+    page.episode.set({ episode_id: 'E-1', state: 'selection_required', language: 'es', mode: 'guided', replayed: false } as never);
+    page.chatStatement = 'No reconozco este cargo.';
+    await fixture.whenStable();
+    const cannotFind = [...el.querySelectorAll('.chat .ar-btn-secondary')].find((b: Element) => b.textContent!.trim() === page.t().chatCannotFind) as HTMLButtonElement;
+    cannotFind.focus();
+    cannotFind.click();
+    await fixture.whenStable();
+    const field = el.querySelector<HTMLTextAreaElement>('#chat-details')!;
+    expect(document.activeElement).toBe(field);
+    expect(el.querySelector('#' + field.getAttribute('aria-describedby'))!.textContent).toContain(page.t().chatDetailsPrompt);
     fixture.nativeElement.remove();
   });
 

@@ -50,7 +50,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
   };
 
   /** Reserve one immutable handoff and optional confirmed case in one atomic batch; SQL revalidates live session and ownership. */
-  const reserveIntakeHandoff = async ({ customerId, episodeId, turnKey, payloadHash, sessionHash, completeCase, kind, evidence, actions, questions, usage, now, referenceShort }) => {
+  const reserveIntakeHandoff = async ({ customerId, episodeId, turnKey, payloadHash, sessionHash, details, completeCase, kind, evidence, actions, questions, usage, now, referenceShort }) => {
     const handoffId = crypto.randomUUID();
     const caseId = kind === 'complete' ? crypto.randomUUID() : null;
     const eligible = "e.customer_id=? AND e.episode_id=? AND e.state='selection_required' "
@@ -74,8 +74,10 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       ['INSERT INTO intake_turns(episode_id,turn_key,payload_hash,response_json) '
         + 'SELECT episode_id,turn_key,payload_hash,? FROM intake_handoffs WHERE handoff_id=?',
         JSON.stringify({ handoff_id: handoffId }),handoffId],
-      ["UPDATE intake_episodes SET state='handoff_pending',updated_at=? WHERE episode_id=? "
-        + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=?)',now,episodeId,handoffId],
+      // Details (what the customer remembers) are appended once, in the same statement as the state change, so they cost no
+      // extra query; a replay inserts no handoff under this id, so it appends nothing.
+      ["UPDATE intake_episodes SET state='handoff_pending',updated_at=?,customer_statement=customer_statement||COALESCE(char(10)||?,'') WHERE episode_id=? "
+        + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=?)',now,details ?? null,episodeId,handoffId],
       ['SELECT h.* FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.episode_id=?',customerId,episodeId]
     ]);
     const handoff = result.at(-1).results[0] ?? null;

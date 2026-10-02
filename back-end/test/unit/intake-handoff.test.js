@@ -179,3 +179,29 @@ test('receipt reports the read-back checks and open questions for every kind', a
   assert.equal(technical.kind, 'technical');
   assert.deepEqual([technical.actions_taken, technical.unresolved_questions], [['transaction_lookup_failed'], ['matching_transaction','customer_confirmation']]);
 });
+
+test('incomplete handoff details are appended once to the statement, hashed into the key, and bounded with it', async t => {
+  const { db, store, start } = await setup(t);
+  const statement = episode => db.prepare('SELECT customer_statement s, state FROM intake_episodes WHERE episode_id=?').get(episode);
+  const episode = await start(); const details = 'Unos 50 euros el martes, en una tienda de ropa.';
+  const body = { episode_id: episode, kind: 'incomplete', idempotency_key: crypto.randomUUID(), details: `  ${details}  ` };
+  const res = await route(post('/intake/handoff', body), env, store); assert.equal(res.status, 201); const receipt = await res.json(); assertContract('intakeReceipt', receipt);
+  assert.equal(receipt.kind, 'incomplete'); assert.equal(statement(episode).s, 'No reconozco este cargo.\n' + details);
+  assert.deepEqual(await (await route(post('/intake/handoff', body), env, store)).json(), { ...receipt, replayed: true });
+  assert.equal(statement(episode).s, 'No reconozco este cargo.\n' + details, 'a replay appends nothing');
+  assert.equal((await route(post('/intake/handoff', { ...body, details: 'Otra cosa distinta, no lo mismo.' }), env, store)).status, 409, 'same key, other details');
+  assert.equal((await route(post('/intake/handoff', { episode_id: episode, kind: 'incomplete', idempotency_key: body.idempotency_key }), env, store)).status, 409, 'same key, details dropped');
+  // Hostile or malformed details never reach SQL: wrong type, too short, too long, U+0000, lone surrogate, an extra field, details on a confirmation.
+  const open = await start();
+  for (const bad of [{ details: 7 }, { details: 'corto' }, { details: 'x'.repeat(2001) }, { details: 'tiene un nulo \u0000 dentro' }, { details: 'mal formado \ud800 aquí' }, { details, extra: 1 }]) {
+    assert.equal((await route(post('/intake/handoff', { episode_id: open, kind: 'incomplete', idempotency_key: crypto.randomUUID(), ...bad }), env, store)).status, 422, JSON.stringify(bad).slice(0, 30));
+  }
+  assert.equal((await route(post('/intake/confirm', { ...confirm(open), details }), env, store)).status, 422);
+  assert.equal(statement(open).state, 'selection_required', 'rejections leave the episode open');
+  // Details that would push the statement past 2000 code points are refused before the write; the episode stays open for a shorter answer.
+  const overflow = await route(post('/intake/handoff', { episode_id: open, kind: 'incomplete', idempotency_key: crypto.randomUUID(), details: '😀'.repeat(1990) }), env, store);
+  assert.equal(overflow.status, 422); assert.equal(statement(open).state, 'selection_required');
+  assert.equal((await route(post('/intake/handoff', { episode_id: open, kind: 'incomplete', idempotency_key: crypto.randomUUID(), details: '😀'.repeat(1975) }), env, store)).status, 201);
+  assert.equal([...statement(open).s].length, 2000);
+  assert.deepEqual(events(db).filter(e => e.case_id === open).map(e => e.event), ['intake_started', 'handoff_created', 'intake_ended']);
+});

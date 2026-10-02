@@ -25,33 +25,33 @@ describe('CustomerPage', () => {
     page = TestBed.createComponent(CustomerPage).componentInstance;
   });
 
-  it('opens on sign-in with the purpose and the three explanation lines, then goes home once charges are loaded', async () => {
+  it('starts on the intro, moves to sign-in on start, and to the home once charges are loaded', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     const p = fixture.componentInstance;
-    await p.ngOnInit();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
+    expect(p.step()).toBe('intro');
+    expect(p.discClass()).toBe('disc disc--boot');
+    expect(el.querySelector('.intro')).not.toBeNull();
+    p.start();
+    fixture.detectChanges();
     expect(p.step()).toBe('login');
-    expect(el.querySelector('h1')?.textContent?.trim()).toBe(p.t().greeting);
-    expect(el.querySelector('.purpose')?.textContent?.trim()).toBe(p.t().tagline);
-    expect([...el.querySelectorAll('.explain li')].map(li => li.textContent?.trim()))
-      .toEqual([p.t().explain1, p.t().explain2, p.t().explain3]);
-    expect(el.querySelector('.intro')).toBeNull();
+    expect(p.discClass()).toBe('disc disc--login');
+    expect(el.querySelector('.step h1')?.textContent?.trim()).toBe(p.t().whoAreYou);
+    expect([...el.querySelectorAll('.login-promise p')].map(li => li.textContent?.trim()))
+      .toEqual([p.t().promise1, p.t().promise2, p.t().promise3]);
     p.identity = 'demo-ana';
     await p.login();
     expect(p.step()).toBe('home');
+    expect(p.discClass()).toBe('disc disc--home');
   });
 
-  it('states the purpose before the picker, and that sign-in is simulated and shows only your own charges', async () => {
+  it('says on sign-in that it is simulated and shows only your own charges', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     const p = fixture.componentInstance;
-    await p.ngOnInit();
+    p.start();
     fixture.detectChanges();
-    const el = fixture.nativeElement as HTMLElement;
-    const purpose = el.querySelector('.purpose')!;
-    const picker = el.querySelector('app-customer-picker')!;
-    expect(purpose.compareDocumentPosition(picker) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const note = el.querySelector('.sign-in-note')?.textContent ?? '';
+    const note = (fixture.nativeElement as HTMLElement).querySelector('.login-form > p.ar-small')?.textContent ?? '';
     expect(note).toContain(p.t().synthetic);
     expect(note).toContain(p.t().onlyYours);
   });
@@ -65,6 +65,7 @@ describe('CustomerPage', () => {
 
   it('stays on sign-in and shows the mapped error when sign-in fails', async () => {
     service.signIn.and.rejectWith(new ApiError(503, 'unavailable'));
+    page.start();
     page.identity = 'demo-ana';
     await page.login();
     expect(page.step()).toBe('login');
@@ -76,6 +77,7 @@ describe('CustomerPage', () => {
     service.identities.and.returnValue(new Promise<Identity[]>(r => { resolve = r; }));
     const fixture = TestBed.createComponent(CustomerPage);
     const init = fixture.componentInstance.ngOnInit();
+    fixture.componentInstance.start();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('#identities-loading')?.textContent).toContain(fixture.componentInstance.t().working);
@@ -89,6 +91,7 @@ describe('CustomerPage', () => {
   it('loads the identity choices from the API instead of a hard-coded list', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     await fixture.componentInstance.ngOnInit();
+    fixture.componentInstance.start();
     fixture.detectChanges();
     const rows = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.ar-row-name')].map(o => o.textContent?.trim());
     expect(rows).toEqual(['Ana (demo)', 'Bruno (demo)']);
@@ -121,6 +124,12 @@ describe('CustomerPage', () => {
       service.startIntake.and.resolveTo(started);
       page.chatStatement = '  No reconozco este cargo.  ';
       await page.send();
+    }
+    /** The "can't find it" path: the guide asks once what the customer remembers, and the answer goes with the handoff. */
+    async function review(details = 'Unos 50 euros el martes, en una tienda de ropa.') {
+      page.cannotFind();
+      page.chatDetails = details;
+      await page.handoff();
     }
 
     it('starts with exactly the guided fields and shows no reference before the receipt', async () => {
@@ -214,12 +223,45 @@ describe('CustomerPage', () => {
       expect(page.identityLocked()).toBeFalse();
     });
 
-    it('asks for human review without a charge, sending kind incomplete', async () => {
+    it('"can\'t find it" asks once what the customer remembers before anything is sent, then sends it with the incomplete handoff', async () => {
       await startEpisode();
       service.handoffIntake.and.resolveTo({ ...intakeReceipt, kind: 'incomplete' });
-      await page.cannotFind();
-      expect(service.handoffIntake.calls.mostRecent().args[0]).toEqual({ episode_id: started.episode_id, idempotency_key: jasmine.any(String), kind: 'incomplete' });
+      page.cannotFind();
+      expect(service.handoffIntake).not.toHaveBeenCalled();
+      expect(page.chatStep()).toBe('details');
+      expect(page.identityLocked()).toBeTrue();
+      expect(page.log().slice(-2)).toEqual([{ from: 'me', key: 'chatCannotFind' }, { from: 'bot', key: 'chatDetailsPrompt' }]);
+      page.chatDetails = '😀😀😀😀😀';
+      await page.handoff();
+      expect(service.handoffIntake).not.toHaveBeenCalled();
+      expect(page.chatError()).toBe(lang.t().chatValidationShort);
+      page.chatDetails = '  Unos 50 euros el martes, en una tienda de ropa.  ';
+      await page.handoff();
+      expect(service.handoffIntake.calls.mostRecent().args[0]).toEqual({ details: 'Unos 50 euros el martes, en una tienda de ropa.',
+        episode_id: started.episode_id, idempotency_key: jasmine.any(String), kind: 'incomplete' });
+      expect(page.log().at(-1)).toEqual({ from: 'me', text: 'Unos 50 euros el martes, en una tienda de ropa.' });
       expect(page.receiptTitle()).toBe(lang.t().receiptIncomplete);
+      expect(page.identityLocked()).toBeFalse();
+    });
+
+    it('the details field cannot outgrow the statement column, and with no room left the handoff goes without the question', async () => {
+      service.startIntake.and.resolveTo(started);
+      page.chatStatement = 'x'.repeat(1991);
+      await page.send();
+      service.handoffIntake.and.resolveTo({ ...intakeReceipt, kind: 'incomplete' });
+      expect(page.room).toBe(8);
+      await page.cannotFind();
+      expect(page.chatStep()).toBe('receipt');
+      expect(service.handoffIntake.calls.mostRecent().args[0]).toEqual({ episode_id: started.episode_id, idempotency_key: jasmine.any(String), kind: 'incomplete' });
+    });
+
+    it('picking a charge row while the guide waits for details goes back to choosing it', async () => {
+      await startEpisode();
+      page.cannotFind();
+      page.openChat('demo-tx-001');
+      expect(page.chatStep()).toBe('choose');
+      expect(page.choice).toBe('demo-tx-001');
+      expect(page.log().at(-1)).toEqual({ from: 'bot', key: 'chatChoose' });
     });
 
     it('a pending finish cannot switch between confirm and handoff', async () => {
@@ -263,7 +305,7 @@ describe('CustomerPage', () => {
     it('a 409 on finish ends the episode and offers a customer-initiated new report', async () => {
       await startEpisode();
       service.handoffIntake.and.rejectWith(new ApiError(409, 'x'));
-      await page.cannotFind();
+      await review();
       expect(page.chatStep()).toBe('ended');
       expect(page.chatError()).toBe(lang.t().err409Finish);
       expect(lang.t().err409Finish).not.toBe(lang.t().err409);
@@ -319,7 +361,7 @@ describe('CustomerPage', () => {
       await page.confirmCharge();
       expect(service.confirmIntake).toHaveBeenCalledTimes(1);
       service.handoffIntake.and.resolveTo({ ...intakeReceipt, protocol: '77777777-8888-4777-8666-555555555555', kind: 'incomplete' });
-      await page.cannotFind();
+      await review();
       expect(page.receipts().map(r => [r.receipt.kind, r.transactionId])).toEqual([['complete', 'demo-tx-001'], ['incomplete', null]]);
     });
 
@@ -494,7 +536,15 @@ describe('CustomerPage', () => {
         accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review' });
       p.chatStatement = 'No reconozco este cargo.';
       await p.send();
-      await p.cannotFind();
+      p.cannotFind();
+      fixture.detectChanges();
+      // The details step: a labelled field, Send instead of a second "can't find" button, nothing sent yet.
+      const field = el.querySelector<HTMLTextAreaElement>('#chat-details')!;
+      expect(el.querySelector('label[for="chat-details"]')?.textContent).toContain(p.t().chatDetailsLabel);
+      expect(field.getAttribute('maxlength')).toBe(String(2000 - 1 - 'No reconozco este cargo.'.length));
+      expect(service.handoffIntake).not.toHaveBeenCalled();
+      p.chatDetails = 'Unos 50 euros el martes, en una tienda de ropa.';
+      await p.handoff();
       fixture.detectChanges();
       const receiptEl = el.querySelector('#intake-receipt')!;
       expect([...receiptEl.querySelectorAll('.open-questions li')].map(li => li.textContent?.trim()))

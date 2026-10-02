@@ -44,3 +44,17 @@ test('terminal receipt replay still requires live same-owner authority after ses
  const replay=await ana.call('/intake/confirm',body);assert.equal(replay.status,200);assert.deepEqual(replay.body,{...original.body,replayed:true});
  const bruno=await customer('demo-bruno');const foreign=await bruno.call('/intake/confirm',body);assert.equal(foreign.status,404);assert.equal(foreign.body.protocol,undefined);
 });
+
+test('incomplete handoff details reach the agent statement once on real D1, and only with the same key and content',async()=>{
+ const ana=await customer();const episode_id=await start(ana);const details="Uns 50 reais na terça; a loja chamava 'Moda X'.";
+ const body={episode_id,kind:'incomplete',idempotency_key:crypto.randomUUID(),details};
+ const accepted=await ana.call('/intake/handoff',body);assert.equal(accepted.status,201);assertContract('intakeReceipt',accepted.body);assert.equal(accepted.body.kind,'incomplete');console.log('D1_INTAKE_INCOMPLETE_DETAILS '+JSON.stringify(accepted.metrics));
+ const replay=await ana.call('/intake/handoff',body);assert.equal(replay.status,200);assert.deepEqual(replay.body,{...accepted.body,replayed:true});
+ assert.equal((await ana.call('/intake/handoff',{...body,details:'Outra coisa completamente diferente.'})).status,409);
+ assert.equal((await ana.call('/intake/handoff',{episode_id,kind:'incomplete',idempotency_key:body.idempotency_key})).status,409);
+ const agent=client();await agent.call('/demo/agent-session',{});const detail=await agent.call('/agent/intake-detail?protocol='+accepted.body.protocol);
+ assert.equal(detail.status,200);assertContract('agentIntakeDetail',detail.body);assert.equal(detail.body.customer_statement,'Não reconheço esta cobrança.\n'+details);
+ const bruno=await customer('demo-bruno');assert.equal((await bruno.call('/intake/handoff',{...body,idempotency_key:crypto.randomUUID()})).status,404);
+ const fresh=await start(ana);for(const bad of [{details:'curto'},{details:'x'.repeat(2001)},{details:'nulo \u0000 aqui'},{details:7}])assert.equal((await ana.call('/intake/handoff',{episode_id:fresh,kind:'incomplete',idempotency_key:crypto.randomUUID(),...bad})).status,422);
+ assert.equal((await ana.call('/intake/handoff',{episode_id:fresh,kind:'incomplete',idempotency_key:crypto.randomUUID()})).status,201,'the episode stayed open');
+});

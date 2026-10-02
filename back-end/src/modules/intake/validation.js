@@ -13,22 +13,35 @@ export function validateStartRequest(body) {
   if (!['es', 'pt'].includes(body.language) || body.mode !== 'guided' || body.report_type !== 'unrecognized_charge') {
     return invalid('Select an ES/PT guided unrecognized-charge report');
   }
-  if (typeof body.customer_statement !== 'string' || !body.customer_statement.isWellFormed()) {
-    return invalid('Statement must be valid Unicode text');
-  }
-  if (body.customer_statement.includes('\u0000')) return invalid('Statement must not contain U+0000');
-  const statement = body.customer_statement.trim();
-  const length = [...statement].length;
-  if (length < 10 || length > 2000) return invalid('Describe the charge in 10–2000 characters');
+  const statement = checkText(body.customer_statement);
+  if (statement.error) return statement;
   if (typeof body.idempotency_key !== 'string' || !UUID.test(body.idempotency_key)) return invalid('Invalid request key');
-  return { value: { language: body.language, statement, key: body.idempotency_key.toLowerCase() } };
+  return { value: { language: body.language, statement: statement.value, key: body.idempotency_key.toLowerCase() } };
 }
 
-/** Accept only explicit confirmation or incomplete handoff fields; failure evidence stays server-controlled. */
+/** Customer free text: well-formed Unicode without U+0000, trimmed to 10–2000 code points. */
+function checkText(text) {
+  if (typeof text !== 'string' || !text.isWellFormed()) return invalid('Statement must be valid Unicode text');
+  if (text.includes('\u0000')) return invalid('Statement must not contain U+0000');
+  const value = text.trim();
+  const length = [...value].length;
+  if (length < 10 || length > 2000) return invalid('Describe the charge in 10–2000 characters');
+  return { value };
+}
+
+/**
+ * Accept only explicit confirmation or incomplete handoff fields; failure evidence stays server-controlled.
+ * An incomplete handoff may carry ``details`` (what the customer remembers, same rules as the statement);
+ * the route appends them to the stored statement.
+ */
 export function validateHandoffRequest(body, complete) {
-  const keys = complete ? 'customer_confirmed,episode_id,idempotency_key,transaction_id' : 'episode_id,idempotency_key,kind';
-  if (body === null || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).sort().join() !== keys) return invalid('Provide exactly the handoff fields');
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return invalid('Provide exactly the handoff fields');
+  const keys = Object.keys(body).sort().join();
+  const withDetails = !complete && keys === 'details,episode_id,idempotency_key,kind';
+  if (keys !== (complete ? 'customer_confirmed,episode_id,idempotency_key,transaction_id' : 'episode_id,idempotency_key,kind') && !withDetails) return invalid('Provide exactly the handoff fields');
   if (typeof body.episode_id !== 'string' || !UUID.test(body.episode_id) || typeof body.idempotency_key !== 'string' || !UUID.test(body.idempotency_key)) return invalid('Invalid episode or request key');
   if (complete ? body.customer_confirmed !== true || typeof body.transaction_id !== 'string' || !body.transaction_id || body.transaction_id.length > 100 || !body.transaction_id.isWellFormed() || body.transaction_id.includes('\u0000') : body.kind !== 'incomplete') return invalid('Explicit owned confirmation or incomplete handoff required');
-  return { value: { episodeId: body.episode_id.toLowerCase(), turnKey: body.idempotency_key.toLowerCase(), transactionId: complete ? body.transaction_id : null } };
+  const details = withDetails ? checkText(body.details) : { value: null };
+  if (details.error) return details;
+  return { value: { episodeId: body.episode_id.toLowerCase(), turnKey: body.idempotency_key.toLowerCase(), transactionId: complete ? body.transaction_id : null, details: details.value } };
 }
