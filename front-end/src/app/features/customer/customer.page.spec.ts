@@ -17,13 +17,14 @@ describe('CustomerPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake'], { client: signal(''), card: signal(null), receipts: signal([]) });
+      'startIntake', 'confirmIntake', 'handoffIntake', 'reports'], { client: signal(''), card: signal(null), receipts: signal([]) });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null });
     service.transactions.and.resolveTo({ items: [tx], has_more: false, coverage: 'fictitious_demo_data_only' });
     service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', context_card: null });
     service.logout.and.resolveTo();
+    service.reports.and.resolveTo({ items: [], has_more: false });
     cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
     cognito.requestCode.and.resolveTo();
     cognito.submitCode.and.resolveTo('id.token');
@@ -607,7 +608,7 @@ describe('CustomerPage', () => {
       expect(el.querySelector('.products')).toBeNull();
     });
 
-    it('while a request is pending the agent link is disabled, and receipts and the home survive in-app navigation', async () => {
+    it('while a request is pending the agent link is disabled, and the server reports and the home survive in-app navigation', async () => {
       const { fixture, p, el } = await home();
       service.startIntake.and.rejectWith(new ApiError(503, 'x'));
       p.chatStatement = 'No reconozco este cargo.';
@@ -619,10 +620,8 @@ describe('CustomerPage', () => {
       p.frozen.set(null);
       fixture.detectChanges();
       expect(link().getAttribute('href')).toBe('/agent');
-      service.receipts.set([{ receipt: { episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555',
-        kind: 'incomplete', accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'],
-        reference_short: 'AR-3F9Q-1Z7P', next_step_code: 'await_human_review' }, transactionId: null }]);
       fixture.destroy();
+      service.reports.and.resolveTo({ items: [report('incomplete', 'AR-3F9Q-1Z7P')], has_more: false });
       const again = TestBed.createComponent(CustomerPage);
       await again.componentInstance.ngOnInit();
       await again.whenStable();
@@ -636,6 +635,59 @@ describe('CustomerPage', () => {
       expect(reports[0]).toContain(p.t().receiptIncomplete);
       expect(reports[0]).toContain('AR-3F9Q-1Z7P'); // the short code is the reference a customer keeps
       expect(reports[0]).not.toContain('99999999-8888-4777-8666-555555555555');
+    });
+
+    const report = (kind: 'complete' | 'incomplete' | 'technical', ref: string | null, at = '2026-10-01T12:00:00Z', protocol = '99999999-8888-4777-8666-555555555555') =>
+      ({ protocol, reference_short: ref, kind, status: 'received', next_step: 'review_pending', accepted_at: at } as const);
+    const rows = (el: HTMLElement) => [...el.querySelectorAll('.your-reports li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+
+    it('after sign-in lists the server reports in server order (newest first), with reference, kind and status as text', async () => {
+      service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB', '2026-10-02T09:30:00Z'),
+        report('technical', null, '2026-10-01T08:00:00Z', '11111111-2222-4333-8444-555555555555')], has_more: false });
+      const { el, p } = await home();
+      expect(service.reports).toHaveBeenCalled();
+      expect(el.querySelector('.your-reports h3')?.textContent?.trim()).toBe(p.t().yourReports);
+      const [first, second] = rows(el);
+      expect(first).toContain('AR-AAAA-BBBB');
+      expect(first).toContain(p.t().receiptComplete);
+      expect(first).toContain(p.t().statusReceived + ': ' + p.t().nextStepReview);
+      expect(first).toContain('2026-10-02 09:30:00');
+      expect(second).toContain('11111111-2222-4333-8444-555555555555'); // no short code: the protocol
+      expect(second).toContain(p.t().receiptTechnical);
+      expect(el.textContent).not.toContain(p.t().moreReports);
+    });
+
+    it('reloads the reports after a receipt', async () => {
+      const { fixture, p, el } = await home();
+      expect(el.querySelector('.your-reports')).toBeNull();
+      service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', mode: 'guided' } as never);
+      p.chatStatement = 'No reconozco este cargo.';
+      await p.send();
+      const before = service.reports.calls.count();
+      service.reports.and.resolveTo({ items: [report('incomplete', 'AR-CCCC-DDDD')], has_more: false });
+      service.handoffIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555',
+        kind: 'incomplete', accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: [], reference_short: 'AR-CCCC-DDDD',
+        next_step_code: 'await_human_review' });
+      await p.handoff();
+      fixture.detectChanges();
+      expect(service.reports.calls.count()).toBe(before + 1);
+      expect(rows(el)[0]).toContain('AR-CCCC-DDDD');
+    });
+
+    it('says when more reports exist than are listed', async () => {
+      service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB')], has_more: true });
+      const { el, p } = await home();
+      expect(el.textContent).toContain(p.t().moreReports);
+    });
+
+    it('a failed reports load shows one muted line and keeps the charges', async () => {
+      service.reports.and.rejectWith(new ApiError(503, 'x'));
+      const { el, p } = await home();
+      expect(p.step()).toBe('home');
+      expect(el.textContent).toContain(p.t().reportsFailed);
+      expect(el.querySelector('.your-reports')).toBeNull();
+      expect(el.querySelectorAll('.report-btn').length).toBe(1);
+      expect(el.querySelector('.ar-alert')).toBeNull();
     });
 
     it('shows only the greeting, the charges and the report panel; no hero, stats, currency box or floating toggle', async () => {

@@ -85,7 +85,8 @@ const es = {
     check_customer_confirmation_recorded: 'Confirmación del cargo registrada',
     check_transaction_lookup_failed: 'La búsqueda del cargo falló',
     check_matching_transaction: 'Cargo sin identificar', check_customer_confirmation: 'Confirmación del cargo pendiente',
-    yourReports: 'Tus reportes',
+    yourReports: 'Tus reportes', statusReceived: 'Recibido', nextStepReview: 'una persona lo revisará',
+    moreReports: 'Hay más reportes que no se muestran aquí.', reportsFailed: 'No se pudieron cargar tus reportes.',
     sessionRenewed: 'Tu sesión había expirado. La renovamos con la misma identidad y reenviamos la misma solicitud.'
 };
 
@@ -175,7 +176,8 @@ const STRINGS: Record<Lang, Strings> = {
     check_customer_confirmation_recorded: 'Confirmação da cobrança registrada',
     check_transaction_lookup_failed: 'A busca da cobrança falhou',
     check_matching_transaction: 'Cobrança não identificada', check_customer_confirmation: 'Confirmação da cobrança pendente',
-    yourReports: 'Seus relatos',
+    yourReports: 'Seus relatos', statusReceived: 'Recebido', nextStepReview: 'uma pessoa vai analisá-lo',
+    moreReports: 'Há mais relatos que não aparecem aqui.', reportsFailed: 'Não foi possível carregar seus relatos.',
     sessionRenewed: 'Sua sessão tinha expirado. Nós a renovamos com a mesma identidade e reenviamos o mesmo pedido.'
   },
   en: {
@@ -259,7 +261,8 @@ const STRINGS: Record<Lang, Strings> = {
     check_customer_confirmation_recorded: 'Charge confirmation recorded',
     check_transaction_lookup_failed: 'Charge lookup failed',
     check_matching_transaction: 'Charge not identified', check_customer_confirmation: 'Charge confirmation pending',
-    yourReports: 'Your reports',
+    yourReports: 'Your reports', statusReceived: 'Received', nextStepReview: 'a person will review it',
+    moreReports: 'There are more reports that are not shown here.', reportsFailed: 'Your reports could not be loaded.',
     sessionRenewed: 'Your session had expired. We renewed it with the same identity and resent the same request.'
   }
 };

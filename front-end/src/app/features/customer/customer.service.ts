@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/http/api.service';
 import { ContextCard, CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeReceipt, IntakeStart, IntakeStartBody,
-  TransactionList } from '../../shared/models/intake.model';
+  ReportList, TransactionList } from '../../shared/models/intake.model';
 
 /** A receipt read back in this tab, with the charge the customer confirmed (null for a handoff without one). */
 export interface ReceiptEntry {
@@ -39,6 +39,10 @@ export class CustomerService {
 
   transactions(): Promise<TransactionList> {
     return this.api.request<TransactionList>('/transactions');
+  }
+
+  reports(): Promise<ReportList> {
+    return this.api.request<ReportList>('/reports');
   }
 
   startIntake(body: IntakeStartBody): Promise<IntakeStart> {

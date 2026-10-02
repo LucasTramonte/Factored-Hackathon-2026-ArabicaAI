@@ -164,3 +164,17 @@ export interface IntakeReceipt {
   unresolved_questions: string[];
   next_step_code: 'await_human_review';
 }
+
+/** GET /reports: the session customer's own handoffs, newest first, 20 per page. Status is a constant until reviews are stored. */
+export interface Report {
+  protocol: string;
+  reference_short: string | null;
+  kind: IntakeKind;
+  status: 'received';
+  next_step: 'review_pending';
+  accepted_at: string;
+}
+export interface ReportList {
+  items: Report[];
+  has_more: boolean;
+}
