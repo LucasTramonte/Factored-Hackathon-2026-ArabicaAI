@@ -3,11 +3,23 @@
     "target": "http://127.0.0.1:8787",
     "secure": false
   },
+  "/auth/**": {
+    "target": "http://127.0.0.1:8787",
+    "secure": false
+  },
   "/transactions": {
     "target": "http://127.0.0.1:8787",
     "secure": false
   },
   "/cases": {
+    "target": "http://127.0.0.1:8787",
+    "secure": false
+  },
+  "/reports": {
+    "target": "http://127.0.0.1:8787",
+    "secure": false
+  },
+  "/reports/**": {
     "target": "http://127.0.0.1:8787",
     "secure": false
   },
@@ -20,6 +32,10 @@
     "secure": false
   },
   "/agent/intakes": {
+    "target": "http://127.0.0.1:8787",
+    "secure": false
+  },
+  "/agent/intake-status": {
     "target": "http://127.0.0.1:8787",
     "secure": false
   },

@@ -15,5 +15,9 @@
   },
   "devDependencies": {
     "wrangler": "4.143.0"
+  },
+  "dependencies": {
+    "aws4fetch": "1.0.20",
+    "jose": "5.10.0"
   }
 }

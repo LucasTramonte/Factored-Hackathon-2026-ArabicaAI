@@ -9,8 +9,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createStore } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
+import { close } from '../support/close.js';
 
-const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p' };
+const env = { DEMO_PICKER: '1' };
 const EPISODES = 100;
 // A 77-code-point statement (the typical length used by ADR-004) and the 2,000-code-point maximum.
 const TYPICAL = 'No reconozco el cargo de Mercado Demo del 25 de septiembre; no hice la compra';
@@ -19,21 +20,22 @@ const VARIANTS = { typical: TYPICAL, max_ascii: 'x'.repeat(2000), max_4byte: '\u
 // measured on 2026-09-30; ADR-004 uses these bounds. Sessions are excluded: they are purged at expiry.
 const BOUND = { complete: { typical: 5500, max_ascii: 13800, max_4byte: 23400 }, incomplete: { typical: 3700, max_ascii: 7800, max_4byte: 12900 } };
 
-function setup() {
+/** A fresh in-memory D1 with every migration up to, not including, ``before`` (all of them by default). */
+function setup(before = '~') {
   const db = new DatabaseSync(':memory:'); db.exec('PRAGMA foreign_keys=ON');
   const dir = new URL('../../migrations/', import.meta.url);
-  for (const file of readdirSync(dir).sort()) db.exec(readFileSync(new URL(file, dir), 'utf8'));
+  for (const file of readdirSync(dir).sort().filter(f => f < before)) db.exec(readFileSync(new URL(file, dir), 'utf8'));
   db.exec(readFileSync(new URL('../../seeds/seed_fictitious.sql', import.meta.url), 'utf8'));
   const store = createStore({ prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
     batch: async statements => { db.exec('BEGIN'); try { const r = statements.map(s => s.all()); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } } });
   let cookie = '';
   const call = async (path, body) => {
     const response = await route(new Request('https://demo.example' + path, { method: 'POST', body: JSON.stringify(body),
-      headers: { Authorization: 'Basic ' + Buffer.from('u:p').toString('base64'), ...(cookie ? { Cookie: cookie } : {}) } }), env, store);
+      headers: { ...(cookie ? { Cookie: cookie } : {}) } }), env, store);
     const set = response.headers.get('set-cookie'); if (set) cookie = set.split(';', 1)[0];
     return { status: response.status, body: await response.json() };
   };
-  return { db, call };
+  return { db, store, call };
 }
 
 /** Bytes per table group (table plus its indexes) from dbstat; page granularity is amortized over 100 episodes. */
@@ -52,7 +54,7 @@ test('retained storage per guided episode stays within the ADR-004 capacity inpu
   const measured = {};
   for (const kind of ['complete', 'incomplete']) {
     for (const [variant, statement] of Object.entries(VARIANTS)) {
-      const { db, call } = setup();
+      const { db, store, call } = setup();
       assert.equal((await call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
       const before = usage(db); const count = Object.fromEntries(TABLES.map(t => [t, rows(db, t)]));
       for (let i = 0; i < EPISODES; i++) {
@@ -62,6 +64,7 @@ test('retained storage per guided episode stays within the ADR-004 capacity inpu
           ? await call('/intake/confirm', { episode_id: start.body.episode_id, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: crypto.randomUUID() })
           : await call('/intake/handoff', { episode_id: start.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() });
         assert.equal(done.status, 201);
+        if (kind === 'complete') await close(store, done.body.protocol); // a person closed it, so the next episode may report the same charge
       }
       const after = usage(db);
       const perRow = Object.fromEntries(TABLES.map(t => {
@@ -99,5 +102,39 @@ test('the documented demo-activity reset respects intake foreign keys and keeps 
   for (const table of [...TABLES, 'sessions']) assert.equal(rows(db, table), 0, table);
   assert.deepEqual(['customers', 'transactions', 'context_cards', 'sample_provenance'].map(t => rows(db, t)), seed);
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
+  db.close();
+});
+
+test('migration 0014 admits English and keeps every episode, foreign key and index of intake_episodes', async () => {
+  const MIGRATION = '0014_english_reports.sql';
+  const { db, store, call } = setup(MIGRATION);
+  assert.equal((await call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
+  for (const [language, statement, complete] of [['es', 'No reconozco este cargo.', true], ['pt', 'Não reconheço esta cobrança.', false], ['es', 'No reconozco este otro cargo.', null]]) {
+    const start = await call('/intake/start', { language, mode: 'guided', report_type: 'unrecognized_charge', customer_statement: statement, idempotency_key: crypto.randomUUID() });
+    assert.equal(start.status, 201);
+    if (complete === null) continue; // an open episode with no handoff
+    const done = complete
+      ? await call('/intake/confirm', { episode_id: start.body.episode_id, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: crypto.randomUUID() })
+      : await call('/intake/handoff', { episode_id: start.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() });
+    assert.equal(done.status, 201);
+    if (complete) await close(store, done.body.protocol);
+  }
+  assert.throws(() => db.exec("UPDATE intake_episodes SET language='en'"), /CHECK/, 'before 0014 English is refused');
+  const indexes = () => db.prepare('PRAGMA index_list(intake_episodes)').all()
+    .map(({ name, unique, origin, partial }) => ({ name, unique, origin, partial })).sort((a, b) => a.name.localeCompare(b.name));
+  const columns = () => db.prepare('PRAGMA table_xinfo(intake_episodes)').all();
+  const episodes = () => db.prepare('SELECT * FROM intake_episodes ORDER BY episode_id').all();
+  const before = { indexes: indexes(), columns: columns(), episodes: episodes(), rows: TABLES.map(t => rows(db, t)) };
+  assert.equal(before.indexes.length, 4); // primary key, UNIQUE(customer_id,start_key), owner, idle (partial)
+  db.exec('BEGIN'); db.exec(readFileSync(new URL('../../migrations/' + MIGRATION, import.meta.url), 'utf8')); db.exec('COMMIT');
+  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  assert.deepEqual({ indexes: indexes(), columns: columns(), episodes: episodes(), rows: TABLES.map(t => rows(db, t)) }, before);
+  for (const child of ['intake_turns', 'intake_events', 'intake_handoffs']) {
+    assert.deepEqual(db.prepare(`PRAGMA foreign_key_list(${child})`).all().filter(k => k.from === 'episode_id').map(k => k.table), ['intake_episodes'], child);
+  }
+  const english = await call('/intake/start', { language: 'en', mode: 'guided', report_type: 'unrecognized_charge', customer_statement: 'I do not recognize this charge.', idempotency_key: crypto.randomUUID() });
+  assert.equal(english.status, 201);
+  assert.equal(db.prepare('SELECT language FROM intake_episodes WHERE episode_id=?').get(english.body.episode_id).language, 'en');
+  assert.throws(() => db.exec("UPDATE intake_episodes SET language='fr'"), /CHECK/);
   db.close();
 });

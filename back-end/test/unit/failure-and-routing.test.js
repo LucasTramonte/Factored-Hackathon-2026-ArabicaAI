@@ -2,20 +2,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { withMetrics } from '../../src/index.js';
-import { route } from '../../src/router.js';
+import { API_ROUTES, ROLES, ROUTE_ROLES, route } from '../../src/router.js';
+import { listIdentities, startCustomerSession } from '../../src/modules/customer/routes.js';
 import { readJsonBody, MAX_BODY_BYTES } from '../../src/http.js';
 import { tokenHash } from '../../src/auth/session.js';
 import { assertContract } from '../support/contract.js';
 
-const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p' };
-const auth = 'Basic ' + Buffer.from('u:p').toString('base64');
+const env = { DEMO_PICKER: '1' };
 const token = 'a'.repeat(64);
 const body = { transaction_id: 'tx-1', customer_statement: 'I do not recognize this charge.',
   customer_confirmed: true, idempotency_key: '0f8fad5b-d9cb-469f-a165-70867728950e' };
 
 function post(path, payload, cookie = `demo_session=${token}`) {
   return new Request('https://demo.example.workers.dev' + path, { method: 'POST',
-    headers: { Authorization: auth, Cookie: cookie, 'Content-Type': 'application/json' },
+    headers: { Cookie: cookie, 'Content-Type': 'application/json' },
     body: typeof payload === 'string' ? payload : JSON.stringify(payload) });
 }
 
@@ -65,27 +65,38 @@ test('oversized and non-JSON bodies are rejected before any store call', async (
   assert.deepEqual(small.value, body);
 });
 
-test('known paths answer 405 with Allow after the gate, unknown API paths 404', async () => {
+test('known paths answer 405 with Allow, unknown API paths 404', async () => {
   const store = await fakeStore();
-  const get = path => new Request('https://d.example' + path, { headers: { Authorization: auth } });
+  const get = path => new Request('https://d.example' + path);
   const wrong = await route(get('/cases'), env, store);
   assert.equal(wrong.status, 405);
   assert.equal(wrong.headers.get('Allow'), 'POST');
   assert.equal((await route(get('/agent/unknown'), env, store)).status, 404);
-  const anonymous = await route(new Request('https://d.example/cases', { method: 'OPTIONS' }), env, store);
-  assert.equal(anonymous.status, 401);
-  assert.equal(anonymous.headers.get('Allow'), null);
+  const anonymous = await route(new Request('https://d.example/agent/cases', { method: 'OPTIONS' }), env, store);
+  assert.equal(anonymous.status, 405);
+  assert.equal(anonymous.headers.get('Allow'), 'GET');
 });
 
-test('HTML documents require the gate before assets are served', async () => {
+test('no path has a Basic gate: documents are served and every API path reaches its handler', async () => {
   const served = [];
   const assetsEnv = { ...env, ASSETS: { fetch: async r => { served.push(new URL(r.url).pathname); return new Response('<app-root>'); } } };
-  const store = await fakeStore();
-  for (const path of ['/', '/index.html', '/agent']) {
-    assert.equal((await route(new Request('https://d.example' + path), assetsEnv, store)).status, 401);
-    assert.equal((await route(new Request('https://d.example' + path, { headers: { Authorization: auth } }), assetsEnv, store)).status, 200);
+  const store = await fakeStore({ findSession: async () => null, listDatasetIdentities: async () => [] });
+  const anon = (path, method = 'GET') => route(new Request('https://d.example' + path, { method }), assetsEnv, store);
+  for (const [method, path, status] of [['GET', '/', 200], ['GET', '/index.html', 200], ['GET', '/agent', 200], ['GET', '/transactions', 401],
+    ['POST', '/intake/start', 401], ['POST', '/auth/logout', 204], ['POST', '/auth/session', 422], ['GET', '/cases/nope', 404], ['GET', '/intake', 404],
+    ['DELETE', '/transactions', 405], ['GET', '/agent/intakes', 401], ['GET', '/agent/cases', 401], ['GET', '/agent/intake-detail', 401],
+    ['POST', '/agent/intake-status', 401], ['OPTIONS', '/agent/cases', 405], ['POST', '/agent', 405], ['GET', '/demo/identities', 200]]) {
+    const res = await anon(path, method);
+    assert.equal(res.headers.get('WWW-Authenticate'), null, `${method} ${path}`);
+    assert.equal(res.status, status, `${method} ${path}`);
   }
   assert.deepEqual(served, ['/', '/index.html', '/agent']);
+  // Case and encoding tricks never reach an agent handler: they fall to the static app shell.
+  const agentStore = new Proxy({}, { get: (_, name) => { throw new Error(`store.${String(name)} touched`); } });
+  for (const path of ['/AGENT', '/%61gent/intakes', '//agent/intakes', '/Agent/cases']) {
+    const res = await route(new Request('https://d.example' + path), assetsEnv, agentStore);
+    assert.equal(await res.text(), '<app-root>', path);
+  }
 });
 
 test('database metrics are exposed only when explicitly enabled', () => {
@@ -105,15 +116,24 @@ test('the body limit stops reading a stream without Content-Length', async () =>
   assert.ok(pulled <= 20, `read ${pulled} KB before stopping`);
 });
 
+test('the demo picker exists only when DEMO_PICKER=1 and otherwise never touches the store', async () => {
+  const store = new Proxy({}, { get: (_, name) => { throw new Error(`store.${String(name)} touched`); } });
+  for (const picker of [{}, { DEMO_PICKER: '0' }, { DEMO_PICKER: 1 }]) {
+    for (const res of [await listIdentities(new Request('https://d.example/demo/identities'), picker, store),
+      await startCustomerSession(post('/demo/session', { customer_id: 'demo-ana' }, ''), picker, store)]) {
+      assert.equal(res.status, 404);
+      assert.deepEqual(await res.json(), { detail: 'Not found' });
+    }
+  }
+});
+
 test('identity list joins the committed fictitious identities with dataset customers loaded in D1', async () => {
   let asked = null;
   const store = { metrics: () => ({ queries: 0, rowsRead: 0, rowsWritten: 0 }),
     listDatasetIdentities: async limit => { asked = limit; return [
       { customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' },
       { customer_id: 'demo-ana', display_name: 'Shadow of a committed identity', country: 'México' }]; } };
-  const req = headers => new Request('https://d.example/demo/identities', { headers });
-  assert.equal((await route(req({}), env, store)).status, 401);
-  const res = await route(req({ Authorization: auth }), env, store);
+  const res = await route(new Request('https://d.example/demo/identities'), env, store);
   assert.equal(res.status, 200);
   const body = await res.json();
   assertContract('identityList', body);
@@ -129,7 +149,7 @@ test('identity list joins the committed fictitious identities with dataset custo
 test('identity list fails closed when D1 cannot list the cohort', async () => {
   const store = { metrics: () => ({ queries: 0, rowsRead: 0, rowsWritten: 0 }),
     listDatasetIdentities: async () => { throw new Error('D1 down'); } };
-  const res = await route(new Request('https://d.example/demo/identities', { headers: { Authorization: auth } }), env, store);
+  const res = await route(new Request('https://d.example/demo/identities'), env, store);
   assert.equal(res.status, 503);
   assertContract('error', await res.json());
 });
@@ -159,7 +179,7 @@ test('the transaction list says whether it shows fictitious or dataset rows', as
     const store = { metrics: () => ({ queries: 0, rowsRead: 0, rowsWritten: 0 }), listTransactions: async () => [],
       findSession: async (h, actor) => (h === hash && actor === 'customer' ? { customer_id } : null) };
     const res = await route(new Request('https://d.example/transactions',
-      { headers: { Authorization: auth, Cookie: `demo_session=${token}` } }), env, store);
+      { headers: { Cookie: `demo_session=${token}` } }), env, store);
     const payload = await res.json();
     assertContract('transactionList', payload);
     assert.equal(payload.coverage, coverage, customer_id);
@@ -193,4 +213,47 @@ test('a malformed stored context card degrades to null and login still works', a
   const { context_card: card } = await res.json();
   assert.deepEqual(card, { version: 1, snapshot_at: '2026-09-29T00:00:00+00:00', first_name: 'Ana',
     locale_hint: 'es-AR', products: [] });
+});
+
+test('every API path is limited per IP before any store call; documents are not', async () => {
+  const keys = [];
+  const limiter = success => ({ limit: async ({ key }) => { keys.push(key); return { success }; } });
+  const untouched = new Proxy({}, { get: (_, name) => { throw new Error(`store.${String(name)} touched`); } });
+  const req = (path, method = 'GET', headers = {}) => new Request('https://d.example' + path,
+    { method, headers: { 'CF-Connecting-IP': '203.0.113.7', ...headers } });
+  const limited = { ...env, API_LIMIT: limiter(false), ASSETS: { fetch: async () => new Response('<app-root>') } };
+  for (const [method, path] of [['GET', '/transactions'], ['POST', '/auth/session'], ['POST', '/intake/start'], ['GET', '/cases/nope'],
+    ['POST', '/demo/agent-session'], ['GET', '/agent/intakes'], ['GET', '/demo/identities']]) {
+    const res = await route(req(path, method), limited, untouched);
+    assert.equal(res.status, 429, `${method} ${path}`);
+    assert.equal(res.headers.get('Retry-After'), '60');
+    assertContract('error', await res.json());
+  }
+  assert.deepEqual(keys, Array(7).fill('203.0.113.7'));
+  keys.length = 0;
+  assert.equal((await route(req('/'), limited, untouched)).status, 200);
+  assert.equal((await route(req('/agent'), limited, untouched)).status, 200);
+  assert.deepEqual(keys, [], 'documents never call the limiter');
+  const store = await fakeStore({ findSession: async () => null });
+  for (const e of [{ ...env, API_LIMIT: limiter(true) }, env]) {
+    const res = await route(new Request('https://d.example/transactions'), e, store);
+    assert.equal(res.status, 401);
+  }
+  assert.deepEqual(keys, ['unknown']);
+});
+
+test('every route has a declared role; admin and auditor own none; each protected route refuses the other actor\'s live session', async () => {
+  assert.deepEqual(Object.keys(ROUTE_ROLES).sort(), Object.keys(API_ROUTES).sort());
+  assert.deepEqual([...new Set(Object.values(ROUTE_ROLES))].sort(), ['agent', 'customer', 'public']);
+  assert.deepEqual(ROLES, ['public', 'customer', 'agent', 'admin', 'auditor']);
+  // The fake store accepts ``token`` only as a live customer session, so each request carries a session, just not this role's.
+  const store = await fakeStore();
+  const other = { customer: `demo_agent_session=${token}`, agent: `demo_session=${token}` };
+  for (const [path, role] of Object.entries(ROUTE_ROLES)) {
+    if (role === 'public') continue;
+    for (const method of Object.keys(API_ROUTES[path])) {
+      const res = await route(new Request('https://d.example' + path, { method, headers: { Cookie: other[role] } }), env, store);
+      assert.equal(res.status, 401, `${method} ${path} (${role})`);
+    }
+  }
 });

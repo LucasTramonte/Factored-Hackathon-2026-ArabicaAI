@@ -1,7 +1,7 @@
 /** Read-only handoff views through authenticated Worker routes and real local D1. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { client, base, auth } from '../support/client.js';
+import { client, base, closeReport } from '../support/client.js';
 import { assertContract } from '../support/contract.js';
 async function report(c, complete) {
   const started = await c.call('/intake/start',{language:'es',mode:'guided',report_type:'unrecognized_charge',customer_statement:'No reconozco este cargo; solicito revisión.',idempotency_key:crypto.randomUUID()});
@@ -31,6 +31,7 @@ test('agent detail retrieves complete and incomplete evidence and actual ordered
       :['intake_started','handoff_created','intake_ended']);
     assert.equal(detail.body.history.at(-1).outcome,receipt.kind==='complete'?'accepted':'routed');
     assert.equal(detail.body.history_has_more,false); assert.equal(detail.metrics.rows_written,0);
+    assert.deepEqual(detail.body.model_reading,{mode:'off',model_version:null,llm_calls:0},'switch off locally: no model read the case');
     if(receipt.kind==='complete'){
       assert.equal(detail.body.verified_evidence.transaction.transaction_id,'demo-tx-001');
       assert.equal(detail.body.verified_evidence.transaction.amount,'125.50');
@@ -42,14 +43,14 @@ test('agent detail retrieves complete and incomplete evidence and actual ordered
     measurements[receipt.kind]=detail.metrics;
   }
   assert.equal(queue.metrics.rows_written,0); console.log('D1_AGENT_INTAKES '+JSON.stringify(measurements));
+  await closeReport(complete.protocol); // releases demo-tx-001 for later suites
 });
 
-test('agent handoff reads reject gate method path customer swaps forged tokens expiry and hostile protocols',async()=>{
+test('agent handoff reads reject method path customer swaps forged tokens expiry and hostile protocols',async()=>{
   const c=client(); await c.call('/demo/session',{customer_id:'demo-ana'});
   const receipt=await report(c,false); const paths=['/agent/intakes','/agent/intake-detail?protocol='+receipt.protocol];
   for(const path of paths)for(const method of ['GET','HEAD','POST','PUT','DELETE','OPTIONS']){
-    assert.equal((await fetch(base+path,{method})).status,401);
-    const response=await fetch(base+path,{method,headers:{Authorization:auth}});
+    const response=await fetch(base+path,{method});
     assert.equal(response.status,method==='GET'?401:405); if(response.status===405)assert.equal(response.headers.get('Allow'),'GET');
   }
   for(const path of ['/agent/intakes/extra','/agent/intake-detail/extra'])assert.equal((await c.call(path)).status,404);

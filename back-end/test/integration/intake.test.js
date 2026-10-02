@@ -1,7 +1,7 @@
 /** Real local-D1 guided starts: concurrent replay, session isolation, hostile input and contract. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { client, base, auth } from '../support/client.js';
+import { client, base, closeReport } from '../support/client.js';
 import { assertContract } from '../support/contract.js';
 import { scorerPython } from '../../scripts/scorer-python.mjs';
 
@@ -22,7 +22,7 @@ test('guided_start_is_owned_and_idempotent against local D1', async () => {
   const ana = await customer();
   const body = startBody();
   const results = await Promise.all(Array.from({ length: 10 }, () => fetch(base + '/intake/start', {
-    method: 'POST', headers: { Authorization: auth, Cookie: ana.cookie, 'Content-Type': 'application/json' },
+    method: 'POST', headers: { Cookie: ana.cookie, 'Content-Type': 'application/json' },
     body: JSON.stringify(body) }).then(async r => ({ status: r.status, body: await r.json() }))));
   assert.deepEqual(results.map(r => r.status).sort(), [200, 200, 200, 200, 200, 200, 200, 200, 200, 201]);
   assert.equal(new Set(results.map(r => r.body.episode_id)).size, 1);
@@ -50,11 +50,11 @@ test('guided_start_is_owned_and_idempotent against local D1', async () => {
 test('guided start gate, path, session-role and malformed-input boundaries', async () => {
   for (const path of ['/intake/start', '/intake', '/intake/', '/intake/unknown', '/intake/start/extra']) {
     for (const method of ['GET', 'POST', 'HEAD', 'OPTIONS', 'DELETE', 'PUT']) {
-      const denied = await fetch(base + path, { method });
-      assert.equal(denied.status, 401, `${method} ${path}`);
-      assert.equal(denied.headers.get('Allow'), null);
-      const gated = await fetch(base + path, { method, headers: { Authorization: auth } });
-      assert.equal(gated.status, path === '/intake/start' ? (method === 'POST' ? 401 : 405) : 404, `${method} ${path}`);
+      for (const headers of [{}, { Authorization: 'Basic eDp5' }]) {
+        const res = await fetch(base + path, { method, headers });
+        assert.equal(res.status, path === '/intake/start' ? (method === 'POST' ? 401 : 405) : 404, `${method} ${path}`);
+        assert.equal(res.headers.get('WWW-Authenticate'), null, 'no team gate on customer paths');
+      }
     }
   }
   const agent = client();
@@ -67,7 +67,7 @@ test('guided start gate, path, session-role and malformed-input boundaries', asy
   }
   const ana = await customer();
   const body = startBody();
-  for (const invalid of ['{bad', '[]', 'null', { ...body, customer_id: 'demo-bruno' }, { ...body, language: 'en' },
+  for (const invalid of ['{bad', '[]', 'null', { ...body, customer_id: 'demo-bruno' }, { ...body, language: 'fr' },
     { ...body, mode: 'ai' }, { ...body, report_type: 'recognized_charge' }, { ...body, extra: true },
     { ...body, customer_statement: 'x'.repeat(2001) }, { ...body, customer_statement: '\ud800'.repeat(10) }]) {
     const rejected = await ana.call('/intake/start', invalid);
@@ -111,7 +111,7 @@ test('idle_close_and_export_keep_pending_and_unknown_visible on local D1',async 
   await mkdir(dir,{recursive:true});t.after(()=>rm(dir,{recursive:true,force:true}));
   const config=resolve(process.cwd(),'wrangler.jsonc');
   const ana=await customer();const start=await ana.call('/intake/start',startBody());
-  const complete=await ana.call('/intake/confirm',{episode_id:start.body.episode_id,transaction_id:'demo-tx-001',customer_confirmed:true,idempotency_key:crypto.randomUUID()});assert.equal(complete.status,201);
+  const complete=await ana.call('/intake/confirm',{episode_id:start.body.episode_id,transaction_id:'demo-tx-001',customer_confirmed:true,idempotency_key:crypto.randomUUID()});assert.equal(complete.status,201);await closeReport(complete.body.protocol);
   const incompleteStart=await ana.call('/intake/start',startBody());assert.equal((await ana.call('/intake/handoff',{episode_id:incompleteStart.body.episode_id,kind:'incomplete',idempotency_key:crypto.randomUUID()})).status,201);
   const open=await ana.call('/intake/start',startBody('pt'));assert.equal(open.status,201);
   let expired;

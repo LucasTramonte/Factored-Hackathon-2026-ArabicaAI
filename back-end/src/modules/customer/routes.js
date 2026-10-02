@@ -4,12 +4,12 @@
  */
 import identities from '../../config/identities.json' with { type: 'json' };
 import { fail, json, readJsonBody } from '../../http.js';
-import { readSession, startSession } from '../../auth/session.js';
-import { validateCaseRequest } from './validation.js';
+import { endSession, requireSession, startSession } from '../../auth/session.js';
+import { bearerClaims, verifyIdToken } from '../../auth/cognito.js';
+import { CUSTOMER_ID, validateCaseRequest } from './validation.js';
+import { encrypt } from '../../notify/email.js';
 
 const COMMITTED = new Map(identities.customers.map(c => [c.customer_id, c]));
-/** Dataset ids are short ASCII codes; anything else is rejected before it reaches D1. */
-const CUSTOMER_ID = /^[A-Za-z0-9-]{1,64}$/;
 const COHORT_LIMIT = 1000;
 const PAGE = 20;
 const NOT_CONFIRMED = 'Acceptance not confirmed; retry with the same idempotency key';
@@ -17,8 +17,10 @@ const NOT_CONFIRMED = 'Acceptance not confirmed; retry with the same idempotency
 /**
  * GET /demo/identities: the committed (mostly fictitious) identities, then the dataset cohort loaded in D1.
  * Cohort ids and names are never committed; a D1 row never overrides a committed identity.
+ * Both picker routes exist only when ``DEMO_PICKER=1`` (local development); production has no global customer listing.
  */
 export async function listIdentities(request, env, store) {
+  if (env.DEMO_PICKER !== '1') return fail(404, 'Not found');
   let cohort;
   try { cohort = await store.listDatasetIdentities(COHORT_LIMIT); } catch { return fail(503, 'Demo identities are unavailable'); }
   const items = identities.customers.map(({ customer_id, display_name }) => ({ customer_id, display_name, country: null }));
@@ -60,6 +62,7 @@ function contextCard(row) {
 
 /** POST /demo/session: start a simulated session for a committed identity or a loaded dataset customer. */
 export async function startCustomerSession(request, env, store) {
+  if (env.DEMO_PICKER !== '1') return fail(404, 'Not found');
   const body = await readJsonBody(request);
   if (body.error) return body.error;
   const customerId = body.value?.customer_id;
@@ -73,9 +76,36 @@ export async function startCustomerSession(request, env, store) {
     { 'Set-Cookie': await startSession(request, store, 'customer', customerId) });
 }
 
+const NOT_ENROLLED = 'This account is not enrolled in the demo';
+
+/**
+ * POST /auth/session: a customer session from a verified Cognito ID token in ``Authorization: Bearer``.
+ * Identity comes only from the verified claims; any body is ignored. The token is never logged, echoed or
+ * stored, and an unverified token never reaches the store. The email is stored only AES-GCM encrypted (for
+ * notifications), and only when ``EMAIL_KEY`` is valid; without it sign-in proceeds and nothing is stored.
+ */
+export async function startEmailSession(request, env, store, ctx, verify = verifyIdToken) {
+  const signedIn = await bearerClaims(request, env, verify);
+  if (signedIn.error) return signedIn.error;
+  const { claims } = signedIn;
+  const { customerId } = claims;
+  if (!claims.groups.includes('customer') || customerId === null || !await store.customerSource(customerId)) {
+    return fail(403, NOT_ENROLLED);
+  }
+  const card = contextCard(await store.findContextCard(customerId));
+  const emailEnc = await encrypt(claims.email, env).catch(() => null);
+  return json({ customer_id: customerId, mode: 'email_otp', context_card: card }, 200,
+    { 'Set-Cookie': await startSession(request, store, 'customer', customerId, emailEnc) });
+}
+
+/** POST /auth/logout: revoke the presented customer session; always 204, so it reveals nothing. */
+export async function logout(request, env, store) {
+  return new Response(null, { status: 204, headers: { 'Set-Cookie': await endSession(request, store, 'customer') } });
+}
+
 /** GET /transactions: the session customer's charges, newest first, one page. */
 export async function listTransactions(request, env, store) {
-  const current = await readSession(request, store, 'customer');
+  const current = await requireSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
   const rows = await store.listTransactions(current.customer_id, PAGE + 1);
   // Only committed fictitious identities show fictitious rows; everyone else is a dataset customer.
@@ -89,7 +119,7 @@ export async function listTransactions(request, env, store) {
  * content replays the receipt (200); different content is a conflict (409).
  */
 export async function createCase(request, env, store) {
-  const current = await readSession(request, store, 'customer');
+  const current = await requireSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
   const body = await readJsonBody(request);
   if (body.error) return body.error;

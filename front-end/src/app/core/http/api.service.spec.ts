@@ -27,6 +27,12 @@ describe('ApiService', () => {
     expect(get.body).toBeUndefined();
   });
 
+  it('merges extra headers into the request', async () => {
+    fetchSpy.and.returnValue(reply(200, {}));
+    await api.request('/auth/session', {}, { Authorization: 'Bearer a.b.c' });
+    expect(fetchSpy.calls.argsFor(0)[1].headers).toEqual({ 'Content-Type': 'application/json', Authorization: 'Bearer a.b.c' });
+  });
+
   it('keeps the status of every documented failure and never the server text', async () => {
     for (const status of [401, 404, 409, 413, 422, 503]) {
       fetchSpy.and.returnValue(reply(status, { detail: 'server text is not shown' }));
@@ -38,6 +44,24 @@ describe('ApiService', () => {
         expect((e as ApiError).status).toBe(status);
         expect((e as ApiError).message).not.toContain('server text');
       }
+    }
+  });
+
+  it('flags only the open-report 409, by its detail, and keeps no server text', async () => {
+    fetchSpy.and.returnValue(reply(409, { detail: 'This charge already has an open report' }));
+    const e = await api.request('/intake/confirm', {}).then(() => null, (x: unknown) => x) as ApiError;
+    expect(e.status).toBe(409);
+    expect(e.openReport).toBeTrue();
+    expect(e.message).not.toContain('open report');
+  });
+
+  it('leaves openReport false for any other 409 body, including one that is not JSON', async () => {
+    for (const response of [reply(409, { detail: 'Episode is no longer open' }), reply(409, {}),
+      Promise.resolve(new Response('not json', { status: 409 }))]) {
+      fetchSpy.and.returnValue(response);
+      const e = await api.request('/intake/confirm', {}).then(() => null, (x: unknown) => x) as ApiError;
+      expect(e.status).toBe(409);
+      expect(e.openReport).toBeFalse();
     }
   });
 

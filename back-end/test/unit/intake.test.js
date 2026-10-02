@@ -8,16 +8,14 @@ import { route } from '../../src/router.js';
 import { tokenHash } from '../../src/auth/session.js';
 import { assertContract } from '../support/contract.js';
 
-const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p',
-  ASSETS: { fetch: () => new Response('asset') } };
-const auth = 'Basic ' + Buffer.from('u:p').toString('base64');
+const env = { ASSETS: { fetch: () => new Response('asset') } };
 const token = 'a'.repeat(64);
 const body = { language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
   customer_statement: 'No reconozco este cargo.', idempotency_key: '0f8fad5b-d9cb-469f-a165-70867728950e' };
 
-function request(payload = body, { path = '/intake/start', method = 'POST', cookie = `demo_session=${token}`, authorization = auth } = {}) {
+function request(payload = body, { path = '/intake/start', method = 'POST', cookie = `demo_session=${token}` } = {}) {
   return new Request('https://d.example' + path, { method,
-    headers: { ...(authorization ? { Authorization: authorization } : {}), Cookie: cookie },
+    headers: { Cookie: cookie },
     ...(method === 'POST' ? { body: typeof payload === 'string' ? payload : JSON.stringify(payload) } : {}) });
 }
 
@@ -67,9 +65,9 @@ test('guided_start_is_owned_and_idempotent', async t => {
   assert.equal(db.prepare('SELECT count(*) AS n FROM intake_events').get().n, 1);
 });
 
-test('invalid starts, roles, expiry, gate, methods and paths never write intake rows', async t => {
+test('invalid starts, roles, expiry, methods and paths never write intake rows', async t => {
   const { db, store } = await setup(t);
-  const invalid = [null, [], '"text"', '{bad', { ...body, customer_id: 'bruno' }, { ...body, language: 'en' },
+  const invalid = [null, [], '"text"', '{bad', { ...body, customer_id: 'bruno' }, { ...body, language: 'fr' }, { ...body, language: 'EN' },
     { ...body, mode: 'ai' }, { ...body, report_type: 'balance' }, { ...body, idempotency_key: 'bad' },
     { ...body, customer_statement: 'short' }, { ...body, customer_statement: 'x'.repeat(2001) },
     { ...body, customer_statement: '\ud800'.repeat(10) }, { ...body, extra: true },
@@ -83,11 +81,9 @@ test('invalid starts, roles, expiry, gate, methods and paths never write intake 
   assert.equal((await route(request(), env, store)).status, 401);
   for (const method of ['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']) {
     assert.equal((await route(request(body, { method }), env, store)).status, 405);
-    assert.equal((await route(request(body, { method, authorization: null }), env, store)).status, 401);
   }
   for (const path of ['/intake', '/intake/', '/intake/unknown', '/intake/start/extra']) {
     assert.equal((await route(request(body, { path }), env, store)).status, 404);
-    assert.equal((await route(request(body, { path, authorization: null }), env, store)).status, 401);
   }
   assert.equal(db.prepare('SELECT count(*) AS n FROM intake_episodes').get().n, 0);
 });
@@ -128,10 +124,11 @@ test('Unicode code-point bounds and SQL-like statements remain data', async t =>
 });
 
 
-test('start contract rejects a case reference, language drift and extra identity fields', () => {
+test('start contract admits es, pt and en; rejects a case reference, other languages and extra identity fields', () => {
   const receipt = { episode_id: '11111111-2222-4333-8444-555555555555', state: 'selection_required', language: 'es', mode: 'guided', replayed: false };
   assertContract('intakeStart', receipt);
-  for (const invalid of [{ ...receipt, protocol: 'case-id' }, { ...receipt, language: 'en' },
+  assertContract('intakeStart', { ...receipt, language: 'en' });
+  for (const invalid of [{ ...receipt, protocol: 'case-id' }, { ...receipt, language: 'fr' },
     { ...receipt, customer_id: 'ana' }, { ...receipt, replayed: 'yes' }]) assert.throws(() => assertContract('intakeStart', invalid), /violated/);
 });
 

@@ -23,6 +23,7 @@ describe('LangService', () => {
     const keys = (l: 'es' | 'pt' | 'en') => { lang.set(l); return Object.keys(lang.t()).sort(); };
     expect(keys('pt')).toEqual(keys('es'));
     expect(keys('en')).toEqual(keys('es'));
+    lang.set('es'); // set() persists to localStorage: leaving 'en' would start the next spec's LangService in English
   });
 
   it('translates failures by status and never shows server text', () => {

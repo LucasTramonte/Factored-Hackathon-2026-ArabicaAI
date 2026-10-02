@@ -10,8 +10,8 @@ export function validateStartRequest(body) {
   if (body === null || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).sort().join() !== KEYS) {
     return invalid('Provide exactly the guided report fields');
   }
-  if (!['es', 'pt'].includes(body.language) || body.mode !== 'guided' || body.report_type !== 'unrecognized_charge') {
-    return invalid('Select an ES/PT guided unrecognized-charge report');
+  if (!['es', 'pt', 'en'].includes(body.language) || body.mode !== 'guided' || body.report_type !== 'unrecognized_charge') {
+    return invalid('Select an ES/PT/EN guided unrecognized-charge report');
   }
   const statement = checkText(body.customer_statement);
   if (statement.error) return statement;

@@ -17,7 +17,7 @@ test('observability is kept in the file so deploys never reset it', () => {
 test('only API and HTML document paths run the Worker first; bundles stay free', () => {
   const paths = config.assets.run_worker_first;
   assert.ok(Array.isArray(paths));
-  for (const p of ['/', '/index.html', '/agent', '/healthz', '/demo/*', '/transactions', '/cases', '/intake', '/intake/*', '/agent/*']) assert.ok(paths.includes(p), p);
+  for (const p of ['/', '/index.html', '/agent', '/healthz', '/demo/*', '/transactions', '/cases', '/intake', '/intake/*', '/agent/*', '/reports', '/reports/*']) assert.ok(paths.includes(p), p);
   assert.ok(!paths.some(p => p === '/*' || p.endsWith('.js') || p.endsWith('.css')));
 });
 
@@ -33,12 +33,12 @@ test('run_worker_first and the router agree: every API path runs the Worker, and
   for (const prefix of prefixes) assert.ok(API_PREFIXES.includes(prefix), `${prefix}* runs the Worker but is not an API prefix`);
 });
 
-test('look-alike paths outside the API namespaces reach the static assets, not the gated API', async () => {
+test('look-alike paths outside the API namespaces reach the static assets, not the API', async () => {
   const { route } = await import('../../src/router.js');
-  const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p', ASSETS: { fetch: () => new Response('asset') } };
-  for (const path of ['/intakeX', '/intakes', '/intake-foo', '/casesX', '/transactionsX']) {
+  const env = { ASSETS: { fetch: () => new Response('asset') } };
+  for (const path of ['/intakeX', '/intakes', '/intake-foo', '/casesX', '/transactionsX', '/reportsX']) {
     const response = await route(new Request('https://demo.example' + path), env, {});
     assert.equal(response.status, 200, path); assert.equal(await response.text(), 'asset', path);
   }
-  for (const path of ['/intake', '/intake/', '/intake/x']) assert.equal((await route(new Request('https://demo.example' + path), env, {})).status, 401, path);
+  for (const path of ['/intake', '/intake/', '/intake/x']) assert.equal((await route(new Request('https://demo.example' + path), env, {})).status, 404, path);
 });

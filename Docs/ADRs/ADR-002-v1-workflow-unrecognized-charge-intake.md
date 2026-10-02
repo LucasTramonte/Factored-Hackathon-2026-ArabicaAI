@@ -1,6 +1,6 @@
 # ADR-002 — V1 workflow: unrecognized-charge intake with human handoff
 
-- **Status:** Accepted (2026-09-29): Lucas Tramonte, Roberto Z and Manoella R agreed in the status PR
+- **Status:** Accepted (2026-09-29): Lucas Tramonte, Roberto Z and Manoella R agreed in the status PR. [ADR-008](ADR-008-english-report-language.md) (Proposed) proposes to supersede decision 3 for English.
 - **Date:** 2026-09-29
 - **Deciders:** Lucas Tramonte, Roberto Z, Manoella R
 - **Related:** [ADR-001](ADR-001-workflow-prioritization.md) (recommended a read-only inquiry as the primary path; this record narrows V1 to intake)
@@ -43,3 +43,4 @@ The data supports the choice and also limits what we can claim from it:
 
 - The live demo implements decisions 1–2. Its runtime is [ADR-003](ADR-003-intake-single-runtime-worker-d1.md) and its sizing is [ADR-004](ADR-004-intake-capacity-and-cost.md).
 - The authored ES/PT scenarios are in `Docs/intake/v1_scenarios.md` (PR #9), and the held-out and safety splits are in `evals/intake/cases.json` (PR #16).
+- **Urgency lane (2026-10-02, migration 0013).** A confirmed charge is `high` when it is at least a fixed amount per currency (MXN 10,000, COP 2,000,000, ARS 500,000, USD 500, BRL 2,500) or when, among the customer's most recent 21 served purchases (newest first), at least 5 others share its currency and it is above their p95 (nearest rank). The amounts are round policy values the team states, not values fitted to the data (DATA_QUALITY DF-024); a bank would set its own in `back-end/src/config/urgency.json`. MXN is listed although no served purchase uses it (DF-005); the served data has USD, COP and ARS (cohort) and BRL (fictitious charges). A high report heads the agent queue while open, and the receipt and the `received` email tell the customer to call their bank to block the card (a demo number). The service still never blocks a card (decision 3).

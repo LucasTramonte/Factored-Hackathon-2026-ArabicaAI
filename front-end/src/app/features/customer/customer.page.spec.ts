@@ -3,24 +3,33 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerPage, initialsOf } from './customer.page';
-import { LangService } from '../../shared/i18n/lang.service';
+import { LangService, errorText } from '../../shared/i18n/lang.service';
 import { CustomerService } from './customer.service';
-import { Identity, IntakeReceipt, IntakeStart, Transaction } from '../../shared/models/intake.model';
+import { CognitoService } from '../../core/auth/cognito.service';
+import { Identity, IntakeReceipt, IntakeStart, Report, Transaction } from '../../shared/models/intake.model';
 
 describe('CustomerPage', () => {
   let service: jasmine.SpyObj<CustomerService>;
   let page: CustomerPage;
+  let cognito: jasmine.SpyObj<CognitoService>;
   const tx: Transaction = { transaction_id: 'demo-tx-001', merchant_name: 'Mercado', occurred_at: null,
     source_occurred_at: '2026-02-26T13:21:51', amount: '125.50', currency: 'BRL' };
 
   beforeEach(async () => {
-    service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake'], { client: signal(''), card: signal(null), receipts: signal([]) });
+    service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
+      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate'], { client: signal(''), card: signal(null) });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null });
     service.transactions.and.resolveTo({ items: [tx], has_more: false, coverage: 'fictitious_demo_data_only' });
-    await TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] })
+    service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', context_card: null });
+    service.logout.and.resolveTo();
+    service.reports.and.resolveTo({ items: [], has_more: false });
+    cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
+    cognito.requestCode.and.resolveTo();
+    cognito.submitCode.and.resolveTo('id.token');
+    await TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service },
+      { provide: CognitoService, useValue: cognito }, provideRouter([])] })
       .compileComponents();
     page = TestBed.createComponent(CustomerPage).componentInstance;
   });
@@ -44,6 +53,31 @@ describe('CustomerPage', () => {
     await p.login();
     expect(p.step()).toBe('home');
     expect(p.discClass()).toBe('disc disc--home');
+  });
+
+  it('shows the promise from the first frame of the intro, not hidden or faded by any animation', () => {
+    const fixture = TestBed.createComponent(CustomerPage);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const el = root.querySelector<HTMLElement>('.intro .promise-line');
+    expect(el?.textContent?.trim()).toBe(fixture.componentInstance.t().promiseLine);
+    for (let n: HTMLElement | null = el; n && n !== root.parentElement; n = n.parentElement) {
+      const style = getComputedStyle(n);
+      expect(style.visibility).withContext(n.className).not.toBe('hidden');
+      expect(style.opacity).withContext(n.className).toBe('1');
+    }
+  });
+
+  it('puts the promise above the email field on sign-in', async () => {
+    const fixture = TestBed.createComponent(CustomerPage);
+    const p = fixture.componentInstance;
+    Object.defineProperty(p, 'demoPicker', { value: false });
+    p.start();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const promise = el.querySelector('.login-form .promise-line');
+    expect(promise?.textContent?.trim()).toBe(p.t().promiseLine);
+    expect(promise!.compareDocumentPosition(el.querySelector('#login-email')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('says on sign-in that it is simulated and shows only your own charges', async () => {
@@ -98,6 +132,162 @@ describe('CustomerPage', () => {
     expect(fixture.componentInstance.identity).toBe('demo-ana');
   });
 
+  describe('email sign-in', () => {
+    beforeEach(() => TestBed.inject(LangService).set('es')); // es has a report language; the chat specs rely on it
+    async function open(demoPicker: boolean) {
+      const fixture = TestBed.createComponent(CustomerPage);
+      const p = fixture.componentInstance;
+      Object.defineProperty(p, 'demoPicker', { value: demoPicker });
+      await p.ngOnInit();
+      p.start();
+      fixture.detectChanges();
+      return { fixture, p, el: fixture.nativeElement as HTMLElement };
+    }
+    async function toCode(p: CustomerPage) {
+      p.email = ' ana@example.com ';
+      await p.requestCode();
+    }
+
+    it('sends a code, shows where it went, and verifies into the home', async () => {
+      const { fixture, p, el } = await open(false);
+      expect(el.querySelector<HTMLInputElement>('input[type=email]')?.labels?.[0].textContent).toContain(p.t().emailLabel);
+      await toCode(p);
+      fixture.detectChanges();
+      expect(cognito.requestCode).toHaveBeenCalledWith('ana@example.com');
+      expect(el.querySelector('#code-sent')?.textContent).toContain('ana@example.com');
+      const code = el.querySelector<HTMLInputElement>('#login-code')!;
+      expect([code.inputMode, code.autocomplete, code.maxLength, code.pattern]).toEqual(['numeric', 'one-time-code', 8, '[0-9]*']);
+      p.code = '12345678';
+      await p.verify();
+      expect(cognito.submitCode).toHaveBeenCalledWith('ana@example.com', '12345678');
+      expect(service.signInWithToken).toHaveBeenCalledWith('id.token');
+      expect(p.client()).toBe('CLI-1');
+      expect(p.step()).toBe('home');
+    });
+
+    it('maps each failure to its own text and keeps the right step', async () => {
+      const { p } = await open(false);
+      const t = p.t();
+      cognito.requestCode.and.rejectWith(new ApiError(401));
+      await toCode(p);
+      expect([p.codeSent(), p.error()]).toEqual([false, t.errSendCode]);
+      cognito.requestCode.and.rejectWith(new ApiError(429));
+      await toCode(p);
+      expect(p.error()).toBe(t.errTooMany);
+      cognito.requestCode.and.resolveTo();
+      await toCode(p);
+      const cases: [jasmine.Spy, number, string][] = [[cognito.submitCode, 401, t.errCode], [service.signInWithToken, 403, t.errNotEnrolled],
+        [cognito.submitCode, 429, t.errTooMany], [cognito.submitCode, 0, t.err503], [service.signInWithToken, 503, t.err503]];
+      for (const [spy, status, text] of cases) {
+        cognito.submitCode.and.resolveTo('id.token');
+        service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp' });
+        spy.and.rejectWith(new ApiError(status));
+        if (!p.codeSent()) await toCode(p);
+        await p.verify();
+        // A Cognito failure keeps the code step; a Worker failure spent the code, so it is back to the email step.
+        expect([p.step(), p.codeSent(), p.error()]).withContext(String(status)).toEqual(['login', spy === cognito.submitCode, text]);
+      }
+    });
+
+    it('after Cognito accepts the code, a failed Worker exchange returns to the email step for a new code', async () => {
+      const real = new CognitoService();
+      cognito.requestCode.and.callFake(e => real.requestCode(e));
+      cognito.submitCode.and.callFake((e, c) => real.submitCode(e, c));
+      const fetchSpy = spyOn(globalThis, 'fetch');
+      const reply = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+      const { p } = await open(false);
+      for (const [status, text] of [[403, p.t().errNotEnrolled], [503, p.t().err503]] as const) {
+        fetchSpy.and.returnValues(reply({ ChallengeName: 'EMAIL_OTP', Session: 's' }), reply({ AuthenticationResult: { IdToken: 'id' } }));
+        service.signInWithToken.and.rejectWith(new ApiError(status));
+        await toCode(p);
+        await p.verify();
+        expect([p.step(), p.codeSent(), p.email, p.error()]).withContext(String(status)).toEqual(['login', false, ' ana@example.com ', text]);
+      }
+      expect(cognito.submitCode).toHaveBeenCalledTimes(2);
+    });
+
+    it('a failed logout after a refused renewal drops the open report so nothing goes out under the other cookie', async () => {
+      const { p } = await open(false);
+      await toCode(p);
+      await p.verify();
+      service.startIntake.and.resolveTo({ episode_id: 'e', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
+      p.chatStatement = 'No reconozco este cargo.';
+      await p.send();
+      p.step.set('login');
+      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-2', mode: 'email_otp' });
+      service.logout.and.rejectWith(new ApiError(0));
+      await toCode(p);
+      await p.verify();
+      expect([p.step(), p.client(), p.frozen(), p.chatStep(), p.error()]).toEqual(['login', '', null, 'describe', p.t().err503]);
+    });
+
+    it('refuses a renewal that signs in another customer and keeps the open report', async () => {
+      const { p } = await open(false);
+      await toCode(p);
+      await p.verify();
+      service.startIntake.and.resolveTo({ episode_id: 'e', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
+      p.chatStatement = 'No reconozco este cargo.';
+      await p.send();
+      expect(p.identityLocked()).toBeTrue();
+      p.step.set('login');
+      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-2', mode: 'email_otp' });
+      await toCode(p);
+      await p.verify();
+      expect([p.step(), p.client(), p.chatStep(), p.error()]).toEqual(['login', 'CLI-1', 'choose', p.t().errOtherCustomer]);
+      expect(service.logout).toHaveBeenCalledTimes(1);
+      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp' });
+      await toCode(p);
+      await p.verify();
+      expect([p.step(), p.chatStep()]).toEqual(['home', 'choose']);
+      expect(service.logout).toHaveBeenCalledTimes(1); // a matching renewal keeps its session
+    });
+
+    it('in production an email renewal resends the frozen start with the same key and body, with no reset', async () => {
+      const { fixture, p, el } = await open(false);
+      await toCode(p);
+      await p.verify();
+      p.openChat();
+      service.startIntake.and.returnValues(Promise.reject(new ApiError(401)),
+        Promise.resolve({ episode_id: 'e', state: 'selection_required', language: 'es', mode: 'guided', replayed: false }));
+      p.chatStatement = 'No reconozco este cargo.';
+      await p.send();
+      const frozen = p.frozen();
+      expect(frozen?.path).toBe('start');
+      expect([p.chatError(), service.signIn.calls.count()]).toEqual([p.t().err401, 0]); // no silent demo renewal
+      fixture.detectChanges();
+      [...el.querySelectorAll<HTMLButtonElement>('.chat button')].find(b => b.textContent!.trim() === p.t().renew)!.click();
+      expect(p.step()).toBe('login');
+      await toCode(p);
+      await p.verify();
+      expect([p.step(), p.client(), p.frozen()]).toEqual(['home', 'CLI-1', frozen]);
+      expect(p.log()).toContain({ from: 'me', text: 'No reconozco este cargo.' });
+      expect(service.logout).not.toHaveBeenCalled();
+      await p.run();
+      const [first, second] = service.startIntake.calls.allArgs().map(a => a[0]);
+      expect(second).toEqual(first);
+      expect(second.idempotency_key).toBe((frozen!.body as { idempotency_key: string }).idempotency_key);
+      expect(p.chatStep()).toBe('choose');
+    });
+
+    it('in production renders no picker, never lists identities, and says the sign-in is an email code', async () => {
+      const { p, el } = await open(false);
+      expect(service.identities).not.toHaveBeenCalled();
+      expect(el.querySelector('app-customer-picker')).toBeNull();
+      const note = el.querySelector('.login-form > p.ar-small')?.textContent ?? '';
+      expect(note).toContain(p.t().emailSignIn);
+      expect(note).not.toContain(p.t().synthetic);
+      expect(note).toContain(p.t().onlyYours);
+    });
+
+    it('in development keeps the picker under its own heading', async () => {
+      const { p, el } = await open(true);
+      expect(service.identities).toHaveBeenCalled();
+      expect(el.querySelector('app-customer-picker')).not.toBeNull();
+      expect(el.querySelector('#local-identities')?.textContent?.trim()).toBe(p.t().localIdentities);
+      expect(el.querySelector('input[type=email]')).not.toBeNull();
+    });
+  });
+
   it('takes initials only from words that start with a letter', () => {
     expect(initialsOf('Ana (demo)')).toBe('A');
     expect(initialsOf('Ángela Núñez (demo)')).toBe('ÁN');
@@ -108,7 +298,9 @@ describe('CustomerPage', () => {
     const started: IntakeStart = { episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false };
     const intakeReceipt: IntakeReceipt = { episode_id: started.episode_id, protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
       accepted_at: '2026-09-30T12:00:00Z', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'],
-      unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review' };
+      unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review', urgency: 'normal' };
+    const openReport: Report = { protocol: intakeReceipt.protocol, reference_short: 'AR-7K3M-2Q4X', kind: 'complete', status: 'received',
+      next_step: 'review_pending', accepted_at: intakeReceipt.accepted_at, transaction_id: 'demo-tx-001' };
     let lang: LangService;
 
     beforeEach(async () => {
@@ -142,35 +334,57 @@ describe('CustomerPage', () => {
       expect(page.intakeReceipt()).toBeNull();
     });
 
-    it('maps pt to pt, and in English asks for the report language with no default', async () => {
+    it('defaults the report language to the interface language, English included', async () => {
       lang.set('pt');
       expect(page.reportLang()).toBe('pt');
       lang.set('en');
-      expect(page.reportLang()).toBeNull();
+      expect(page.reportLang()).toBe('en');
       page.chatStatement = 'I do not recognize this charge.';
+      service.startIntake.and.resolveTo({ ...started, language: 'en' });
       await page.send();
-      expect(service.startIntake).not.toHaveBeenCalled();
-      expect(page.chatError()).toBe(lang.t().chatValidation);
-      page.chosenLang.set('pt');
+      expect(service.startIntake.calls.mostRecent().args[0].language).toBe('en');
+    });
+
+    /** The chat rendered, for the report-language choice. */
+    async function chat() {
+      const fixture = TestBed.createComponent(CustomerPage);
+      fixture.componentInstance.identity = 'demo-ana';
+      await fixture.componentInstance.login();
+      fixture.componentInstance.openChat();
+      fixture.detectChanges();
+      return { fixture, p: fixture.componentInstance };
+    }
+
+    it('in English lists Español, Português and English, English checked, and sends the one chosen', async () => {
+      lang.set('en');
+      const { fixture, p } = await chat();
+      const radios = [...fixture.nativeElement.querySelectorAll('input[name="report-lang"]')] as HTMLInputElement[];
+      expect(radios.map(r => [r.value, r.checked, r.parentElement!.textContent!.trim()])).toEqual(
+        [['es', false, 'Español'], ['pt', false, 'Português'], ['en', true, 'English']]);
+      expect(fixture.nativeElement.querySelector('.chat-lang legend').textContent).not.toContain('not supported');
+      radios[1].click();
+      fixture.detectChanges();
+      p.chatStatement = 'Não reconheço esta cobrança.';
       service.startIntake.and.resolveTo({ ...started, language: 'pt' });
-      await page.send();
+      await p.send();
       expect(service.startIntake.calls.mostRecent().args[0].language).toBe('pt');
     });
 
-    it('refuses a statement under 10 code points; the error names the language only when it is asked', async () => {
+    it('asks for the report language only in English, as before', async () => {
+      const { fixture } = await chat();
+      expect(fixture.nativeElement.querySelector('input[name="report-lang"]')).toBeNull();
+      lang.set('pt'); fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('input[name="report-lang"]')).toBeNull();
+    });
+
+    it('refuses a statement under 10 code points in every interface language', async () => {
       page.chatStatement = '😀😀😀😀😀';
-      await page.send();
+      for (const code of ['es', 'pt', 'en'] as const) {
+        lang.set(code);
+        await page.send();
+        expect(page.chatError()).toBe(lang.t().chatValidationShort);
+      }
       expect(service.startIntake).not.toHaveBeenCalled();
-      expect(page.chatError()).toBe(lang.t().chatValidationShort);
-      lang.set('pt');
-      await page.send();
-      expect(page.chatError()).toBe(lang.t().chatValidationShort);
-      lang.set('en');
-      await page.send();
-      expect(page.chatError()).toBe(lang.t().chatValidation);
-      page.chosenLang.set('pt');
-      await page.send();
-      expect(page.chatError()).toBe(lang.t().chatValidation);
     });
 
     it('freezes the start and resends the same body after a 503, even if the text changes', async () => {
@@ -302,6 +516,20 @@ describe('CustomerPage', () => {
       expect(page.chatError()).toBe(lang.t().err409);
     });
 
+    it('a confirm 409 for an open report on the charge says so in each language and ends the episode', async () => {
+      await startEpisode();
+      service.confirmIntake.and.rejectWith(new ApiError(409, undefined, true));
+      page.choice = 'demo-tx-001';
+      page.chatConfirmed = true;
+      await page.confirmCharge();
+      expect(page.chatStep()).toBe('ended');
+      expect(page.chatError()).toBe('Este cargo ya tiene un reporte abierto.');
+      for (const [code, text] of [['pt', 'Esta cobrança já tem um relato aberto.'], ['en', 'This charge already has an open report.']] as const) {
+        lang.set(code);
+        expect(lang.t().err409OpenReport).toBe(text);
+      }
+    });
+
     it('a 409 on finish ends the episode and offers a customer-initiated new report', async () => {
       await startEpisode();
       service.handoffIntake.and.rejectWith(new ApiError(409, 'x'));
@@ -327,6 +555,7 @@ describe('CustomerPage', () => {
     it('does not send twice while busy or after a receipt', async () => {
       await startEpisode();
       service.confirmIntake.and.resolveTo(intakeReceipt);
+      service.reports.and.resolveTo({ items: [openReport], has_more: false });
       page.choice = 'demo-tx-001';
       page.chatConfirmed = true;
       await Promise.all([page.confirmCharge(), page.confirmCharge()]);
@@ -334,7 +563,7 @@ describe('CustomerPage', () => {
       await page.cannotFind();
       expect(service.confirmIntake).toHaveBeenCalledTimes(1);
       expect(service.handoffIntake).not.toHaveBeenCalled();
-      expect(page.reportedState('demo-tx-001')).toBe('accepted');
+      expect(page.reportOf('demo-tx-001')?.status).toBe('received');
     });
 
     it('a charge row opens the chat with that charge preselected but unconfirmed', async () => {
@@ -345,24 +574,22 @@ describe('CustomerPage', () => {
       expect(page.chatConfirmed).toBeFalse();
     });
 
-    it('keeps every receipt of the session after a new report; an accepted charge is not offered again', async () => {
+    it('a charge with an open server report is not offered again after a new report; a closed one is', async () => {
       await startEpisode();
       service.confirmIntake.and.resolveTo(intakeReceipt);
+      service.reports.and.resolveTo({ items: [openReport], has_more: false });
       page.choice = 'demo-tx-001';
       page.chatConfirmed = true;
       await page.confirmCharge();
       page.newReport();
-      expect(page.receipts().length).toBe(1);
-      expect(page.reportedState('demo-tx-001')).toBe('accepted');
       expect(page.choosable()).toEqual([]);
       await startEpisode();
       page.choice = 'demo-tx-001';
       page.chatConfirmed = true;
       await page.confirmCharge();
       expect(service.confirmIntake).toHaveBeenCalledTimes(1);
-      service.handoffIntake.and.resolveTo({ ...intakeReceipt, protocol: '77777777-8888-4777-8666-555555555555', kind: 'incomplete' });
-      await review();
-      expect(page.receipts().map(r => [r.receipt.kind, r.transactionId])).toEqual([['complete', 'demo-tx-001'], ['incomplete', null]]);
+      page.reports.set({ items: [{ ...openReport, status: 'closed', next_step: 'closed_by_person' }], has_more: false });
+      expect(page.choosable()).toEqual([tx]);
     });
 
     it('marks a pending confirmation as not confirmed, never as accepted', async () => {
@@ -371,7 +598,8 @@ describe('CustomerPage', () => {
       page.choice = 'demo-tx-001';
       page.chatConfirmed = true;
       await page.confirmCharge();
-      expect(page.reportedState('demo-tx-001')).toBe('chipPending');
+      expect(page.pending('demo-tx-001')).toBeTrue();
+      expect(page.reportOf('demo-tx-001')).toBeUndefined();
     });
 
     it('answers FAQs from fixed translated text only', () => {
@@ -392,7 +620,7 @@ describe('CustomerPage', () => {
 
   describe('rendered home', () => {
     async function home(card: unknown = null) {
-      TestBed.inject(LangService).set('es'); // other specs may leave English selected, which asks for the report language
+      TestBed.inject(LangService).set('es'); // other specs may leave English selected, which shows the report-language choice
       service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: card as never });
       const fixture = TestBed.createComponent(CustomerPage);
       const p = fixture.componentInstance;
@@ -418,7 +646,7 @@ describe('CustomerPage', () => {
       expect(el.querySelector('.products')).toBeNull();
     });
 
-    it('while a request is pending the agent link is disabled, and receipts and the home survive in-app navigation', async () => {
+    it('while a request is pending the agent link is disabled, and the server reports and the home survive in-app navigation', async () => {
       const { fixture, p, el } = await home();
       service.startIntake.and.rejectWith(new ApiError(503, 'x'));
       p.chatStatement = 'No reconozco este cargo.';
@@ -430,10 +658,8 @@ describe('CustomerPage', () => {
       p.frozen.set(null);
       fixture.detectChanges();
       expect(link().getAttribute('href')).toBe('/agent');
-      service.receipts.set([{ receipt: { episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555',
-        kind: 'incomplete', accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'],
-        reference_short: 'AR-3F9Q-1Z7P', next_step_code: 'await_human_review' }, transactionId: null }]);
       fixture.destroy();
+      service.reports.and.resolveTo({ items: [report('incomplete', 'AR-3F9Q-1Z7P')], has_more: false });
       const again = TestBed.createComponent(CustomerPage);
       await again.componentInstance.ngOnInit();
       await again.whenStable();
@@ -444,9 +670,168 @@ describe('CustomerPage', () => {
       expect(html.querySelector('.ar-count')).withContext('no receipt badge on the agent link: it read as a queue count').toBeNull();
       const reports = [...html.querySelectorAll('.your-reports li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim());
       expect(reports.length).toBe(1);
-      expect(reports[0]).toContain(p.t().receiptIncomplete);
+      expect(reports[0]).toContain(p.t().kindIncomplete);
       expect(reports[0]).toContain('AR-3F9Q-1Z7P'); // the short code is the reference a customer keeps
       expect(reports[0]).not.toContain('99999999-8888-4777-8666-555555555555');
+    });
+
+    const report = (kind: 'complete' | 'incomplete' | 'technical', ref: string | null, at = '2026-10-01T12:00:00Z', protocol = '99999999-8888-4777-8666-555555555555') =>
+      ({ protocol, reference_short: ref, kind, status: 'received', next_step: 'review_pending', accepted_at: at, transaction_id: null } as const);
+    const rows = (el: HTMLElement) => [...el.querySelectorAll('.your-reports li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+
+    it('after sign-in lists the server reports in server order (newest first), with reference, kind and status as text', async () => {
+      service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB', '2026-10-02T09:30:00Z'),
+        report('technical', null, '2026-10-01T08:00:00Z', '11111111-2222-4333-8444-555555555555')], has_more: false });
+      const { el, p } = await home();
+      expect(service.reports).toHaveBeenCalled();
+      expect(el.querySelector('.your-reports h3')?.textContent?.trim()).toBe(p.t().yourReports);
+      const [first, second] = rows(el);
+      expect(first).toContain('AR-AAAA-BBBB');
+      expect(first).not.toContain(p.t().receiptComplete); // a complete report needs no kind word
+      expect(el.querySelectorAll('.your-reports .report-kind').length).toBe(1);
+      expect(first).toContain(p.t().statusReceived);
+      expect(first).toContain(p.t().nextStepReview);
+      expect(first).toContain('2026-10-02 09:30:00');
+      expect(second).toContain('11111111-2222-4333-8444-555555555555'); // no short code: the protocol
+      expect(second).toContain(p.t().kindTechnical);
+      expect(el.textContent).not.toContain(p.t().moreReports);
+    });
+
+    describe('after a fresh sign-in, each charge row follows its server report', () => {
+      const chip = (el: HTMLElement) => el.querySelector('.td-state .ar-chip')?.textContent?.replace(/\s+/g, ' ').trim();
+      const listed = (status: 'received' | 'in_review' | 'closed') => service.reports.and.resolveTo({ items: [{ ...report('complete', 'AR-AAAA-BBBB'),
+        status, next_step: status === 'received' ? 'review_pending' : status === 'in_review' ? 'being_reviewed' : 'closed_by_person', transaction_id: 'demo-tx-001' }], has_more: false });
+
+      it('an open report shows its status and reference and no Report button; the chat does not offer the charge', async () => {
+        listed('received');
+        const { el, p } = await home();
+        expect(chip(el)).toBe(p.t().statusReceived + ' AR-AAAA-BBBB');
+        expect(el.querySelector('.td-state .ar-btn')).toBeNull();
+        expect(p.choosable()).toEqual([]);
+      });
+
+      it('in review shows the in-review text', async () => {
+        listed('in_review');
+        const { el, p } = await home();
+        expect(chip(el)).toBe(p.t().inReview + ' AR-AAAA-BBBB');
+        expect(el.querySelector('.td-state .ar-btn')).toBeNull();
+      });
+
+      it('a closed report shows the closed chip and the Report button again', async () => {
+        listed('closed');
+        const { el, p } = await home();
+        expect(chip(el)).toBe(p.t().chipClosed + ' AR-AAAA-BBBB');
+        expect(el.querySelector('.td-state .ar-btn')).not.toBeNull();
+        expect(p.choosable()).toEqual([tx]);
+      });
+
+      for (const status of ['received', 'in_review', 'closed'] as const) {
+        it(`"Your reports" shows the ${status} status as the same chip term as the charge row`, async () => {
+          listed(status);
+          const { el, p } = await home();
+          const term = el.querySelector('.your-reports li .report-status .ar-chip')?.textContent?.trim();
+          expect(term).toBe(p.t()[p.statusChip[status]]);
+          expect(chip(el)).toBe(term + ' AR-AAAA-BBBB');
+        });
+      }
+
+      it('"Your reports" names the charge by merchant and amount', async () => {
+        listed('received');
+        const { el } = await home();
+        expect(rows(el)[0]).toContain('Mercado');
+        expect(rows(el)[0]).toContain('125.50 BRL');
+      });
+    });
+
+    it('shows the status a person set: received, in review, closed; never resolved', async () => {
+      service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB'),
+        { ...report('complete', 'AR-CCCC-DDDD', undefined, '11111111-2222-4333-8444-555555555555'), status: 'in_review', next_step: 'being_reviewed' },
+        { ...report('complete', 'AR-EEEE-FFFF', undefined, '22222222-2222-4333-8444-555555555555'), status: 'closed', next_step: 'closed_by_person' }], has_more: false });
+      const { el, p } = await home();
+      const [received, inReview, closed] = rows(el);
+      expect([...el.querySelectorAll('.your-reports .report-status .ar-chip')].map(c => c.textContent!.trim()))
+        .toEqual([p.t().statusReceived, p.t().inReview, p.t().chipClosed]);
+      expect(received).toContain(p.t().nextStepReview);
+      expect(inReview).toContain(p.t().statusInReview);
+      expect(inReview).not.toContain(p.t().nextStepReview);
+      expect(closed).toContain(p.t().statusClosed);
+      expect(closed).not.toContain(p.t().nextStepReview);
+      expect(el.querySelector('.your-reports')!.textContent).not.toMatch(/resuelt|resolvid|resolved/i);
+    });
+
+    it('reloads the reports after a receipt', async () => {
+      const { fixture, p, el } = await home();
+      expect(el.querySelector('.your-reports')).toBeNull();
+      service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', mode: 'guided' } as never);
+      p.chatStatement = 'No reconozco este cargo.';
+      await p.send();
+      const before = service.reports.calls.count();
+      service.reports.and.resolveTo({ items: [report('incomplete', 'AR-CCCC-DDDD')], has_more: false });
+      service.handoffIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555',
+        kind: 'incomplete', accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: [], reference_short: 'AR-CCCC-DDDD',
+        next_step_code: 'await_human_review', urgency: 'normal' });
+      await p.handoff();
+      fixture.detectChanges();
+      expect(service.reports.calls.count()).toBe(before + 1);
+      expect(rows(el)[0]).toContain('AR-CCCC-DDDD');
+    });
+
+    it('each report row has an update button labelled with its reference; each answer maps to its own text, focus stays', async () => {
+      service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB'),
+        report('technical', null, '2026-10-01T08:00:00Z', '11111111-2222-4333-8444-555555555555')], has_more: false });
+      const { fixture, el, p } = await home();
+      const buttons = [...el.querySelectorAll<HTMLButtonElement>('.your-reports li .update-btn')];
+      expect(buttons.map(b => b.textContent?.trim())).toEqual([p.t().updateMe, p.t().updateMe]);
+      expect(buttons.every(b => b.classList.contains('ar-btn-sm'))).withContext('the same compact size as the row Report button').toBeTrue();
+      expect(buttons.map(b => b.getAttribute('aria-label'))).toEqual([p.t().updateMe + ': AR-AAAA-BBBB', p.t().updateMe + ': 11111111-2222-4333-8444-555555555555']);
+      let finish!: () => void;
+      service.requestUpdate.and.returnValue(new Promise(done => { finish = () => done({ queued: true }); }));
+      await fixture.whenStable();
+      buttons[0].focus(); buttons[0].click(); fixture.detectChanges();
+      expect(service.requestUpdate).toHaveBeenCalledWith('99999999-8888-4777-8666-555555555555');
+      expect(buttons[0].disabled).toBeTrue();
+      finish(); await fixture.whenStable(); fixture.detectChanges();
+      expect(buttons[0].disabled).toBeFalse();
+      expect(document.activeElement).toBe(buttons[0]);
+      const status = (row = 0) => el.querySelectorAll('.your-reports [role="status"]')[row]?.textContent?.trim();
+      expect(status()).toBe(p.t().updateSent);
+      for (const [error, key] of [[429, 'updateRecent'], [409, 'updateNoEmail'], [503, null]] as const) {
+        service.requestUpdate.and.rejectWith(new ApiError(error, 'x'));
+        await p.requestUpdate('11111111-2222-4333-8444-555555555555'); fixture.detectChanges();
+        expect(status(0)).toBe('', 'the answer belongs to the other row');
+        expect(status(1)).toBe(key ? p.t()[key] : errorText(p.t(), new ApiError(error, 'x')));
+      }
+    });
+
+    it('one update request at a time: every row waits, and a second click sends nothing', async () => {
+      service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB'),
+        report('technical', null, '2026-10-01T08:00:00Z', '11111111-2222-4333-8444-555555555555')], has_more: false });
+      const { fixture, el, p } = await home();
+      let finish!: () => void;
+      service.requestUpdate.and.returnValue(new Promise(done => { finish = () => done({ queued: true }); }));
+      const first = p.requestUpdate('99999999-8888-4777-8666-555555555555'); fixture.detectChanges();
+      const buttons = [...el.querySelectorAll<HTMLButtonElement>('.your-reports li .update-btn')];
+      expect(buttons.map(b => b.disabled)).toEqual([true, true]);
+      await p.requestUpdate('11111111-2222-4333-8444-555555555555');
+      expect(service.requestUpdate).toHaveBeenCalledTimes(1);
+      finish(); await first; fixture.detectChanges();
+      expect(buttons.map(b => b.disabled)).toEqual([false, false]);
+    });
+
+    it('says when more reports exist than are listed', async () => {
+      service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB')], has_more: true });
+      const { el, p } = await home();
+      expect(el.textContent).toContain(p.t().moreReports);
+    });
+
+    it('a failed reports load shows one muted line and keeps the charges', async () => {
+      service.reports.and.rejectWith(new ApiError(503, 'x'));
+      const { el, p } = await home();
+      expect(p.step()).toBe('home');
+      expect(el.textContent).toContain(p.t().reportsFailed);
+      expect(el.querySelector('.your-reports')).toBeNull();
+      expect(el.querySelectorAll('.td-state .ar-btn').length).toBe(1);
+      expect(el.querySelector('.ar-alert')).toBeNull();
     });
 
     it('shows only the greeting, the charges and the report panel; no hero, stats, currency box or floating toggle', async () => {
@@ -455,10 +840,15 @@ describe('CustomerPage', () => {
       expect(el.querySelector('#cargos')).not.toBeNull();
       for (const gone of ['.ar-card', '.agent-panel', '.stats', '.chat-toggle', '.home-top', '.your-reports']) expect(el.querySelector(gone)).withContext(gone).toBeNull(); // the hero is .ar-card; there is no .hero class
       expect(el.querySelectorAll('.box').length).toBe(1);
-      expect(el.querySelectorAll('.report-btn').length).toBe(1);
+      expect(el.querySelectorAll('.td-state .ar-btn').length).toBe(1);
     });
 
-    it('says when more charges exist than are listed', async () => {
+    it('captions the charges with what every data source supports: recent purchases in the demo data, newest first, no risk scores', async () => {
+    const { el, p } = await home();
+    expect(el.querySelector('#cargos .box-body > .ar-caption')?.textContent?.trim()).toBe(p.t().windowCaption);
+  });
+
+  it('says when more charges exist than are listed', async () => {
       service.transactions.and.resolveTo({ items: [tx], has_more: true, coverage: 'fictitious_demo_data_only' });
       const { el, p } = await home();
       expect(el.textContent).toContain(p.t().moreCharges);
@@ -466,7 +856,7 @@ describe('CustomerPage', () => {
 
     it('points aria-controls at the chat only while it exists, and does not repeat the choose prompt as the legend', async () => {
       const { fixture, p, el } = await home();
-      const button = el.querySelector<HTMLButtonElement>('.report-btn')!;
+      const button = el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!;
       expect(button.hasAttribute('aria-controls')).toBeFalse();
       button.click();
       fixture.detectChanges();
@@ -491,7 +881,7 @@ describe('CustomerPage', () => {
 
     it('opens the chat from a charge row, links the textarea to its error, and focuses the receipt', async () => {
       const { fixture, p, el } = await home();
-      el.querySelector<HTMLButtonElement>('.report-btn')!.click();
+      el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!.click();
       fixture.detectChanges();
       expect(p.choice).toBe('demo-tx-001');
       p.chatStatement = 'short';
@@ -503,7 +893,7 @@ describe('CustomerPage', () => {
       expect(el.querySelector('#chat-error')?.textContent).toContain(p.t().chatValidationShort);
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
       service.confirmIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
-        accepted_at: 'x', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'], unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review' });
+        accepted_at: 'x', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'], unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review', urgency: 'normal' });
       p.chatStatement = 'No reconozco este cargo.';
       await p.send();
       fixture.detectChanges();
@@ -533,7 +923,7 @@ describe('CustomerPage', () => {
       p.openChat();
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
       service.handoffIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'incomplete',
-        accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review' });
+        accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review', urgency: 'normal' });
       p.chatStatement = 'No reconozco este cargo.';
       await p.send();
       p.cannotFind();
@@ -552,9 +942,49 @@ describe('CustomerPage', () => {
       expect(receiptEl.querySelector('.checks')?.textContent).toContain(p.t().none);
     });
 
-    it('gives every charge a Report button named after its merchant that opens the chat on it', async () => {
+    it('shows the call-your-bank line with the number as text only on a high-urgency receipt', async () => {
       const { fixture, p, el } = await home();
-      const button = el.querySelector<HTMLButtonElement>('.report-btn')!;
+      p.openChat();
+      const base: IntakeReceipt = { episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
+        accepted_at: 'x', replayed: false, urgency: 'normal', actions_taken: [], unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review' };
+      p.intakeReceipt.set(base);
+      fixture.detectChanges();
+      expect(el.querySelector('#intake-receipt')).not.toBeNull();
+      expect(el.querySelector('.urgent-line')).toBeNull();
+      p.intakeReceipt.set({ ...base, urgency: 'high', block_card_line: '+52 55 0000 0000 (demo)' });
+      fixture.detectChanges();
+      const line = el.querySelector('.urgent-line')!;
+      expect(line.textContent).toContain(p.t().blockCardCall);
+      expect(line.textContent).toContain(p.t().blockCardNote);
+      expect(line.querySelector('.ar-mono')?.textContent?.trim()).toBe('+52 55 0000 0000 (demo)');
+      expect(line.querySelector('a')).toBeNull();
+    });
+
+    it('after a receipt, another row\'s Report starts a new report on that charge; a frozen request still disables the rows', async () => {
+      const tx2: Transaction = { ...tx, transaction_id: 'demo-tx-002', merchant_name: 'Loja' };
+      service.transactions.and.resolveTo({ items: [tx, tx2], has_more: false, coverage: 'fictitious_demo_data_only' });
+      const { fixture, p, el } = await home();
+      p.openChat('demo-tx-001');
+      p.intakeReceipt.set({ episode_id: 'E', protocol: 'P', kind: 'complete', accepted_at: 'x', replayed: false, urgency: 'normal',
+        actions_taken: [], unresolved_questions: [], reference_short: 'AR-AAAA-BBBB', next_step_code: 'await_human_review' });
+      fixture.detectChanges();
+      const buttons = () => [...el.querySelectorAll<HTMLButtonElement>('.td-state .ar-btn')];
+      expect(buttons().map(b => b.disabled)).toEqual([false, false]);
+      buttons()[1].click();
+      fixture.detectChanges();
+      expect(p.chatStep()).toBe('describe');
+      expect(p.intakeReceipt()).toBeNull();
+      expect(p.choice).toBe('demo-tx-002');
+      expect(p.log()).toEqual([{ from: 'bot', key: 'chatHello' }]);
+      p.frozen.set({ path: 'start', body: {} as never });
+      fixture.detectChanges();
+      expect(buttons().map(b => b.disabled)).toEqual([true, true]);
+    });
+
+    it('gives every charge a compact Report button named after its merchant that opens the chat on it', async () => {
+      const { fixture, p, el } = await home();
+      const button = el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!;
+      expect(button.classList).toContain('ar-btn-sm');
       expect(button.textContent).toContain(p.t().reportCharge);
       expect(button.textContent).toContain('Mercado');
       button.click();

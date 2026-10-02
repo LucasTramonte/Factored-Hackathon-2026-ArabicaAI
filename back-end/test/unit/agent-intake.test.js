@@ -7,11 +7,10 @@ import { createStore } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
 import { tokenHash } from '../../src/auth/session.js';
 import { assertContract } from '../support/contract.js';
-const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p' };
-const auth = 'Basic ' + Buffer.from('u:p').toString('base64');
+const env = {};
 const customerToken = 'a'.repeat(64), agentToken = 'b'.repeat(64);
-const request = (path, { method = 'GET', cookie = `demo_agent_session=${agentToken}`, authorization = auth, body } = {}) =>
-  new Request('https://demo.example' + path, { method, headers: { Authorization: authorization, Cookie: cookie },
+const request = (path, { method = 'GET', cookie = `demo_agent_session=${agentToken}`, body } = {}) =>
+  new Request('https://demo.example' + path, { method, headers: { Cookie: cookie },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 async function setup(t) {
   const db = new DatabaseSync(':memory:'); t.after(() => db.close()); db.exec('PRAGMA foreign_keys=ON');
@@ -110,10 +109,10 @@ test('agent queue returns only the newest 50 acknowledged handoffs and reports m
   assert.deepEqual(tied.items.map(x=>x.protocol),db.prepare('SELECT handoff_id FROM intake_handoffs ORDER BY handoff_id LIMIT 50').all().map(x=>x.handoff_id));
 });
 
-test('agent intake paths enforce gate methods agent sessions and strict protocol query', async t => {
+test('agent intake paths enforce methods agent sessions and strict protocol query', async t => {
   const {db,store,get} = await setup(t);
   for(const path of ['/agent/intakes','/agent/intake-detail','/agent/intakes/extra','/agent/intake-detail/extra'])for(const method of ['GET','HEAD','POST','PUT','DELETE','OPTIONS']) {
-    assert.equal((await route(request(path,{method,authorization:''}),env,store)).status,401);
+    assert.equal((await route(request(path,{method,cookie:''}),env,store)).status,path.endsWith('/extra')?404:method==='GET'?401:405);
     const res = await route(request(path,{method}),env,store);
     assert.equal(res.status,path.endsWith('/extra')?404:method==='GET'?(path.endsWith('detail')?422:200):405);
     if(res.status===405)assert.equal(res.headers.get('Allow'),'GET');
@@ -134,4 +133,43 @@ test('history is bounded with explicit overflow and preserves persisted sequence
   const body=await (await get('/agent/intake-detail?protocol='+receipt.protocol)).json(); assertContract('agentIntakeDetail',body);
   assert.equal(body.history.length,100); assert.equal(body.history_has_more,true);
   assert.deepEqual(body.history.map(x=>x.seq),Array.from({length:100},(_,i)=>i));
+});
+
+test('POST /agent/intake-status validates its body, moves forward one step only and replays without writing', async t => {
+  const { db, store, finish } = await setup(t);
+  const { receipt } = await finish('incomplete');
+  db.prepare("INSERT INTO notification_targets VALUES('ana','iv.x',1)").run();
+  const post = (body, cookie) => route(request('/agent/intake-status', { method: 'POST', body, ...(cookie && { cookie }) }), env, store);
+  const p = receipt.protocol;
+  for (const body of [null, [], {}, { protocol: p }, { status: 'closed' }, { protocol: p, status: 'received' }, { protocol: p, status: 'resolved' },
+    { protocol: 'x', status: 'closed' }, { protocol: 42, status: 'closed' }, { protocol: p, status: 'closed', extra: 1 }, { protocol: p, status: 'closed', customer_id: 'ana' }])
+    assert.equal((await post(body)).status, 422, JSON.stringify(body));
+  for (const cookie of [`demo_session=${customerToken}`, `demo_agent_session=${'f'.repeat(64)}`, 'x=1'])
+    assert.equal((await post({ protocol: p, status: 'in_review' }, cookie)).status, 401);
+  assert.equal((await post({ protocol: crypto.randomUUID(), status: 'in_review' })).status, 404);
+  assert.equal((await post({ protocol: p, status: 'closed' })).status, 409, 'no skipping');
+  const first = await post({ protocol: p.toUpperCase(), status: 'in_review' });
+  assert.equal(first.status, 200); const body = await first.json(); assertContract('intakeTransition', body);
+  assert.equal(body.protocol, p); assert.equal(body.status, 'in_review');
+  const writes = db.prepare('SELECT total_changes() AS n').get().n;
+  const replay = await post({ protocol: p, status: 'in_review' });
+  assert.equal(replay.status, 200); assert.deepEqual(await replay.json(), body);
+  assert.equal(db.prepare('SELECT total_changes() AS n').get().n, writes, 'a replay writes nothing');
+  assert.equal((await post({ protocol: p, status: 'closed' })).status, 200);
+  assert.equal((await post({ protocol: p, status: 'in_review' })).status, 409, 'never backwards');
+  const history = db.prepare('SELECT status,agent_session_ref FROM handoff_status_history ORDER BY rowid').all();
+  const ref = (await tokenHash(agentToken)).slice(0, 12);
+  assert.deepEqual(history.map(r => ({ ...r })), [{ status: 'in_review', agent_session_ref: ref }, { status: 'closed', agent_session_ref: ref }]);
+  assert.deepEqual(db.prepare("SELECT template FROM email_outbox WHERE template<>'received' ORDER BY rowid").all().map(r => r.template), ['in_review', 'closed']);
+  assert.equal(db.prepare('SELECT status FROM intake_handoffs WHERE handoff_id=?').get(p).status, 'closed');
+});
+
+test('a reserved but unacknowledged handoff cannot be moved and gets no history', async t => {
+  const { db, store, finish } = await setup(t);
+  const pending = await finish('complete', { ...store, readIntakeReceipt: async () => { throw new Error('readback unavailable'); } });
+  assert.equal(pending.response.status, 503);
+  const protocol = db.prepare('SELECT complete_case_id FROM intake_handoffs WHERE episode_id=?').get(pending.episode_id).complete_case_id;
+  const res = await route(request('/agent/intake-status', { method: 'POST', body: { protocol, status: 'in_review' } }), env, store);
+  assert.equal(res.status, 404);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM handoff_status_history').get().n, 0);
 });

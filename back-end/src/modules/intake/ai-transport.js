@@ -16,7 +16,7 @@ export const EXTRACTION_TIMEOUT_MS = 10000;
 const GUIDED = 'guided-0.1';
 const EXTRACTION_KEYS = 'demand,injection,intent,invalid,stated_facts';
 /** A call that started but whose usage is unknown: counted, never reported as free. */
-const UNKNOWN = { llm_calls: 1, known_input_tokens: 0, known_output_tokens: 0, usage_unavailable_calls: 1 };
+export const UNKNOWN = { llm_calls: 1, known_input_tokens: 0, known_output_tokens: 0, usage_unavailable_calls: 1 };
 
 /** Event producers the exporter accepts: the guided flow and, once registered, the approved extractor. */
 export const producers = (extractor = APPROVED_EXTRACTOR) => new Set([GUIDED, ...(extractor ? [extractor.modelVersion] : [])]);

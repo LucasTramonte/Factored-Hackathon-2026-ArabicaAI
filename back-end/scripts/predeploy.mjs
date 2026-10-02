@@ -40,8 +40,19 @@ export function appliedFromWranglerJson(text) {
   return rows.map(r => r.name);
 }
 
+/**
+ * Throws when ``vars`` would ship a local-only variable: ``COGNITO_TEST_JWKS`` lets anyone holding its private key sign in,
+ * and ``DEMO_PICKER`` lets anyone become any customer or agent without signing in. Secrets are not checked here.
+ */
+export function assertNoLocalVars(config) {
+  for (const name of ['COGNITO_TEST_JWKS', 'DEMO_PICKER']) {
+    if (config.vars && name in config.vars) throw new Error(`wrangler.jsonc vars contain ${name} (local only); remove it before deploying`);
+  }
+}
+
 async function main() {
   const config = await readWranglerConfig();
+  assertNoLocalVars(config);
   const db = config.d1_databases?.[0];
   if (!db || db.database_id === '00000000-0000-0000-0000-000000000000') {
     throw new Error('Create the remote D1 database and replace the placeholder database_id before deployment');
@@ -52,7 +63,8 @@ async function main() {
   const pending = pendingMigrations(await localMigrations(), appliedFromWranglerJson(out));
   if (pending.length) {
     throw new Error(`Remote D1 is missing migrations ${pending.join(', ')}. After they pass the local tests, run `
-      + `npx wrangler d1 migrations apply ${db.database_name} --remote, then retry the deploy`);
+      + `npx wrangler d1 migrations apply ${db.database_name} --remote, then retry the deploy. `
+      + 'See CONTRIBUTING.md (migrations go remote before merge).');
   }
   console.log(`Remote D1 has all ${(await localMigrations()).length} migrations; deploying`);
 }

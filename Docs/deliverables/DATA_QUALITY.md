@@ -246,7 +246,7 @@ The [bronze profile findings](../../data_profiles/bronze_data_profile/bronze_pro
 - **Interpretation:** a USD 5,000 purchase doesn't exist in this data. So the data can't tell us where a "high-value" dispute starts, and it can't justify amount tiers fitted to it.
 - **Impact on the product:** CX feedback says a large unexpected charge causes panic and needs the fastest, surest path. Any tier must therefore be a stated policy, not a learned threshold.
 - **Handling:**
-  - The proposed policy, planned and not built: a charge that is high **relative to the customer's own purchases** (above their own p95), or above a fixed amount the bank sets, gets a priority handoff and a clear "call the bank to block your card" line.
+  - The stated policy, built in migration 0013 with round amounts that are not fitted (`back-end/src/config/urgency.json`, ADR-002 implementation notes): a charge that is high **relative to the customer's own purchases** (above the p95 of the customer's most recent 21 served purchases, newest first, with at least 5 in its currency), or above a fixed amount the bank sets, gets a priority handoff and a clear "call the bank to block your card" line.
   - The assistant never blocks a card itself (ADR-002).
   - The amounts above are USD (`amount_usd`); for Colombia and Argentina they are FX-derived and keep their estimated flag (DF-015).
 

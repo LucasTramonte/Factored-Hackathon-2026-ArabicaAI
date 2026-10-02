@@ -3,13 +3,15 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { formatSourceTime } from '../../shared/format/source-time.util';
-import { Lang, LangService, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
+import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
-import { Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
-  Transaction } from '../../shared/models/intake.model';
+import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
+  Report, ReportList, Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
+import { CognitoService } from '../../core/auth/cognito.service';
+import { demoPicker } from '../../core/auth/cognito.config';
 
 /**
  * The customer flow as one connected screen: intro, sign-in, home. The disc is a single element that
@@ -29,10 +31,6 @@ const STATEMENT_MAX = 2000;
 export type ChatLine = { from: 'bot' | 'me'; key: keyof Strings } | { from: 'me'; text: string };
 type Frozen = { path: 'start'; body: IntakeStartBody } | { path: 'confirm'; body: IntakeConfirmBody } | { path: 'handoff'; body: IntakeHandoffBody };
 
-/** es and pt map to themselves; English has no report language, so the chat asks (no default). */
-export function intakeLanguage(ui: Lang): IntakeLang | null {
-  return ui === 'en' ? null : ui;
-}
 /** FAQ question → fixed answer. Only the dispute process; nothing is answered from free text. */
 export const FAQ = { faqNextQ: 'faqNextA', faqTimeQ: 'faqTimeA', faqMissingQ: 'faqMissingA' } as const;
 /** Receipt title per server-decided kind. */
@@ -46,14 +44,25 @@ const RECEIPT_TITLE = { complete: 'receiptComplete', incomplete: 'receiptIncompl
 })
 export class CustomerPage implements OnInit, OnDestroy {
   private readonly service = inject(CustomerService);
+  private readonly cognito = inject(CognitoService);
+  /** Local demo identities under the email form; development builds only. */
+  readonly demoPicker = demoPicker;
+  /** The email one-time code was sent: the code field replaces the email field. */
+  readonly codeSent = signal(false);
+  email = '';
+  code = '';
   readonly lang = inject(LangService);
   readonly t = this.lang.t;
   readonly busy = signal(false);
   readonly error = signal('');
   readonly client = this.service.client;
   readonly card = this.service.card;
-  /** Every receipt from this tab's session, newest last; kept across new reports and in-app navigation. */
-  readonly receipts = this.service.receipts;
+  /** "Your reports" from GET /reports, so it survives the tab; null until loaded. */
+  readonly reports = signal<ReportList | null>(null);
+  readonly reportsFailed = signal(false);
+  /** The report whose update request is in flight (one at a time: every row's button waits), and the last answer shown under its row. */
+  readonly updating = signal<string | null>(null);
+  readonly updateNote = signal<{ protocol: string; text: string } | null>(null);
   readonly transactions = signal<Transaction[]>([]);
   readonly hasMore = signal(false);
   readonly identities = signal<Identity[]>([]);
@@ -61,9 +70,10 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly identitiesLoading = signal(false);
   readonly chatOpen = signal(false);
   readonly chosenLang = signal<IntakeLang | null>(null);
-  readonly reportLang = computed(() => this.chosenLang() ?? intakeLanguage(this.lang.lang()));
-  /** The report-language choice is shown when the interface has no report language, and stays once the customer has chosen. */
-  readonly askLang = computed(() => !this.reportLang() || this.chosenLang() !== null);
+  /** The customer's choice, else the interface language: every interface language is a report language (ADR-008). */
+  readonly reportLang = computed<IntakeLang>(() => this.chosenLang() ?? this.lang.lang());
+  /** The report-language choice is shown in an English interface, as before, and stays once the customer has chosen. */
+  readonly askLang = computed(() => this.lang.lang() === 'en' || this.chosenLang() !== null);
   readonly episode = signal<IntakeStart | null>(null);
   readonly frozen = signal<Frozen | null>(null);
   readonly intakeReceipt = signal<IntakeReceipt | null>(null);
@@ -77,9 +87,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly chatStep = computed<ChatStep>(() => this.intakeReceipt() ? 'receipt' : this.ended() ? 'ended' : !this.episode() ? 'describe' : this.asking() ? 'details' : 'choose');
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
-  readonly receiptTitleKey = RECEIPT_TITLE;
-  /** Charges already accepted in this session are not offered again. */
-  readonly choosable = computed(() => this.transactions().filter(tx => !this.receipts().some(r => r.receipt.kind === 'complete' && r.transactionId === tx.transaction_id)));
+  /** A charge whose newest server report is still open is not offered again (the server refuses it with 409). */
+  readonly choosable = computed(() => this.transactions().filter(tx => (this.reportOf(tx.transaction_id)?.status ?? 'closed') === 'closed'));
+  readonly statusChip = STATUS_CHIP;
   /** Locked while a request is frozen or a guided report is open: renewing must keep the same customer. */
   readonly identityLocked = computed(() => this.frozen() !== null || this.chatStep() === 'choose' || this.chatStep() === 'details');
   readonly step = signal<Step>('intro');
@@ -124,11 +134,12 @@ export class CustomerPage implements OnInit, OnDestroy {
   constructor() {
     // Move focus to the receipt, the choose step (it replaces the focused Send button), the details field (it replaces the
     // focused "can't find" button) and the chat heading when each appears; the heading is last, so opening the panel focuses it.
-    for (const name of ['intakeReceiptEl', 'chooseStep', 'detailsField', 'chatPanel'] as const) {
+    for (const name of ['codeField', 'intakeReceiptEl', 'chooseStep', 'detailsField', 'chatPanel'] as const) {
       const el: Signal<ElementRef<HTMLElement> | undefined> = this[name];
       effect(() => el()?.nativeElement.focus());
     }
   }
+  private readonly codeField = viewChild<ElementRef<HTMLElement>>('codeField');
   private readonly intakeReceiptEl = viewChild<ElementRef<HTMLElement>>('intakeReceiptEl');
   private readonly chatPanel = viewChild<ElementRef<HTMLElement>>('chatPanel');
   /** The control that opened the panel (a charge row's Report button), so closing can return focus to it. */
@@ -149,6 +160,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     // Outside the zone so the app (and tests) can be stable while it waits; the signal still schedules the render.
     this.introTimer = this.zone.runOutsideAngular(() => setTimeout(() => this.introDone.set(true), 6800)); // must outlast the intro word animation delays in styles.css
     if (this.client()) void this.resume();
+    if (!this.demoPicker) return;
     this.identitiesLoading.set(true);
     try {
       this.identities.set(await this.service.identities());
@@ -164,6 +176,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     clearTimeout(this.bootTimer);
     clearTimeout(this.introTimer);
     if (this.narrowQuery) this.narrowQuery.onchange = null;
+    this.cognito.forget();
   }
 
   start(): void {
@@ -176,29 +189,113 @@ export class CustomerPage implements OnInit, OnDestroy {
     return checkText(this.t(), code);
   }
 
-  /** Sign in; while a request is pending, re-authenticate as the same identity. */
-  async login(): Promise<void> {
+  /** Local demo sign-in; while a request is pending, re-authenticate as the same identity. */
+  login(): Promise<void> {
+    const identity = this.identityLocked() ? this.client() : this.identity;
+    return this.enter(async () => ({ ...await this.service.signIn(identity), customer_id: identity }), e => this.fail(e));
+  }
+
+  /** Email the one-time code. A 401 reads as "could not send", so the UI never says whether the address exists. */
+  async requestCode(): Promise<void> {
     if (this.busy()) return;
     this.busy.set(true);
     this.error.set('');
-    const identity = this.identityLocked() ? this.client() : this.identity;
-    if (!this.identityLocked() && identity !== this.client()) this.reset();
     try {
-      this.card.set((await this.service.signIn(identity))?.context_card ?? null);
-      this.client.set(identity);
-      await this.loadTransactions();
-      this.step.set('home');
+      await this.cognito.requestCode(this.email.trim());
+      this.codeSent.set(true);
     } catch (e) {
-      this.fail(e);
+      this.error.set(this.signInError(e, 'errSendCode'));
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /**
+   * Code → Cognito ID token → Worker session, then the same home path as the demo sign-in. Once Cognito accepts the
+   * code it is spent, so a failed Worker exchange goes back to the email step (email kept) to request a new one.
+   */
+  verify(): Promise<void> {
+    let spent = false;
+    return this.enter(async () => {
+      const token = await this.cognito.submitCode(this.email.trim(), this.code.trim());
+      spent = true;
+      return this.service.signInWithToken(token);
+    }, e => {
+      if (spent) this.backToEmail();
+      this.error.set(this.signInError(e, spent ? 'errOther' : 'errCode'));
+    });
+  }
+
+  /** "Use another email". */
+  anotherEmail(): void {
+    this.error.set('');
+    this.backToEmail();
+  }
+
+  /** The chat's Renew: the demo re-signs the same identity; email sign-in needs a new code from the login step. */
+  renew(): Promise<void> | void {
+    return this.demoPicker ? this.login() : this.step.set('login');
+  }
+
+  /** Back to the email field (focused); the pending challenge is forgotten. */
+  private backToEmail(): void {
+    this.cognito.forget();
+    this.codeSent.set(false);
+    this.code = '';
+    afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('#login-email')?.focus(), { injector: this.injector });
+  }
+
+  /**
+   * Start a session and go home. While a report is open (``identityLocked``) a different customer is refused and
+   * nothing changes; otherwise a new customer starts from a clean state.
+   */
+  private async enter(session: () => Promise<CustomerSession>, onError: (e: unknown) => void): Promise<void> {
+    if (this.busy()) return;
+    this.busy.set(true);
+    this.error.set('');
+    try {
+      const s = await session();
+      if (this.identityLocked() && s.customer_id !== this.client()) {
+        // That sign-in set the other customer's cookie: drop it before anything else can be sent with it. If that
+        // fails the cookie may remain, so the open report is dropped too and nothing can go out under it.
+        this.backToEmail();
+        try {
+          await this.service.logout();
+        } catch (e) {
+          this.reset();
+          this.fail(e);
+          return;
+        }
+        this.error.set(this.t().errOtherCustomer);
+        return;
+      }
+      if (s.customer_id !== this.client()) this.reset();
+      this.card.set(s.context_card ?? null);
+      this.client.set(s.customer_id);
+      this.codeSent.set(false);
+      this.code = '';
+      await this.loadTransactions();
+      await this.loadReports();
+      this.step.set('home');
+    } catch (e) {
+      onError(e);
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  /** Sign-in failures: 401 gets the step's own vague text, 403 not enrolled, 429 wait; the rest the generic text. */
+  private signInError(e: unknown, on401: keyof Strings): string {
+    const status = e instanceof ApiError ? e.status : -1;
+    const key = status === 401 ? on401 : status === 403 ? 'errNotEnrolled' : status === 429 ? 'errTooMany' : null;
+    return key ? this.t()[key] : errorText(this.t(), e);
   }
 
   /** Back from another in-app view in this tab: show the same customer's home again; the cookie still decides access. */
   private async resume(): Promise<void> {
     this.booted.set(true);
     this.step.set('home');
+    void this.loadReports();
     try {
       await this.loadTransactions();
     } catch (e) {
@@ -212,9 +309,45 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.hasMore.set(list.has_more);
   }
 
-  /** Open the chat; from a charge row, that charge is preselected (the customer still confirms it). */
+  /** Never throws: a failed load leaves the home usable with one muted line. */
+  private async loadReports(): Promise<void> {
+    try {
+      this.reports.set(await this.service.reports());
+      this.reportsFailed.set(false);
+    } catch {
+      this.reportsFailed.set(true);
+    }
+  }
+
+  /** "Email me an update" on a report row; the button keeps focus and the answer is announced under the row. */
+  async requestUpdate(protocol: string): Promise<void> {
+    if (this.updating()) return;
+    this.updating.set(protocol);
+    this.updateNote.set(null); // cleared while the request runs, so the same answer is announced again
+    let text: string;
+    try {
+      await this.service.requestUpdate(protocol);
+      text = this.t().updateSent;
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : -1;
+      text = status === 429 ? this.t().updateRecent : status === 409 ? this.t().updateNoEmail : errorText(this.t(), e);
+    } finally {
+      this.updating.set(null);
+    }
+    this.updateNote.set({ protocol, text });
+  }
+
+  /**
+   * Open the chat; from a charge row, that charge is preselected (the customer still confirms it). A row's Report on a
+   * finished chat (receipt or ended) starts a new report on that charge; nothing changes while a request is frozen.
+   */
   openChat(transactionId?: string): void {
     this.opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
+    const restart = !!transactionId && !this.busy() && !this.frozen() && (this.chatStep() === 'receipt' || this.chatStep() === 'ended');
+    if (restart) {
+      this.clearChat();
+      this.chatPanel()?.nativeElement.focus(); // the panel stays open, so the heading would not take focus on its own
+    }
     this.chatOpen.set(true);
     if (transactionId && !this.frozen() && this.chatStep() !== 'receipt' && this.chatStep() !== 'ended') {
       this.choice = transactionId;
@@ -227,11 +360,21 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
-  /** The row chip: accepted in this session, or a confirmation whose acceptance is not yet known. */
-  reportedState(transactionId: string): 'accepted' | 'chipPending' | null {
+  /** A confirmation of this charge whose acceptance is not yet known. */
+  pending(transactionId: string): boolean {
     const frozen = this.frozen();
-    if (frozen?.path === 'confirm' && frozen.body.transaction_id === transactionId) return 'chipPending';
-    return this.receipts().some(r => r.receipt.kind === 'complete' && r.transactionId === transactionId) ? 'accepted' : null;
+    return frozen?.path === 'confirm' && frozen.body.transaction_id === transactionId;
+  }
+
+  /** The charge's newest report from the server list (items are newest first): the only source of a row's report state. */
+  // ponytail: sees only the 20 newest reports; an older open report falls back to the server's 409. Upgrade: a per-charge lookup.
+  reportOf(transactionId: string): Report | undefined {
+    return this.reports()?.items.find(r => r.transaction_id === transactionId);
+  }
+
+  /** The charge a report names, when it is among the loaded charges. */
+  chargeOf(transactionId: string | null): Transaction | undefined {
+    return transactionId ? this.transactions().find(tx => tx.transaction_id === transactionId) : undefined;
   }
 
   /** Start the guided report: statement and report language only; no reference comes back. */
@@ -240,8 +383,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     if (!this.frozen()) {
       const statement = this.chatStatement.trim();
       const language = this.reportLang();
-      if (!language || [...statement].length < 10) {
-        this.chatError.set(this.askLang() ? this.t().chatValidation : this.t().chatValidationShort);
+      if ([...statement].length < 10) {
+        this.chatError.set(this.t().chatValidationShort);
         return;
       }
       this.frozen.set({ path: 'start', body: { customer_statement: statement, idempotency_key: crypto.randomUUID(), language,
@@ -335,7 +478,8 @@ export class CustomerPage implements OnInit, OnDestroy {
       try {
         result = await this.call(frozen);
       } catch (e) {
-        if (!(e instanceof ApiError && e.status === 401)) throw e;
+        // Email sign-in can't renew silently (it needs a new code): the 401 stays for the manual Renew.
+        if (!(e instanceof ApiError && e.status === 401) || !this.demoPicker) throw e;
         try {
           this.card.set((await this.service.signIn(this.client()))?.context_card ?? null);
         } catch (renewal) {
@@ -352,7 +496,7 @@ export class CustomerPage implements OnInit, OnDestroy {
         this.log.update(l => [...l, { from: 'bot', key: 'chatChoose' }]);
       } else {
         this.intakeReceipt.set(result as IntakeReceipt);
-        this.receipts.update(list => [...list, { receipt: result as IntakeReceipt, transactionId: frozen.path === 'confirm' ? frozen.body.transaction_id : null }]);
+        await this.loadReports();
       }
     } catch (e) {
       if (e instanceof ApiError && DEFINITIVE.has(e.status)) {
@@ -362,7 +506,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       // A finish 409 means the report is already submitted or closed: say so, and offer a new report.
       const finish409 = frozen.path !== 'start' && e instanceof ApiError && e.status === 409;
       if (finish409) this.ended.set(true);
-      this.chatError.set(finish409 ? this.t().err409Finish : errorText(this.t(), e));
+      this.chatError.set(finish409 ? this.t()[(e as ApiError).openReport ? 'err409OpenReport' : 'err409Finish'] : errorText(this.t(), e));
     } finally {
       this.busy.set(false);
     }
@@ -381,7 +525,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.transactions.set([]);
     this.hasMore.set(false);
     this.card.set(null);
-    this.receipts.set([]);
+    this.reports.set(null);
+    this.reportsFailed.set(false);
     this.chosenLang.set(null);
     this.clearChat();
   }

@@ -13,6 +13,7 @@ import statistics
 
 VERSIONS = ('1', '2')
 BASE = {'event', 'version', 'case_id', 'ts', 'seq', 'session_ref', 'language', 'model_version'}
+LANGUAGES = ('es', 'pt', 'en')  # en is additional (ADR-008); the frozen evaluation set is es/pt only.
 USAGE = ('duration_ms', 'llm_calls', 'input_tokens', 'output_tokens', 'tool_calls')
 TOKENS = ('input_tokens', 'output_tokens')
 V2_USAGE = ('known_input_tokens', 'known_output_tokens', 'usage_unavailable_calls')
@@ -54,7 +55,7 @@ def _check_event(e):
         raise ValueError(f'Unsupported event version: {e["version"]}')
     if type(e['seq']) is not int or e['seq'] < 0:
         raise ValueError(f'{name}.seq must be a non-negative integer')
-    if e['language'] not in ('es', 'pt'):
+    if e['language'] not in LANGUAGES:
         raise ValueError(f'Unsupported language: {e["language"]}')
     if not isinstance(e['ts'], str) or not TS.fullmatch(e['ts']):
         raise ValueError(f'ts must be millisecond UTC like 2026-09-29T14:00:00.000Z, got {e["ts"]!r}')
@@ -154,7 +155,7 @@ def _summary(episodes):
 
 
 def summarize(events):
-    """Return episode KPIs for 'all', 'es' and 'pt' from a list of event dicts; unsafe is a gate, not a rate."""
+    """Return episode KPIs for 'all', 'es', 'pt' and 'en' from a list of event dicts; unsafe is a gate, not a rate."""
     for e in events:
         _check_event(e)
     groups = {}
@@ -163,7 +164,7 @@ def summarize(events):
     for case_id, seq in groups.items():
         _check_episode(case_id, seq)
     return {label: _summary([seq for seq in groups.values() if label == 'all' or seq[0]['language'] == label])
-            for label in ('all', 'es', 'pt')}
+            for label in ('all', *LANGUAGES)}
 
 
 def main():

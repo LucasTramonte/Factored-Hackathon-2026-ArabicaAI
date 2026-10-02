@@ -15,21 +15,21 @@ The service does not decide fraud, issue refunds or authenticate bank customers.
 | Path | Responsibility |
 |---|---|
 | `src/index.js` | Entry point. It turns any unexpected error into a generic 503. It adds D1 counters only when `DEMO_EXPOSE_DB_METRICS=1`, which is set in local tests only. |
-| `src/router.js` | Exact route table. The access gate runs before method checks and also covers the HTML documents (`/`, `/index.html`, `/agent`). Other methods on API paths get 405, unknown API paths get 404. Hashed bundles are served without the Worker. |
+| `src/router.js` | Exact route table. There is no team gate: every API route relies on its handler's session check (customer or agent), behind the per-IP limit. Other methods on API paths get 405, unknown API paths get 404. Hashed bundles are served without the Worker. |
 | `src/http.js` | JSON responses, cookies, and body parsing capped at 16 KB. |
-| `src/auth/access-gate.js` | Basic gate for API routes, second to Cloudflare Access. It fails closed when not configured. |
+| `src/auth/cognito.js` | Verifies Cognito ID tokens; `bearerClaims` is shared by customer and agent sign-in (422/401/503). |
 | `src/auth/session.js` | Random 256-bit tokens. Only their SHA-256 is stored, and customer and agent sessions are kept separate. |
 | `src/modules/customer/` | Login, own charges, and case creation with validation. |
 | `src/modules/intake/` | Guided intake: start, confirm and incomplete handoff, with strict validation. No free-text classification. |
-| `src/modules/agent/` | Agent session, the read-only case view, and the read-only intake queue and detail. |
+| `src/modules/agent/` | Agent session, the read-only case view, the intake queue and detail, and the received → in review → closed steps. |
 | `src/store/d1.js` | Every SQL statement. This is the only module to replace if the store changes. Multi-statement writes run as one atomic `db.batch()`. |
 | `src/config/identities.json` | Committed demo identities (fictitious, plus the one-day slice's customer), shared with the Gold slice. Dataset cohort customers are listed from D1 instead. |
-| `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. 0001–0007 are applied to local and remote D1 (0006: customer source and country; 0007: the `seed_loads` load log). |
+| `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. Remote D1 holds 0001–0008 (0006: customer source and country; 0007: the `seed_loads` load log; 0008: the short reference). 0009–0013 (notifications, review status, one open report per charge, auth audit, urgency) come with PRs #60 to #66 and go to remote D1 before each merges. |
 | `scripts/intake-store.mjs` | Local D1 binding for the operator scripts, through Wrangler's `getPlatformProxy`. It uses the store in `src/store/d1.js`, so the scripts contain no SQL. |
 | `scripts/close-idle-intakes.mjs`, `scripts/export-intake-events.mjs` | Manual operator scripts: bounded idle closure and the privacy-checked event export (below). |
 | `scripts/reset-demo-activity.sql` | Deletes demo activity in foreign-key order and keeps the seed (below). |
 | `seeds/seed_fictitious.sql` | Fictitious identities and charges. Rerunning it is a no-op, and drift makes it fail. |
-| `test/unit/` | Pure-module tests: validation, gate, sessions, failure injection, routing, the contract validator. |
+| `test/unit/` | Pure-module tests: validation, sign-in, sessions, failure injection, routing, the contract validator. |
 | `test/integration/` | Tests against local D1: main flow, adversarial matrix, guided intake, agent intake views, operator scripts and D1 budgets. All JSON is checked against `front-end/contracts/`. `run-local.mjs` runs `budget.test.js` last, in its own test-runner call, so its fixtures can't affect the other suites. |
 
 ## Run and test locally
@@ -51,7 +51,7 @@ CI sets `INTAKE_PYTHON: python`.
 
 If you applied an earlier, pre-merge version of migration 0004 to your local D1, recreate the database: delete `back-end/.wrangler/state`, then reapply the migrations and seeds. The final 0004 dropped two indexes and added CHECK constraints before merge. Local state is ignored and disposable.
 
-To browse locally, create `back-end/.dev.vars` (ignored by Git) with `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD`. Then, from `back-end/`:
+To browse locally, create `back-end/.dev.vars` (ignored by Git) with `DEMO_PICKER="1"` for the demo identity picker (`/demo/identities`, `/demo/session`) and the one-click agent session (`POST /demo/agent-session` without `Authorization`); without it the picker routes answer 404 and the agent session needs a Cognito token. `DEMO_PICKER` is local only and never set in production, where customers and agents sign in with their email code. Then, from `back-end/`:
 
 ```bash
 npx wrangler d1 migrations apply arabica-intake-demo --local
@@ -62,24 +62,29 @@ npx wrangler dev --local
 
 ## API routes
 
-Every route except `GET /healthz` needs the team gate (HTTP Basic, below Cloudflare Access). Without it the response is 401, before method checks; with the gate secrets unset it is 503. A known path with another method returns 405 and an `Allow` header. An unknown path under `/demo/`, `/agent/`, `/transactions/`, `/cases/` or `/intake` returns a JSON 404 and is never served as the app. Bodies are capped at 16 KB (413). After the simulated login, identity comes only from the session cookie, never from a request body. Every JSON body matches `front-end/contracts/intake-api.schema.json`.
+There is no team password. Customers sign in with an email one-time code (`POST /auth/session`, group `customer`) and agents with the same code (`POST /demo/agent-session`, group `agent`, else 403). The `/`, `/index.html` and `/agent` documents are public, each customer route answers 401 without a valid customer session, and each agent route answers 401 without a valid agent session. A known path with another method returns 405 and an `Allow` header. An unknown path under `/demo/`, `/agent/`, `/transactions/`, `/cases/` or `/intake` returns a JSON 404 and is never served as the app. Bodies are capped at 16 KB (413). Every API path (customer, agent, `/auth/*`, `/demo/*` and unknown API paths) allows 60 requests a minute per IP through the Workers Rate Limiting binding `API_LIMIT`, then answers 429 with `Retry-After: 60`; the count is per Cloudflare location and approximate, and it is keyed by IP, so users behind a shared NAT share the budget. After sign-in, identity comes only from the session cookie, never from a request body. Every JSON body matches `front-end/contracts/intake-api.schema.json`.
 
 | Method and path | Session | Purpose | Main statuses |
 |---|---|---|---|
 | `GET /healthz` | none | Liveness; one D1 query | 200 |
-| `GET /demo/identities` | none | Committed identities, then up to 1,000 dataset customers from D1, each with `country` (one query) | 200, 503 |
-| `POST /demo/session` | none | Simulated customer login for a committed identity or a D1 dataset customer; malformed ids are rejected before any query | 200, 422, 503 (committed identity not loaded) |
+| `GET /demo/identities` | none | Committed identities, then up to 1,000 dataset customers from D1, each with `country` (one query) | 200, 503; 404 without `DEMO_PICKER=1` |
+| `POST /demo/session` | none | Simulated customer login for a committed identity or a D1 dataset customer; malformed ids are rejected before any query | 200, 422, 503 (committed identity not loaded); 404 without `DEMO_PICKER=1` |
 | `GET /transactions` | customer | The customer's own charges, one page, with `has_more` | 200, 401 |
 | `POST /cases` | customer | Legacy one-step confirmed case | 201, 200 (replay), 401, 404, 409, 422, 503 |
 | `POST /intake/start` | customer | Start an explicit guided ES/PT unrecognized-charge report (10–2,000 code points, no U+0000, UUID key). No case reference is returned. A same-key replay returns the original, immutable start receipt (`state: selection_required`) even after the episode was abandoned or handed off, so it does not describe the current state | 201, 200 (same key and content), 401, 409 (same key, other content), 422, 503 (retry the same key) |
 | `POST /intake/confirm` | customer | Confirm one owned transaction; returns the protocol only after the case and handoff are read back | 201, 200 (same key and content replays the receipt), 401 (expired or revoked, including in the reservation itself; renew as the same customer and retry the same key), 404 (episode or transaction not owned; foreign and missing look identical), 409 ("Episode already submitted with different content or key" once a handoff exists; "Episode is no longer open" after abandonment, when there is no reservation), 422, 503 (acceptance unknown; retry the same key) |
 | `POST /intake/handoff` | customer | Ask for human review without a confirmed transaction (`kind: incomplete`); same receipt rules. Optional `details` (what the customer remembers; same text rules as the statement) is appended to the stored statement once, with a newline, and is part of the replay content | same as confirm, without the transaction 404; 422 when statement and details exceed 2,000 code points together |
-| `POST /demo/agent-session` | none | Simulated agent login | 200 |
+| `POST /auth/session` | none | Customer sign-in from `Authorization: Bearer <Cognito ID token>` in group `customer` | 200, 401, 403 (not enrolled), 422 (no token), 503 (JWKS unreachable) |
+| `POST /auth/logout` | none | Revokes the presented customer session | 204 |
+| `GET /reports` | customer | The customer's own acknowledged reports, newest first, 20 a page with `has_more`: reference, kind, status, next step and the confirmed charge id (null without one) | 200, 401, 422 (any query parameter) |
+| `POST /reports/update` | customer | Queue one status email for an own report, at most one per report per five minutes | 202, 401, 404 (foreign and missing look identical), 409 (no email on file), 422, 429 |
+| `POST /demo/agent-session` | none | Agent login from `Authorization: Bearer <Cognito ID token>` in group `agent` (`mode: email_otp`); any body is ignored. With `DEMO_PICKER=1` and no `Authorization`, a one-click local session (`mode: simulated_login`) | 200, 401, 403 (not in group `agent`), 422 (no token), 503 (JWKS unreachable) |
 | `GET /agent/cases` | agent | Legacy read-only case list, 50 per page | 200, 401 |
 | `GET /agent/intakes` | agent | Newest 50 acknowledged intake handoffs (complete, incomplete, technical) with `has_more`; pending reservations are excluded | 200, 401 |
 | `GET /agent/intake-detail?protocol=<uuid>` | agent | Statement, verified evidence (or `null`), server actions, open questions and recorded service history (100 events, `history_has_more`) | 200, 401, 404, 422 (anything but exactly one valid `protocol`) |
+| `POST /agent/intake-status` | agent | Move a report one step, received → in review → closed, with a history row and one email to the customer; a replay writes nothing | 200, 401, 404, 409 (any other step), 422 |
 
-Agent routes are read-only; nothing changes status, refunds, blocks a card or decides fraud. A customer session never opens an agent route and an agent session never opens a customer route.
+The only agent write is the review status; nothing refunds, blocks a card or decides fraud. A customer session never opens an agent route and an agent session never opens a customer route.
 
 `GET /agent/intakes` is the authoritative queue for guided reports. The legacy `GET /agent/cases` is unchanged and the client no longer calls it: it lists every confirmed case row, including a guided complete case whose reservation is still `handoff_pending` after a lost read-back. In that case the customer got 503 and no reference, and a same-owner retry with the same key completes it. Until then the episode counts as pending in the event export.
 
@@ -142,16 +147,24 @@ Preview builds share the production D1 binding. Keep them disabled until a separ
 
 Smart Placement is on (`placement.mode = "smart"`). It is adaptive: Cloudflare may run the Worker nearer D1 once telemetry shows a benefit, and the `cf-placement` response header shows where it actually ran. Each D1 query from São Paulo took about 150 ms before this change (ADR-004).
 
-Runtime secrets `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` live only in the Worker's settings, never in the repository or build logs. Without them, every API route returns 503. Cloudflare Access, with an email allowlist or one-time PIN, must protect the whole hostname, static files included. That is a deployment requirement, confirmed by check 1 of the remote checklist below for a document, a bundle and an API route. `scripts/predeploy.mjs` refuses to deploy a placeholder D1 ID, and it also refuses while the remote D1 lacks a migration in `migrations/`. It reads `d1_migrations` with the build token, so that token needs D1 read access. If the state can't be read, the deploy stops. Non-production branch builds must stay disabled: a preview would bind the production D1.
+The deploy order for the agent sign-in change is below. `DEMO_PICKER` must never be set as a Worker var or secret: with no team gate it would let anyone become any customer or agent. `scripts/predeploy.mjs` refuses `DEMO_PICKER` and `COGNITO_TEST_JWKS` in `vars` (it cannot see secrets), refuses to deploy a placeholder D1 ID, and it also refuses while the remote D1 lacks a migration in `migrations/`. It reads `d1_migrations` with the build token, so that token needs D1 read access. If the state can't be read, the deploy stops. Non-production branch builds must stay disabled: a preview would bind the production D1.
 
 Schema changes: `npx wrangler d1 migrations apply arabica-intake-demo --remote`, after the same migration has passed the local tests. To load reviewed data, run `npx wrangler d1 execute arabica-intake-demo --remote --file <seed>` for the fictitious seed, or for a Gold slice seed whose manifest has been reviewed. Never upload `data/`, DuckDB, Parquet or credentials.
+
+### Before deploying this change (agent sign-in)
+
+1. Enrol each agent with `back-end/scripts/cognito/enroll.sh <email> - agent`; otherwise nobody can open the agent view.
+2. Deploy.
+3. Sign in once as a customer and once as an agent on the live URL.
+4. Remove the Cloudflare Access application in the Zero Trust dashboard.
+5. Delete the `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` Worker secrets (`cd back-end && npx wrangler secret delete DEMO_ACCESS_USERNAME && npx wrangler secret delete DEMO_ACCESS_PASSWORD`); the Worker no longer reads them.
 
 ## Remote checks after a deploy
 
 Record the date and the results of each check in ADR-004's implementation notes:
 
-1. Cloudflare Access denies an email that isn't on the allowlist.
-2. A missing Basic credential returns 401 on `/transactions`.
+1. Cloudflare Access is no longer on the hostname: `/` loads without any credential.
+2. `/agent` loads without any credential; `/agent/intakes` without an agent session returns 401 `Start a demo agent session first`; `/transactions` without a session returns 401 `Start a demo session first`; an enrolled agent signs in with an email code and sees the queue.
 3. Each customer sees only their own charges.
 4. A confirmed case returns a reference, and a retry returns the same one.
 5. The agent view shows the case.

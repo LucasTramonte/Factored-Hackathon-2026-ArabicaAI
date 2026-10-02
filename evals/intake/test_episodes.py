@@ -113,6 +113,12 @@ class EpisodeTests(unittest.TestCase):
         self.assertEqual(s['pt']['outcomes'], dict(abandoned=1, pending=1))
         self.assertEqual(s['es']['safe_accepted_intake_rate'], 1/3)
 
+    def test_english_episodes_get_their_own_summary(self):
+        s = summarize(ACCEPTED + [dict(e, case_id='en-1', language='en') for e in ABANDONED])
+        self.assertEqual(list(s), ['all', 'es', 'pt', 'en'])
+        self.assertEqual((s['en']['eligible_started'], s['en']['outcomes']), (1, dict(abandoned=1)))
+        self.assertEqual((s['all']['eligible_started'], s['pt']['eligible_started']), (2, 0))
+
     def test_empty_log_keeps_rates_undefined(self):
         s = summarize([])
         self.assertEqual(s['all']['eligible_started'], 0)
@@ -142,7 +148,7 @@ class EpisodeTests(unittest.TestCase):
             'exactly one intake_started': ACCEPTED + [ev('intake_started', 'a', 9)],
             'Unknown event': [ev('intake_started', 'z', 0), ev('refund_issued', 'z', 1)],
             'version': [dict(ev('intake_started', 'z', 0), version='3')],
-            'language': [ev('intake_started', 'z', 0, language='en')],
+            'language': [ev('intake_started', 'z', 0, language='fr')],
             'mixes languages': [ev('intake_started', 'z', 0), ended('z', 1, 'abandoned', language='pt')],
             'needs exactly one intake_started': [ended('z', 0, 'abandoned')],
             'outside the contract': [ev('intake_started', 'z', 0, customer_id='CLI-1')],

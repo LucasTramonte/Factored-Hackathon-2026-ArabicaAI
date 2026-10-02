@@ -33,6 +33,16 @@ export function newShortReference() {
 const SHORT_REFERENCE_ATTEMPTS = 3;
 const shortReferenceTaken = error => /UNIQUE/i.test(String(error?.message)) && /reference_short/i.test(String(error?.message));
 
+/** One encrypted address per customer (AES-GCM blob from ``notify/email.js``); a new email sign-in replaces it. */
+const UPSERT_TARGET = 'INSERT INTO notification_targets(customer_id,email_enc,updated_at) VALUES(?,?,?) '
+  + 'ON CONFLICT(customer_id) DO UPDATE SET email_enc=excluded.email_enc,updated_at=excluded.updated_at';
+
+/** One authentication audit row (migration 0012): references only, never a customer id, email or token. */
+const AUTH_EVENT = 'INSERT INTO auth_events(ts,actor,event,session_ref,request_id) VALUES(?,?,?,?,?)';
+
+/** At most one ``update`` email per customer and reference in this window; ``enqueueEmail`` enforces it in SQL. */
+export const UPDATE_EVERY_MS = 300000;
+
 /** ``shortReference`` is injectable so tests can force collisions. */
 export function createStore(db, { shortReference = newShortReference } = {}) {
   const totals = { queries: 0, rowsRead: 0, rowsWritten: 0, roundTrips: 0 };
@@ -50,7 +60,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
   };
 
   /** Reserve one immutable handoff and optional confirmed case in one atomic batch; SQL revalidates live session and ownership. */
-  const reserveIntakeHandoff = async ({ customerId, episodeId, turnKey, payloadHash, sessionHash, details, completeCase, kind, evidence, actions, questions, usage, now, referenceShort }) => {
+  const reserveIntakeHandoff = async ({ customerId, episodeId, turnKey, payloadHash, sessionHash, details, completeCase, kind, evidence, actions, questions, usage, now, referenceShort, urgency = 'normal' }) => {
     const handoffId = crypto.randomUUID();
     const caseId = kind === 'complete' ? crypto.randomUUID() : null;
     const eligible = "e.customer_id=? AND e.episode_id=? AND e.state='selection_required' "
@@ -65,11 +75,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         caseId, 'intake:' + episodeId, completeCase?.transaction_id ?? '', ...params
       ]] : []),
       ['INSERT INTO intake_handoffs(handoff_id,episode_id,complete_case_id,turn_key,payload_hash,kind,tool_status,'
-        + 'evidence_json,actions_json,questions_json,destination,priority,accepted_at,usage_json,reference_short) '
-        + "SELECT ?,e.episode_id,?,?,?,?,?,?,?,?,?,?,?,json_set(?,'$.tool_calls',json_extract(e.usage_json,'$.tool_calls'),'$.operation_duration_ms',COALESCE(json_extract(e.usage_json,'$.operation_duration_ms'),0)),? FROM intake_episodes e WHERE " + eligible
+        + 'evidence_json,actions_json,questions_json,destination,priority,accepted_at,usage_json,reference_short,urgency) '
+        + "SELECT ?,e.episode_id,?,?,?,?,?,?,?,?,?,?,?,json_set(?,'$.tool_calls',json_extract(e.usage_json,'$.tool_calls'),'$.operation_duration_ms',COALESCE(json_extract(e.usage_json,'$.operation_duration_ms'),0)),?,? FROM intake_episodes e WHERE " + eligible
         + (kind === 'complete' ? ' AND EXISTS(SELECT 1 FROM cases WHERE case_id=?)' : ''),
         handoffId,caseId,turnKey,payloadHash,kind,kind === 'technical' ? 'failed' : 'ok',
-        JSON.stringify(evidence),JSON.stringify(actions),JSON.stringify(questions),'case_service','normal',new Date(now).toISOString(),JSON.stringify(usage),referenceShort,
+        JSON.stringify(evidence),JSON.stringify(actions),JSON.stringify(questions),'case_service','normal',new Date(now).toISOString(),JSON.stringify(usage),referenceShort,kind === 'complete' ? urgency : 'normal',
         ...params,...(kind === 'complete' ? [caseId] : [])],
       ['INSERT INTO intake_turns(episode_id,turn_key,payload_hash,response_json) '
         + 'SELECT episode_id,turn_key,payload_hash,? FROM intake_handoffs WHERE handoff_id=?',
@@ -95,11 +105,30 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     findContextCard: customerId => first(
       'SELECT card_version, snapshot_at, card_json FROM context_cards WHERE customer_id=?', customerId),
 
-    /** In one atomic batch: purge expired sessions, revoke the presented token, insert the new one. */
-    rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt }) => batch([
+    /**
+     * Revoke one ``actor`` session by token hash and, only when that session existed, record ``logged_out`` in the same
+     * batch. Another actor's token under this cookie neither logs out nor revokes anything.
+     */
+    revokeSession: (hash, actor, now, requestId) => batch([
+      ["INSERT INTO auth_events(ts,actor,event,session_ref,request_id) SELECT ?,?,'logged_out',?,? "
+        + 'WHERE EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor=?)', now, actor, hash.slice(0, 12), requestId, hash, actor],
+      ['DELETE FROM sessions WHERE token_hash=? AND actor=?', hash, actor]]),
+    /** Record a refused presented cookie (``session_expired`` or ``session_rejected``). */
+    recordAuthEvent: ({ now, actor, event, sessionRef, requestId }) => all(AUTH_EVENT, now, actor, event, sessionRef, requestId),
+    /** Newest audit rows; read only by tests and operators (no route serves them). */
+    listAuthEvents: limit => all('SELECT * FROM auth_events ORDER BY id DESC LIMIT ?', limit),
+
+    /**
+     * In one atomic batch: purge expired sessions, revoke the presented token, insert the new one and, with
+     * ``emailEnc`` (an email sign-in), upsert the customer's encrypted address in the same round trip. Records
+     * ``session_started`` in the same batch.
+     */
+    rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt, emailEnc, requestId }) => batch([
       ['DELETE FROM sessions WHERE expires_at<=?', now],
       ...(oldHash ? [['DELETE FROM sessions WHERE token_hash=?', oldHash]] : []),
-      ['INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)', newHash, actor, customerId, expiresAt]
+      ['INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)', newHash, actor, customerId, expiresAt],
+      ...(emailEnc ? [[UPSERT_TARGET, customerId, emailEnc, now]] : []),
+      [AUTH_EVENT, now, actor, 'session_started', newHash.slice(0, 12), requestId]
     ]),
     findSession: (hash, actor, now) =>
       first('SELECT customer_id, expires_at FROM sessions WHERE token_hash=? AND actor=? AND expires_at>?', hash, actor, now),
@@ -143,6 +172,14 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         JSON.stringify({ llm_calls: usage.llm_calls, known_input_tokens: usage.known_input_tokens,
           known_output_tokens: usage.known_output_tokens, usage_unavailable_calls: usage.usage_unavailable_calls }), customerId, episodeId, producer]
     ]),
+    /** Add a usage delta for the details shadow call (first one unknown call, then measured − unknown) to the episode its producer started. */
+    recordDetailsExtraction: ({ customerId, episodeId, producer, usage }) => batch([
+      ["UPDATE intake_episodes SET usage_json=json_set(usage_json,'$.llm_calls',json_extract(usage_json,'$.llm_calls')+?,"
+        + "'$.known_input_tokens',json_extract(usage_json,'$.known_input_tokens')+?,'$.known_output_tokens',json_extract(usage_json,'$.known_output_tokens')+?,"
+        + "'$.usage_unavailable_calls',json_extract(usage_json,'$.usage_unavailable_calls')+?) "
+        + "WHERE customer_id=? AND episode_id=? AND json_extract(usage_json,'$.model_version')=?",
+        usage.llm_calls, usage.known_input_tokens, usage.known_output_tokens, usage.usage_unavailable_calls, customerId, episodeId, producer]
+    ]),
     /** Read an episode only for its authenticated owner; a foreign id and a missing id are indistinguishable. */
     findIntake: (customerId, episodeId) => first(
       'SELECT * FROM intake_episodes WHERE customer_id=? AND episode_id=?', customerId, episodeId),
@@ -151,6 +188,13 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     findOwnedTransaction: (customerId, transactionId) => first(
       'SELECT transaction_id,occurred_at,source_occurred_at,merchant_name,amount,currency FROM transactions '
       + 'WHERE customer_id=? AND transaction_id=?', customerId, transactionId),
+    /**
+     * Whether this customer has an acknowledged complete report on the charge that no person has closed yet. Reads only
+     * that charge's cases (index ``cases_customer_transaction``, migration 0011), never the customer's whole history.
+     */
+    openReportForTransaction: (customerId, transactionId) => first(
+      'SELECT 1 FROM cases c JOIN intake_handoffs h ON h.complete_case_id=c.case_id JOIN intake_episodes e ON e.episode_id=h.episode_id '
+      + "WHERE c.customer_id=? AND c.transaction_id=? AND h.status<>'closed' AND e.state='complete_handoff' LIMIT 1", customerId, transactionId),
     /** Read a reservation only through its owning episode. */
     findOwnedIntakeHandoff: (customerId, episodeId) => first(
       'SELECT h.* FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.episode_id=?', customerId, episodeId),
@@ -179,7 +223,12 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         + "AND EXISTS(SELECT 1 FROM intake_episodes WHERE episode_id=? AND customer_id=? AND state='handoff_pending')",
         toolCalls,operationDuration,episodeId,episodeId,customerId]
     ]),
-    /** After read-back, require live authority to atomically append one terminal chain and freeze state; concurrent acknowledgments are no-ops. */
+    /**
+     * After read-back, require live authority to atomically append one terminal chain and freeze state; concurrent
+     * acknowledgments are no-ops. The first acknowledgement also queues one ``received`` email when the customer has
+     * a notification target (reference: the short one when present, else the protocol). Returns
+     * ``{ acknowledged, emailId }``; ``emailId`` is null on a replay or without a target.
+     */
     finishIntakeHandoff: async ({ customerId, episode, receipt, sessionHash, now, operationDuration, toolCalls }) => {
       const authority = " AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=? AND expires_at>?)";
       const authorityParams = [sessionHash, customerId, now];
@@ -188,6 +237,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       const base = { version: '2', case_id: episode.episode_id, ts: new Date(now).toISOString(),
         session_ref: episode.session_ref,language: episode.language,model_version:model.model_version ?? 'guided-0.1' };
       const reference = receipt.complete_case_id ?? receipt.handoff_id;
+      const emailId = crypto.randomUUID();
       const complete = receipt.kind === 'complete';
       const extras = [
         ...(complete ? [{ event:'transaction_confirmed',transaction_ref:receipt.handoff_id }] : []),
@@ -212,6 +262,14 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=e.episode_id) '
           + authority + ' ON CONFLICT(episode_id,seq) DO NOTHING', receipt.next_seq+index,JSON.stringify({...base,seq:receipt.next_seq+index,...extra}),customerId,episode.episode_id,receipt.handoff_id,...authorityParams
         ]),
+        // Before the state change, so only the acknowledgement that moves the episode out of handoff_pending queues it.
+        ["INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) "
+          + "SELECT ?,?,e.customer_id,'received',e.language,?,'queued' FROM intake_episodes e "
+          + "WHERE e.customer_id=? AND e.episode_id=? AND e.state='handoff_pending' "
+          + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=e.episode_id) '
+          // A language the templates lack skips the email instead of failing the outbox CHECK and rolling back the handoff.
+          + "AND e.language IN ('es','pt','en') AND EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id)" + authority + ' RETURNING message_id',
+          emailId,now,receipt.reference_short ?? reference,customerId,episode.episode_id,receipt.handoff_id,...authorityParams],
         ['UPDATE intake_episodes SET state=?,updated_at=? WHERE customer_id=? AND episode_id=? '
           + "AND state='handoff_pending' AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=intake_episodes.episode_id)" + authority,
           complete ? 'complete_handoff' : receipt.kind === 'technical' ? 'technical_handoff' : 'incomplete_handoff',now,customerId,episode.episode_id,receipt.handoff_id,...authorityParams],
@@ -219,7 +277,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + "WHERE e.customer_id=? AND e.episode_id=? AND h.handoff_id=? AND e.state IN ('complete_handoff','technical_handoff','incomplete_handoff')" + authority,
           customerId,episode.episode_id,receipt.handoff_id,...authorityParams]
       ]);
-      return Boolean(results.at(-1).results[0]);
+      return { acknowledged: Boolean(results.at(-1).results[0]), emailId: results.at(-3).results[0]?.message_id ?? null };
     },
 
     /**
@@ -302,23 +360,112 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       'SELECT case_id, transaction_id, customer_statement, status, accepted_at FROM cases '
       + 'WHERE customer_id=? AND idempotency_key=?', customerId, idempotencyKey),
 
-    /** One handoff per episode; only acknowledged terminal rows enter this bounded queue. */
-    listIntakeHandoffs: limit => all(
-      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
-      + 'h.destination,h.priority,h.accepted_at,h.reference_short FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
-      + "WHERE e.state=h.kind||'_handoff' ORDER BY h.accepted_at DESC,protocol LIMIT ?", Math.min(limit, 51)),
-    /** Optional complete evidence is one-to-one and owner-scoped; missing evidence never drops a handoff. */
+    /**
+     * One handoff per episode; only acknowledged terminal rows enter this bounded queue. Open high-urgency reports come
+     * first (partial index ``intake_handoffs_urgent``, migration 0013), then the rest newest first; one round trip.
+     */
+    listIntakeHandoffs: async limit => {
+      const lane = urgent => 'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
+        + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+        + "WHERE e.state=h.kind||'_handoff' AND " + (urgent ? '' : 'NOT ') + "(h.urgency='high' AND h.status<>'closed') "
+        + 'ORDER BY h.accepted_at DESC,protocol LIMIT ?';
+      const [high, rest] = await batch([[lane(true), Math.min(limit, 51)], [lane(false), Math.min(limit, 51)]]);
+      return [...high.results, ...rest.results].slice(0, Math.min(limit, 51));
+    },
+    /**
+     * The session customer's acknowledged handoffs, newest first, with the charge of a complete one when its case is this customer's and confirmed (null
+     * otherwise; ``cases`` is one row per primary key). Only handoffs whose receipt was read back appear.
+     */
+    // ponytail: reads ~1 + 2 rows per episode of the customer (all states) then a temp sort; LIMIT does not cap it.
+    // Upgrade: an index on handoffs keyed by customer and accepted_at, which needs a customer column there.
+    listCustomerHandoffs: (customerId, limit) => all(
+      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,h.kind,h.status,h.accepted_at,c.transaction_id '
+      + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+      + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
+      + "WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
+      + 'ORDER BY h.accepted_at DESC,protocol LIMIT ?', customerId, limit),
+    /**
+     * One acknowledged report of this customer (same predicate as ``listCustomerHandoffs``) with its episode language
+     * and whether the customer has a notification target; null when missing or another customer's.
+     */
+    findCustomerReport: (customerId, protocol) => first(
+      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,h.status,e.language,'
+      + 'EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id) AS has_target '
+      + "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
+      + 'AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))', customerId, protocol, protocol),
+    /**
+     * Optional complete evidence is one-to-one and owner-scoped; missing evidence never drops a handoff. ``model_version``
+     * and ``llm_calls`` come from the episode's usage (set only by shadow extraction), never the model's output.
+     */
     findIntakeHandoff: protocol => first(
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
-      + 'h.destination,h.priority,h.accepted_at,h.reference_short,h.evidence_json,h.actions_json,h.questions_json,'
-      + 'e.customer_statement,e.language,t.transaction_id AS verified_transaction_id '
+      + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status,h.evidence_json,h.actions_json,h.questions_json,'
+      + 'e.customer_statement,e.language,t.transaction_id AS verified_transaction_id,'
+      + "json_extract(e.usage_json,'$.model_version') AS model_version,COALESCE(json_extract(e.usage_json,'$.llm_calls'),0) AS llm_calls "
       + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
       + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
       + 'LEFT JOIN transactions t ON t.transaction_id=c.transaction_id AND t.customer_id=e.customer_id '
       + "WHERE e.state=h.kind||'_handoff' AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))", protocol, protocol),
+    /**
+     * Move one acknowledged handoff (public ``protocol``) from ``from`` to ``to`` in one atomic batch: a history row,
+     * the customer's ``to`` email (when they have a target) and the status change, each guarded by ``status=from``.
+     * The email statement runs before the update, so ``status`` still equal to ``from`` while the ``to`` history row
+     * exists can only mean this batch inserted it: a replay or a concurrent loser queues nothing. Returns the final
+     * ``{ status, changed_at, customer_id, language, reference }`` (null when no acknowledged handoff matches) and the
+     * queued ``emailId`` or null.
+     */
+    transitionHandoff: async ({ protocol, from, to, now, agentSessionRef, emailId }) => {
+      const target = '(SELECT h.handoff_id FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+        + "WHERE (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?)) AND e.state=h.kind||'_handoff')";
+      const results = await batch([
+        ['INSERT INTO handoff_status_history(handoff_id,status,changed_at,agent_session_ref) SELECT handoff_id,?,?,? FROM intake_handoffs '
+          + 'WHERE handoff_id=' + target + ' AND status=?', to, now, agentSessionRef, protocol, protocol, from],
+        ["INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) "
+          + "SELECT ?,?,e.customer_id,?,e.language,COALESCE(h.reference_short,h.complete_case_id,h.handoff_id),'queued' "
+          + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE h.handoff_id=' + target + ' AND h.status=? '
+          + 'AND EXISTS(SELECT 1 FROM handoff_status_history WHERE handoff_id=h.handoff_id AND status=?) '
+          + "AND e.language IN ('es','pt','en') AND EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id) RETURNING message_id",
+          emailId, now, to, protocol, protocol, from, to],
+        ['UPDATE intake_handoffs SET status=? WHERE handoff_id=' + target + ' AND status=?', to, protocol, protocol, from],
+        ['SELECT h.status,(SELECT changed_at FROM handoff_status_history WHERE handoff_id=h.handoff_id AND status=h.status) AS changed_at,'
+          + 'e.customer_id,e.language,COALESCE(h.reference_short,h.complete_case_id,h.handoff_id) AS reference '
+          + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE h.handoff_id=' + target, protocol, protocol]
+      ]);
+      return { row: results.at(-1).results[0] ?? null, emailId: results[1].results[0]?.message_id ?? null };
+    },
+    /** One handoff's status history, oldest first (audit and tests). */
+    listStatusHistory: protocol => all(
+      'SELECT s.status,s.changed_at,s.agent_session_ref FROM handoff_status_history s JOIN intake_handoffs h USING(handoff_id) '
+      + 'WHERE h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?) ORDER BY s.changed_at,s.rowid', protocol, protocol),
     /** At most 101 indexed events, so overflow is explicit. Guided chains have at most 5 events; add a cursor before supporting more than 100. */
     listIntakeHistory: episodeId => all(
       'SELECT event_json FROM intake_events WHERE episode_id=? ORDER BY seq LIMIT 101', episodeId),
+
+    findNotificationTarget: customerId => first(
+      'SELECT email_enc,updated_at FROM notification_targets WHERE customer_id=?', customerId),
+    /**
+     * Outbox rows hold template, language and reference only, never a body; they start ``queued``. An ``update`` is
+     * inserted only when no ``update`` for that customer and reference is newer than ``UPDATE_EVERY_MS``, in the same
+     * statement, so concurrent requests queue one. An ``update`` returns the inserted ``[{ message_id }]``, empty when refused.
+     */
+    enqueueEmail: ({ messageId, now, customerId, template, language, reference }) => template === 'update'
+      ? all("INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) SELECT ?,?,?,'update',?,?,'queued' "
+        + "WHERE NOT EXISTS(SELECT 1 FROM email_outbox WHERE customer_id=? AND reference=? AND template='update' AND created_at>?) RETURNING message_id",
+        messageId, now, customerId, language, reference, customerId, reference, now - UPDATE_EVERY_MS)
+      : all("INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) VALUES(?,?,?,?,?,?,'queued')",
+        messageId, now, customerId, template, language, reference),
+    /** One customer's outbox rows for a reference (index ``email_outbox_recent``); no address, no body. */
+    findEmails: (customerId, reference) => all(
+      'SELECT template,language,provider_status FROM email_outbox WHERE customer_id=? AND reference=? ORDER BY created_at', customerId, reference),
+    markEmail: (messageId, status, providerMessageId) => all(
+      'UPDATE email_outbox SET provider_status=?,provider_message_id=? WHERE message_id=?', status, providerMessageId ?? null, messageId),
+    /**
+     * ``{ count, latest }`` of this customer's ``template`` emails for a reference created after ``sinceMs``, for
+     * rate limits (index ``email_outbox_recent``); ``latest`` is the newest ``created_at`` or null.
+     */
+    recentEmails: async (customerId, reference, sinceMs, template) => first(
+      'SELECT COUNT(*) AS count,MAX(created_at) AS latest FROM email_outbox WHERE customer_id=? AND reference=? AND created_at>? AND template=?',
+      customerId, reference, sinceMs, template),
 
     listAgentCases: limit => all(
       'SELECT c.case_id AS protocol, c.customer_id, u.display_name, c.transaction_id, t.merchant_name, '

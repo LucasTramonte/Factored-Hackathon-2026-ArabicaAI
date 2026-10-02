@@ -4,10 +4,10 @@
 
 The V1 workflow ([ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)):
 
-1. A customer signs in with a **simulated** identity and sees only their own charges.
+1. A customer signs in with an email one-time code and sees only their own charges.
 2. They pick one, describe it and explicitly confirm.
 3. They get a reference once the case is stored.
-4. A simulated agent reads the case.
+4. An agent, signed in with their own email code, reads the case.
 
 The reference means "accepted for human review". It is not a fraud decision, a refund, a card block or a resolution. The MVP is deterministic, and no model is called. The runtime is one Cloudflare Worker with D1 ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Capacity and cost are covered in [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md).
 
@@ -71,17 +71,66 @@ The observed customer CSV has fields such as `first_name`, `last_name` and `last
 
 ## Deployed preview
 
-The Worker `factored-hackathon-2026-arabicaai` runs at https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Cloudflare Access (email allowlist) and a Basic gate protect it. Neither is bank authentication.
+The Worker `factored-hackathon-2026-arabicaai` runs at https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Customers and agents sign in with a Cognito email code; there is no team password once this branch deploys ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)). Until Phase 1 deploys, Cloudflare Access (email allowlist) still fronts the whole hostname.
 
 - On 2026-09-29, production D1 held both migrations, the fictitious seed and no cases.
 - Loading the Gold slice into production is a reviewed, manual step (`back-end/README.md`, "Deployment").
+- On 2026-10-01, PR #54 merged migration 0008 without applying it to remote D1, so every Workers Build from `main` after 20:55 UTC stopped at the deploy guard and the live version stayed `17450a30`.
+- On 2026-10-02, the migration was applied by hand at 02:35 UTC and a manual `npm run deploy` at 02:40 UTC published `3412aff1` from `main` `093e0e7`; remote D1 holds migrations 0001-0008.
 - Build settings and the post-deploy checklist are in [back-end/README.md](../../back-end/README.md).
+
+### Customer sign-in (Cognito)
+
+Customers sign in with an email one-time code from the Amazon Cognito user pool `arabicaai-demo` (`us-east-2`, Essentials tier, account `arabica`). Email is the username, self sign-up is off, and each customer user carries the immutable attribute `custom:customer_id`, which the Worker maps to a customer loaded in D1. The pool id and the public app client id (`arabicaai-web`, no secret) are plain `vars` in `back-end/wrangler.jsonc`. Cognito requires `PASSWORD` in the pool's allowed first factors, so it is listed, but no user is ever given a known password, and the client requests and accepts only `EMAIL_OTP`. An admin-created user starts in `FORCE_CHANGE_PASSWORD`; on 2026-10-01 that status did not block the `EMAIL_OTP` challenge (no `admin-set-user-password` workaround was needed), and the first email-code sign-in confirmed the user, which is now `CONFIRMED`. Groups: `customer`, `agent`, `admin`, `auditor`.
+
+Production has no demo identity picker once Phase 1 deploys: `/demo/identities` and `/demo/session` exist only when `DEMO_PICKER=1` (local development), so customers sign in with their email code.
+
+`COGNITO_TEST_JWKS` is a local-test variable only; never set it as a Worker var or secret (the deploy guard refuses it in `vars`). `DEMO_PICKER` must never be set as a Worker var or secret either: with no team gate it would let anyone become any customer or agent (the deploy guard refuses it in `vars`; it cannot see secrets).
+
+```bash
+back-end/scripts/cognito/setup.sh                                  # creates or finds pool, attribute, client, groups; prints the vars
+back-end/scripts/cognito/enroll.sh <email> <customer_id> [group]   # customer; no invitation email is sent
+back-end/scripts/cognito/enroll.sh <email> - agent                 # agent, admin or auditor: no customer id
+```
+
+Both use `--profile ${AWS_PROFILE:-arabica}` and can be rerun. Judges' and teammates' emails are enrolled with `enroll.sh`; each person who reviews reports on `/agent` is enrolled with `enroll.sh <email> - agent` (a customer-only account gets 403 there); the customer id cannot change after creation, so delete the user first to re-map one. Once Phase 1 deploys, a person removes Cloudflare Access from the hostname in the Zero Trust dashboard; until then Access still fronts the sign-in page.
+
+#### Before deploying this change (agent sign-in)
+
+1. Enrol each agent with `back-end/scripts/cognito/enroll.sh <email> - agent`; otherwise nobody can open the agent view.
+2. Deploy.
+3. Sign in once as a customer and once as an agent on the live URL.
+4. Remove the Cloudflare Access application in the Zero Trust dashboard.
+5. Delete the `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` Worker secrets (`cd back-end && npx wrangler secret delete DEMO_ACCESS_USERNAME && npx wrangler secret delete DEMO_ACCESS_PASSWORD`); the Worker no longer reads them.
+
+### Notification email (SES)
+
+The Worker will send notification emails through Amazon SES v2 (`us-east-2`, account `arabica`) from `rzuniga@aptsny.co`; the team has no verified domain, so the sender is a single verified email identity. `SES_REGION` and `SES_FROM` are plain `vars` in `back-end/wrangler.jsonc`. The IAM user `arabicaai-worker-ses` has one inline policy, `ses-send-only`, allowing only `ses:SendEmail` on `arn:aws:ses:us-east-2:849110176017:identity/rzuniga@aptsny.co`, and no managed policies.
+
+The account is in the SES sandbox (200 emails a day, 1 a second), and SES delivers only to verified addresses. On 2026-10-02 a production-access request was filed (`put-account-details`, mail type `TRANSACTIONAL`, under 50 emails a day, recipients limited to Cognito-enrolled users, bounces and complaints stop sends to that address). It was denied the same day: `ProductionAccessEnabled` is `false` and the review status is `DENIED`. The account stays in the sandbox, so each recipient's address must be created as an SES email identity and its owner must click AWS's verification email. Re-filing with more detail from the SES console is optional. Check it with `aws sesv2 get-account --profile arabica --region us-east-2 --query '[ProductionAccessEnabled,Details.ReviewDetails.Status]'`.
+
+```bash
+back-end/scripts/ses/setup.sh   # creates or finds the sender identity and the send-only user; prints verification status and the user ARN
+```
+
+Human steps (the access key never passes through an agent or the repository):
+
+1. Open the AWS verification email sent to `rzuniga@aptsny.co` and click its link; `setup.sh` then prints `verified=True`.
+2. Create the access key and set the three Worker secrets:
+
+   ```bash
+   aws iam create-access-key --user-name arabicaai-worker-ses --profile arabica   # copy the two values once
+   cd back-end && npx wrangler secret put SES_ACCESS_KEY_ID && npx wrangler secret put SES_SECRET_ACCESS_KEY
+   npx wrangler secret put EMAIL_KEY   # 32 random bytes, base64: openssl rand -base64 32
+   ```
+
+3. For each judge, run `aws sesv2 create-email-identity --email-identity <judge email> --profile arabica --region us-east-2` and ask them to click AWS's verification email.
 
 ## Known limits
 
-- Simulated identities: anyone who passes Access can act as any demo customer.
+- Customer identity is a Cognito email code mapped to one demo customer; it is not bank authentication. Agents sign in with their own email code in the `agent` group; there is no shared team password.
 - Sessions last one hour and are stored in D1.
-- A retry with the same key and content returns the same reference, and different content gets 409. A second case for the same charge under a new key is possible: there is no cross-key duplicate rule yet (tracked in the roadmap).
+- A retry with the same key and content returns the same reference, and different content gets 409. A charge with a report still received or in review can't be reported again under a new key (409) until a person closes it; two confirmations in the same instant can still open two.
 - If the browser tab is closed with a request pending, the pending state is lost, but no duplicate is created.
 - No historical complaint is linked to a transaction, so none is joined here by `customer_id` alone.
 

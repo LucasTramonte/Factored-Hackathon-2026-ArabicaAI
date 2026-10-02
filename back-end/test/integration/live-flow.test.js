@@ -2,17 +2,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assertContract } from '../support/contract.js';
-import { auth, base, client } from '../support/client.js';
+import { base, client } from '../support/client.js';
 
-test('page is static; the API needs the gate; customers are isolated; replay and handoff work', async () => {
+test('pages are public; customers are isolated; replay and handoff work', async () => {
   for (const path of ['/', '/index.html', '/agent']) {
-    assert.equal((await fetch(base + path)).status, 401, `${path} document needs the team gate`);
-    const page = await fetch(base + path, { headers: { Authorization: auth } });
+    const page = await fetch(base + path);
     assert.equal(page.status, 200, path);
     assert.match(await page.text(), /<app-root/);
   }
   assert.equal((await fetch(base + '/favicon.ico')).status, 200, 'static files are served without the Worker');
-  assert.equal((await client({ authorization: null }).call('/transactions')).status, 401);
+  assert.equal((await client().call('/transactions')).status, 401);
 
   const ids = await client().call('/demo/identities');
   assert.equal(ids.status, 200);
@@ -30,7 +29,7 @@ test('page is static; the API needs the gate; customers are isolated; replay and
 
   const anaRows = await ana.call('/transactions');
   assertContract('transactionList', anaRows.body);
-  assert.deepEqual(new Set(anaRows.body.items.map(x => x.transaction_id)), new Set(['demo-tx-001', 'demo-tx-002']));
+  assert.deepEqual(new Set(anaRows.body.items.map(x => x.transaction_id)), new Set(['demo-tx-001', 'demo-tx-002', 'demo-tx-004', 'demo-tx-005', 'demo-tx-006']));
   assert.deepEqual((await bruno.call('/transactions')).body.items.map(x => x.transaction_id), ['demo-tx-003']);
 
   const request = { transaction_id: 'demo-tx-001', customer_statement: 'I do not recognize this charge.',

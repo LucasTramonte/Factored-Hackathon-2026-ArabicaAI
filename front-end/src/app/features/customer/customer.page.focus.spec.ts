@@ -3,11 +3,13 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { CustomerPage } from './customer.page';
 import { CustomerService } from './customer.service';
+import { CognitoService } from '../../core/auth/cognito.service';
 import { IntakeReceipt } from '../../shared/models/intake.model';
 
 describe('CustomerPage focus', () => {
   it('leaves focus alone on first render, then moves it to each new step heading', async () => {
-    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions'], { client: signal(''), card: signal(null), receipts: signal([]) }); // untyped: only what this flow calls
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null) }); // untyped: only what this flow calls
+    service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' }]);
     service.signIn.and.resolveTo();
     service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only' });
@@ -33,7 +35,8 @@ describe('CustomerPage focus', () => {
   });
 
   it('moves focus to the chat heading when a new report replaces the receipt', async () => {
-    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions'], { client: signal(''), card: signal(null), receipts: signal([]) });
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null) });
+    service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([]);
     service.signIn.and.resolveTo();
     service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only' });
@@ -57,7 +60,8 @@ describe('CustomerPage focus', () => {
   });
 
   it('makes the page behind the open chat inert only at narrow widths, never the chat itself', async () => {
-    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions'], { client: signal(''), card: signal(null), receipts: signal([]) });
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null) });
+    service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([]);
     service.signIn.and.resolveTo();
     service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only' });
@@ -81,7 +85,8 @@ describe('CustomerPage focus', () => {
   });
 
   async function home() {
-    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions'], { client: signal(''), card: signal(null), receipts: signal([]) });
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null) });
+    service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([]);
     service.signIn.and.resolveTo();
     service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only' });
@@ -161,9 +166,11 @@ describe('CustomerPage focus', () => {
     page.narrow.set(true);
     page.chatOpen.set(true);
     await fixture.whenStable();
-    const close = el.querySelector<HTMLButtonElement>('#intake-chat .chat-close');
-    expect(close).withContext('a close control inside the dialog').not.toBeNull();
-    expect(close!.textContent!.trim()).toBe(page.t().chatClose);
+    const close = el.querySelector<HTMLButtonElement>(`#intake-chat .chat-head button[aria-label="${page.t().chatClose}"]`);
+    expect(close).withContext('an icon close in the panel header, named by its label').not.toBeNull();
+    expect(close!.textContent!.trim()).toBe('');
+    expect(close!.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect([...close!.classList]).toEqual(jasmine.arrayContaining(['ar-btn', 'ar-btn-secondary', 'ar-btn-icon']));
     close!.click();
     await fixture.whenStable();
     expect(page.chatOpen()).toBeFalse();
@@ -171,12 +178,13 @@ describe('CustomerPage focus', () => {
     page.narrow.set(false);
     page.chatOpen.set(true);
     await fixture.whenStable();
-    expect(el.querySelector('#intake-chat .chat-close')).withContext('wide: the panel still carries its own close').not.toBeNull();
+    expect(el.querySelector(`#intake-chat button[aria-label="${page.t().chatClose}"]`)).withContext('wide: the panel still carries its own close').not.toBeNull();
     fixture.nativeElement.remove();
   });
 
   it('returns focus to the charge row button that opened the panel', async () => {
-    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions'], { client: signal(''), card: signal(null), receipts: signal([]) });
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null) });
+    service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([]);
     service.signIn.and.resolveTo();
     service.transactions.and.resolveTo({ items: [{ transaction_id: 'demo-tx-001', merchant_name: 'Mercado', occurred_at: null, source_occurred_at: '2026-02-26T13:21:51', amount: '125.50', currency: 'BRL' }], has_more: false, coverage: 'fictitious_demo_data_only' });
@@ -189,7 +197,7 @@ describe('CustomerPage focus', () => {
     await page.login();
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
-    const button = el.querySelector<HTMLButtonElement>('.report-btn')!;
+    const button = el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!;
     button.focus();
     button.click();
     await fixture.whenStable();
@@ -197,6 +205,31 @@ describe('CustomerPage focus', () => {
     page.closeChat();
     await fixture.whenStable();
     expect(document.activeElement).toBe(button);
+    fixture.nativeElement.remove();
+  });
+
+  it('focuses the code field when it appears and the email field on "use another email"', async () => {
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'transactions', 'reports'], { client: signal(''), card: signal(null) });
+    service.reports.and.resolveTo({ items: [], has_more: false });
+    const cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
+    cognito.requestCode.and.resolveTo();
+    TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service },
+      { provide: CognitoService, useValue: cognito }, provideRouter([])] });
+    const fixture = TestBed.createComponent(CustomerPage);
+    document.body.appendChild(fixture.nativeElement);
+    const page = fixture.componentInstance;
+    Object.defineProperty(page, 'demoPicker', { value: false });
+    fixture.autoDetectChanges();
+    page.start();
+    await fixture.whenStable();
+    page.email = 'ana@example.com';
+    await page.requestCode();
+    await fixture.whenStable();
+    expect(document.activeElement?.id).toBe('login-code');
+    page.anotherEmail();
+    await fixture.whenStable();
+    expect(document.activeElement?.id).toBe('login-email');
+    expect(cognito.forget).toHaveBeenCalled();
     fixture.nativeElement.remove();
   });
 });

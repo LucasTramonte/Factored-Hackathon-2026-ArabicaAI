@@ -1,5 +1,7 @@
 /** Validation for case creation. Types are exact and lengths count Unicode code points, as SQLite does. */
 
+/** Customer ids (committed, dataset or Cognito) are short ASCII codes; anything else is rejected before it reaches D1. */
+export const CUSTOMER_ID = /^[A-Za-z0-9-]{1,64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const invalid = detail => ({ error: { status: 422, detail } });
 

@@ -11,14 +11,14 @@
       "properties": {
         "episode_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
         "state": { "const": "selection_required" },
-        "language": { "type": "string", "pattern": "^(es|pt)$" },
+        "language": { "type": "string", "pattern": "^(es|pt|en)$" },
         "mode": { "const": "guided" },
         "replayed": { "type": "boolean" }
       }
     },
     "intakeReceipt": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "episode_id", "protocol", "kind", "accepted_at", "replayed", "actions_taken", "unresolved_questions", "next_step_code"],
+      "required": ["reference_short", "episode_id", "protocol", "kind", "accepted_at", "replayed", "urgency", "actions_taken", "unresolved_questions", "next_step_code"],
       "properties": {
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "episode_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
@@ -26,6 +26,8 @@
         "kind": { "type": "string", "pattern": "^(complete|technical|incomplete)$" },
         "accepted_at": { "type": "string", "minLength": 1 },
         "replayed": { "type": "boolean" },
+        "urgency": { "type": "string", "pattern": "^(normal|high)$" },
+        "block_card_line": { "type": "string", "minLength": 1, "description": "Present only when urgency is high: the bank's card-block number (a demo number) for the customer to call; this service never blocks a card." },
         "actions_taken": { "type": "array", "items": { "type": "string", "pattern": "^(owned_transaction_retrieved|customer_confirmation_recorded|transaction_lookup_failed)$" } },
         "unresolved_questions": { "type": "array", "items": { "type": "string", "pattern": "^(matching_transaction|customer_confirmation)$" } },
         "next_step_code": { "const": "await_human_review" }
@@ -98,6 +100,48 @@
         }
       }
     },
+    "emailSession": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "customer_id",
+        "mode"
+      ],
+      "properties": {
+        "customer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "const": "email_otp"
+        },
+        "context_card": {
+          "type": ["object", "null"],
+          "description": "Snapshot prepared by the quality-gated load; locale_hint never overrides session language.",
+          "additionalProperties": false,
+          "required": ["version", "snapshot_at", "first_name", "locale_hint", "products"],
+          "properties": {
+            "version": { "const": 1 },
+            "snapshot_at": { "type": "string", "minLength": 1 },
+            "first_name": { "type": ["string", "null"], "minLength": 1 },
+            "locale_hint": { "type": "string", "pattern": "^(es|pt)(-[A-Za-z0-9]+)*$" },
+            "products": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["product_type", "last4", "currency"],
+                "properties": {
+                  "product_type": { "type": ["string", "null"] },
+                  "last4": { "type": ["string", "null"], "pattern": "^[0-9]{4}$" },
+                  "currency": { "type": ["string", "null"], "pattern": "^[A-Z]{3}$" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "agentSession": {
       "type": "object",
       "additionalProperties": false,
@@ -110,7 +154,7 @@
           "const": "agent"
         },
         "mode": {
-          "const": "simulated_login"
+          "type": "string", "pattern": "^(simulated_login|email_otp)$"
         }
       }
     },
@@ -352,15 +396,17 @@
     },
     "agentIntake": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "protocol", "episode_id", "kind", "tool_status", "destination", "priority", "accepted_at"],
+      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at"],
       "properties": {
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
         "episode_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
         "kind": {"type": "string", "pattern": "^(complete|technical|incomplete)$"},
+        "status": {"type": "string", "pattern": "^(received|in_review|closed)$"},
         "tool_status": {"type": "string", "pattern": "^(ok|failed|timeout)$"},
         "destination": {"type": "string", "minLength": 1},
         "priority": {"type": "string", "minLength": 1},
+        "urgency": {"type": "string", "pattern": "^(normal|high)$"},
         "accepted_at": {"type": "string", "minLength": 1}
       }
     },
@@ -372,6 +418,40 @@
         "has_more": {"type": "boolean"},
         "scope": {"const": "synthetic_demo_only"}
       }
+    },
+    "reportList": {
+      "type": "object", "additionalProperties": false,
+      "required": ["items", "has_more"],
+      "properties": {
+        "items": {"type": "array", "maxItems": 20, "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["protocol", "reference_short", "kind", "status", "next_step", "accepted_at", "transaction_id"],
+          "properties": {
+            "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+            "reference_short": {"type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$"},
+            "kind": {"type": "string", "pattern": "^(complete|incomplete|technical)$"},
+            "status": {"type": "string", "pattern": "^(received|in_review|closed)$"},
+            "next_step": {"type": "string", "pattern": "^(review_pending|being_reviewed|closed_by_person)$"},
+            "accepted_at": {"type": "string", "minLength": 1},
+            "transaction_id": {"type": ["string", "null"], "minLength": 1}
+          }
+        }},
+        "has_more": {"type": "boolean"}
+      }
+    },
+    "intakeTransition": {
+      "type": "object", "additionalProperties": false,
+      "required": ["protocol", "status", "changed_at"],
+      "properties": {
+        "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+        "status": {"type": "string", "pattern": "^(in_review|closed)$"},
+        "changed_at": {"type": "string", "minLength": 1}
+      }
+    },
+    "updateQueued": {
+      "type": "object", "additionalProperties": false,
+      "required": ["queued"],
+      "properties": { "queued": {"const": true} }
     },
     "intakeServiceTransition": {
       "type": "object", "additionalProperties": false,
@@ -391,23 +471,26 @@
     },
     "agentIntakeDetail": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "protocol", "episode_id", "kind", "tool_status", "destination", "priority", "accepted_at", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "scope"],
+      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "model_reading", "scope"],
       "properties": {
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
         "episode_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
         "kind": {"type": "string", "pattern": "^(complete|technical|incomplete)$"},
+        "status": {"type": "string", "pattern": "^(received|in_review|closed)$"},
         "tool_status": {"type": "string", "pattern": "^(ok|failed|timeout)$"},
         "destination": {"type": "string", "minLength": 1},
         "priority": {"type": "string", "minLength": 1},
+        "urgency": {"type": "string", "pattern": "^(normal|high)$"},
         "accepted_at": {"type": "string", "minLength": 1},
-        "language": {"type": "string", "pattern": "^(es|pt)$"},
+        "language": {"type": "string", "pattern": "^(es|pt|en)$"},
         "customer_statement": {"type": "string", "minLength": 10, "maxLength": 2000},
         "verified_evidence": {"type": "object", "additionalProperties": false, "required": ["transaction"], "properties": {"transaction": {"type": ["object", "null"], "additionalProperties": false, "required": ["transaction_id", "occurred_at", "source_occurred_at", "merchant_name", "amount", "currency"], "properties": {"transaction_id": {"type": "string", "minLength": 1}, "occurred_at": {"type": ["string", "null"]}, "source_occurred_at": {"type": ["string", "null"]}, "merchant_name": {"type": "string"}, "amount": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]{1,2})?$"}, "currency": {"type": "string", "pattern": "^[A-Z]{3}$"}}}}},
         "actions_taken": {"type": "array", "items": {"type": "string", "minLength": 1}},
         "unresolved_questions": {"type": "array", "items": {"type": "string", "minLength": 1}},
         "history": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/intakeServiceTransition"}},
         "history_has_more": {"type": "boolean"},
+        "model_reading": {"type": "object", "additionalProperties": false, "required": ["mode", "model_version", "llm_calls"], "description": "Whether a model read the case in shadow: version and call count only, never its output; it decides nothing.", "properties": {"mode": {"type": "string", "pattern": "^(off|shadow)$"}, "model_version": {"type": ["string", "null"], "minLength": 1}, "llm_calls": {"type": "integer"}}},
         "scope": {"const": "synthetic_demo_only"}
       }
     }

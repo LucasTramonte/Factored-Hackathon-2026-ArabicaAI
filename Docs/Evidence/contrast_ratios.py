@@ -15,6 +15,7 @@ STYLES = Path(__file__).resolve().parents[2] / "front-end" / "src" / "styles.css
 TEXT_PAIRS = [
     ("body text on page", "--ink", "--surface", 4.5),
     ("body text on raised box", "--ink", "--surface-raised", 4.5),
+    ("promise line, intro and sign-in (22px/600; 18px/600 at 720px and below)", "--ink", "--surface", 4.5),
     ("muted text on page", "--ink-muted", "--surface", 4.5),
     ("muted text on raised box", "--ink-muted", "--surface-raised", 4.5),
     ("muted chip text on sunken chip", "--ink-muted", "--surface-sunken", 4.5),
@@ -22,13 +23,15 @@ TEXT_PAIRS = [
     ("link / accent text on raised box", "--accent", "--surface-raised", 4.5),
     ("ok chip text", "--ok", "--ok-soft", 4.5),
     ("warn chip text", "--warn", "--warn-soft", 4.5),
-    ("text on accent-soft (selected row, chat bubble)", "--ink", "--accent-soft", 4.5),
-    ("muted text on accent-soft", "--ink-muted", "--accent-soft", 4.5),
+    ("err chip text (high priority, technical failure)", "--err", "--err-soft", 4.5),
+    ("text on accent-soft (selected row, open or hovered queue row, chat bubble)", "--ink", "--accent-soft", 4.5),
+    ("muted text on accent-soft (open or hovered queue row)", "--ink-muted", "--accent-soft", 4.5),
     ("button label on accent button", "--surface", "--accent", 4.5),
 ]
 SURFACE_PAIRS = [
     ("raised box on page", "--surface-raised", "--surface", 3.0),
     ("sunken chip on raised box", "--surface-sunken", "--surface-raised", 3.0),
+    ("sunken chip on open or hovered queue row", "--surface-sunken", "--accent-soft", 3.0),
     ("hairline on page", "--line", "--surface", 3.0),
     ("strong line (inputs) on page", "--line-strong", "--surface", 3.0),
 ]

@@ -5,7 +5,7 @@
   overflow-y: auto; scroll-padding-bottom: 72px; display: flex; flex-direction: column; gap: 12px; padding: 20px; /* scroll-padding: a focused receipt lands above the sticky actions bar */
   background: var(--surface-raised); border: var(--hairline) solid var(--line-strong); border-radius: var(--radius-lg);
 }
-.chat-close { align-self: flex-end; }
+.chat-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .chat-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .chat-log li { max-width: 85%; padding: 8px 12px; border-radius: var(--radius-md); overflow-wrap: anywhere; font: 400 14px/20px var(--font-sans); }
 .chat-bot { align-self: flex-start; background: var(--surface-sunken); }
@@ -19,5 +19,12 @@
    language switch (WCAG 2.4.11): its top stays at least 96px down (84px bottom + 180px - 84px). Keep the breakpoint in
    sync with `narrowQuery` in customer.page.ts and the 1180px rule in styles.css. */
 @media (width > 1180px) { .chat { max-height: calc(100vh - 180px); max-height: calc(100dvh - 180px); } } /* range syntax: no gap at fractional widths */
-@media (max-width: 640px) { .chat { right: 16px; bottom: 72px; } }
-.report-btn { min-height: 36px; padding: 0 14px; font-size: 14px; }
+/* On a phone the panel is a full sheet, so nothing tappable shows beside or below it. */
+@media (max-width: 640px) { .chat { inset: 16px; width: auto; max-height: none; } .stage:has(.chat) .disc { visibility: hidden; } } /* the fixed disc would paint over the sheet */
+.login-email { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+.your-reports li + li { margin-top: 12px; }
+.report-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 4px 0 8px; }
+.box-body > .ar-caption { display: block; margin-top: 4px; } .table + .ar-caption { margin-top: 12px; }
+
+/* Urgency lane: the call-your-bank line on a high receipt; text only, never a block action. */
+.urgent-line .ar-mono { white-space: nowrap; }

@@ -90,3 +90,4 @@ These were written before any frozen scoring. Amendments 1 and 2 change how a re
 
 - Evaluation: `python -m evals.intake.run --cases <frozen corpus>` for the checklist. The extractor gets a runner entry in its own PR. Its batch follows the pre-registration template: 3 unchanged repetitions if the model is stochastic, scored by per-case majority, with Wilson intervals and McNemar against the checklist (`evals/intake/stats.py`).
 - Prices are ADR-004's, checked on 2026-09-29 against the [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/) page. The pre-registered run records the actual tokens and neurons.
+- 2026-10-02: with the switch on, the shadow call also reads the details an incomplete (not-found) handoff carries, after the response, with the same deadline and fail-safe; only its usage is added to the episode. The agent detail shows `model_reading` (mode, version and call count only, never the model's output).
