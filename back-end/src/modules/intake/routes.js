@@ -1,5 +1,5 @@
 /** Guided reports use authenticated ownership and durable start receipts; the extractor switch (off by default) only records a shadow call. */
-import { readSession, tokenHash } from '../../auth/session.js';
+import { requireSession, tokenHash } from '../../auth/session.js';
 import { fail, json, readJsonBody, readCookies } from '../../http.js';
 import { UUID, validateStartRequest, validateHandoffRequest } from './validation.js';
 import { APPROVED_EXTRACTOR, extractShadow, readyExtractor } from './ai-transport.js';
@@ -14,7 +14,7 @@ import { STATUS_TEXT } from '../../notify/templates.js';
  * the response; ``approved`` is a test seam: the router never passes it.
  */
 export async function startIntake(request, env, store, ctx, approved = APPROVED_EXTRACTOR) {
-  const current = await readSession(request, store, 'customer');
+  const current = await requireSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
   const body = await readJsonBody(request);
   if (body.error) return body.error;
@@ -57,7 +57,7 @@ export const handoffIntake = (request, env, store, ctx) => finishIntake(request,
  */
 async function finishIntake(request, env, store, ctx, complete) {
   const started = performance.now();
-  const current = await readSession(request, store, 'customer');
+  const current = await requireSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
   const body = await readJsonBody(request);
   if (body.error) return body.error;
@@ -86,7 +86,7 @@ async function finishIntake(request, env, store, ctx, complete) {
     // ponytail: check-then-write, so two confirms within the same instant can still open two reports; the agent queue shows both.
     if (kind === 'complete' && await store.openReportForTransaction(customerId, transactionId)) return fail(409, 'This charge already has an open report');
   }
-  const live = await readSession(request, store, 'customer');
+  const live = await requireSession(request, store, 'customer');
   if (!live || live.customer_id !== customerId) return fail(401, 'Start a demo session first');
   const sessionHash = await tokenHash(readCookies(request).demo_session);
   try {
@@ -132,7 +132,7 @@ async function finishIntake(request, env, store, ctx, complete) {
 async function unreserved(request, store, { customerId, episodeId, toolCalls, started }) {
   try { await store.recordIntakeAttempt({ customerId, episodeId, toolCalls, operationDuration: Math.floor(performance.now() - started) }); } catch { /* best effort */ }
   try {
-    const live = await readSession(request, store, 'customer');
+    const live = await requireSession(request, store, 'customer');
     if (!live || live.customer_id !== customerId) return fail(401, 'Session expired; renew the same customer session and retry with the same idempotency key');
     const [episode, reservation] = [await store.findIntake(customerId, episodeId), await store.findOwnedIntakeHandoff(customerId, episodeId)];
     if (episode && episode.state !== 'selection_required' && !reservation) return fail(409, 'Episode is no longer open');
@@ -145,7 +145,7 @@ const REPORTS_PAGE = 20;
 const NEXT_STEP = { received: 'review_pending', in_review: 'being_reviewed', closed: 'closed_by_person' };
 /** GET /reports: the session customer's own acknowledged reports, newest first; no statement, evidence or episode id. */
 export async function listReports(request, env, store) {
-  const current = await readSession(request, store, 'customer');
+  const current = await requireSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
   if (new URL(request.url).search) return fail(422, 'Unexpected parameters');
   const rows = await store.listCustomerHandoffs(current.customer_id, REPORTS_PAGE + 1);
@@ -159,7 +159,7 @@ export async function listReports(request, env, store) {
  * Foreign and missing reports get the same 404; no target 409; one ``update`` email per report per 5 minutes (429).
  */
 export async function requestUpdate(request, env, store, ctx) {
-  const current = await readSession(request, store, 'customer');
+  const current = await requireSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
   const body = await readJsonBody(request);
   if (body.error) return body.error;

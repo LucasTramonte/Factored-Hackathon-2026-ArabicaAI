@@ -43,7 +43,7 @@ try {
   await symlink(join(project, 'node_modules'), join(temp, 'node_modules'), 'dir'); // the Worker bundles jose
   await cp(join(project, 'seeds/seed_fictitious.sql'), join(temp, 'seed_fictitious.sql'));
   // Tests sign ID tokens with a throwaway key for the real pool's issuer and client id (wrangler.jsonc vars);
-  // only the key set is local. predeploy refuses COGNITO_TEST_JWKS in vars, so it lives in .dev.vars only.
+  // only the key set is local. predeploy refuses COGNITO_TEST_JWKS and DEMO_PICKER in vars, so it lives in .dev.vars only.
   const { privateKey, publicKey } = await generateKeyPair('RS256', { extractable: true });
   const kid = 'local-test';
   const jwks = JSON.stringify({ keys: [{ ...(await exportJWK(publicKey)), kid, alg: 'RS256', use: 'sig' }] });
@@ -51,7 +51,7 @@ try {
   Object.assign(testEnv, { COGNITO_TEST_PRIVATE_JWK: JSON.stringify({ ...(await exportJWK(privateKey)), kid }),
     COGNITO_TEST_ISSUER: issuerFor(vars), COGNITO_TEST_CLIENT_ID: vars.COGNITO_CLIENT_ID });
   await writeFile(join(temp, '.dev.vars'),
-    'DEMO_ACCESS_USERNAME="local-reviewer"\nDEMO_ACCESS_PASSWORD="local-test-password"\nDEMO_EXPOSE_DB_METRICS="1"\nDEMO_PICKER="1"\n'
+    'DEMO_EXPOSE_DB_METRICS="1"\nDEMO_PICKER="1"\n'
     + `COGNITO_TEST_JWKS='${jwks}'\n`
     // A throwaway address key; no SES secrets are written, so every local send is skipped.
     + `EMAIL_KEY="${randomBytes(32).toString('base64')}"\n`);

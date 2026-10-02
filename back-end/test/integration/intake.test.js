@@ -1,7 +1,7 @@
 /** Real local-D1 guided starts: concurrent replay, session isolation, hostile input and contract. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { client, base, auth, closeReport } from '../support/client.js';
+import { client, base, closeReport } from '../support/client.js';
 import { assertContract } from '../support/contract.js';
 import { scorerPython } from '../../scripts/scorer-python.mjs';
 
@@ -22,7 +22,7 @@ test('guided_start_is_owned_and_idempotent against local D1', async () => {
   const ana = await customer();
   const body = startBody();
   const results = await Promise.all(Array.from({ length: 10 }, () => fetch(base + '/intake/start', {
-    method: 'POST', headers: { Authorization: auth, Cookie: ana.cookie, 'Content-Type': 'application/json' },
+    method: 'POST', headers: { Cookie: ana.cookie, 'Content-Type': 'application/json' },
     body: JSON.stringify(body) }).then(async r => ({ status: r.status, body: await r.json() }))));
   assert.deepEqual(results.map(r => r.status).sort(), [200, 200, 200, 200, 200, 200, 200, 200, 200, 201]);
   assert.equal(new Set(results.map(r => r.body.episode_id)).size, 1);
@@ -50,7 +50,7 @@ test('guided_start_is_owned_and_idempotent against local D1', async () => {
 test('guided start gate, path, session-role and malformed-input boundaries', async () => {
   for (const path of ['/intake/start', '/intake', '/intake/', '/intake/unknown', '/intake/start/extra']) {
     for (const method of ['GET', 'POST', 'HEAD', 'OPTIONS', 'DELETE', 'PUT']) {
-      for (const headers of [{}, { Authorization: auth }]) {
+      for (const headers of [{}, { Authorization: 'Basic eDp5' }]) {
         const res = await fetch(base + path, { method, headers });
         assert.equal(res.status, path === '/intake/start' ? (method === 'POST' ? 401 : 405) : 404, `${method} ${path}`);
         assert.equal(res.headers.get('WWW-Authenticate'), null, 'no team gate on customer paths');

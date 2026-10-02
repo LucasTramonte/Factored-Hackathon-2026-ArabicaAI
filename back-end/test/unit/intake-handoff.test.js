@@ -8,10 +8,10 @@ import { route } from '../../src/router.js';
 import { tokenHash } from '../../src/auth/session.js';
 import { assertContract } from '../support/contract.js';
 import { close as closeReport } from '../support/close.js';
-const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p' };
+const env = {};
 const token = 'a'.repeat(64);
 const post = (path, body) => new Request('https://demo.example' + path, { method: 'POST',
-  headers: { Authorization: 'Basic ' + Buffer.from('u:p').toString('base64'), Cookie: `demo_session=${token}` }, body: JSON.stringify(body) });
+  headers: { Cookie: `demo_session=${token}` }, body: JSON.stringify(body) });
 async function setup(t) {
   const db = new DatabaseSync(':memory:'); t.after(() => db.close()); db.exec('PRAGMA foreign_keys=ON');
   const dir = new URL('../../migrations/', import.meta.url);

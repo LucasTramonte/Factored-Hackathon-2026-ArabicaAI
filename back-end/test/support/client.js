@@ -1,6 +1,5 @@
 /** HTTP client for integration tests against the local Worker; keeps one cookie jar per client. */
 export const base = process.env.WORKER_TEST_URL || 'http://127.0.0.1:8787';
-export const auth = 'Basic ' + Buffer.from('local-reviewer:local-test-password').toString('base64');
 
 /** Parse ``X-D1-Metrics`` into numbers, or ``null`` when the header is absent. */
 export function metricsOf(response) {
@@ -9,8 +8,8 @@ export function metricsOf(response) {
   return Object.fromEntries(raw.split(';').map(part => part.split('=')).map(([k, v]) => [k, Number(v)]));
 }
 
-/** A browser-like client: sends the gate credential and replays the last Set-Cookie. */
-export function client({ authorization = auth } = {}) {
+/** A browser-like client: sends ``authorization`` when given and replays the last Set-Cookie. */
+export function client({ authorization } = {}) {
   let cookie = '';
   return {
     get cookie() { return cookie; },

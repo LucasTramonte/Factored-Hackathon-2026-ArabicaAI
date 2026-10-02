@@ -12,8 +12,7 @@ import { route } from '../../src/router.js';
 import { assertContract } from '../support/contract.js';
 import { close } from '../support/close.js';
 
-const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p', DEMO_PICKER: '1' };
-const AUTH = 'Basic ' + Buffer.from('u:p').toString('base64');
+const env = { DEMO_PICKER: '1' };
 
 function setup(options) {
   const db = new DatabaseSync(':memory:'); db.exec('PRAGMA foreign_keys=ON');
@@ -27,7 +26,7 @@ function setup(options) {
     let cookie = '';
     return async (path, body) => {
       const response = await route(new Request('https://demo.example' + path, { method: body === undefined ? 'GET' : 'POST',
-        body: body === undefined ? undefined : JSON.stringify(body), headers: { Authorization: AUTH, ...(cookie ? { Cookie: cookie } : {}) } }), env, store);
+        body: body === undefined ? undefined : JSON.stringify(body), headers: { ...(cookie ? { Cookie: cookie } : {}) } }), env, store);
       const set = response.headers.get('set-cookie'); if (set) cookie = set.split(';', 1)[0];
       return { status: response.status, body: await response.json() };
     };

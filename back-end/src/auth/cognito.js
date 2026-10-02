@@ -4,6 +4,7 @@
  */
 import { createLocalJWKSet, createRemoteJWKSet, jwtVerify } from 'jose';
 import { CUSTOMER_ID } from '../modules/customer/validation.js';
+import { fail } from '../http.js';
 
 let remote;
 
@@ -34,4 +35,23 @@ export async function verifyIdToken(token, { jwks, issuer, clientId }) {
   const groups = Array.isArray(payload['cognito:groups']) ? payload['cognito:groups'].filter(g => typeof g === 'string') : [];
   const id = payload['custom:customer_id'];
   return { sub: payload.sub, email: payload.email, groups, customerId: typeof id === 'string' && CUSTOMER_ID.test(id) ? id : null };
+}
+
+const BEARER = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/;
+// The JWKS could not be fetched: jose's timeout, an unusable set, a non-200 or non-JSON answer (generic), or fetch itself.
+const JWKS_DOWN = new Set(['ERR_JWKS_TIMEOUT', 'ERR_JWKS_INVALID', 'ERR_JOSE_GENERIC']);
+
+/**
+ * ``{ claims }`` from the ID token in ``Authorization: Bearer``, or ``{ error }``: 422 without a well-formed token,
+ * 401 when it fails verification, 503 when the JWKS is unreachable. The token is never logged, echoed or stored.
+ */
+export async function bearerClaims(request, env, verify = verifyIdToken) {
+  const token = BEARER.exec(request.headers.get('Authorization') || '')?.[1];
+  if (!token || token.length > 4096) return { error: fail(422, 'Provide the sign-in token') };
+  try {
+    return { claims: await verify(token, { jwks: jwksFor(env), issuer: issuerFor(env), clientId: env.COGNITO_CLIENT_ID }) };
+  } catch (e) {
+    if (e instanceof TypeError || JWKS_DOWN.has(e?.code)) return { error: fail(503, 'Sign-in is unavailable') };
+    return { error: fail(401, 'Sign-in could not be verified') };
+  }
 }

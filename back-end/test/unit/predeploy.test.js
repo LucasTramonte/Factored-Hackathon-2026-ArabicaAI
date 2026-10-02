@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { assertNoTestJwks, localMigrations, pendingMigrations, appliedFromWranglerJson, readWranglerConfig } from '../../scripts/predeploy.mjs';
+import { assertNoLocalVars, localMigrations, pendingMigrations, appliedFromWranglerJson, readWranglerConfig } from '../../scripts/predeploy.mjs';
 
 test('every local migration file is known to the guard, in order', async () => {
   const files = await localMigrations();
@@ -42,10 +42,11 @@ test('the guard reads wrangler.jsonc as JSONC: comments and trailing commas are 
   assert.equal(config.name, 'demo');
 });
 
-test('the guard refuses a config that would ship the local test JWKS', async () => {
-  assert.throws(() => assertNoTestJwks({ vars: { COGNITO_REGION: 'r', COGNITO_TEST_JWKS: '{"keys":[]}' } }), /COGNITO_TEST_JWKS/);
-  assert.doesNotThrow(() => assertNoTestJwks({ vars: { COGNITO_REGION: 'r' } }));
-  assert.doesNotThrow(() => assertNoTestJwks({}));
+test('the guard refuses a config that would ship the local test JWKS or the demo picker', async () => {
+  assert.throws(() => assertNoLocalVars({ vars: { COGNITO_REGION: 'r', COGNITO_TEST_JWKS: '{"keys":[]}' } }), /COGNITO_TEST_JWKS/);
+  for (const value of ['1', '0', '']) assert.throws(() => assertNoLocalVars({ vars: { COGNITO_REGION: 'r', DEMO_PICKER: value } }), /DEMO_PICKER/);
+  assert.doesNotThrow(() => assertNoLocalVars({ vars: { COGNITO_REGION: 'r' } }));
+  assert.doesNotThrow(() => assertNoLocalVars({}));
   const shipped = await readWranglerConfig();
-  assert.doesNotThrow(() => assertNoTestJwks(shipped));
+  assert.doesNotThrow(() => assertNoLocalVars(shipped));
 });

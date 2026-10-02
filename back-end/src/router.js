@@ -1,9 +1,7 @@
 /**
- * Exact route table. The team gate covers only the agent and demo paths (``/agent``, ``/agent/*``,
- * ``/demo/*``) and runs before method checks there; customer routes are protected by each handler's
- * session check, behind a per-IP limit (60 a minute). Unknown paths under API prefixes return JSON 404 and are never served as the app.
+ * Exact route table. Every API route has a declared role (``ROUTE_ROLES``); protected ones are checked by their
+ * handler's session read (customer or agent), behind a per-IP limit (60 a minute). Unknown paths under API prefixes return JSON 404 and are never served as the app.
  */
-import { checkAccessGate } from './auth/access-gate.js';
 import { fail, json } from './http.js';
 import { createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession } from './modules/customer/routes.js';
 import { startIntake, confirmIntake, handoffIntake, listReports, requestUpdate } from './modules/intake/routes.js';
@@ -27,10 +25,33 @@ export const API_ROUTES = {
   '/agent/intake-detail': { GET: getAgentIntakeDetail },
   '/agent/intake-status': { POST: transitionIntake }
 };
+/** Who may call what. ``public`` needs no session; ``customer`` and ``agent`` need that actor's live session, which each
+ *  handler reads itself. ``admin`` and ``auditor`` exist as roles (Lucas's RBAC) and own no route until a feature needs
+ *  one. Declarative: adding a route without a role fails at module load. */
+export const ROLES = ['public', 'customer', 'agent', 'admin', 'auditor'];
+export const ROUTE_ROLES = {
+  '/demo/identities': 'public',
+  '/demo/session': 'public',
+  '/auth/session': 'public',
+  '/auth/logout': 'public',
+  '/transactions': 'customer',
+  '/cases': 'customer',
+  '/intake/start': 'customer',
+  '/intake/confirm': 'customer',
+  '/intake/handoff': 'customer',
+  '/reports': 'customer',
+  '/reports/update': 'customer',
+  '/demo/agent-session': 'public',
+  '/agent/cases': 'agent',
+  '/agent/intakes': 'agent',
+  '/agent/intake-detail': 'agent',
+  '/agent/intake-status': 'agent'
+};
+for (const path of Object.keys(API_ROUTES)) if (!ROLES.includes(ROUTE_ROLES[path])) throw new Error(`Route ${path} has no role`);
 export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/transactions/', '/cases/', '/intake/', '/reports/'];
 /** Bare API namespace paths that have no handler but must still answer JSON 404. */
 export const API_NAMESPACES = new Set(['/intake', '/auth']);
-/** HTML documents the Worker sees first; of these only ``/agent`` is gated. Hashed bundles skip the Worker. */
+/** HTML documents the Worker sees first; all are public. Hashed bundles skip the Worker. */
 export const DOCUMENT_PATHS = new Set(['/', '/index.html', '/agent']);
 
 /** Dispatch one request; ``store`` is the per-request D1 store and ``ctx`` the Worker context (for waitUntil). */
@@ -41,16 +62,11 @@ export async function route(request, env, store, ctx) {
     await store.ping();
     return json({ status: 'ok' });
   }
-  const team = pathname === '/agent' || pathname.startsWith('/agent/') || pathname.startsWith('/demo/');
-  if (team) {
-    const denied = checkAccessGate(request, env);
-    if (denied) return denied;
-  }
   const methods = API_ROUTES[pathname];
   if (methods || API_NAMESPACES.has(pathname) || API_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
     // Public API paths cost a D1 read or a JWKS check per cookie or bearer, so they are limited per IP (ADR-004).
     // A missing binding (unit tests) allows the request.
-    if (!team && (await env.API_LIMIT?.limit({ key: request.headers.get('cf-connecting-ip') ?? 'unknown' }))?.success === false) {
+    if ((await env.API_LIMIT?.limit({ key: request.headers.get('cf-connecting-ip') ?? 'unknown' }))?.success === false) {
       return fail(429, 'Too many requests', { 'Retry-After': '60' });
     }
     if (!methods) return fail(404, 'Not found');

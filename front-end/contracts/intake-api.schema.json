@@ -152,7 +152,7 @@
           "const": "agent"
         },
         "mode": {
-          "const": "simulated_login"
+          "type": "string", "pattern": "^(simulated_login|email_otp)$"
         }
       }
     },

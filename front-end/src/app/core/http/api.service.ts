@@ -11,7 +11,7 @@ export class ApiError extends Error {
   }
 }
 
-/** Same-origin JSON client for the intake API. The browser handles the team gate and session cookies. */
+/** Same-origin JSON client for the intake API. The browser handles the session cookies. */
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   /** ``headers`` are merged over the defaults (e.g. ``Authorization`` for the sign-in token). */

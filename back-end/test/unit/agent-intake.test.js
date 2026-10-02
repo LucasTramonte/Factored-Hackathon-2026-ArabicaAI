@@ -7,11 +7,10 @@ import { createStore } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
 import { tokenHash } from '../../src/auth/session.js';
 import { assertContract } from '../support/contract.js';
-const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p' };
-const auth = 'Basic ' + Buffer.from('u:p').toString('base64');
+const env = {};
 const customerToken = 'a'.repeat(64), agentToken = 'b'.repeat(64);
-const request = (path, { method = 'GET', cookie = `demo_agent_session=${agentToken}`, authorization = auth, body } = {}) =>
-  new Request('https://demo.example' + path, { method, headers: { Authorization: authorization, Cookie: cookie },
+const request = (path, { method = 'GET', cookie = `demo_agent_session=${agentToken}`, body } = {}) =>
+  new Request('https://demo.example' + path, { method, headers: { Cookie: cookie },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 async function setup(t) {
   const db = new DatabaseSync(':memory:'); t.after(() => db.close()); db.exec('PRAGMA foreign_keys=ON');
@@ -110,10 +109,10 @@ test('agent queue returns only the newest 50 acknowledged handoffs and reports m
   assert.deepEqual(tied.items.map(x=>x.protocol),db.prepare('SELECT handoff_id FROM intake_handoffs ORDER BY handoff_id LIMIT 50').all().map(x=>x.handoff_id));
 });
 
-test('agent intake paths enforce gate methods agent sessions and strict protocol query', async t => {
+test('agent intake paths enforce methods agent sessions and strict protocol query', async t => {
   const {db,store,get} = await setup(t);
   for(const path of ['/agent/intakes','/agent/intake-detail','/agent/intakes/extra','/agent/intake-detail/extra'])for(const method of ['GET','HEAD','POST','PUT','DELETE','OPTIONS']) {
-    assert.equal((await route(request(path,{method,authorization:''}),env,store)).status,401);
+    assert.equal((await route(request(path,{method,cookie:''}),env,store)).status,path.endsWith('/extra')?404:method==='GET'?401:405);
     const res = await route(request(path,{method}),env,store);
     assert.equal(res.status,path.endsWith('/extra')?404:method==='GET'?(path.endsWith('detail')?422:200):405);
     if(res.status===405)assert.equal(res.headers.get('Allow'),'GET');

@@ -21,9 +21,11 @@ const CEILING = {
   // One query listing the dataset cohort. It reads every customers row: 8 in the fixture (ceiling +2, the read
   // margin), about 800 with the cohort loaded (ADR-004).
   identities: [1, 10, 0, 1],
-  login: [5, 10, 6, 3],
+  // Every session start and logout also writes one auth_events row in its existing batch (migration 0012): one query,
+  // 1 read and 2 writes (the row and auth_events_time), no round trip; logout's insert also checks the session (ADR-004).
+  login: [6, 10, 6, 3],
   list: [2, 25, 0, 2],
-  logout: [1, 1, 1, 1],
+  logout: [2, 3, 3, 1],
   create: [4, 12, 6, 4],
   agentLogin: [3, 6, 6, 1],
   agentList: [2, 250, 0, 2],
@@ -62,7 +64,7 @@ const CEILING = {
 const EXPORT_SLACK = 2;
 const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
 // Customer requests of one guided episode (login + list + start + terminal request); ADR-004 sizes capacity on these.
-const EPISODE_CEILING = { complete: [32, 90, 41, 16], incomplete: [27, 66, 32, 14] };
+const EPISODE_CEILING = { complete: [33, 90, 43, 16], incomplete: [28, 67, 34, 14] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);
@@ -98,6 +100,8 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
   measured.logout = within('logout', (await c.call('/auth/logout', {})).metrics);
   const agent = client();
   measured.agentLogin = within('agentLogin', (await agent.call('/demo/agent-session', {})).metrics);
+  measured.agentEmailLogin = within('agentLogin', (await client({ authorization: 'Bearer ' + await idToken('agent@test', { groups: ['agent'] }) })
+    .call('/demo/agent-session', {})).metrics);
   measured.agentList = within('agentList', (await agent.call('/agent/cases')).metrics);
   const episode = sum(measured, ['login', 'list', 'create']);
   console.log('D1_BUDGET ' + JSON.stringify({ per_request: measured, customer_episode: episode }));
@@ -207,7 +211,7 @@ test('50-row queue scan budget is qualified against 50 terminal and 50 pending t
   const payloadHash = await tokenHash(JSON.stringify(['incomplete', null]));
   const receipts = [];
   await withIntakeStore({ config: config() }, async store => {
-    await store.rotateSession({ now: Date.now(), oldHash: null, newHash: sessionHash, actor: 'customer', customerId: 'demo-ana', expiresAt: now + 3600000 });
+    await store.rotateSession({ now: Date.now(), oldHash: null, newHash: sessionHash, actor: 'customer', customerId: 'demo-ana', expiresAt: now + 3600000, requestId: 'budget-fixture' });
     const reserve = async i => {
       const { episode } = await store.startIntake({ customerId: 'demo-ana', language: 'es', statement: 'No reconozco este cargo.', key: crypto.randomUUID(), now, expiresAt: now + 3600000 });
       const { handoff } = await store.persistIntakeHandoff({ customerId: 'demo-ana', episodeId: episode.episode_id, turnKey: crypto.randomUUID(), payloadHash,

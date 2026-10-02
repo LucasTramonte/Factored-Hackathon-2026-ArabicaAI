@@ -14,7 +14,7 @@ This page maps each box to what exists and what's next. The decisions behind it 
 |---|---|---|
 | Bronze / Silver / quality | Done, with a quality gate and a bounded one-day sample | — |
 | Gold: versioned evidence + coverage | `data_pipelines/gold/` writes a content-versioned D1 seed and a provenance manifest | Multi-day and multi-customer slices with zero, one and several matches. The API doesn't return `slice_version` or coverage yet. |
-| Validate session + customer scope | Session-only identity, separate customer and agent actors, expiry, rotation; tested adversarially | Idle expiry, and an agent role gated separately from the team gate |
+| Validate session + customer scope | Session-only identity, separate customer and agent actors, expiry, rotation; tested adversarially | Idle expiry (the agent role now comes from the Cognito `agent` group) |
 | Retrieve permitted candidates | The customer's newest 20 charges | Filters (amount, date window, merchant) and coverage/version in the response |
 | Classify retrieval outcome | Deployed 2026-10-01 and used by the guided UI. The guided flow separates an explicitly confirmed owned transaction (complete handoff), an explicit request for review without one (incomplete handoff) and a failed lookup (technical handoff). | Automatic one / several / none classification of free text, which waits for the approved extraction adapter and Gold serving fields (gated). Never claim a charge doesn't exist. |
 | Tool error → bounded retry, safe fallback | Generic 503, and the client retries the frozen request with the same key. Since 2026-10-01 (deployed), a failed owned-transaction lookup ends in a durable technical handoff. | A server-side bounded retry before the technical handoff |

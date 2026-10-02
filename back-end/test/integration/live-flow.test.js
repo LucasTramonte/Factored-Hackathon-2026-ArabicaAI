@@ -2,17 +2,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assertContract } from '../support/contract.js';
-import { auth, base, client } from '../support/client.js';
+import { base, client } from '../support/client.js';
 
-test('page is static; only the agent paths need the gate; customers are isolated; replay and handoff work', async () => {
-  assert.equal((await fetch(base + '/agent')).status, 401, 'the agent document needs the team gate');
-  for (const [path, headers] of [['/', {}], ['/index.html', {}], ['/agent', { Authorization: auth }]]) {
-    const page = await fetch(base + path, { headers });
+test('pages are public; customers are isolated; replay and handoff work', async () => {
+  for (const path of ['/', '/index.html', '/agent']) {
+    const page = await fetch(base + path);
     assert.equal(page.status, 200, path);
     assert.match(await page.text(), /<app-root/);
   }
   assert.equal((await fetch(base + '/favicon.ico')).status, 200, 'static files are served without the Worker');
-  assert.equal((await client({ authorization: null }).call('/transactions')).status, 401);
+  assert.equal((await client().call('/transactions')).status, 401);
 
   const ids = await client().call('/demo/identities');
   assert.equal(ids.status, 200);
