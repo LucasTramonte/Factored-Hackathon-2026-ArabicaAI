@@ -10,6 +10,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { createStore, newShortReference, SHORT_REFERENCE } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
 import { assertContract } from '../support/contract.js';
+import { close } from '../support/close.js';
 
 const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p', DEMO_PICKER: '1' };
 const AUTH = 'Basic ' + Buffer.from('u:p').toString('base64');
@@ -78,10 +79,10 @@ test('every receipt kind carries a short reference, and replays return the same 
 });
 
 test('codes are independent of the case UUID and unique across many handoffs', async () => {
-  const { db, actor } = setup();
+  const { db, store, actor } = setup();
   const ana = await customer(actor);
   const receipts = [];
-  for (let i = 0; i < 40; i++) receipts.push((await confirm(ana, await start(ana))).body);
+  for (let i = 0; i < 40; i++) { receipts.push((await confirm(ana, await start(ana))).body); await close(store, receipts.at(-1).protocol); }
   assert.equal(new Set(receipts.map(r => r.reference_short)).size, 40);
   for (const r of receipts) {
     const code = r.reference_short.slice(3).replace('-', '').toLowerCase();
@@ -92,10 +93,10 @@ test('codes are independent of the case UUID and unique across many handoffs', a
 
 test('SQL refuses a duplicate code, and the store retries with a fresh one instead of failing the customer', async () => {
   const codes = ['AR-AAAA-AAAA', 'AR-AAAA-AAAA', 'AR-BBBB-BBBB'];
-  const { db, actor } = setup({ shortReference: () => codes.shift() });
+  const { db, store, actor } = setup({ shortReference: () => codes.shift() });
   const ana = await customer(actor);
   const first = await confirm(ana, await start(ana));
-  assert.equal(first.body.reference_short, 'AR-AAAA-AAAA');
+  assert.equal(first.body.reference_short, 'AR-AAAA-AAAA'); await close(store, first.body.protocol);
   const second = await confirm(ana, await start(ana));
   assert.equal(second.status, 201); assert.equal(second.body.reference_short, 'AR-BBBB-BBBB');
   assert.throws(() => db.prepare("UPDATE intake_handoffs SET reference_short='AR-AAAA-AAAA' WHERE reference_short='AR-BBBB-BBBB'").run(), /UNIQUE/);
@@ -104,9 +105,10 @@ test('SQL refuses a duplicate code, and the store retries with a fresh one inste
 });
 
 test('when every retry collides, nothing is reserved and no reference is promised', async () => {
-  const { db, actor } = setup({ shortReference: () => 'AR-CCCC-CCCC' });
+  const { db, store, actor } = setup({ shortReference: () => 'AR-CCCC-CCCC' });
   const ana = await customer(actor);
-  assert.equal((await confirm(ana, await start(ana))).status, 201);
+  const first = await confirm(ana, await start(ana));
+  assert.equal(first.status, 201); await close(store, first.body.protocol);
   const key = crypto.randomUUID(); const episode = await start(ana);
   const blocked = await confirm(ana, episode, key);
   assert.equal(blocked.status, 503); assert.equal(blocked.body.reference_short, undefined); assert.equal(blocked.body.protocol, undefined);

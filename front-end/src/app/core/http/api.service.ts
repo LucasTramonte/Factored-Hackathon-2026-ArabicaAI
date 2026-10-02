@@ -1,11 +1,11 @@
 import { Injectable } from '@angular/core';
 
 /**
- * A failed API call. ``status`` is 0 when the request never got an answer. Only the status is
- * meaningful; the UI maps it to text (``errorText``) and server text is never kept or shown.
+ * A failed API call. ``status`` is 0 when the request never got an answer. The UI maps the status to text
+ * (``errorText``) and server text is never kept or shown; ``openReport`` marks the one 409 that needs its own text.
  */
 export class ApiError extends Error {
-  constructor(readonly status: number, message = `HTTP ${status}`) {
+  constructor(readonly status: number, message = `HTTP ${status}`, readonly openReport = false) {
     super(message);
     this.name = 'ApiError';
   }
@@ -27,7 +27,8 @@ export class ApiService {
     } catch {
       throw new ApiError(0);
     }
-    if (!response.ok) throw new ApiError(response.status);
+    if (!response.ok) throw new ApiError(response.status, undefined, response.status === 409
+      && (await response.json().catch(() => null))?.detail === 'This charge already has an open report');
     return response.json() as Promise<T>;
   }
 }

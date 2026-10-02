@@ -1,7 +1,7 @@
 /** Real local-D1 guided starts: concurrent replay, session isolation, hostile input and contract. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { client, base, auth } from '../support/client.js';
+import { client, base, auth, closeReport } from '../support/client.js';
 import { assertContract } from '../support/contract.js';
 import { scorerPython } from '../../scripts/scorer-python.mjs';
 
@@ -111,7 +111,7 @@ test('idle_close_and_export_keep_pending_and_unknown_visible on local D1',async 
   await mkdir(dir,{recursive:true});t.after(()=>rm(dir,{recursive:true,force:true}));
   const config=resolve(process.cwd(),'wrangler.jsonc');
   const ana=await customer();const start=await ana.call('/intake/start',startBody());
-  const complete=await ana.call('/intake/confirm',{episode_id:start.body.episode_id,transaction_id:'demo-tx-001',customer_confirmed:true,idempotency_key:crypto.randomUUID()});assert.equal(complete.status,201);
+  const complete=await ana.call('/intake/confirm',{episode_id:start.body.episode_id,transaction_id:'demo-tx-001',customer_confirmed:true,idempotency_key:crypto.randomUUID()});assert.equal(complete.status,201);await closeReport(complete.body.protocol);
   const incompleteStart=await ana.call('/intake/start',startBody());assert.equal((await ana.call('/intake/handoff',{episode_id:incompleteStart.body.episode_id,kind:'incomplete',idempotency_key:crypto.randomUUID()})).status,201);
   const open=await ana.call('/intake/start',startBody('pt'));assert.equal(open.status,201);
   let expired;

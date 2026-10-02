@@ -494,7 +494,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       // A finish 409 means the report is already submitted or closed: say so, and offer a new report.
       const finish409 = frozen.path !== 'start' && e instanceof ApiError && e.status === 409;
       if (finish409) this.ended.set(true);
-      this.chatError.set(finish409 ? this.t().err409Finish : errorText(this.t(), e));
+      this.chatError.set(finish409 ? this.t()[(e as ApiError).openReport ? 'err409OpenReport' : 'err409Finish'] : errorText(this.t(), e));
     } finally {
       this.busy.set(false);
     }

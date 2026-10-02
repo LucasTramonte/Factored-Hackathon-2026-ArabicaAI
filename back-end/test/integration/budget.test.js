@@ -31,7 +31,9 @@ const CEILING = {
   intakeStartReplay: [6, 6, 2, 2],
   // The first acknowledgement queues one "received" email for a customer with a notification target (Task 3.2):
   // one more statement in the acknowledgement batch, 3 writes (row, primary key, email_outbox_recent).
-  intakeConfirm: [19, 72, 26, 8],
+  // One open report per charge (Task 4.4): one more query and round trip that reads only that charge's cases
+  // (index cases_customer_transaction, migration 0011), and one more write for that index on the case insert (ADR-004).
+  intakeConfirm: [20, 74, 27, 9],
   intakeConfirmReplay: [18, 54, 0, 7],
   intakeIncomplete: [15, 55, 18, 7],
   intakeIncompleteReplay: [15, 44, 0, 7],
@@ -43,6 +45,9 @@ const CEILING = {
   // Session, owned report with its target flag, the outbox insert that checks the 5-minute window itself (row, primary
   // key, email_outbox_recent); the send marks the row from its own store after the response (Task 3.3).
   reportsUpdate: [3, 14, 3, 3],
+  // Agent session, then one batch: history row (+ unique index), the customer's email (row, primary key,
+  // email_outbox_recent) and the status update; each statement resolves the handoff by its unique keys (ADR-004).
+  agentTransition: [5, 26, 6, 2],
   completeDetail: [3, 15, 0, 3],
   incompleteDetail: [3, 10, 0, 3],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
@@ -57,7 +62,7 @@ const CEILING = {
 const EXPORT_SLACK = 2;
 const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
 // Customer requests of one guided episode (login + list + start + terminal request); ADR-004 sizes capacity on these.
-const EPISODE_CEILING = { complete: [31, 82, 40, 15], incomplete: [27, 66, 32, 14] };
+const EPISODE_CEILING = { complete: [32, 90, 41, 16], incomplete: [27, 66, 32, 14] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);
@@ -111,7 +116,8 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   measured.start = within('intakeStart', start.metrics);
   const startReplay = await c.call('/intake/start', body); assert.equal(startReplay.status, 200);
   measured.startReplay = within('intakeStartReplay', startReplay.metrics);
-  const confirmation = { episode_id: start.body.episode_id, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: crypto.randomUUID() };
+  const confirmation = { episode_id: start.body.episode_id, transaction_id: 'demo-tx-005', // never confirmed by an earlier suite
+    customer_confirmed: true, idempotency_key: crypto.randomUUID() };
   const complete = await c.call('/intake/confirm', confirmation);
   assert.equal(complete.status, 201); assertContract('intakeReceipt', complete.body);
   measured.confirm = within('intakeConfirm', complete.metrics);
@@ -151,6 +157,10 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   const update = await cohort.call('/reports/update', { protocol: cohortReceipt.body.protocol });
   assert.equal(update.status, 202); assertContract('updateQueued', update.body);
   measured.reportsUpdate = within('reportsUpdate', update.metrics);
+  const transition = await agent.call('/agent/intake-status', { protocol: cohortReceipt.body.protocol, status: 'in_review' });
+  assert.equal(transition.status, 200); assertContract('intakeTransition', transition.body);
+  measured.agentTransition = within('agentTransition', transition.metrics);
+  assert.equal(transition.metrics.rows_written, CEILING.agentTransition[2], 'the in_review email was queued');
   const completeEpisode = sum(measured, ['login', 'list', 'start', 'confirm']);
   const incompleteEpisode = sum({ ...measured, start: measured.start2 }, ['login', 'list', 'start', 'incomplete']);
   within('complete episode', completeEpisode, EPISODE_CEILING.complete);

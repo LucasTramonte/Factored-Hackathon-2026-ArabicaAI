@@ -135,3 +135,42 @@ test('history is bounded with explicit overflow and preserves persisted sequence
   assert.equal(body.history.length,100); assert.equal(body.history_has_more,true);
   assert.deepEqual(body.history.map(x=>x.seq),Array.from({length:100},(_,i)=>i));
 });
+
+test('POST /agent/intake-status validates its body, moves forward one step only and replays without writing', async t => {
+  const { db, store, finish } = await setup(t);
+  const { receipt } = await finish('incomplete');
+  db.prepare("INSERT INTO notification_targets VALUES('ana','iv.x',1)").run();
+  const post = (body, cookie) => route(request('/agent/intake-status', { method: 'POST', body, ...(cookie && { cookie }) }), env, store);
+  const p = receipt.protocol;
+  for (const body of [null, [], {}, { protocol: p }, { status: 'closed' }, { protocol: p, status: 'received' }, { protocol: p, status: 'resolved' },
+    { protocol: 'x', status: 'closed' }, { protocol: 42, status: 'closed' }, { protocol: p, status: 'closed', extra: 1 }, { protocol: p, status: 'closed', customer_id: 'ana' }])
+    assert.equal((await post(body)).status, 422, JSON.stringify(body));
+  for (const cookie of [`demo_session=${customerToken}`, `demo_agent_session=${'f'.repeat(64)}`, 'x=1'])
+    assert.equal((await post({ protocol: p, status: 'in_review' }, cookie)).status, 401);
+  assert.equal((await post({ protocol: crypto.randomUUID(), status: 'in_review' })).status, 404);
+  assert.equal((await post({ protocol: p, status: 'closed' })).status, 409, 'no skipping');
+  const first = await post({ protocol: p.toUpperCase(), status: 'in_review' });
+  assert.equal(first.status, 200); const body = await first.json(); assertContract('intakeTransition', body);
+  assert.equal(body.protocol, p); assert.equal(body.status, 'in_review');
+  const writes = db.prepare('SELECT total_changes() AS n').get().n;
+  const replay = await post({ protocol: p, status: 'in_review' });
+  assert.equal(replay.status, 200); assert.deepEqual(await replay.json(), body);
+  assert.equal(db.prepare('SELECT total_changes() AS n').get().n, writes, 'a replay writes nothing');
+  assert.equal((await post({ protocol: p, status: 'closed' })).status, 200);
+  assert.equal((await post({ protocol: p, status: 'in_review' })).status, 409, 'never backwards');
+  const history = db.prepare('SELECT status,agent_session_ref FROM handoff_status_history ORDER BY rowid').all();
+  const ref = (await tokenHash(agentToken)).slice(0, 12);
+  assert.deepEqual(history.map(r => ({ ...r })), [{ status: 'in_review', agent_session_ref: ref }, { status: 'closed', agent_session_ref: ref }]);
+  assert.deepEqual(db.prepare("SELECT template FROM email_outbox WHERE template<>'received' ORDER BY rowid").all().map(r => r.template), ['in_review', 'closed']);
+  assert.equal(db.prepare('SELECT status FROM intake_handoffs WHERE handoff_id=?').get(p).status, 'closed');
+});
+
+test('a reserved but unacknowledged handoff cannot be moved and gets no history', async t => {
+  const { db, store, finish } = await setup(t);
+  const pending = await finish('complete', { ...store, readIntakeReceipt: async () => { throw new Error('readback unavailable'); } });
+  assert.equal(pending.response.status, 503);
+  const protocol = db.prepare('SELECT complete_case_id FROM intake_handoffs WHERE episode_id=?').get(pending.episode_id).complete_case_id;
+  const res = await route(request('/agent/intake-status', { method: 'POST', body: { protocol, status: 'in_review' } }), env, store);
+  assert.equal(res.status, 404);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM handoff_status_history').get().n, 0);
+});

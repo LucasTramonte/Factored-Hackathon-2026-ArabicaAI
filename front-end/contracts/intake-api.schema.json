@@ -394,12 +394,13 @@
     },
     "agentIntake": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "protocol", "episode_id", "kind", "tool_status", "destination", "priority", "accepted_at"],
+      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "accepted_at"],
       "properties": {
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
         "episode_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
         "kind": {"type": "string", "pattern": "^(complete|technical|incomplete)$"},
+        "status": {"type": "string", "pattern": "^(received|in_review|closed)$"},
         "tool_status": {"type": "string", "pattern": "^(ok|failed|timeout)$"},
         "destination": {"type": "string", "minLength": 1},
         "priority": {"type": "string", "minLength": 1},
@@ -426,12 +427,21 @@
             "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
             "reference_short": {"type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$"},
             "kind": {"type": "string", "pattern": "^(complete|incomplete|technical)$"},
-            "status": {"const": "received"},
-            "next_step": {"const": "review_pending"},
+            "status": {"type": "string", "pattern": "^(received|in_review|closed)$"},
+            "next_step": {"type": "string", "pattern": "^(review_pending|being_reviewed|closed_by_person)$"},
             "accepted_at": {"type": "string", "minLength": 1}
           }
         }},
         "has_more": {"type": "boolean"}
+      }
+    },
+    "intakeTransition": {
+      "type": "object", "additionalProperties": false,
+      "required": ["protocol", "status", "changed_at"],
+      "properties": {
+        "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+        "status": {"type": "string", "pattern": "^(in_review|closed)$"},
+        "changed_at": {"type": "string", "minLength": 1}
       }
     },
     "updateQueued": {
@@ -457,12 +467,13 @@
     },
     "agentIntakeDetail": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "protocol", "episode_id", "kind", "tool_status", "destination", "priority", "accepted_at", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "scope"],
+      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "accepted_at", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "scope"],
       "properties": {
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
         "episode_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
         "kind": {"type": "string", "pattern": "^(complete|technical|incomplete)$"},
+        "status": {"type": "string", "pattern": "^(received|in_review|closed)$"},
         "tool_status": {"type": "string", "pattern": "^(ok|failed|timeout)$"},
         "destination": {"type": "string", "minLength": 1},
         "priority": {"type": "string", "minLength": 1},

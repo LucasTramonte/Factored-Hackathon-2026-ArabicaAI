@@ -1,7 +1,9 @@
-/** Agent routes: a separate simulated session and a read-only view of accepted cases. */
-import { fail, json } from '../../http.js';
-import { readSession, startSession } from '../../auth/session.js';
+/** Agent routes: a separate simulated session, views of accepted cases and handoffs, and the review status a person sets. */
+import { fail, json, readCookies, readJsonBody } from '../../http.js';
+import { COOKIE, readSession, startSession, tokenHash } from '../../auth/session.js';
 import { UUID } from '../intake/validation.js';
+import { createStore } from '../../store/d1.js';
+import { deliver } from '../../notify/dispatch.js';
 
 const PAGE = 50;
 
@@ -45,9 +47,38 @@ export async function getAgentIntakeDetail(request, env, store) {
     const event = JSON.parse(event_json);
     return Object.fromEntries(historyKeys.filter(key => key in event).map(key => [key, event[key]]));
   });
-  return json({ protocol: row.protocol, reference_short: row.reference_short ?? null, episode_id: row.episode_id, kind: row.kind, tool_status: row.tool_status,
+  return json({ protocol: row.protocol, reference_short: row.reference_short ?? null, episode_id: row.episode_id, kind: row.kind, status: row.status, tool_status: row.tool_status,
     destination: row.destination, priority: row.priority, accepted_at: row.accepted_at, language: row.language,
     customer_statement: row.customer_statement, verified_evidence: { transaction },
     actions_taken: JSON.parse(row.actions_json), unresolved_questions: JSON.parse(row.questions_json),
     history, history_has_more: events.length > 100, scope: 'synthetic_demo_only' });
+}
+
+/** The one step allowed into each status; forward only, no skipping. */
+const PREVIOUS = { in_review: 'received', closed: 'in_review' };
+
+/**
+ * POST /agent/intake-status ``{ protocol, status }``: a person moves an acknowledged handoff received → in_review →
+ * closed. Nothing is refunded, blocked or decided (ADR-002). 200 when the handoff ends in the requested status (first
+ * time or replay; a replay writes nothing), 404 when unknown, 409 for any other step. The first step queues one
+ * email to the customer, sent after the response.
+ */
+export async function transitionIntake(request, env, store, ctx) {
+  if (!await readSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');
+  const body = await readJsonBody(request);
+  if (body.error) return body.error;
+  const value = body.value;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).sort().join() !== 'protocol,status'
+    || typeof value.protocol !== 'string' || !UUID.test(value.protocol) || !Object.hasOwn(PREVIOUS, value.status)) return fail(422, 'Provide exactly a valid protocol and status');
+  const protocol = value.protocol.toLowerCase();
+  // The session's audit ref: 12 hex characters of the token hash, never the token.
+  const agentSessionRef = (await tokenHash(readCookies(request)[COOKIE.agent])).slice(0, 12);
+  const { row, emailId } = await store.transitionHandoff({ protocol, from: PREVIOUS[value.status], to: value.status,
+    now: Date.now(), agentSessionRef, emailId: crypto.randomUUID() });
+  if (!row) return fail(404, 'Intake handoff not found');
+  if (row.status !== value.status) return fail(409, 'Status can only move forward one step');
+  // A store of its own, so the send's queries never count in this response's metrics.
+  if (emailId && ctx?.waitUntil) ctx.waitUntil(deliver(env, createStore(env.DB),
+    { messageId: emailId, customerId: row.customer_id, language: row.language, reference: row.reference, template: value.status }));
+  return json({ protocol, status: row.status, changed_at: new Date(row.changed_at).toISOString() });
 }

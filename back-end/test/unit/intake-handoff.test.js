@@ -7,6 +7,7 @@ import { createStore } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
 import { tokenHash } from '../../src/auth/session.js';
 import { assertContract } from '../support/contract.js';
+import { close as closeReport } from '../support/close.js';
 const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p' };
 const token = 'a'.repeat(64);
 const post = (path, body) => new Request('https://demo.example' + path, { method: 'POST',
@@ -124,9 +125,10 @@ test('late session revocation or expiry preserves pending reservation until same
     assert.deepEqual(events(db).filter(e=>e.case_id===episode).map(e=>e.event),['intake_started']);
     const reserved=db.prepare('SELECT handoff_id FROM intake_handoffs WHERE episode_id=?').get(episode).handoff_id;
     db.prepare('INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)').run(await tokenHash(token),'customer','ana',Date.now()+3600000);
-    const recovered=await route(post('/intake/confirm',body),env,store);assert.equal(recovered.status,200);assert.equal((await recovered.json()).replayed,true);
+    const recovered=await route(post('/intake/confirm',body),env,store);assert.equal(recovered.status,200);const replayed=await recovered.json();assert.equal(replayed.replayed,true);
     assert.equal(db.prepare('SELECT handoff_id FROM intake_handoffs WHERE episode_id=?').get(episode).handoff_id,reserved);
     assert.equal(events(db).filter(e=>e.case_id===episode&&e.event==='intake_ended').length,1);
+    await closeReport(store,replayed.protocol);
   }
   const terminal=db.prepare('SELECT episode_id FROM intake_handoffs LIMIT 1').get().episode_id;
   const key=db.prepare('SELECT turn_key FROM intake_handoffs WHERE episode_id=?').get(terminal).turn_key;

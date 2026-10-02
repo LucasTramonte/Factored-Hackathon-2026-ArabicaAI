@@ -7,7 +7,7 @@ import { checkAccessGate } from './auth/access-gate.js';
 import { fail, json } from './http.js';
 import { createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession } from './modules/customer/routes.js';
 import { startIntake, confirmIntake, handoffIntake, listReports, requestUpdate } from './modules/intake/routes.js';
-import { listAgentCases, listAgentIntakes, getAgentIntakeDetail, startAgentSession } from './modules/agent/routes.js';
+import { listAgentCases, listAgentIntakes, getAgentIntakeDetail, startAgentSession, transitionIntake } from './modules/agent/routes.js';
 
 export const API_ROUTES = {
   '/demo/identities': { GET: listIdentities },
@@ -24,7 +24,8 @@ export const API_ROUTES = {
   '/demo/agent-session': { POST: startAgentSession },
   '/agent/cases': { GET: listAgentCases },
   '/agent/intakes': { GET: listAgentIntakes },
-  '/agent/intake-detail': { GET: getAgentIntakeDetail }
+  '/agent/intake-detail': { GET: getAgentIntakeDetail },
+  '/agent/intake-status': { POST: transitionIntake }
 };
 export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/transactions/', '/cases/', '/intake/', '/reports/'];
 /** Bare API namespace paths that have no handler but must still answer JSON 404. */

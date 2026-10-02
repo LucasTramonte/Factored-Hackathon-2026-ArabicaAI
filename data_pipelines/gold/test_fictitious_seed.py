@@ -29,7 +29,7 @@ def test_seed_loads_reruns_and_rejects_drift():
     con.executescript(seed)
     assert con.execute("SELECT customer_id, display_name FROM customers ORDER BY 1").fetchall() == [
         ("demo-ana", "Ana (demo)"), ("demo-bruno", "Bruno (demo)")]
-    assert con.execute("SELECT count(*) FROM transactions WHERE source_occurred_at IS NULL").fetchone() == (3,)
+    assert con.execute("SELECT count(*) FROM transactions WHERE source_occurred_at IS NULL").fetchone() == (5,)
     con.execute("UPDATE transactions SET amount='1.00' WHERE transaction_id='demo-tx-001'")
     with pytest.raises(sqlite3.IntegrityError):
         con.executescript(seed)

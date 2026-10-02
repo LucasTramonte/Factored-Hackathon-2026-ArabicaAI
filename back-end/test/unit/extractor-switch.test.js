@@ -21,6 +21,7 @@ import { assertContract } from '../support/contract.js';
 import { readWranglerConfig } from '../../scripts/predeploy.mjs';
 import { exportIntakeEvents } from '../../scripts/export-intake-events.mjs';
 import { scorerPython } from '../../scripts/scorer-python.mjs';
+import { close } from '../support/close.js';
 
 const SOURCE_PROMPT = readFileSync(new URL('../../../intake_agent/extractor/prompt.md', import.meta.url), 'utf8');
 const VERSION = 'extractor-v1@' + createHash('sha256').update(SOURCE_PROMPT).digest('hex').slice(0, 12);
@@ -82,7 +83,8 @@ function assertGuided(raw) {
 async function episodes(env, store, events, call = route) {
   const start = async () => { const res = await call(post('/intake/start', startBody()), env, store()); assert.equal(res.status, 201); return (await res.json()).episode_id; };
   const complete = await start();
-  assert.equal((await route(post('/intake/confirm', { episode_id: complete, transaction_id: 'tx-ana', customer_confirmed: true, idempotency_key: crypto.randomUUID() }), env, store())).status, 201);
+  const confirmed = await route(post('/intake/confirm', { episode_id: complete, transaction_id: 'tx-ana', customer_confirmed: true, idempotency_key: crypto.randomUUID() }), env, store());
+  assert.equal(confirmed.status, 201); await close(store(), (await confirmed.json()).protocol);
   const incomplete = await start();
   assert.equal((await route(post('/intake/handoff', { episode_id: incomplete, kind: 'incomplete', idempotency_key: crypto.randomUUID() }), env, store())).status, 201);
   const idle = await start();
@@ -201,7 +203,7 @@ test('on: failure, timeout, malformed output or bad usage fall back to the same 
     const { tool_calls, model_version, ...recorded } = usage(payload.episode_id);
     assert.deepEqual(recorded, expected, String(behaviour)); assert.equal(model_version, VERSION);
     const confirm = await route(post('/intake/confirm', { episode_id: payload.episode_id, transaction_id: 'tx-ana', customer_confirmed: true, idempotency_key: crypto.randomUUID() }), env, store());
-    assert.equal(confirm.status, 201, 'the guided flow continues');
+    assert.equal(confirm.status, 201, 'the guided flow continues'); await close(store(), (await confirm.json()).protocol);
   }
   for (const raw of events()) assert.ok(!raw.includes('tx-bruno') && !raw.includes('bruno'));
   const unknownEnds = events().map(JSON.parse).filter(e => e.event === 'intake_ended' && e.usage_unavailable_calls);

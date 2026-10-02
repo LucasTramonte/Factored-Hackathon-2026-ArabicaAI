@@ -7,12 +7,13 @@ import { formatSourceTime } from '../../shared/format/source-time.util';
 import { LangService, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
-import { AgentIntake, AgentIntakeDetail, IntakeKind } from '../../shared/models/intake.model';
+import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind } from '../../shared/models/intake.model';
 import { AgentService } from './agent.service';
 
+const STATUS_KEYS: Record<HandoffStatus, keyof Strings> = { received: 'statusReceived', in_review: 'inReview', closed: 'reviewClosed' };
 const KIND_KEYS: Record<IntakeKind, keyof Strings> = { complete: 'kindComplete', technical: 'kindTechnical', incomplete: 'kindIncomplete' };
 
-/** Agent view: the guided intake queue with a detail panel, then the legacy case list. Read-only. */
+/** Agent view: the guided intake queue with a detail panel. The only change a person can make is the next status step. */
 @Component({
   selector: 'app-agent-page',
   imports: [DatePipe, RouterLink, LangSwitch, Mark],
@@ -35,6 +36,7 @@ export class AgentPage {
   readonly sourceTime = formatSourceTime;
   private readonly detailHeading = viewChild<ElementRef<HTMLElement>>('detailHeading');
   private readonly signInButton = viewChild<ElementRef<HTMLButtonElement>>('signIn');
+  private readonly statusText = viewChild<ElementRef<HTMLElement>>('statusText');
   private readonly queueHeading = viewChild<ElementRef<HTMLElement>>('queueHeading');
   private trigger: HTMLElement | null = null;
 
@@ -51,6 +53,42 @@ export class AgentPage {
 
   kindLabel(kind: IntakeKind): string {
     return this.t()[KIND_KEYS[kind]];
+  }
+
+  statusLabel(status: HandoffStatus): string {
+    return this.t()[STATUS_KEYS[status]];
+  }
+
+  /** Take the next status step for the open report. On 409 someone else moved it: reload the detail and say so. Focus lands on the status text. */
+  async advance(d: AgentIntakeDetail): Promise<void> {
+    if (this.busy() || d.status === 'closed') return;
+    this.busy.set(true);
+    this.error.set('');
+    try {
+      this.applyStatus(d.protocol, (await this.service.setStatus(d.protocol, d.status === 'received' ? 'in_review' : 'closed')).status);
+    } catch (e) {
+      if (!(e instanceof ApiError && e.status === 409)) this.fail(e);
+      else try {
+        const fresh = await this.service.intakeDetail(d.protocol);
+        this.detail.update(x => x?.protocol === d.protocol ? fresh : x);
+        this.applyStatus(d.protocol, fresh.status);
+        this.error.set(this.t().agentErr409);
+      } catch (again) {
+        // No stale button for a status we could not confirm.
+        this.openProtocol.set(null);
+        this.detail.set(null);
+        this.fail(again);
+      }
+    } finally {
+      this.busy.set(false);
+      afterNextRender(() => this.statusText()?.nativeElement.focus(), { injector: this.injector });
+    }
+  }
+
+  /** Update the queue row and, if still open, the detail in place. */
+  private applyStatus(protocol: string, status: HandoffStatus): void {
+    this.intakes.update(xs => xs.map(x => x.protocol === protocol ? { ...x, status } : x));
+    this.detail.update(x => x?.protocol === protocol ? { ...x, status } : x);
   }
 
   /** Start an agent session, then load the intake queue. The button is disabled while busy, which drops its focus: focus then goes to the queue, or back to the button on failure. */

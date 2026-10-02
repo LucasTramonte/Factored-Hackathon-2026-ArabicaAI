@@ -1,8 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from '../../core/http/api.service';
-import { AgentIntakeDetail, AgentIntakeList } from '../../shared/models/intake.model';
+import { AgentIntakeDetail, AgentIntakeList, IntakeTransition } from '../../shared/models/intake.model';
 
-/** Agent calls: a separate simulated session and read-only views. Nothing here changes a case. */
+/** Agent calls: a separate simulated session, read-only views and the one status step a person takes. Nothing refunds, blocks or decides. */
 @Injectable({ providedIn: 'root' })
 export class AgentService {
   private readonly api = inject(ApiService);
@@ -18,5 +18,10 @@ export class AgentService {
 
   intakeDetail(protocol: string): Promise<AgentIntakeDetail> {
     return this.api.request<AgentIntakeDetail>('/agent/intake-detail?protocol=' + encodeURIComponent(protocol));
+  }
+
+  /** Move a report one step forward (received → in_review → closed); 409 when someone already moved it. */
+  setStatus(protocol: string, status: IntakeTransition['status']): Promise<IntakeTransition> {
+    return this.api.request<IntakeTransition>('/agent/intake-status', { protocol, status });
   }
 }

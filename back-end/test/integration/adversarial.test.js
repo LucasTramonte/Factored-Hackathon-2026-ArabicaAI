@@ -5,11 +5,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { assertContract } from '../support/contract.js';
-import { auth, base, client, idToken } from '../support/client.js';
+import { auth, base, client, closeReport, idToken } from '../support/client.js';
 
 const API = { '/demo/identities': 'GET', '/demo/session': 'POST', '/auth/logout': 'POST', '/transactions': 'GET', '/cases': 'POST', '/intake/start': 'POST',
   '/intake/confirm': 'POST', '/intake/handoff': 'POST', '/demo/agent-session': 'POST', '/agent/cases': 'GET', '/agent/intakes': 'GET',
-  '/agent/intake-detail': 'GET', '/reports': 'GET', '/reports/update': 'POST' };
+  '/agent/intake-detail': 'GET', '/agent/intake-status': 'POST', '/reports': 'GET', '/reports/update': 'POST' };
 const wrong = 'Basic ' + Buffer.from('local-reviewer:wrong').toString('base64');
 const uuid = () => crypto.randomUUID();
 
@@ -269,7 +269,9 @@ test('path tricks on the guided routes never confirm without a session or return
     const res = await fetch(base + path, { headers: { Cookie: agent.cookie } });
     assert.doesNotMatch(await res.text(), /customer_statement|"items"|No reconozco/, path);
   }
-  assert.equal((await ana.call('/intake/confirm', JSON.parse(confirm))).status, 201, 'the real route still works with the session');
+  const real = await ana.call('/intake/confirm', JSON.parse(confirm));
+  assert.equal(real.status, 201, 'the real route still works with the session');
+  await closeReport(real.body.protocol); // releases demo-tx-001 for later tests
 });
 
 test('isolation on guided routes: foreign and missing episodes or transactions look identical', async () => {
@@ -333,6 +335,7 @@ test('divergent concurrent confirmations and handoff on one episode leave exactl
       const again = await ana.call(path, body);
       assert.equal(again.status, body === winner.body ? 200 : 409, 'retries agree with the outcome');
     }
+    if (winner.path === '/intake/confirm') await closeReport(winner.json.protocol); // the next trial races on both charges again
   }
 });
 

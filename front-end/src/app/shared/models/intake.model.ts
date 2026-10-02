@@ -56,6 +56,8 @@ export interface AgentCaseList {
 
 // Agent intake: /agent/intakes and /agent/intake-detail.
 export type IntakeKind = 'complete' | 'technical' | 'incomplete';
+/** Set only by a person, forward one step at a time (ADR-002: no refund, block or verdict). */
+export type HandoffStatus = 'received' | 'in_review' | 'closed';
 
 export interface AgentIntake {
   protocol: string;
@@ -63,6 +65,7 @@ export interface AgentIntake {
   reference_short: string | null;
   episode_id: string;
   kind: IntakeKind;
+  status: HandoffStatus;
   tool_status: 'ok' | 'failed' | 'timeout';
   destination: string;
   priority: string;
@@ -75,8 +78,8 @@ export interface AgentIntakeList {
   scope: 'synthetic_demo_only';
 }
 
-/** One recorded service event; optional fields appear only on the events that carry them. */
-export interface IntakeTransition {
+/** One recorded service event (contract ``intakeServiceTransition``); optional fields appear only on the events that carry them. */
+export interface IntakeServiceTransition {
   seq: number;
   event: string;
   ts: string;
@@ -89,13 +92,20 @@ export interface IntakeTransition {
   missing?: string[];
 }
 
+/** POST /agent/intake-status response. */
+export interface IntakeTransition {
+  protocol: string;
+  status: 'in_review' | 'closed';
+  changed_at: string;
+}
+
 export interface AgentIntakeDetail extends AgentIntake {
   language: 'es' | 'pt';
   customer_statement: string;
   verified_evidence: { transaction: Transaction | null };
   actions_taken: string[];
   unresolved_questions: string[];
-  history: IntakeTransition[];
+  history: IntakeServiceTransition[];
   history_has_more: boolean;
   scope: 'synthetic_demo_only';
 }
@@ -165,13 +175,13 @@ export interface IntakeReceipt {
   next_step_code: 'await_human_review';
 }
 
-/** GET /reports: the session customer's own handoffs, newest first, 20 per page. Status is a constant until reviews are stored. */
+/** GET /reports: the session customer's own handoffs, newest first, 20 per page, with the status a person set. */
 export interface Report {
   protocol: string;
   reference_short: string | null;
   kind: IntakeKind;
-  status: 'received';
-  next_step: 'review_pending';
+  status: HandoffStatus;
+  next_step: 'review_pending' | 'being_reviewed' | 'closed_by_person';
   accepted_at: string;
 }
 export interface ReportList {
