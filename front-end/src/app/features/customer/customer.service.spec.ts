@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ApiService } from '../../core/http/api.service';
 import { CustomerService } from './customer.service';
+import { LangService } from '../../shared/i18n/lang.service';
 
 describe('CustomerService guided intake', () => {
   it('posts each guided body unchanged to its own route', async () => {
@@ -20,5 +21,17 @@ describe('CustomerService guided intake', () => {
     await service.reports();
     expect(api.request.calls.allArgs()).toEqual([['/intake/start', start], ['/intake/confirm', confirm], ['/intake/handoff', handoff],
       ['/demo/session', { customer_id: 'demo-ana' }], ['/auth/session', {}, { Authorization: 'Bearer a.b.c' }], ['/auth/logout', {}], ['/reports']]);
+  });
+
+  it('sends the interface language on the charges list and posts the display acknowledgement', async () => {
+    const api = jasmine.createSpyObj<ApiService>('ApiService', ['request']);
+    api.request.and.resolveTo({});
+    TestBed.configureTestingModule({ providers: [{ provide: ApiService, useValue: api }] });
+    TestBed.inject(LangService).set('pt');
+    const service = TestBed.inject(CustomerService);
+    await service.transactions();
+    await service.displayed('aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+    expect(api.request.calls.allArgs()).toEqual([['/transactions?lang=pt'],
+      ['/transactions/displayed', { view_ref: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' }]]);
   });
 });

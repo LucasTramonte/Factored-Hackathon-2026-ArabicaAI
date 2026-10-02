@@ -18,13 +18,17 @@ import { tokenHash } from '../../src/auth/session.js';
 // Ceilings per request: [queries, rows_read, rows_written, round_trips]. D1 Free allows 50 queries per invocation;
 // round trips drive latency (about 150 ms each when the Worker runs far from D1).
 const CEILING = {
-  // One query listing the dataset cohort. It reads every customers row: 8 in the fixture (ceiling +2, the read
-  // margin), about 800 with the cohort loaded (ADR-004).
-  identities: [1, 10, 0, 1],
+  // One query listing the dataset cohort. It reads every customers row: 10 in the fixture since the two charge-view
+  // customers (ceiling +2, the read margin), about 800 with the cohort loaded (ADR-004).
+  identities: [1, 12, 0, 1],
   // Every session start and logout also writes one auth_events row in its existing batch (migration 0012): one query,
   // 1 read and 2 writes (the row and auth_events_time), no round trip; logout's insert also checks the session (ADR-004).
   login: [6, 10, 6, 3],
   list: [2, 25, 0, 2],
+  // GET /transactions?lang= (ADR-009): list plus one charge_views insert (row and primary key), one more round trip.
+  listView: [3, 26, 2, 3],
+  // POST /transactions/displayed: session, then one UPDATE … RETURNING; a replay rewrites the same row (COALESCE).
+  displayed: [2, 5, 1, 2],
   logout: [2, 3, 3, 1],
   create: [4, 12, 6, 4],
   agentLogin: [3, 6, 6, 1],
@@ -71,8 +75,9 @@ const CEILING = {
 // The guided producer writes at most 5 events per episode, so a full page is at most 702 rows.
 const EXPORT_SLACK = 2;
 const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
-// Customer requests of one guided episode (login + list + start + terminal request); ADR-004 sizes capacity on these.
-const EPISODE_CEILING = { complete: [34, 92, 43, 17], incomplete: [28, 70, 34, 14] };
+// Customer requests of one guided episode (login + list?lang= + displayed + start + terminal request), as the client
+// sends them from ADR-009 on; ADR-004 sizes capacity on these.
+const EPISODE_CEILING = { complete: [37, 97, 46, 20], incomplete: [31, 75, 37, 17] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);
@@ -122,7 +127,12 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   assert.equal((await client({ authorization: 'Bearer ' + await idToken('demo-ana') }).call('/auth/session', {})).status, 200); // target present: worst case
   const c = client(); const measured = {};
   measured.login = within('login', (await c.call('/demo/session', { customer_id: 'demo-ana' })).metrics);
-  measured.list = within('list', (await c.call('/transactions')).metrics);
+  const list = await c.call('/transactions?lang=es'); assertContract('transactionList', list.body);
+  measured.list = within('listView', list.metrics);
+  const shown = await c.call('/transactions/displayed', { view_ref: list.body.view_ref });
+  assert.equal(shown.status, 200); assertContract('chargeViewDisplayed', shown.body);
+  measured.displayed = within('displayed', shown.metrics);
+  measured.displayedReplay = within('displayed', (await c.call('/transactions/displayed', { view_ref: list.body.view_ref })).metrics);
   const body = startBody(); const start = await c.call('/intake/start', body);
   assert.equal(start.status, 201); assertContract('intakeStart', start.body);
   measured.start = within('intakeStart', start.metrics);
@@ -185,8 +195,8 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   assert.equal(closing.status, 200); assertContract('intakeTransition', closing.body);
   measured.agentTransitionHigh = within('agentTransitionHigh', closing.metrics);
   assert.equal(closing.metrics.rows_written, CEILING.agentTransitionHigh[2], 'closing queued the email (D1 counts no write for leaving the partial index)');
-  const completeEpisode = sum(measured, ['login', 'list', 'start', 'confirm']);
-  const incompleteEpisode = sum({ ...measured, start: measured.start2 }, ['login', 'list', 'start', 'incomplete']);
+  const completeEpisode = sum(measured, ['login', 'list', 'displayed', 'start', 'confirm']);
+  const incompleteEpisode = sum({ ...measured, start: measured.start2 }, ['login', 'list', 'displayed', 'start', 'incomplete']);
   within('complete episode', completeEpisode, EPISODE_CEILING.complete);
   within('incomplete episode', incompleteEpisode, EPISODE_CEILING.incomplete);
   console.log('D1_GUIDED_BUDGET ' + JSON.stringify({ per_request: measured, complete_episode: completeEpisode, incomplete_episode: incompleteEpisode }));

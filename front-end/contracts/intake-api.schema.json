@@ -205,7 +205,8 @@
       "required": [
         "items",
         "has_more",
-        "coverage"
+        "coverage",
+        "view_ref"
       ],
       "properties": {
         "items": {
@@ -221,7 +222,21 @@
         "coverage": {
           "type": "string",
           "pattern": "^(fictitious_demo_data_only|dataset_cohort)$"
+        },
+        "view_ref": {
+          "type": ["string", "null"],
+          "description": "Random reference of the recorded view when ?lang= was sent (ADR-009); null when nothing was recorded.",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
         }
+      }
+    },
+    "chargeViewDisplayed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["view_ref", "displayed_at"],
+      "properties": {
+        "view_ref": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "displayed_at": { "type": "integer", "description": "Epoch milliseconds of the first acknowledgement; a replay keeps it." }
       }
     },
     "caseReceipt": {

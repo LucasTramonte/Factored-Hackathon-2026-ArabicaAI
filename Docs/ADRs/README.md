@@ -14,6 +14,7 @@ Technical and product-scope decisions for the ArabicaAI hackathon solution. Each
 | [006](ADR-006-learned-extractor-workers-ai.md) | Learned component: a fact extractor on Workers AI, smallest model first | Proposed (2026-09-29) |
 | [007](ADR-007-customer-identity-cognito-email-otp.md) | Customer identity: Amazon Cognito email one-time codes | Proposed (2026-10-02) |
 | [008](ADR-008-english-report-language.md) | English as a report language | Proposed (2026-10-02) |
+| [009](ADR-009-recent-charges-resolution.md) | Recent charges as the normal resolution path (view and display acknowledgement) | Proposed (2026-10-02) |
 
 ## Format
 
