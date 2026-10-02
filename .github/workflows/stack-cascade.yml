@@ -34,4 +34,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Run a copy: the script checks out other branches, which may change or remove scripts/.
           cp scripts/stack-cascade.sh "$RUNNER_TEMP/stack-cascade.sh"
-          bash "$RUNNER_TEMP/stack-cascade.sh" "${{ github.event.pull_request.head.sha }}" "${{ github.event.pull_request.number }}"
+          bash "$RUNNER_TEMP/stack-cascade.sh" "${{ github.event.pull_request.head.sha }}" "${{ github.event.pull_request.number }}" "${{ github.event.pull_request.head.ref }}"

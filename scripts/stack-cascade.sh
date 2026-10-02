@@ -1,26 +1,29 @@
 #!/usr/bin/env bash
-# stack-cascade.sh MERGED_SHA [MERGED_PR_NUMBER]
+# stack-cascade.sh MERGED_SHA [MERGED_PR_NUMBER] [MERGED_BRANCH]
 #
 # Keep stacked PRs mergeable after a squash merge into main, without rebasing.
-# For every open PR whose head contains MERGED_SHA (the merged PR's head), in
-# stack order: the bottom PR is retargeted to main and merges origin/main; each
+# For every open same-repository PR whose head contains MERGED_SHA (the merged
+# PR's head), in stack order: a PR based on main or MERGED_BRANCH is retargeted
+# to main and merges origin/main (any other base is skipped); each
 # PR above it merges its (just updated) base branch. A conflict while merging
 # main is resolved only when, for every conflicted file, main's version is
 # byte-identical to MERGED_SHA's version (the PR already holds that content and
 # more), by keeping the PR's side. Any other conflict aborts, comments on the
 # PR, and stops that PR and every PR stacked on it. Pushes are fast-forward
-# only (never --force); each push dispatches quality.yml for the branch.
+# only (never --force); a rejected push also comments and stops. Each push
+# dispatches quality.yml for the branch.
 #
 # Run from a clone with full history and `origin` fetched; needs gh and jq.
 set -euo pipefail
 
-merged=$(git rev-parse --verify "${1:?usage: stack-cascade.sh MERGED_SHA [PR_NUMBER]}^{commit}")
+merged=$(git rev-parse --verify "${1:?usage: stack-cascade.sh MERGED_SHA [PR_NUMBER] [MERGED_BRANCH]}^{commit}")
 pr_ref=${2:+ after #$2}
+merged_branch=${3:-}
 git fetch -q origin
 
 # "number head base" lines for open PRs whose head contains the merged commit.
-prs=$(gh pr list --state open --limit 200 --json number,headRefName,baseRefName |
-  jq -r '.[] | "\(.number) \(.headRefName) \(.baseRefName)"')
+prs=$(gh pr list --state open --limit 200 --json number,headRefName,baseRefName,isCrossRepository |
+  jq -r '.[] | select(.isCrossRepository | not) |"\(.number) \(.headRefName) \(.baseRefName)"')
 pending=$(echo "$prs" | while read -r n head base; do
   if [ -n "$n" ] && git merge-base --is-ancestor "$merged" "origin/$head" 2>/dev/null; then echo "$n $head $base"; fi
 done)
@@ -50,8 +53,7 @@ while [ -n "$pending" ]; do
   git checkout -q --detach "origin/$head"
   if [[ "$heads" == *" $base "* ]]; then
     source_ref="origin/$base"
-  elif [ "$base" = main ] || ! git rev-parse -q --verify "origin/$base" >/dev/null ||
-       [ "$(git rev-parse "origin/$base")" = "$merged" ]; then
+  elif [ "$base" = main ] || [ "$base" = "$merged_branch" ]; then
     [ "$base" = main ] || gh pr edit "$n" --base main >/dev/null
     source_ref=origin/main
   else
@@ -64,10 +66,10 @@ while [ -n "$pending" ]; do
     differing=""
     [ -n "$conflicted" ] || differing=" (merge failed without file conflicts)"
     if [ "$source_ref" = origin/main ]; then
-      for f in $conflicted; do # missing on both sides -> both empty -> identical
+      while IFS= read -r f; do # missing on both sides -> both empty -> identical
         [ "$(git rev-parse -q --verify "origin/main:$f" || true)" = "$(git rev-parse -q --verify "$merged:$f" || true)" ] ||
           differing="$differing $f"
-      done
+      done <<<"$conflicted"
     else
       differing=" $(echo $conflicted)"
     fi
@@ -76,10 +78,10 @@ while [ -n "$pending" ]; do
       stop "$n" "$head" "merging \`${source_ref#origin/}\` conflicts in:$differing."
       continue
     fi
-    for f in $conflicted; do
+    while IFS= read -r f; do
       if git cat-file -e "HEAD:$f" 2>/dev/null; then git checkout -q --ours -- "$f" && git add -- "$f"
       else git rm -q -- "$f"; fi
-    done
+    done <<<"$conflicted"
     git commit -q --no-edit
     action="merged ${source_ref#origin/}, kept PR side in:$(echo " "$conflicted)"
   else
@@ -89,7 +91,8 @@ while [ -n "$pending" ]; do
   if [ "$(git rev-parse HEAD)" = "$before" ]; then
     echo "#$n $head: up to date"; continue
   fi
-  git push -q origin "HEAD:refs/heads/$head"
+  git push -q origin "HEAD:refs/heads/$head" || {
+    stop "$n" "$head" "push rejected (a workflow file change or branch protection)."; continue; }
   git fetch -q origin
   gh workflow run quality.yml --ref "$head"
   echo "#$n $head: $action, pushed, CI dispatched"
