@@ -2,6 +2,14 @@ import { Injectable } from '@angular/core';
 import { ApiError } from '../http/api.service';
 import { cognito } from './cognito.config';
 
+/** The fields read from a Cognito JSON reply (success or error). */
+interface CognitoReply {
+  ChallengeName?: string;
+  Session?: string;
+  AuthenticationResult?: { IdToken?: string };
+  __type?: string;
+}
+
 const ENDPOINT = `https://cognito-idp.${cognito.region}.amazonaws.com/`;
 /** Cognito error types → the status the UI maps to text; anything else is 503. One status for a wrong code or unknown user: no enumeration. */
 const STATUS: Record<string, number> = { UserNotFoundException: 401, NotAuthorizedException: 401, CodeMismatchException: 401,
@@ -41,7 +49,7 @@ export class CognitoService {
     this.session = '';
   }
 
-  private async call(target: string, body: unknown): Promise<any> {
+  private async call(target: string, body: unknown): Promise<CognitoReply> {
     let response: Response;
     try {
       response = await fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/x-amz-json-1.1',
@@ -49,7 +57,7 @@ export class CognitoService {
     } catch {
       throw new ApiError(0);
     }
-    const data = await response.json().catch(() => ({}));
+    const data: CognitoReply = await response.json().catch(() => ({}));
     if (typeof data.Session === 'string' && data.Session) this.session = data.Session;
     if (!response.ok) throw new ApiError(STATUS[String(data.__type ?? '').split('#').pop()!] ?? 503);
     return data;

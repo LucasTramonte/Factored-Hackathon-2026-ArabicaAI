@@ -50,7 +50,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   private readonly service = inject(CustomerService);
   private readonly cognito = inject(CognitoService);
   /** Local demo identities under the email form; development builds only. */
-  demoPicker = demoPicker;
+  readonly demoPicker = demoPicker;
   /** The email one-time code was sent: the code field replaces the email field. */
   readonly codeSent = signal(false);
   email = '';
@@ -175,6 +175,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     clearTimeout(this.bootTimer);
     clearTimeout(this.introTimer);
     if (this.narrowQuery) this.narrowQuery.onchange = null;
+    this.cognito.forget();
   }
 
   start(): void {
@@ -208,18 +209,38 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
-  /** Code → Cognito ID token → Worker session, then the same home path as the demo sign-in. */
+  /**
+   * Code → Cognito ID token → Worker session, then the same home path as the demo sign-in. Once Cognito accepts the
+   * code it is spent, so a failed Worker exchange goes back to the email step (email kept) to request a new one.
+   */
   verify(): Promise<void> {
-    return this.enter(async () => this.service.signInWithToken(await this.cognito.submitCode(this.email.trim(), this.code.trim())),
-      e => this.error.set(this.signInError(e, 'errCode')));
+    let spent = false;
+    return this.enter(async () => {
+      const token = await this.cognito.submitCode(this.email.trim(), this.code.trim());
+      spent = true;
+      return this.service.signInWithToken(token);
+    }, e => {
+      if (spent) this.backToEmail();
+      this.error.set(this.signInError(e, spent ? 'errOther' : 'errCode'));
+    });
   }
 
-  /** Back to the email field; the pending challenge is forgotten. */
+  /** "Use another email". */
   anotherEmail(): void {
+    this.error.set('');
+    this.backToEmail();
+  }
+
+  /** The chat's Renew: the demo re-signs the same identity; email sign-in needs a new code from the login step. */
+  renew(): Promise<void> | void {
+    return this.demoPicker ? this.login() : this.step.set('login');
+  }
+
+  /** Back to the email field (focused); the pending challenge is forgotten. */
+  private backToEmail(): void {
     this.cognito.forget();
     this.codeSent.set(false);
     this.code = '';
-    this.error.set('');
     afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('#login-email')?.focus(), { injector: this.injector });
   }
 
@@ -234,8 +255,16 @@ export class CustomerPage implements OnInit, OnDestroy {
     try {
       const s = await session();
       if (this.identityLocked() && s.customer_id !== this.client()) {
-        // That sign-in set the other customer's cookie: drop it before anything else can be sent with it.
-        await this.service.logout().catch(() => undefined);
+        // That sign-in set the other customer's cookie: drop it before anything else can be sent with it. If that
+        // fails the cookie may remain, so the open report is dropped too and nothing can go out under it.
+        this.backToEmail();
+        try {
+          await this.service.logout();
+        } catch (e) {
+          this.reset();
+          this.fail(e);
+          return;
+        }
         this.error.set(this.t().errOtherCustomer);
         return;
       }
@@ -254,7 +283,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   /** Sign-in failures: 401 gets the step's own vague text, 403 not enrolled, 429 wait; the rest the generic text. */
-  private signInError(e: unknown, on401: 'errSendCode' | 'errCode'): string {
+  private signInError(e: unknown, on401: keyof Strings): string {
     const status = e instanceof ApiError ? e.status : -1;
     const key = status === 401 ? on401 : status === 403 ? 'errNotEnrolled' : status === 429 ? 'errTooMany' : null;
     return key ? this.t()[key] : errorText(this.t(), e);

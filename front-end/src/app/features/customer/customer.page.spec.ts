@@ -111,7 +111,7 @@ describe('CustomerPage', () => {
     async function open(demoPicker: boolean) {
       const fixture = TestBed.createComponent(CustomerPage);
       const p = fixture.componentInstance;
-      p.demoPicker = demoPicker;
+      Object.defineProperty(p, 'demoPicker', { value: demoPicker });
       await p.ngOnInit();
       p.start();
       fixture.detectChanges();
@@ -139,7 +139,7 @@ describe('CustomerPage', () => {
       expect(p.step()).toBe('home');
     });
 
-    it('maps each failure to its own text and keeps the step', async () => {
+    it('maps each failure to its own text and keeps the right step', async () => {
       const { p } = await open(false);
       const t = p.t();
       cognito.requestCode.and.rejectWith(new ApiError(401));
@@ -156,9 +156,43 @@ describe('CustomerPage', () => {
         cognito.submitCode.and.resolveTo('id.token');
         service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp' });
         spy.and.rejectWith(new ApiError(status));
+        if (!p.codeSent()) await toCode(p);
         await p.verify();
-        expect([p.step(), p.codeSent(), p.error()]).withContext(String(status)).toEqual(['login', true, text]);
+        // A Cognito failure keeps the code step; a Worker failure spent the code, so it is back to the email step.
+        expect([p.step(), p.codeSent(), p.error()]).withContext(String(status)).toEqual(['login', spy === cognito.submitCode, text]);
       }
+    });
+
+    it('after Cognito accepts the code, a failed Worker exchange returns to the email step for a new code', async () => {
+      const real = new CognitoService();
+      cognito.requestCode.and.callFake(e => real.requestCode(e));
+      cognito.submitCode.and.callFake((e, c) => real.submitCode(e, c));
+      const fetchSpy = spyOn(globalThis, 'fetch');
+      const reply = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+      const { p } = await open(false);
+      for (const [status, text] of [[403, p.t().errNotEnrolled], [503, p.t().err503]] as const) {
+        fetchSpy.and.returnValues(reply({ ChallengeName: 'EMAIL_OTP', Session: 's' }), reply({ AuthenticationResult: { IdToken: 'id' } }));
+        service.signInWithToken.and.rejectWith(new ApiError(status));
+        await toCode(p);
+        await p.verify();
+        expect([p.step(), p.codeSent(), p.email, p.error()]).withContext(String(status)).toEqual(['login', false, ' ana@example.com ', text]);
+      }
+      expect(cognito.submitCode).toHaveBeenCalledTimes(2);
+    });
+
+    it('a failed logout after a refused renewal drops the open report so nothing goes out under the other cookie', async () => {
+      const { p } = await open(false);
+      await toCode(p);
+      await p.verify();
+      service.startIntake.and.resolveTo({ episode_id: 'e', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
+      p.chatStatement = 'No reconozco este cargo.';
+      await p.send();
+      p.step.set('login');
+      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-2', mode: 'email_otp' });
+      service.logout.and.rejectWith(new ApiError(0));
+      await toCode(p);
+      await p.verify();
+      expect([p.step(), p.client(), p.frozen(), p.chatStep(), p.error()]).toEqual(['login', '', null, 'describe', p.t().err503]);
     });
 
     it('refuses a renewal that signs in another customer and keeps the open report', async () => {

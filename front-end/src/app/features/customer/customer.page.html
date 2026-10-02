@@ -226,7 +226,7 @@
             }
             @if (frozen()) {
               <div class="ar-panel ar-panel-warn" role="status"><p>{{ t().pending }}</p></div>
-              <div class="report-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="demoPicker ? login() : step.set('login')" [disabled]="busy()">{{ t().renew }}</button></div>
+              <div class="report-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="renew()" [disabled]="busy()">{{ t().renew }}</button></div>
             }
             @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
             <div class="chat-faq" role="group" [attr.aria-label]="t().chatFaq">

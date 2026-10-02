@@ -210,7 +210,7 @@ describe('CustomerPage focus', () => {
     const fixture = TestBed.createComponent(CustomerPage);
     document.body.appendChild(fixture.nativeElement);
     const page = fixture.componentInstance;
-    page.demoPicker = false;
+    Object.defineProperty(page, 'demoPicker', { value: false });
     fixture.autoDetectChanges();
     page.start();
     await fixture.whenStable();
