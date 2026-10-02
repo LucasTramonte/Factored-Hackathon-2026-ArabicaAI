@@ -1,12 +1,12 @@
 # Intake web client (Angular)
 
-The customer and agent views for the synthetic charge-intake demo. The client doesn't decide fraud, block a card or issue a refund; customers sign in with an email one-time code from Amazon Cognito (`src/app/core/auth/`; the browser calls `cognito-idp.us-east-2.amazonaws.com` directly and keeps no token), and the agent sign-in is simulated. Development builds (`ng serve`) also show the local demo identity picker, which calls `/demo/*` and needs `DEMO_PICKER=1` on the Worker; production builds never render it. The API is the Cloudflare Worker in [`back-end/`](../back-end/README.md), and the response shapes it relies on are in [`contracts/`](contracts/intake-api.schema.json).
+The customer and agent views for the synthetic charge-intake demo. The client doesn't decide fraud, block a card or issue a refund; customers sign in with an email one-time code from Amazon Cognito (`src/app/core/auth/`; the browser calls `cognito-idp.us-east-2.amazonaws.com` directly and keeps no token), and agents sign in the same way in the `agent` group. Development builds (`ng serve`) also show the local demo identity picker, which calls `/demo/*` and needs `DEMO_PICKER=1` on the Worker; production builds never render it. The API is the Cloudflare Worker in [`back-end/`](../back-end/README.md), and the response shapes it relies on are in [`contracts/`](contracts/intake-api.schema.json).
 
 | Path | Responsibility |
 |---|---|
 | `src/app/core/http/api.service.ts` | Same-origin JSON client. Maps each HTTP status to a user message and never shows server text. |
 | `src/app/features/customer/` | One connected screen under `/`: intro, email-code sign-in and home as in-page steps (the Worker only serves documents at `/` and `/agent`); one disc travels between them. Then home, with the charges and one Report button per row. The report panel opens from a row: describe what happened, confirm the charge or ask for review without one. After a failure, a retry resends the frozen request with the same key. |
-| `src/app/features/agent/` | Separate simulated agent session and a read-only case queue. |
+| `src/app/features/agent/` | Separate agent session, the intake queue and detail, and the received → in review → closed steps. |
 | `src/app/shared/` | API models, `formatSourceTime` (source wall time, never shifted), `i18n/` (every interface string in ES, PT and EN; the `Strings` type makes a missing translation a compile error) and `mark/` (the disc-and-slit mark). |
 | `contracts/` | JSON Schema for API responses, validated by the back-end integration tests. |
 

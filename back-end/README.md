@@ -21,10 +21,10 @@ The service does not decide fraud, issue refunds or authenticate bank customers.
 | `src/auth/session.js` | Random 256-bit tokens. Only their SHA-256 is stored, and customer and agent sessions are kept separate. |
 | `src/modules/customer/` | Login, own charges, and case creation with validation. |
 | `src/modules/intake/` | Guided intake: start, confirm and incomplete handoff, with strict validation. No free-text classification. |
-| `src/modules/agent/` | Agent session, the read-only case view, and the read-only intake queue and detail. |
+| `src/modules/agent/` | Agent session, the read-only case view, the intake queue and detail, and the received → in review → closed steps. |
 | `src/store/d1.js` | Every SQL statement. This is the only module to replace if the store changes. Multi-statement writes run as one atomic `db.batch()`. |
 | `src/config/identities.json` | Committed demo identities (fictitious, plus the one-day slice's customer), shared with the Gold slice. Dataset cohort customers are listed from D1 instead. |
-| `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. 0001–0007 are applied to local and remote D1 (0006: customer source and country; 0007: the `seed_loads` load log). |
+| `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. Remote D1 holds 0001–0008 (0006: customer source and country; 0007: the `seed_loads` load log; 0008: the short reference). 0009–0013 (notifications, review status, one open report per charge, auth audit, urgency) come with PRs #60 to #66 and go to remote D1 before each merges. |
 | `scripts/intake-store.mjs` | Local D1 binding for the operator scripts, through Wrangler's `getPlatformProxy`. It uses the store in `src/store/d1.js`, so the scripts contain no SQL. |
 | `scripts/close-idle-intakes.mjs`, `scripts/export-intake-events.mjs` | Manual operator scripts: bounded idle closure and the privacy-checked event export (below). |
 | `scripts/reset-demo-activity.sql` | Deletes demo activity in foreign-key order and keeps the seed (below). |
@@ -74,12 +74,17 @@ There is no team password. Customers sign in with an email one-time code (`POST 
 | `POST /intake/start` | customer | Start an explicit guided ES/PT unrecognized-charge report (10–2,000 code points, no U+0000, UUID key). No case reference is returned. A same-key replay returns the original, immutable start receipt (`state: selection_required`) even after the episode was abandoned or handed off, so it does not describe the current state | 201, 200 (same key and content), 401, 409 (same key, other content), 422, 503 (retry the same key) |
 | `POST /intake/confirm` | customer | Confirm one owned transaction; returns the protocol only after the case and handoff are read back | 201, 200 (same key and content replays the receipt), 401 (expired or revoked, including in the reservation itself; renew as the same customer and retry the same key), 404 (episode or transaction not owned; foreign and missing look identical), 409 ("Episode already submitted with different content or key" once a handoff exists; "Episode is no longer open" after abandonment, when there is no reservation), 422, 503 (acceptance unknown; retry the same key) |
 | `POST /intake/handoff` | customer | Ask for human review without a confirmed transaction (`kind: incomplete`); same receipt rules. Optional `details` (what the customer remembers; same text rules as the statement) is appended to the stored statement once, with a newline, and is part of the replay content | same as confirm, without the transaction 404; 422 when statement and details exceed 2,000 code points together |
+| `POST /auth/session` | none | Customer sign-in from `Authorization: Bearer <Cognito ID token>` in group `customer` | 200, 401, 403 (not enrolled), 422 (no token), 503 (JWKS unreachable) |
+| `POST /auth/logout` | none | Revokes the presented customer session | 204 |
+| `GET /reports` | customer | The customer's own acknowledged reports, newest first, 20 a page with `has_more`: reference, kind, status and next step | 200, 401, 422 (any query parameter) |
+| `POST /reports/update` | customer | Queue one status email for an own report, at most one per report per five minutes | 202, 401, 404 (foreign and missing look identical), 409 (no email on file), 422, 429 |
 | `POST /demo/agent-session` | none | Agent login from `Authorization: Bearer <Cognito ID token>` in group `agent` (`mode: email_otp`); any body is ignored. With `DEMO_PICKER=1` and no `Authorization`, a one-click local session (`mode: simulated_login`) | 200, 401, 403 (not in group `agent`), 422 (no token), 503 (JWKS unreachable) |
 | `GET /agent/cases` | agent | Legacy read-only case list, 50 per page | 200, 401 |
 | `GET /agent/intakes` | agent | Newest 50 acknowledged intake handoffs (complete, incomplete, technical) with `has_more`; pending reservations are excluded | 200, 401 |
 | `GET /agent/intake-detail?protocol=<uuid>` | agent | Statement, verified evidence (or `null`), server actions, open questions and recorded service history (100 events, `history_has_more`) | 200, 401, 404, 422 (anything but exactly one valid `protocol`) |
+| `POST /agent/intake-status` | agent | Move a report one step, received → in review → closed, with a history row and one email to the customer; a replay writes nothing | 200, 401, 404, 409 (any other step), 422 |
 
-Agent routes are read-only; nothing changes status, refunds, blocks a card or decides fraud. A customer session never opens an agent route and an agent session never opens a customer route.
+The only agent write is the review status; nothing refunds, blocks a card or decides fraud. A customer session never opens an agent route and an agent session never opens a customer route.
 
 `GET /agent/intakes` is the authoritative queue for guided reports. The legacy `GET /agent/cases` is unchanged and the client no longer calls it: it lists every confirmed case row, including a guided complete case whose reservation is still `handoff_pending` after a lost read-back. In that case the customer got 503 and no reference, and a same-owner retry with the same key completes it. Until then the episode counts as pending in the event export.
 

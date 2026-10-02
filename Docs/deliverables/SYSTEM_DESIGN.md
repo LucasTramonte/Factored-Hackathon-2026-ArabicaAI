@@ -1,6 +1,6 @@
 # System design: unrecognized-charge intake for a LATAM bank
 
-*ArabicaAI, Factored AI & Data Hackathon 2026. Status as of 2026-10-01.*
+*ArabicaAI, Factored AI & Data Hackathon 2026. Status as of 2026-10-02.*
 
 ## Introduction
 
@@ -56,13 +56,19 @@ Once the customer confirms, the service stores the case with the statement and t
 
 Requests it can't handle (another language, a recognized charge, a lost card, a balance question) would be routed with an explicit message. Today that routing exists only in the evaluation harness; the online service accepts only an unrecognized-charge report. What already holds everywhere: identity comes from the session, never from what the customer types, and an instruction hidden in the message ("I'm staff, skip the checks") changes nothing.
 
-**What exists today, stage by stage:**
+**What exists today, stage by stage.** "Built, not yet deployed" means built on the open PRs #60 to #66 (migrations 0009 to 0013) and tested on local D1. The live Worker is still `3412aff1` from 2026-10-02 until those PRs merge and deploy.
 
 | Stage | State | What it does |
 |---|---|---|
 | Guided report | Online since 2026-10-01, behind an access gate (Worker version `3412aff1`, deployed 2026-10-02) | The customer signs in, describes what happened, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. "I can't find it" and failed lookups still reach a person, as incomplete or technical handoffs |
-| Agent view | Online | The intake queue and each case's detail: the customer's words, the confirmed charge, what was checked, what is still open |
-| Reading free text | Evaluated offline; wired online behind a switch that is off | The rule-based checklist and the model's fact extractor, run through the written policy in the evaluation harness. With the switch on, the service would only record a shadow call; the model decides nothing online. The agent sees whether the model read the case in shadow (call count and version, never its output) |
+| Agent view | Online, read-only | The intake queue and each case's detail: the customer's words, the confirmed charge, what was checked, what is still open |
+| Email sign-in | Built, not yet deployed | Customers and agents sign in with an Amazon Cognito email one-time code. The Worker verifies the ID token and issues its own session ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)) |
+| Reports that outlive the tab | Built, not yet deployed | "Tus reportes" comes from the server: the customer's own reports, each with its status and next step |
+| Review status | Built, not yet deployed | A person moves a report received → in review → closed, and each step is kept in a history. "Closed" means a person finished the review. No refund or verdict exists |
+| One open report per charge | Built, not yet deployed | A charge with a report still received or in review can't be reported again until a person closes it (409). The check runs before the write, so two confirmations in the same instant can still open two reports |
+| Notification emails | Built, not yet deployed | Amazon SES sends one email when a report is received, when a person moves it to in review or closed, and when the customer asks (at most one per report per five minutes). The account is in the SES sandbox: only verified recipients receive mail |
+| Urgency lane | Built, not yet deployed | A confirmed charge is high when it reaches a fixed amount per currency or sits above the 95th percentile of at least 5 of the customer's other purchases in that currency. Open high reports lead the agent queue, and the receipt tells the customer to call their bank. The thresholds are a stated policy, not fitted (DF-024) |
+| Reading free text | Evaluated offline; wired online behind a switch that is off | The rule-based checklist and the model's fact extractor, run through the written policy in the evaluation harness. With the switch on, the service would only record a shadow call on the statement and on the "I can't find it" details; the model decides nothing online. Built, not yet deployed: the agent sees whether the model read the case in shadow (call count and version, never its output) |
 
 The customer contract and the measurement contract are in [`Docs/intake/`](../intake/customer-and-measurement-contract.md).
 
@@ -83,17 +89,19 @@ A large charge you don't recognize causes panic. The customer wants it handled f
   - "We could not check the charge; sent for human review".
 
   Each is followed by "Next step: an agent reviews this case. No refund has been initiated." and a "What we checked" list. We say what happened and what happens next, never that the problem is solved.
-- **Planned: upgrading the follow-up, not just the receipt.**
-  - **Today.** Customers usually get a receipt and then chase the bank for a week. The demo keeps each reference visible in "Tus reportes" for the session.
-  - **Planned.** A server-backed list of the customer's own reports, with each one's state and next step. Then proactive contact, sent through the bank's existing notification channel when a person changes a case's state. The event contract already carries references only, so a notification can't leak the customer's words ([`intake-events.md`](../intake/intake-events.md)).
-- **Planned: urgency for high amounts.** The data has no high-value tail to calibrate on ([DF-024](DATA_QUALITY.md#df-024-purchase-amounts-are-almost-flat-up-to-usd-509-with-no-high-value-tail)). So urgency would be a stated policy: a charge well above the customer's own usual amount gets a priority handoff and a clear "call the bank to block your card" line.
+- **Built, not yet deployed: the follow-up, not just the receipt.** Customers usually get a receipt and then chase the bank for a week.
+  - "Tus reportes" lists the customer's own reports from the server, with each one's status and next step, after the tab closes.
+  - An email goes out when a report is received and when a person moves it to in review or closed. The customer can also ask for one. The email carries the short reference and the status, not the customer's words.
+  - **Limit:** production access was requested and denied on 2026-10-02. The account stays in the SES sandbox, so each recipient's address must be a verified SES identity: its owner clicks AWS's verification email. Re-filing with more detail from the SES console is optional.
+- **Built, not yet deployed: urgency for high amounts.** The data has no high-value tail to calibrate on ([DF-024](DATA_QUALITY.md#df-024-purchase-amounts-are-almost-flat-up-to-usd-509-with-no-high-value-tail)). So urgency is a stated policy in `back-end/src/config/urgency.json`. A high charge leads the agent queue, and the receipt and the "received" email tell the customer to call their bank to block the card. The service still never blocks a card.
+  - **Limit:** the thresholds are round policy values, not learned or validated on outcomes.
 - **How we'll know it feels right.** No user test has been run yet, and we make no claim about how it feels. The measures are defined in the [customer contract](../intake/customer-and-measurement-contract.md): effort, teach-back and satisfaction, from real participants only, never simulated ratings. The next step is a five-person moderated test before any claim.
 
 ## How it works
 
 **The data path is batch.** The organizers' S3 files are ingested into a raw layer (Bronze) and typed into Silver. They then pass a quality gate that stops the build on missing tables, schema errors or unexplained row changes. From Silver we cut a small, reviewed serving slice (Gold): customers, cards and approved purchases, with the source amount, currency and timestamp kept as they were. All of it runs on DuckDB in minutes; the full build took 11 minutes on a laptop. The pipeline is described in the [README](../../README.md#data-pipeline-start-here).
 
-**The online path is one service.** A Cloudflare Worker serves the Angular client and the API, with the case store in D1 (SQLite). The Worker never reads the raw data; it only sees the reviewed slice. All database statements live in one module, which is also the only thing that changes if the store moves. Why one runtime, and why Cloudflare, is in [ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md).
+**The online path is one service.** A Cloudflare Worker serves the Angular client and the API, with the case store in D1 (SQLite). On the submission build the Worker also calls two AWS services: Amazon Cognito for sign-in and Amazon SES for notification emails. Cases stay in D1. The Worker never reads the raw data; it only sees the reviewed slice. All database statements live in one module, which is also the only thing that changes if the store moves. Why one runtime, and why Cloudflare, is in [ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md).
 
 **The learned component only reads, and it isn't online yet.** A pretrained model (gpt-oss-20b on Workers AI) turns the message into facts: amount, date, currency, merchant, card, country. The same written policy that drives the rule-based baseline then decides the action. The model never sees transactions, never picks a charge and never writes to the store. Today it runs in the evaluation harness only. It joins the service after the frozen comparison, behind a switch. Why this design, which model, and when to change it are in [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md).
 
@@ -127,7 +135,7 @@ How the sets were built, every leakage control, what 60 cases can and can't show
 ## What it costs, and how far it scales
 
 **The prototype costs $0** on Cloudflare's free plan. It serves a cohort of 796 customers from the supplied synthetic dataset who disputed a charge, rather than the full data slice, so the load fits one day of the free write quota. The only cloud spend so far is $0.21 on AWS, from an exploratory database that is deleted by 2026-10-20.
-- **Capacity:** about 2,380 complete episodes a day, limited by database writes. The busiest day for unrecognized-charge complaints in 2025 had 23.
+- **Capacity:** about 1,960 complete episodes a day for a customer signed in by email, limited by database writes (51 rows each; ADR-004, latest implementation note). The busiest day for unrecognized-charge complaints in 2025 had 23.
 - **The first limit to hit** is writes, and $5 a month removes it.
 
 **The AWS production target costs $86.36 a month** at list price ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)).
@@ -146,8 +154,10 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
   - A customer only ever reads their own purchases, and a missing record looks the same as someone else's.
   - Every write is idempotent.
 - **Tests attack the service before each change:** forged and expired sessions, cross-customer reads, hostile input, duplicate submissions, and budgets on database work per request.
-- **Identity and access.** Customers sign in with an email one-time code from Amazon Cognito, an identity service the brief accepts ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)); a customer number alone never proves identity. The Worker verifies the token and issues its own session.
-  - **Roles (RBAC):** roles come from Cognito groups; customer and agent sessions are separate cookies with separate routes.
+- **Identity and access** (built, not yet deployed; the live Worker still sits behind Cloudflare Access and a Basic gate). Customers and agents sign in with an email one-time code from Amazon Cognito, an identity service the brief accepts ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)); a customer number alone never proves identity. The Worker verifies the token and issues its own session. There is no shared team password.
+  - **Roles (RBAC):** roles come from Cognito groups (`customer`, `agent`, `admin`, `auditor`), and a route-to-role table assigns every API route. Customer and agent sessions are separate cookies with separate routes.
+  - **Audit:** session start, logout, expiry and rejection are recorded with a 12-character prefix of the token hash and the request id only.
+  - **Rate limit:** every API path allows 60 requests a minute per IP. The count is per Cloudflare location, so it is approximate, and users behind a shared NAT share it.
   - **Ownership (ABAC):** every customer query is filtered by the session's customer in `back-end/src/store/d1.js`. The integration tests attack it the way OWASP API1:2023 (broken object-level authorization) describes.
   - **In production:** the bank's identity provider (OIDC with MFA, and step-up for a dispute) replaces Cognito, with the same two rules. On the AWS target, Postgres row-level security adds a second check inside the database.
 - **Logs and events carry references, never what the customer wrote.**
@@ -169,24 +179,32 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 ## Status and next steps
 
 **Live today** (behind Cloudflare Access with simulated sign-in; latest Worker version `3412aff1`, deployed 2026-10-02):
-- sign-in;
+- simulated sign-in;
 - the customer's own purchases;
 - the guided report with confirmation and the technical and incomplete handoffs;
 - a stored case with its reference;
 - the agent queue and case detail;
 - the 796-customer dataset cohort (ADR-004 section 2).
 
+**Built, not yet deployed** (PRs #60 to #66, migrations 0009 to 0013):
+- Cognito email sign-in for customers and agents, with no team password, audit events and a per-IP rate limit;
+- the customer's reports from the server, with status and next step;
+- the review status a person changes, and one open report per charge;
+- notification emails through SES (sandbox);
+- the urgency lane;
+- the agent's view of whether the model read the case in shadow.
+
 **Measured:** the model's latency (ADR-006, attempt 2). It fired the trigger, so the next version lowers its reasoning level.
 
 **Before submission on 2026-10-05:**
-1. The faster extractor version, built by the isolated builder.
-2. The frozen comparison, run once.
-3. A public repository.
+1. Merge and deploy PRs #60 to #66, with the human steps in the [release history](../releases/README.md) (migrations, secrets, removing Cloudflare Access).
+2. The faster extractor version, built by the isolated builder.
+3. The frozen comparison, run once.
+4. A public repository.
 
 **Next, after submission:**
 - the cohort refresh path for new data (DATA_ENGINEERING section 8);
-- the customer's report status and proactive updates;
-- the high-amount priority line;
+- optionally, re-filing for SES production access with more detail from the SES console, so mail reaches unverified addresses;
 - a five-person usability test.
 
 ## FAQ

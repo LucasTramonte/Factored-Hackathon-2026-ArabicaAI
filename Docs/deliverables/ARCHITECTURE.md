@@ -32,3 +32,16 @@ The previous CSV baseline was retired only after its check semantics were compar
 The view preserves original categories and all interactions. Identity and exact-text hashes bind predictions to current Silver records; absent/new/changed text remains unclassified. `provisional` and `review_required` are model-derived triage statuses, never verified labels; human adjudication remains pending. Confidence is uncalibrated. Rebuild enrichment after a Silver refresh and query the view rather than historical cache tables directly.
 
 DuckDB checks one-to-one interaction/transcript keys and cache membership coverage before publication; failure rolls back the import. Membership streams through a temporary CSV, while the historical 546 distinct-text responses fit in memory. This importer is intended for the bounded historical cache, not an unbounded live classification service. No historical exploratory module is required by the pipeline or Docker image.
+
+## Online path
+
+The pipeline above ends in a reviewed Gold seed loaded into D1. The online service reads only that seed.
+
+```text
+browser -> Amazon Cognito: email one-time code -> ID token
+browser -> Cloudflare Worker (router, per-IP limit, session from the verified token)
+  -> D1 (every statement in back-end/src/store/d1.js)
+  -> Amazon SES: notification emails, sent after the response
+```
+
+The Worker and D1 remain the single runtime ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito and SES are built, not yet deployed (PRs #60 to #66). The live Worker `3412aff1` still sits behind Cloudflare Access and a Basic gate; both are removed once the change deploys ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)).

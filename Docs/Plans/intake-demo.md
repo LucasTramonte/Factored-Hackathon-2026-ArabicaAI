@@ -7,7 +7,7 @@ The V1 workflow ([ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intak
 1. A customer signs in with an email one-time code and sees only their own charges.
 2. They pick one, describe it and explicitly confirm.
 3. They get a reference once the case is stored.
-4. A simulated agent reads the case.
+4. An agent, signed in with their own email code, reads the case.
 
 The reference means "accepted for human review". It is not a fraud decision, a refund, a card block or a resolution. The MVP is deterministic, and no model is called. The runtime is one Cloudflare Worker with D1 ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Capacity and cost are covered in [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md).
 
@@ -107,7 +107,7 @@ Both use `--profile ${AWS_PROFILE:-arabica}` and can be rerun. Judges' and teamm
 
 The Worker will send notification emails through Amazon SES v2 (`us-east-2`, account `arabica`) from `rzuniga@aptsny.co`; the team has no verified domain, so the sender is a single verified email identity. `SES_REGION` and `SES_FROM` are plain `vars` in `back-end/wrangler.jsonc`. The IAM user `arabicaai-worker-ses` has one inline policy, `ses-send-only`, allowing only `ses:SendEmail` on `arn:aws:ses:us-east-2:849110176017:identity/rzuniga@aptsny.co`, and no managed policies.
 
-The account is in the SES sandbox (200 emails a day, 1 a second): until production access is granted, SES delivers only to verified addresses, so each judge's address must also be created as an SES email identity and its owner must click AWS's verification email, or production access must arrive first. On 2026-10-02 a production-access request was filed (`put-account-details`, mail type `TRANSACTIONAL`, under 50 emails a day, recipients limited to Cognito-enrolled users, bounces and complaints stop sends to that address); its review status was `PENDING`. Check it with `aws sesv2 get-account --profile arabica --region us-east-2 --query '[ProductionAccessEnabled,Details.ReviewDetails.Status]'`.
+The account is in the SES sandbox (200 emails a day, 1 a second), and SES delivers only to verified addresses. On 2026-10-02 a production-access request was filed (`put-account-details`, mail type `TRANSACTIONAL`, under 50 emails a day, recipients limited to Cognito-enrolled users, bounces and complaints stop sends to that address). It was denied the same day: `ProductionAccessEnabled` is `false` and the review status is `DENIED`. The account stays in the sandbox, so each recipient's address must be created as an SES email identity and its owner must click AWS's verification email. Re-filing with more detail from the SES console is optional. Check it with `aws sesv2 get-account --profile arabica --region us-east-2 --query '[ProductionAccessEnabled,Details.ReviewDetails.Status]'`.
 
 ```bash
 back-end/scripts/ses/setup.sh   # creates or finds the sender identity and the send-only user; prints verification status and the user ARN
@@ -124,13 +124,13 @@ Human steps (the access key never passes through an agent or the repository):
    npx wrangler secret put EMAIL_KEY   # 32 random bytes, base64: openssl rand -base64 32
    ```
 
-3. If the account is still in the sandbox when judging starts, for each judge run `aws sesv2 create-email-identity --email-identity <judge email> --profile arabica --region us-east-2` and ask them to click AWS's verification email.
+3. For each judge, run `aws sesv2 create-email-identity --email-identity <judge email> --profile arabica --region us-east-2` and ask them to click AWS's verification email.
 
 ## Known limits
 
 - Customer identity is a Cognito email code mapped to one demo customer; it is not bank authentication. Agents sign in with their own email code in the `agent` group; there is no shared team password.
 - Sessions last one hour and are stored in D1.
-- A retry with the same key and content returns the same reference, and different content gets 409. A second case for the same charge under a new key is possible: there is no cross-key duplicate rule yet (tracked in the roadmap).
+- A retry with the same key and content returns the same reference, and different content gets 409. A charge with a report still received or in review can't be reported again under a new key (409) until a person closes it; two confirmations in the same instant can still open two.
 - If the browser tab is closed with a request pending, the pending state is lost, but no duplicate is created.
 - No historical complaint is linked to a transaction, so none is joined here by `customer_id` alone.
 

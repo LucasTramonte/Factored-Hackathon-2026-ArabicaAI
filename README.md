@@ -6,9 +6,9 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 
 **Evaluators: start with [`SYSTEM_DESIGN.md`](Docs/deliverables/SYSTEM_DESIGN.md).** It tells the whole story in one narrative: the customer and the problem, what we built, how it works, how we know it works, what it costs, and what is missing. The [reading guide](Docs/README.md) then maps each point of the brief to the document that answers it.
 
-![Current architecture on Cloudflare: browsers pass Cloudflare Access, the Basic gate, the router and the session cookie to the customer, intake and agent modules, whose SQL lives in store/d1.js over D1. Static assets skip the Worker; Workers AI is gated and offline only. An offline DuckDB batch goes from S3 to Bronze, Silver, the quality gate, the Gold slice and a reviewed seed loaded into D1](Docs/Evidence/diagrams/current_workflow_arabica_ai.png)
+![Architecture of the deployed Worker on Cloudflare (the diagram predates the Cognito and SES change): browsers pass Cloudflare Access, the Basic gate, the router and the session cookie to the customer, intake and agent modules, whose SQL lives in store/d1.js over D1. Static assets skip the Worker; Workers AI is gated and offline only. An offline DuckDB batch goes from S3 to Bronze, Silver, the quality gate, the Gold slice and a reviewed seed loaded into D1](Docs/Evidence/diagrams/current_workflow_arabica_ai.png)
 
-*What runs today, on Cloudflare (solid: live, dashed: planned). The editable source is [`Workflow - Cloudflare intake.excalidraw`](<Docs/Evidence/diagrams/Workflow - Cloudflare intake.excalidraw>). The priced AWS production target is in the [appendix](#appendix-aws-production-target).*
+*What runs on the live Worker `3412aff1`, on Cloudflare (solid: live, dashed: planned). The submission build replaces Cloudflare Access and the Basic gate with Cognito sign-in and adds SES email; see [How it fits together](#how-it-fits-together). The editable source is [`Workflow - Cloudflare intake.excalidraw`](<Docs/Evidence/diagrams/Workflow - Cloudflare intake.excalidraw>). The priced AWS production target is in the [appendix](#appendix-aws-production-target).*
 
 ## Contents
 
@@ -60,15 +60,18 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
                    data_pipelines/ (Python + DuckDB, batch)                      │
                                                                                  ▼
  Angular client (front-end/) ─► Cloudflare Worker API + D1 (back-end/) ─► agent queue
-                                            ▲
-                     evals/intake (checklist baseline, episode scorer) over HTTP
+        │                            ▲            └─► Amazon SES (notification emails)
+        └─► Amazon Cognito           │
+            (email code → ID token)  evals/intake (checklist baseline, episode scorer) over HTTP
 ```
+
+The Worker and D1 remain the single runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito proves who signs in, and the Worker issues its own session from the verified token. SES only delivers email; cases stay in D1. Both are built, not yet deployed. Once they deploy, Cloudflare Access and the Basic gate are removed ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)).
 
 | Component | Path | What it does |
 |---|---|---|
 | Data pipeline | `data_pipelines/bronze`, `silver`, `quality` | Reproducible, read-only S3 → typed Silver tables with a readiness audit |
 | Gold intake slice | `data_pipelines/gold` | Bounded, quality-gated sample → versioned D1 seed with provenance |
-| Intake API | `back-end/` | One online runtime: sessions, customer-scoped retrieval, idempotent cases, reference after commit, agent view |
+| Intake API | `back-end/` | One online runtime: sessions from Cognito sign-in, customer-scoped retrieval, idempotent cases, reference after commit, the customer's reports, review status, notification emails, agent view |
 | Web client | `front-end/` | Customer and agent views; API contracts in `front-end/contracts/` |
 | Evaluation | `evals/intake`, [`EVALUATION.md`](Docs/deliverables/EVALUATION.md) | Team-built ES/PT test sets, checklist baseline, learned-component harness, episode KPI scorer |
 | Data quality register | [`DATA_QUALITY.md`](Docs/deliverables/DATA_QUALITY.md), `data_profiles/findings/` | Every dataset finding that changes or limits a decision, with its query, impact and handling |
@@ -76,20 +79,24 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 
 **Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Customers sign in with an email one-time code from Amazon Cognito; ask the team to enrol your email. Agents sign in the same way, in the `agent` group; there is no team password ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). Until this branch deploys, the live link still has Cloudflare Access and simulated sign-ins.
 
-**Status (2026-10-01):**
+**Status (2026-10-02):**
 
 - The guided intake is deployed (latest Worker version `3412aff1`, 2026-10-02, from `main` 093e0e7) and tested by the adversarial gate, session, isolation, idempotency and D1 budget suites:
   - owned ES/PT guided reports, with complete, incomplete and technical handoffs;
   - the agent intake queue and detail with service history;
   - a validated event export and a manual idle sweep;
   - the 796-customer dataset cohort loaded into D1;
-  - customer sign-in with a Cognito email code, built and tested, not yet deployed.
+- Built and tested, not yet deployed (PRs #60 to #66, migrations 0009 to 0013):
+  - Cognito email sign-in for customers and agents, with no team password, audit events and a per-IP rate limit;
+  - the customer's reports from the server, with status and next step;
+  - received → in review → closed by a person, and one open report per charge;
+  - notification emails through Amazon SES (sandbox: only verified recipients receive mail);
+  - the urgency lane, a stated policy (`back-end/src/config/urgency.json`).
 - The AI extraction step is wired behind a switch that is off. Its latency fired the trigger, so a faster version comes first ([ADR-006](Docs/ADRs/ADR-006-learned-extractor-workers-ai.md)).
-- It runs on the Cloudflare Free plan ($0). [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes the guided flow at about 2,380 complete episodes a day, against measured volumes of 17–818 a day. The same record prices a production target on AWS at $86.36 a month and explains each service choice.
+- It runs on the Cloudflare Free plan ($0). [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) sizes the submission build at about 1,960 complete email-signed-in episodes a day, against measured volumes of 17–818 a day. The same record prices a production target on AWS at $86.36 a month and explains each service choice.
 - **Not done yet:**
   - automatic one / several / none classification of free text (waits for the extractor);
   - the frozen comparison;
-  - the customer's report status and proactive updates;
   - the cohort refresh path for new data ([DATA_ENGINEERING.md section 8](Docs/deliverables/DATA_ENGINEERING.md#8-if-new-data-arrives-tomorrow));
   - the recent-transactions resolution path (a draft proposal).
 
