@@ -192,6 +192,8 @@ The organizers confirmed that new data would arrive in the same storage pattern 
 2. **New disputes don't enter the cohort.** Cohort membership is fixed to complaints created before 2026-01-01 (`DESIGN_END` in `data_pipelines/gold/cohort.py`), which keeps the evaluation's design window clean (ADR-005). New data only moves the 120-day purchase window of customers already in the cohort.
 3. **Reloading over the current D1 fails.** Every context card carries the quality run's timestamp as `snapshot_at`, and the seed's upserts reject any stored value that differs, by design ([section 2](#2-contracts)). A rebuilt cohort therefore fails on its first customer who is already loaded, with `NOT NULL constraint failed: context_cards.card_json`. A corrected amount, merchant or time fails the same way, and no seed deletes rows that left the cohort or the window.
 
+The [new-data rehearsal](../Evidence/new-data-rehearsal.md) of 2026-10-02 ran this path from S3 to a customer's charges on a copy in 158 seconds, and reproduced stops 1 and 3.
+
 **The fix**, in a follow-up PR:
 - take `as_of` from the quality run instead of a default;
 - let cohort membership move with new complaints, while keeping the evaluation window fixed;
