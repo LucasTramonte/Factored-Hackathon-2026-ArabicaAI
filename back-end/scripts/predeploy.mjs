@@ -40,8 +40,16 @@ export function appliedFromWranglerJson(text) {
   return rows.map(r => r.name);
 }
 
+/** Throws when ``vars`` would ship the local test key set, which would let anyone holding its private key sign in. */
+export function assertNoTestJwks(config) {
+  if (config.vars && 'COGNITO_TEST_JWKS' in config.vars) {
+    throw new Error('wrangler.jsonc vars contain COGNITO_TEST_JWKS (a local test key set); remove it before deploying');
+  }
+}
+
 async function main() {
   const config = await readWranglerConfig();
+  assertNoTestJwks(config);
   const db = config.d1_databases?.[0];
   if (!db || db.database_id === '00000000-0000-0000-0000-000000000000') {
     throw new Error('Create the remote D1 database and replace the placeholder database_id before deployment');

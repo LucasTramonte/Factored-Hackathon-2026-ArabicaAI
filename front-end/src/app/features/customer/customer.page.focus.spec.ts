@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { CustomerPage } from './customer.page';
 import { CustomerService } from './customer.service';
+import { CognitoService } from '../../core/auth/cognito.service';
 import { IntakeReceipt } from '../../shared/models/intake.model';
 
 describe('CustomerPage focus', () => {
@@ -197,6 +198,30 @@ describe('CustomerPage focus', () => {
     page.closeChat();
     await fixture.whenStable();
     expect(document.activeElement).toBe(button);
+    fixture.nativeElement.remove();
+  });
+
+  it('focuses the code field when it appears and the email field on "use another email"', async () => {
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'transactions'], { client: signal(''), card: signal(null), receipts: signal([]) });
+    const cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
+    cognito.requestCode.and.resolveTo();
+    TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service },
+      { provide: CognitoService, useValue: cognito }, provideRouter([])] });
+    const fixture = TestBed.createComponent(CustomerPage);
+    document.body.appendChild(fixture.nativeElement);
+    const page = fixture.componentInstance;
+    Object.defineProperty(page, 'demoPicker', { value: false });
+    fixture.autoDetectChanges();
+    page.start();
+    await fixture.whenStable();
+    page.email = 'ana@example.com';
+    await page.requestCode();
+    await fixture.whenStable();
+    expect(document.activeElement?.id).toBe('login-code');
+    page.anotherEmail();
+    await fixture.whenStable();
+    expect(document.activeElement?.id).toBe('login-email');
+    expect(cognito.forget).toHaveBeenCalled();
     fixture.nativeElement.remove();
   });
 });

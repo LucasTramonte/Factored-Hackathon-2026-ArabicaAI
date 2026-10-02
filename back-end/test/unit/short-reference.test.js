@@ -11,7 +11,7 @@ import { createStore, newShortReference, SHORT_REFERENCE } from '../../src/store
 import { route } from '../../src/router.js';
 import { assertContract } from '../support/contract.js';
 
-const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p' };
+const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p', DEMO_PICKER: '1' };
 const AUTH = 'Basic ' + Buffer.from('u:p').toString('base64');
 
 function setup(options) {

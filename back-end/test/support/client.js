@@ -31,3 +31,13 @@ export function client({ authorization = auth } = {}) {
     }
   };
 }
+
+/** A Cognito-shaped ID token signed with run-local's throwaway key, for the real issuer and client id. */
+export async function idToken(customerId, { groups = ['customer'] } = {}) {
+  const { SignJWT, importJWK } = await import('jose');
+  const jwk = JSON.parse(process.env.COGNITO_TEST_PRIVATE_JWK);
+  return new SignJWT({ token_use: 'id', email: 'test@example.com', email_verified: true, 'cognito:groups': groups,
+    'custom:customer_id': customerId }).setProtectedHeader({ alg: 'RS256', kid: jwk.kid }).setSubject('sub-' + customerId)
+    .setIssuer(process.env.COGNITO_TEST_ISSUER).setAudience(process.env.COGNITO_TEST_CLIENT_ID).setIssuedAt().setExpirationTime('5m')
+    .sign(await importJWK(jwk, 'RS256'));
+}

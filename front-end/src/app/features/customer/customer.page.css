@@ -21,3 +21,5 @@
 @media (width > 1180px) { .chat { max-height: calc(100vh - 180px); max-height: calc(100dvh - 180px); } } /* range syntax: no gap at fractional widths */
 @media (max-width: 640px) { .chat { right: 16px; bottom: 72px; } }
 .report-btn { min-height: 36px; padding: 0 14px; font-size: 14px; }
+.login-email { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+.login-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }

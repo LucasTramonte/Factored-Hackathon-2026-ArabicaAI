@@ -15,7 +15,9 @@ describe('CustomerService guided intake', () => {
     await service.confirmIntake(confirm);
     await service.handoffIntake(handoff);
     await service.signIn('demo-ana');
+    await service.signInWithToken('a.b.c');
+    await service.logout();
     expect(api.request.calls.allArgs()).toEqual([['/intake/start', start], ['/intake/confirm', confirm], ['/intake/handoff', handoff],
-      ['/demo/session', { customer_id: 'demo-ana' }]]);
+      ['/demo/session', { customer_id: 'demo-ana' }], ['/auth/session', {}, { Authorization: 'Bearer a.b.c' }], ['/auth/logout', {}]]);
   });
 });

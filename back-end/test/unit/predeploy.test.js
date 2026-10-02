@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { localMigrations, pendingMigrations, appliedFromWranglerJson, readWranglerConfig } from '../../scripts/predeploy.mjs';
+import { assertNoTestJwks, localMigrations, pendingMigrations, appliedFromWranglerJson, readWranglerConfig } from '../../scripts/predeploy.mjs';
 
 test('every local migration file is known to the guard, in order', async () => {
   const files = await localMigrations();
@@ -40,4 +40,12 @@ test('the guard reads wrangler.jsonc as JSONC: comments and trailing commas are 
   const config = await readWranglerConfig(path);
   assert.equal(config.d1_databases[0].database_name, 'db');
   assert.equal(config.name, 'demo');
+});
+
+test('the guard refuses a config that would ship the local test JWKS', async () => {
+  assert.throws(() => assertNoTestJwks({ vars: { COGNITO_REGION: 'r', COGNITO_TEST_JWKS: '{"keys":[]}' } }), /COGNITO_TEST_JWKS/);
+  assert.doesNotThrow(() => assertNoTestJwks({ vars: { COGNITO_REGION: 'r' } }));
+  assert.doesNotThrow(() => assertNoTestJwks({}));
+  const shipped = await readWranglerConfig();
+  assert.doesNotThrow(() => assertNoTestJwks(shipped));
 });

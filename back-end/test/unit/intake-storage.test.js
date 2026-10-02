@@ -10,7 +10,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { createStore } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
 
-const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p' };
+const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p', DEMO_PICKER: '1' };
 const EPISODES = 100;
 // A 77-code-point statement (the typical length used by ADR-004) and the 2,000-code-point maximum.
 const TYPICAL = 'No reconozco el cargo de Mercado Demo del 25 de septiembre; no hice la compra';

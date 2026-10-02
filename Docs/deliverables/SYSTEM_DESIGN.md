@@ -60,7 +60,7 @@ Requests it can't handle (another language, a recognized charge, a lost card, a 
 
 | Stage | State | What it does |
 |---|---|---|
-| Guided report | Online since 2026-10-01, behind an access gate (Worker version `77f72eb4`) | The customer signs in, describes what happened, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. "I can't find it" and failed lookups still reach a person, as incomplete or technical handoffs |
+| Guided report | Online since 2026-10-01, behind an access gate (Worker version `3412aff1`, deployed 2026-10-02) | The customer signs in, describes what happened, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. "I can't find it" and failed lookups still reach a person, as incomplete or technical handoffs |
 | Agent view | Online | The intake queue and each case's detail: the customer's words, the confirmed charge, what was checked, what is still open |
 | Reading free text | Evaluated offline; wired online behind a switch that is off | The rule-based checklist and the model's fact extractor, run through the written policy in the evaluation harness. With the switch on, the service would only record a shadow call; the model decides nothing online |
 
@@ -146,10 +146,10 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
   - A customer only ever reads their own purchases, and a missing record looks the same as someone else's.
   - Every write is idempotent.
 - **Tests attack the service before each change:** forged and expired sessions, cross-customer reads, hostile input, duplicate submissions, and budgets on database work per request.
-- **Identity and access.** In this demo the identity is a trusted test session, which the brief allows; a customer number alone never proves identity. The sign-in page picks a test customer and says the sign-in is simulated.
-  - **Roles (RBAC):** customer and agent sessions are separate cookies with separate routes.
+- **Identity and access.** Customers sign in with an email one-time code from Amazon Cognito, an identity service the brief accepts ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)); a customer number alone never proves identity. The Worker verifies the token and issues its own session.
+  - **Roles (RBAC):** roles come from Cognito groups; customer and agent sessions are separate cookies with separate routes.
   - **Ownership (ABAC):** every customer query is filtered by the session's customer in `back-end/src/store/d1.js`. The integration tests attack it the way OWASP API1:2023 (broken object-level authorization) describes.
-  - **In production:** the bank's identity provider (OIDC with MFA, and step-up for a dispute) replaces the picker, with the same two rules. On the AWS target, Postgres row-level security adds a second check inside the database.
+  - **In production:** the bank's identity provider (OIDC with MFA, and step-up for a dispute) replaces Cognito, with the same two rules. On the AWS target, Postgres row-level security adds a second check inside the database.
 - **Logs and events carry references, never what the customer wrote.**
 - **Demo data is synthetic, and the service is shut down after 2026-10-20.**
 
@@ -168,7 +168,7 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 
 ## Status and next steps
 
-**Live today** (behind an access gate; latest Worker version `77f72eb4`, deployed 2026-10-01):
+**Live today** (behind Cloudflare Access with simulated sign-in; latest Worker version `3412aff1`, deployed 2026-10-02):
 - sign-in;
 - the customer's own purchases;
 - the guided report with confirmation and the technical and incomplete handoffs;

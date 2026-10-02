@@ -3,11 +3,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { withMetrics } from '../../src/index.js';
 import { route } from '../../src/router.js';
+import { listIdentities, startCustomerSession } from '../../src/modules/customer/routes.js';
 import { readJsonBody, MAX_BODY_BYTES } from '../../src/http.js';
 import { tokenHash } from '../../src/auth/session.js';
 import { assertContract } from '../support/contract.js';
 
-const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p' };
+const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p', DEMO_PICKER: '1' };
 const auth = 'Basic ' + Buffer.from('u:p').toString('base64');
 const token = 'a'.repeat(64);
 const body = { transaction_id: 'tx-1', customer_statement: 'I do not recognize this charge.',
@@ -65,27 +66,44 @@ test('oversized and non-JSON bodies are rejected before any store call', async (
   assert.deepEqual(small.value, body);
 });
 
-test('known paths answer 405 with Allow after the gate, unknown API paths 404', async () => {
+test('known paths answer 405 with Allow, unknown API paths 404', async () => {
   const store = await fakeStore();
   const get = path => new Request('https://d.example' + path, { headers: { Authorization: auth } });
   const wrong = await route(get('/cases'), env, store);
   assert.equal(wrong.status, 405);
   assert.equal(wrong.headers.get('Allow'), 'POST');
   assert.equal((await route(get('/agent/unknown'), env, store)).status, 404);
-  const anonymous = await route(new Request('https://d.example/cases', { method: 'OPTIONS' }), env, store);
+  const anonymous = await route(new Request('https://d.example/agent/cases', { method: 'OPTIONS' }), env, store);
   assert.equal(anonymous.status, 401);
-  assert.equal(anonymous.headers.get('Allow'), null);
+  assert.equal(anonymous.headers.get('Allow'), null, 'team paths reveal no methods before the gate');
 });
 
-test('HTML documents require the gate before assets are served', async () => {
+test('the team gate covers only /agent, /agent/* and /demo/*; customer paths reach routing and their session check', async () => {
   const served = [];
   const assetsEnv = { ...env, ASSETS: { fetch: async r => { served.push(new URL(r.url).pathname); return new Response('<app-root>'); } } };
-  const store = await fakeStore();
-  for (const path of ['/', '/index.html', '/agent']) {
-    assert.equal((await route(new Request('https://d.example' + path), assetsEnv, store)).status, 401);
-    assert.equal((await route(new Request('https://d.example' + path, { headers: { Authorization: auth } }), assetsEnv, store)).status, 200);
+  const store = await fakeStore({ findSession: async () => null });
+  const anon = (path, method = 'GET') => route(new Request('https://d.example' + path, { method }), assetsEnv, store);
+  const gated = res => res.status === 401 && res.headers.get('WWW-Authenticate') !== null;
+  for (const [method, path, status] of [['GET', '/', 200], ['GET', '/index.html', 200], ['GET', '/transactions', 401],
+    ['POST', '/intake/start', 401], ['POST', '/auth/logout', 204], ['POST', '/auth/session', 422], ['GET', '/cases/nope', 404], ['GET', '/intake', 404],
+    ['DELETE', '/transactions', 405]]) {
+    const res = await anon(path, method);
+    assert.equal(gated(res), false, `${method} ${path}`);
+    assert.equal(res.status, status, `${method} ${path}`);
   }
-  assert.deepEqual(served, ['/', '/index.html', '/agent']);
+  assert.deepEqual(served, ['/', '/index.html']);
+  for (const [method, path] of [['GET', '/agent'], ['GET', '/demo/identities'], ['POST', '/demo/session'], ['POST', '/demo/agent-session'],
+    ['GET', '/agent/intakes'], ['GET', '/agent/cases'], ['OPTIONS', '/agent/cases'], ['POST', '/agent']]) {
+    assert.ok(gated(await anon(path, method)), `${method} ${path}`);
+  }
+  // Case and encoding tricks never reach an agent handler: they fall to the static app shell.
+  const agentStore = new Proxy({}, { get: (_, name) => { throw new Error(`store.${String(name)} touched`); } });
+  for (const path of ['/AGENT', '/%61gent/intakes', '//agent/intakes', '/Agent/cases']) {
+    const res = await route(new Request('https://d.example' + path), assetsEnv, agentStore);
+    assert.equal(await res.text(), '<app-root>', path);
+  }
+  const page = await route(new Request('https://d.example/agent', { headers: { Authorization: auth } }), assetsEnv, store);
+  assert.equal(page.status, 200);
 });
 
 test('database metrics are exposed only when explicitly enabled', () => {
@@ -103,6 +121,17 @@ test('the body limit stops reading a stream without Content-Length', async () =>
   const result = await readJsonBody(request);
   assert.equal(result.error.status, 413);
   assert.ok(pulled <= 20, `read ${pulled} KB before stopping`);
+});
+
+test('the demo picker exists only when DEMO_PICKER=1 and otherwise never touches the store', async () => {
+  const store = new Proxy({}, { get: (_, name) => { throw new Error(`store.${String(name)} touched`); } });
+  for (const picker of [{}, { DEMO_PICKER: '0' }, { DEMO_PICKER: 1 }]) {
+    for (const res of [await listIdentities(new Request('https://d.example/demo/identities'), picker, store),
+      await startCustomerSession(post('/demo/session', { customer_id: 'demo-ana' }, ''), picker, store)]) {
+      assert.equal(res.status, 404);
+      assert.deepEqual(await res.json(), { detail: 'Not found' });
+    }
+  }
 });
 
 test('identity list joins the committed fictitious identities with dataset customers loaded in D1', async () => {
@@ -193,4 +222,31 @@ test('a malformed stored context card degrades to null and login still works', a
   const { context_card: card } = await res.json();
   assert.deepEqual(card, { version: 1, snapshot_at: '2026-09-29T00:00:00+00:00', first_name: 'Ana',
     locale_hint: 'es-AR', products: [] });
+});
+
+test('public API paths are limited per IP before any store call; documents and team paths are not', async () => {
+  const keys = [];
+  const limiter = success => ({ limit: async ({ key }) => { keys.push(key); return { success }; } });
+  const untouched = new Proxy({}, { get: (_, name) => { throw new Error(`store.${String(name)} touched`); } });
+  const req = (path, method = 'GET', headers = {}) => new Request('https://d.example' + path,
+    { method, headers: { 'CF-Connecting-IP': '203.0.113.7', ...headers } });
+  const limited = { ...env, API_LIMIT: limiter(false), ASSETS: { fetch: async () => new Response('<app-root>') } };
+  for (const [method, path] of [['GET', '/transactions'], ['POST', '/auth/session'], ['POST', '/intake/start'], ['GET', '/cases/nope']]) {
+    const res = await route(req(path, method), limited, untouched);
+    assert.equal(res.status, 429, `${method} ${path}`);
+    assert.equal(res.headers.get('Retry-After'), '60');
+    assertContract('error', await res.json());
+  }
+  assert.deepEqual(keys, Array(4).fill('203.0.113.7'));
+  keys.length = 0;
+  assert.equal((await route(req('/'), limited, untouched)).status, 200);
+  const agentStore = await fakeStore({ findSession: async () => null });
+  assert.equal((await route(req('/agent/intakes', 'GET', { Authorization: auth }), limited, agentStore)).status, 401, 'reaches the agent session check');
+  assert.deepEqual(keys, [], 'documents and team-gated paths never call the limiter');
+  const store = await fakeStore({ findSession: async () => null });
+  for (const e of [{ ...env, API_LIMIT: limiter(true) }, env]) {
+    const res = await route(new Request('https://d.example/transactions'), e, store);
+    assert.equal(res.status, 401);
+  }
+  assert.deepEqual(keys, ['unknown']);
 });

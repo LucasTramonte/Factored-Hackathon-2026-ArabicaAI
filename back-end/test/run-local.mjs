@@ -1,10 +1,13 @@
 /** Run the Worker against a fresh, isolated local D1 and compiled UI assets. */
-import { cp, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { exportJWK, generateKeyPair } from 'jose';
+import { readWranglerConfig } from '../scripts/predeploy.mjs';
+import { issuerFor } from '../src/auth/cognito.js';
 
 if (Number(process.versions.node.split('.')[0]) < 22) {
   throw new Error('Worker tests require Node 22 or newer');
@@ -28,14 +31,28 @@ const port = await new Promise((resolvePort, reject) => {
   });
 });
 let server;
+const testEnv = {};
 try {
   for (const name of ['src', 'migrations', 'public']) {
     await cp(join(project, name), join(temp, name), { recursive: true });
   }
-  await cp(join(project, 'wrangler.jsonc'), join(temp, 'wrangler.jsonc'));
+  // Miniflare enforces the rate limit binding locally with one shared key, so the local-D1 suites run without it;
+  // the 429 path is covered by the unit test (failure-and-routing.test.js).
+  const { ratelimits, ...localConfig } = await readWranglerConfig(join(project, 'wrangler.jsonc'));
+  await writeFile(join(temp, 'wrangler.jsonc'), JSON.stringify(localConfig));
+  await symlink(join(project, 'node_modules'), join(temp, 'node_modules'), 'dir'); // the Worker bundles jose
   await cp(join(project, 'seeds/seed_fictitious.sql'), join(temp, 'seed_fictitious.sql'));
+  // Tests sign ID tokens with a throwaway key for the real pool's issuer and client id (wrangler.jsonc vars);
+  // only the key set is local. predeploy refuses COGNITO_TEST_JWKS in vars, so it lives in .dev.vars only.
+  const { privateKey, publicKey } = await generateKeyPair('RS256', { extractable: true });
+  const kid = 'local-test';
+  const jwks = JSON.stringify({ keys: [{ ...(await exportJWK(publicKey)), kid, alg: 'RS256', use: 'sig' }] });
+  const { vars } = await readWranglerConfig(join(temp, 'wrangler.jsonc'));
+  Object.assign(testEnv, { COGNITO_TEST_PRIVATE_JWK: JSON.stringify({ ...(await exportJWK(privateKey)), kid }),
+    COGNITO_TEST_ISSUER: issuerFor(vars), COGNITO_TEST_CLIENT_ID: vars.COGNITO_CLIENT_ID });
   await writeFile(join(temp, '.dev.vars'),
-    'DEMO_ACCESS_USERNAME="local-reviewer"\nDEMO_ACCESS_PASSWORD="local-test-password"\nDEMO_EXPOSE_DB_METRICS="1"\n');
+    'DEMO_ACCESS_USERNAME="local-reviewer"\nDEMO_ACCESS_PASSWORD="local-test-password"\nDEMO_EXPOSE_DB_METRICS="1"\nDEMO_PICKER="1"\n'
+    + `COGNITO_TEST_JWKS='${jwks}'\n`);
   run(['d1', 'migrations', 'apply', 'arabica-intake-demo', '--local']);
   run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file', 'seed_fictitious.sql']);
   run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file', 'seed_fictitious.sql']);
@@ -66,7 +83,7 @@ try {
   for (let attempt = 0; attempt < 80; attempt++) {
     if (server.exitCode !== null) break;
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/healthz`);
+      const response = await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(2000) });
       if (response.ok) { ready = true; break; }
     } catch { /* Wait for Wrangler. */ }
     await new Promise(done => setTimeout(done, 250));
@@ -79,7 +96,7 @@ try {
   for (const group of [names.filter(name => name !== 'budget.test.js'), names.filter(name => name === 'budget.test.js')]) {
     if (!group.length) continue;
     const tested = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...group.map(name => join(project, 'test/integration', name))], {
-      cwd: temp, env: { ...env, WORKER_TEST_URL: `http://127.0.0.1:${port}`, EXPIRED_TOKEN: 'e'.repeat(64) },
+      cwd: temp, env: { ...env, ...testEnv, WORKER_TEST_URL: `http://127.0.0.1:${port}`, EXPIRED_TOKEN: 'e'.repeat(64) },
       encoding: 'utf8', timeout: 120_000
     });
     process.stdout.write(tested.stdout ?? '');

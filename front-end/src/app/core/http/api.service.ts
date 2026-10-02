@@ -14,13 +14,14 @@ export class ApiError extends Error {
 /** Same-origin JSON client for the intake API. The browser handles the team gate and session cookies. */
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  async request<T>(path: string, body?: unknown): Promise<T> {
+  /** ``headers`` are merged over the defaults (e.g. ``Authorization`` for the sign-in token). */
+  async request<T>(path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
     let response: Response;
     try {
       response = await fetch(path, {
         method: body === undefined ? 'GET' : 'POST',
         credentials: 'same-origin',
-        headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+        headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
         body: body === undefined ? undefined : JSON.stringify(body)
       });
     } catch {

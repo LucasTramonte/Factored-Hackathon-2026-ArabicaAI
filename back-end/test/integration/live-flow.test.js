@@ -4,10 +4,10 @@ import assert from 'node:assert/strict';
 import { assertContract } from '../support/contract.js';
 import { auth, base, client } from '../support/client.js';
 
-test('page is static; the API needs the gate; customers are isolated; replay and handoff work', async () => {
-  for (const path of ['/', '/index.html', '/agent']) {
-    assert.equal((await fetch(base + path)).status, 401, `${path} document needs the team gate`);
-    const page = await fetch(base + path, { headers: { Authorization: auth } });
+test('page is static; only the agent paths need the gate; customers are isolated; replay and handoff work', async () => {
+  assert.equal((await fetch(base + '/agent')).status, 401, 'the agent document needs the team gate');
+  for (const [path, headers] of [['/', {}], ['/index.html', {}], ['/agent', { Authorization: auth }]]) {
+    const page = await fetch(base + path, { headers });
     assert.equal(page.status, 200, path);
     assert.match(await page.text(), /<app-root/);
   }

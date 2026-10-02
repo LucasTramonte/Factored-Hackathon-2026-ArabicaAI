@@ -5,11 +5,10 @@
 import identities from '../../config/identities.json' with { type: 'json' };
 import { fail, json, readJsonBody } from '../../http.js';
 import { endSession, readSession, startSession } from '../../auth/session.js';
-import { validateCaseRequest } from './validation.js';
+import { issuerFor, jwksFor, verifyIdToken } from '../../auth/cognito.js';
+import { CUSTOMER_ID, validateCaseRequest } from './validation.js';
 
 const COMMITTED = new Map(identities.customers.map(c => [c.customer_id, c]));
-/** Dataset ids are short ASCII codes; anything else is rejected before it reaches D1. */
-const CUSTOMER_ID = /^[A-Za-z0-9-]{1,64}$/;
 const COHORT_LIMIT = 1000;
 const PAGE = 20;
 const NOT_CONFIRMED = 'Acceptance not confirmed; retry with the same idempotency key';
@@ -17,8 +16,10 @@ const NOT_CONFIRMED = 'Acceptance not confirmed; retry with the same idempotency
 /**
  * GET /demo/identities: the committed (mostly fictitious) identities, then the dataset cohort loaded in D1.
  * Cohort ids and names are never committed; a D1 row never overrides a committed identity.
+ * Both picker routes exist only when ``DEMO_PICKER=1`` (local development); production has no global customer listing.
  */
 export async function listIdentities(request, env, store) {
+  if (env.DEMO_PICKER !== '1') return fail(404, 'Not found');
   let cohort;
   try { cohort = await store.listDatasetIdentities(COHORT_LIMIT); } catch { return fail(503, 'Demo identities are unavailable'); }
   const items = identities.customers.map(({ customer_id, display_name }) => ({ customer_id, display_name, country: null }));
@@ -60,6 +61,7 @@ function contextCard(row) {
 
 /** POST /demo/session: start a simulated session for a committed identity or a loaded dataset customer. */
 export async function startCustomerSession(request, env, store) {
+  if (env.DEMO_PICKER !== '1') return fail(404, 'Not found');
   const body = await readJsonBody(request);
   if (body.error) return body.error;
   const customerId = body.value?.customer_id;
@@ -70,6 +72,35 @@ export async function startCustomerSession(request, env, store) {
   if (!source) return fail(503, 'Demo identity is not loaded');
   const card = contextCard(await store.findContextCard(customerId));
   return json({ customer_id: customerId, mode: 'simulated_login', context_card: card }, 200,
+    { 'Set-Cookie': await startSession(request, store, 'customer', customerId) });
+}
+
+const BEARER = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/;
+const NOT_ENROLLED = 'This account is not enrolled in the demo';
+// The JWKS could not be fetched: jose's timeout, an unusable set, a non-200 or non-JSON answer (generic), or fetch itself.
+const JWKS_DOWN = new Set(['ERR_JWKS_TIMEOUT', 'ERR_JWKS_INVALID', 'ERR_JOSE_GENERIC']);
+
+/**
+ * POST /auth/session: a customer session from a verified Cognito ID token in ``Authorization: Bearer``.
+ * Identity comes only from the verified claims; any body is ignored. The token and email are never
+ * logged, echoed or stored, and an unverified token never reaches the store.
+ */
+export async function startEmailSession(request, env, store, ctx, verify = verifyIdToken) {
+  const token = BEARER.exec(request.headers.get('Authorization') || '')?.[1];
+  if (!token || token.length > 4096) return fail(422, 'Provide the sign-in token');
+  let claims;
+  try {
+    claims = await verify(token, { jwks: jwksFor(env), issuer: issuerFor(env), clientId: env.COGNITO_CLIENT_ID });
+  } catch (e) {
+    if (e instanceof TypeError || JWKS_DOWN.has(e?.code)) return fail(503, 'Sign-in is unavailable');
+    return fail(401, 'Sign-in could not be verified');
+  }
+  const { customerId } = claims;
+  if (!claims.groups.includes('customer') || customerId === null || !await store.customerSource(customerId)) {
+    return fail(403, NOT_ENROLLED);
+  }
+  const card = contextCard(await store.findContextCard(customerId));
+  return json({ customer_id: customerId, mode: 'email_otp', context_card: card }, 200,
     { 'Set-Cookie': await startSession(request, store, 'customer', customerId) });
 }
 

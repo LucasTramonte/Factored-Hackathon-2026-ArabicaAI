@@ -27,6 +27,12 @@ describe('ApiService', () => {
     expect(get.body).toBeUndefined();
   });
 
+  it('merges extra headers into the request', async () => {
+    fetchSpy.and.returnValue(reply(200, {}));
+    await api.request('/auth/session', {}, { Authorization: 'Bearer a.b.c' });
+    expect(fetchSpy.calls.argsFor(0)[1].headers).toEqual({ 'Content-Type': 'application/json', Authorization: 'Bearer a.b.c' });
+  });
+
   it('keeps the status of every documented failure and never the server text', async () => {
     for (const status of [401, 404, 409, 413, 422, 503]) {
       fetchSpy.and.returnValue(reply(status, { detail: 'server text is not shown' }));

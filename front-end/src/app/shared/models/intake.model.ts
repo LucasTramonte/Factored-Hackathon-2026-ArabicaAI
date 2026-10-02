@@ -111,7 +111,7 @@ export interface ContextCard {
 
 export interface CustomerSession {
   customer_id: string;
-  mode: 'simulated_login';
+  mode: 'simulated_login' | 'email_otp';
   context_card?: ContextCard | null;
 }
 
