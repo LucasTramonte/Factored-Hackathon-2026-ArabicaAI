@@ -7,6 +7,7 @@ import { fail, json, readJsonBody } from '../../http.js';
 import { endSession, requireSession, startSession } from '../../auth/session.js';
 import { bearerClaims, verifyIdToken } from '../../auth/cognito.js';
 import { CUSTOMER_ID, validateCaseRequest } from './validation.js';
+import { UUID } from '../intake/validation.js';
 import { encrypt } from '../../notify/email.js';
 
 const COMMITTED = new Map(identities.customers.map(c => [c.customer_id, c]));
@@ -103,14 +104,51 @@ export async function logout(request, env, store) {
   return new Response(null, { status: 204, headers: { 'Set-Cookie': await endSession(request, store, 'customer') } });
 }
 
-/** GET /transactions: the session customer's charges, newest first, one page. */
+const VIEW_LANGUAGES = new Set(['es', 'pt', 'en']);
+
+/**
+ * GET /transactions: the session customer's charges, newest first, one page. With ``?lang=es|pt|en`` the
+ * served view is recorded in ``charge_views`` and its random ``view_ref`` returned (ADR-009); without it
+ * nothing is recorded and ``view_ref`` is null. A failed record still serves the rows, unrecorded.
+ */
 export async function listTransactions(request, env, store) {
   const current = await requireSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
+  const language = new URL(request.url).searchParams.get('lang');
+  if (language !== null && !VIEW_LANGUAGES.has(language)) return fail(422, 'Unsupported language');
   const rows = await store.listTransactions(current.customer_id, PAGE + 1);
   // Only committed fictitious identities show fictitious rows; everyone else is a dataset customer.
   const coverage = COMMITTED.get(current.customer_id)?.source === 'fictitious' ? 'fictitious_demo_data_only' : 'dataset_cohort';
-  return json({ items: rows.slice(0, PAGE), has_more: rows.length > PAGE, coverage });
+  const items = rows.slice(0, PAGE);
+  const hasMore = rows.length > PAGE;
+  let viewRef = null;
+  if (language !== null) {
+    const id = crypto.randomUUID();
+    try {
+      await store.insertChargeView({ viewRef: id, customerId: current.customer_id, language, rowCount: items.length,
+        hasMore, coverage, now: Date.now() });
+      viewRef = id;
+    } catch { /* an unrecorded view is a missing numerator, not an outage */ }
+  }
+  return json({ items, has_more: hasMore, coverage, view_ref: viewRef });
+}
+
+/**
+ * POST /transactions/displayed: the client rendered a recorded view. The body is exactly ``{ view_ref }``;
+ * the acknowledgement is bound to the session customer, so another customer's view is 404, and a replay keeps
+ * the first ``displayed_at``.
+ */
+export async function acknowledgeDisplay(request, env, store) {
+  const current = await requireSession(request, store, 'customer');
+  if (!current) return fail(401, 'Start a demo session first');
+  const body = await readJsonBody(request);
+  if (body.error) return body.error;
+  const { value } = body;
+  if (!isObject(value) || Object.keys(value).join() !== 'view_ref' || typeof value.view_ref !== 'string'
+    || !UUID.test(value.view_ref)) return fail(422, 'Provide exactly a valid view_ref');
+  const displayedAt = await store.acknowledgeChargeView(value.view_ref, current.customer_id, Date.now());
+  if (displayedAt === null) return fail(404, 'View not found for this session');
+  return json({ view_ref: value.view_ref, displayed_at: displayedAt });
 }
 
 /**

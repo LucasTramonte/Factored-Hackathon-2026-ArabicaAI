@@ -3,7 +3,7 @@
  * handler's session read (customer or agent), behind a per-IP limit (60 a minute). Unknown paths under API prefixes return JSON 404 and are never served as the app.
  */
 import { fail, json } from './http.js';
-import { createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession } from './modules/customer/routes.js';
+import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession } from './modules/customer/routes.js';
 import { startIntake, confirmIntake, handoffIntake, listReports, requestUpdate } from './modules/intake/routes.js';
 import { listAgentCases, listAgentIntakes, getAgentIntakeDetail, startAgentSession, transitionIntake } from './modules/agent/routes.js';
 
@@ -13,6 +13,7 @@ export const API_ROUTES = {
   '/auth/session': { POST: startEmailSession },
   '/auth/logout': { POST: logout },
   '/transactions': { GET: listTransactions },
+  '/transactions/displayed': { POST: acknowledgeDisplay },
   '/cases': { POST: createCase },
   '/intake/start': { POST: startIntake },
   '/intake/confirm': { POST: confirmIntake },
@@ -35,6 +36,7 @@ export const ROUTE_ROLES = {
   '/auth/session': 'public',
   '/auth/logout': 'public',
   '/transactions': 'customer',
+  '/transactions/displayed': 'customer',
   '/cases': 'customer',
   '/intake/start': 'customer',
   '/intake/confirm': 'customer',
