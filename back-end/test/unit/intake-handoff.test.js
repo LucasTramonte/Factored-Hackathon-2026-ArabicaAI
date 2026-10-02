@@ -7,6 +7,7 @@ import { createStore } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
 import { tokenHash } from '../../src/auth/session.js';
 import { assertContract } from '../support/contract.js';
+import { close as closeReport } from '../support/close.js';
 const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p' };
 const token = 'a'.repeat(64);
 const post = (path, body) => new Request('https://demo.example' + path, { method: 'POST',
@@ -23,11 +24,6 @@ async function setup(t) {
   return { db, store, start };
 }
 const confirm = episode_id => ({episode_id,transaction_id:'tx-ana',customer_confirmed:true,idempotency_key:crypto.randomUUID()});
-/** A person closes the report (received → in_review → closed), so a new episode may report the same charge. */
-async function closeReport(store, protocol) {
-  for (const [from, to] of [['received', 'in_review'], ['in_review', 'closed']])
-    await store.transitionHandoff({ protocol, from, to, now: Date.now(), agentSessionRef: 'unit00000000', emailId: crypto.randomUUID() });
-}
 const events = db => db.prepare('SELECT event_json FROM intake_events ORDER BY seq').all().map(r=>JSON.parse(r.event_json));
 
 test('confirmed_case_and_handoff_chain_commit_once', async t => {

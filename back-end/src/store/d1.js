@@ -165,11 +165,13 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     findOwnedTransaction: (customerId, transactionId) => first(
       'SELECT transaction_id,occurred_at,source_occurred_at,merchant_name,amount,currency FROM transactions '
       + 'WHERE customer_id=? AND transaction_id=?', customerId, transactionId),
-    /** Whether this customer has an acknowledged complete report on the charge that no person has closed yet. */
+    /**
+     * Whether this customer has an acknowledged complete report on the charge that no person has closed yet. Reads only
+     * that charge's cases (index ``cases_customer_transaction``, migration 0011), never the customer's whole history.
+     */
     openReportForTransaction: (customerId, transactionId) => first(
-      'SELECT 1 FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? '
-      + "AND h.kind='complete' AND h.status<>'closed' AND e.state='complete_handoff' "
-      + "AND json_extract(h.evidence_json,'$.transaction.transaction_id')=? LIMIT 1", customerId, transactionId),
+      'SELECT 1 FROM cases c JOIN intake_handoffs h ON h.complete_case_id=c.case_id JOIN intake_episodes e ON e.episode_id=h.episode_id '
+      + "WHERE c.customer_id=? AND c.transaction_id=? AND h.status<>'closed' AND e.state='complete_handoff' LIMIT 1", customerId, transactionId),
     /** Read a reservation only through its owning episode. */
     findOwnedIntakeHandoff: (customerId, episodeId) => first(
       'SELECT h.* FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.episode_id=?', customerId, episodeId),

@@ -47,6 +47,24 @@ describe('ApiService', () => {
     }
   });
 
+  it('flags only the open-report 409, by its detail, and keeps no server text', async () => {
+    fetchSpy.and.returnValue(reply(409, { detail: 'This charge already has an open report' }));
+    const e = await api.request('/intake/confirm', {}).then(() => null, (x: unknown) => x) as ApiError;
+    expect(e.status).toBe(409);
+    expect(e.openReport).toBeTrue();
+    expect(e.message).not.toContain('open report');
+  });
+
+  it('leaves openReport false for any other 409 body, including one that is not JSON', async () => {
+    for (const response of [reply(409, { detail: 'Episode is no longer open' }), reply(409, {}),
+      Promise.resolve(new Response('not json', { status: 409 }))]) {
+      fetchSpy.and.returnValue(response);
+      const e = await api.request('/intake/confirm', {}).then(() => null, (x: unknown) => x) as ApiError;
+      expect(e.status).toBe(409);
+      expect(e.openReport).toBeFalse();
+    }
+  });
+
   it('treats a network failure as unconfirmed, like a 503', async () => {
     fetchSpy.and.returnValue(Promise.reject(new TypeError('Failed to fetch')));
     const e = await api.request('/cases', {}).then(() => null, (x: unknown) => x);

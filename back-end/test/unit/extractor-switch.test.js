@@ -21,6 +21,7 @@ import { assertContract } from '../support/contract.js';
 import { readWranglerConfig } from '../../scripts/predeploy.mjs';
 import { exportIntakeEvents } from '../../scripts/export-intake-events.mjs';
 import { scorerPython } from '../../scripts/scorer-python.mjs';
+import { close } from '../support/close.js';
 
 const SOURCE_PROMPT = readFileSync(new URL('../../../intake_agent/extractor/prompt.md', import.meta.url), 'utf8');
 const VERSION = 'extractor-v1@' + createHash('sha256').update(SOURCE_PROMPT).digest('hex').slice(0, 12);
@@ -79,11 +80,6 @@ function assertGuided(raw) {
   if (e.event === 'intake_ended') for (const [k, v] of Object.entries(GUIDED_END)) assert.equal(e[k], v, k);
 }
 
-/** A person closes the report (received → in_review → closed), so a new episode may report the same charge. */
-async function close(store, protocol) {
-  for (const [from, to] of [['received', 'in_review'], ['in_review', 'closed']])
-    await store.transitionHandoff({ protocol, from, to, now: Date.now(), agentSessionRef: 'unit00000000', emailId: crypto.randomUUID() });
-}
 async function episodes(env, store, events, call = route) {
   const start = async () => { const res = await call(post('/intake/start', startBody()), env, store()); assert.equal(res.status, 201); return (await res.json()).episode_id; };
   const complete = await start();

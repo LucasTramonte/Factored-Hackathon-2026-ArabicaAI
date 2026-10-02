@@ -9,6 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createStore } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
+import { close } from '../support/close.js';
 
 const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p', DEMO_PICKER: '1' };
 const EPISODES = 100;
@@ -33,7 +34,7 @@ function setup() {
     const set = response.headers.get('set-cookie'); if (set) cookie = set.split(';', 1)[0];
     return { status: response.status, body: await response.json() };
   };
-  return { db, call };
+  return { db, store, call };
 }
 
 /** Bytes per table group (table plus its indexes) from dbstat; page granularity is amortized over 100 episodes. */
@@ -52,7 +53,7 @@ test('retained storage per guided episode stays within the ADR-004 capacity inpu
   const measured = {};
   for (const kind of ['complete', 'incomplete']) {
     for (const [variant, statement] of Object.entries(VARIANTS)) {
-      const { db, call } = setup();
+      const { db, store, call } = setup();
       assert.equal((await call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
       const before = usage(db); const count = Object.fromEntries(TABLES.map(t => [t, rows(db, t)]));
       for (let i = 0; i < EPISODES; i++) {
@@ -62,7 +63,7 @@ test('retained storage per guided episode stays within the ADR-004 capacity inpu
           ? await call('/intake/confirm', { episode_id: start.body.episode_id, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: crypto.randomUUID() })
           : await call('/intake/handoff', { episode_id: start.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() });
         assert.equal(done.status, 201);
-        db.exec("UPDATE intake_handoffs SET status='closed'"); // a person closed it, so the next episode may report the same charge
+        if (kind === 'complete') await close(store, done.body.protocol); // a person closed it, so the next episode may report the same charge
       }
       const after = usage(db);
       const perRow = Object.fromEntries(TABLES.map(t => {

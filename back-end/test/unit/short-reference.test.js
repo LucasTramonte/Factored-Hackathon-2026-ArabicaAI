@@ -10,6 +10,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { createStore, newShortReference, SHORT_REFERENCE } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
 import { assertContract } from '../support/contract.js';
+import { close } from '../support/close.js';
 
 const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p', DEMO_PICKER: '1' };
 const AUTH = 'Basic ' + Buffer.from('u:p').toString('base64');
@@ -41,11 +42,6 @@ async function start(call) {
   const r = await call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
     customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() });
   assert.equal(r.status, 201); return r.body.episode_id;
-}
-/** A person closes the report (received → in_review → closed), so a new episode may report the same charge. */
-async function close(store, protocol) {
-  for (const [from, to] of [['received', 'in_review'], ['in_review', 'closed']])
-    await store.transitionHandoff({ protocol, from, to, now: Date.now(), agentSessionRef: 'unit00000000', emailId: crypto.randomUUID() });
 }
 const confirm = (call, episode_id, key = crypto.randomUUID()) =>
   call('/intake/confirm', { episode_id, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: key });
