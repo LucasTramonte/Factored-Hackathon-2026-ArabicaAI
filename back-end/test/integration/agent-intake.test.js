@@ -1,7 +1,7 @@
 /** Read-only handoff views through authenticated Worker routes and real local D1. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { client, base, auth } from '../support/client.js';
+import { client, base, auth, closeReport } from '../support/client.js';
 import { assertContract } from '../support/contract.js';
 async function report(c, complete) {
   const started = await c.call('/intake/start',{language:'es',mode:'guided',report_type:'unrecognized_charge',customer_statement:'No reconozco este cargo; solicito revisión.',idempotency_key:crypto.randomUUID()});
@@ -42,6 +42,7 @@ test('agent detail retrieves complete and incomplete evidence and actual ordered
     measurements[receipt.kind]=detail.metrics;
   }
   assert.equal(queue.metrics.rows_written,0); console.log('D1_AGENT_INTAKES '+JSON.stringify(measurements));
+  await closeReport(complete.protocol); // releases demo-tx-001 for later suites
 });
 
 test('agent handoff reads reject gate method path customer swaps forged tokens expiry and hostile protocols',async()=>{

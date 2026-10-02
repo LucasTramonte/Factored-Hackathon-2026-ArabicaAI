@@ -79,10 +79,16 @@ function assertGuided(raw) {
   if (e.event === 'intake_ended') for (const [k, v] of Object.entries(GUIDED_END)) assert.equal(e[k], v, k);
 }
 
+/** A person closes the report (received → in_review → closed), so a new episode may report the same charge. */
+async function close(store, protocol) {
+  for (const [from, to] of [['received', 'in_review'], ['in_review', 'closed']])
+    await store.transitionHandoff({ protocol, from, to, now: Date.now(), agentSessionRef: 'unit00000000', emailId: crypto.randomUUID() });
+}
 async function episodes(env, store, events, call = route) {
   const start = async () => { const res = await call(post('/intake/start', startBody()), env, store()); assert.equal(res.status, 201); return (await res.json()).episode_id; };
   const complete = await start();
-  assert.equal((await route(post('/intake/confirm', { episode_id: complete, transaction_id: 'tx-ana', customer_confirmed: true, idempotency_key: crypto.randomUUID() }), env, store())).status, 201);
+  const confirmed = await route(post('/intake/confirm', { episode_id: complete, transaction_id: 'tx-ana', customer_confirmed: true, idempotency_key: crypto.randomUUID() }), env, store());
+  assert.equal(confirmed.status, 201); await close(store(), (await confirmed.json()).protocol);
   const incomplete = await start();
   assert.equal((await route(post('/intake/handoff', { episode_id: incomplete, kind: 'incomplete', idempotency_key: crypto.randomUUID() }), env, store())).status, 201);
   const idle = await start();
@@ -201,7 +207,7 @@ test('on: failure, timeout, malformed output or bad usage fall back to the same 
     const { tool_calls, model_version, ...recorded } = usage(payload.episode_id);
     assert.deepEqual(recorded, expected, String(behaviour)); assert.equal(model_version, VERSION);
     const confirm = await route(post('/intake/confirm', { episode_id: payload.episode_id, transaction_id: 'tx-ana', customer_confirmed: true, idempotency_key: crypto.randomUUID() }), env, store());
-    assert.equal(confirm.status, 201, 'the guided flow continues');
+    assert.equal(confirm.status, 201, 'the guided flow continues'); await close(store(), (await confirm.json()).protocol);
   }
   for (const raw of events()) assert.ok(!raw.includes('tx-bruno') && !raw.includes('bruno'));
   const unknownEnds = events().map(JSON.parse).filter(e => e.event === 'intake_ended' && e.usage_unavailable_calls);

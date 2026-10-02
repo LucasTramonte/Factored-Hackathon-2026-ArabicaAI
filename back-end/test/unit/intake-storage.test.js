@@ -62,6 +62,7 @@ test('retained storage per guided episode stays within the ADR-004 capacity inpu
           ? await call('/intake/confirm', { episode_id: start.body.episode_id, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: crypto.randomUUID() })
           : await call('/intake/handoff', { episode_id: start.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() });
         assert.equal(done.status, 201);
+        db.exec("UPDATE intake_handoffs SET status='closed'"); // a person closed it, so the next episode may report the same charge
       }
       const after = usage(db);
       const perRow = Object.fromEntries(TABLES.map(t => {

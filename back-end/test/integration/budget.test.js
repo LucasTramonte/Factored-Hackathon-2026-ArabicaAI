@@ -31,7 +31,9 @@ const CEILING = {
   intakeStartReplay: [6, 6, 2, 2],
   // The first acknowledgement queues one "received" email for a customer with a notification target (Task 3.2):
   // one more statement in the acknowledgement batch, 3 writes (row, primary key, email_outbox_recent).
-  intakeConfirm: [19, 72, 26, 8],
+  // One open report per charge (Task 4.4): one more query and round trip that scans the customer's episodes and their
+  // handoffs, about 2 rows per prior episode; 117 read with demo-ana's retained suite history (ADR-004).
+  intakeConfirm: [20, 130, 26, 9],
   intakeConfirmReplay: [18, 54, 0, 7],
   intakeIncomplete: [15, 55, 18, 7],
   intakeIncompleteReplay: [15, 44, 0, 7],
@@ -60,7 +62,7 @@ const CEILING = {
 const EXPORT_SLACK = 2;
 const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
 // Customer requests of one guided episode (login + list + start + terminal request); ADR-004 sizes capacity on these.
-const EPISODE_CEILING = { complete: [31, 82, 40, 15], incomplete: [27, 66, 32, 14] };
+const EPISODE_CEILING = { complete: [32, 145, 40, 16], incomplete: [27, 66, 32, 14] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);
@@ -114,7 +116,8 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   measured.start = within('intakeStart', start.metrics);
   const startReplay = await c.call('/intake/start', body); assert.equal(startReplay.status, 200);
   measured.startReplay = within('intakeStartReplay', startReplay.metrics);
-  const confirmation = { episode_id: start.body.episode_id, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: crypto.randomUUID() };
+  const confirmation = { episode_id: start.body.episode_id, transaction_id: 'demo-tx-005', // never confirmed by an earlier suite
+    customer_confirmed: true, idempotency_key: crypto.randomUUID() };
   const complete = await c.call('/intake/confirm', confirmation);
   assert.equal(complete.status, 201); assertContract('intakeReceipt', complete.body);
   measured.confirm = within('intakeConfirm', complete.metrics);

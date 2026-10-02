@@ -82,6 +82,9 @@ async function finishIntake(request, env, store, ctx, complete) {
     try { toolCalls++; evidence = await store.findOwnedTransaction(customerId, transactionId); }
     catch { kind = 'technical'; }
     if (kind === 'complete' && !evidence) return fail(404, 'Transaction not found for this session');
+    // Only a new confirmation is checked: a replay has a prior reservation and returns its receipt above this branch.
+    // ponytail: check-then-write, so two confirms within the same instant can still open two reports; the agent queue shows both.
+    if (kind === 'complete' && await store.openReportForTransaction(customerId, transactionId)) return fail(409, 'This charge already has an open report');
   }
   const live = await readSession(request, store, 'customer');
   if (!live || live.customer_id !== customerId) return fail(401, 'Start a demo session first');

@@ -165,6 +165,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     findOwnedTransaction: (customerId, transactionId) => first(
       'SELECT transaction_id,occurred_at,source_occurred_at,merchant_name,amount,currency FROM transactions '
       + 'WHERE customer_id=? AND transaction_id=?', customerId, transactionId),
+    /** Whether this customer has an acknowledged complete report on the charge that no person has closed yet. */
+    openReportForTransaction: (customerId, transactionId) => first(
+      'SELECT 1 FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? '
+      + "AND h.kind='complete' AND h.status<>'closed' AND e.state='complete_handoff' "
+      + "AND json_extract(h.evidence_json,'$.transaction.transaction_id')=? LIMIT 1", customerId, transactionId),
     /** Read a reservation only through its owning episode. */
     findOwnedIntakeHandoff: (customerId, episodeId) => first(
       'SELECT h.* FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.episode_id=?', customerId, episodeId),

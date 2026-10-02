@@ -492,6 +492,20 @@ describe('CustomerPage', () => {
       expect(page.chatError()).toBe(lang.t().err409);
     });
 
+    it('a confirm 409 for an open report on the charge says so in each language and ends the episode', async () => {
+      await startEpisode();
+      service.confirmIntake.and.rejectWith(new ApiError(409, undefined, true));
+      page.choice = 'demo-tx-001';
+      page.chatConfirmed = true;
+      await page.confirmCharge();
+      expect(page.chatStep()).toBe('ended');
+      expect(page.chatError()).toBe('Este cargo ya tiene un reporte abierto.');
+      for (const [code, text] of [['pt', 'Esta cobrança já tem um relato aberto.'], ['en', 'This charge already has an open report.']] as const) {
+        lang.set(code);
+        expect(lang.t().err409OpenReport).toBe(text);
+      }
+    });
+
     it('a 409 on finish ends the episode and offers a customer-initiated new report', async () => {
       await startEpisode();
       service.handoffIntake.and.rejectWith(new ApiError(409, 'x'));

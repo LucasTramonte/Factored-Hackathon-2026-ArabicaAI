@@ -1,7 +1,7 @@
 /** Real D1 handoff races, ownership, strict contracts and measured budgets. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { client,base,auth } from '../support/client.js';
+import { client,base,auth,closeReport } from '../support/client.js';
 import { assertContract } from '../support/contract.js';
 async function customer(id='demo-ana') { const c=client();assert.equal((await c.call('/demo/session',{customer_id:id})).status,200);return c; }
 async function start(c) { const r=await c.call('/intake/start',{language:'pt',mode:'guided',report_type:'unrecognized_charge',customer_statement:'Não reconheço esta cobrança.',idempotency_key:crypto.randomUUID()});assert.equal(r.status,201);return r.body.episode_id; }
@@ -13,6 +13,7 @@ test('confirmed_case_and_handoff_chain_commit_once on real local D1',async()=>{
  const replay=await ana.call('/intake/confirm',body);assert.equal(replay.status,200);assert.equal(replay.body.replayed,true);assertContract('intakeReceipt',replay.body);console.log('D1_INTAKE_CONFIRM_REPLAY '+JSON.stringify(replay.metrics));
  for(const change of [{idempotency_key:crypto.randomUUID()},{transaction_id:'demo-tx-003'}])assert.equal((await ana.call('/intake/confirm',{...body,...change})).status,409);
  const bruno=await customer('demo-bruno');assert.equal((await bruno.call('/intake/confirm',body)).status,404);const own=await start(bruno);assert.equal((await bruno.call('/intake/confirm',{...body,episode_id:own})).status,404);
+ await closeReport(replay.body.protocol);
 });
 
 test('terminal_incomplete_handoff_recovery_uses_new_episode on real D1',async()=>{
@@ -32,7 +33,7 @@ test('handoff endpoints gate methods paths roles expiry and malformed bodies',as
 });
 
 test('complete handoff measures its own D1 work preserving legacy ceilings',async()=>{
- const ana=await customer();const episode_id=await start(ana);const r=await ana.call('/intake/confirm',{episode_id,transaction_id:'demo-tx-001',customer_confirmed:true,idempotency_key:crypto.randomUUID()});assert.equal(r.status,201);assertContract('intakeReceipt',r.body);assert.ok(r.metrics);console.log('D1_INTAKE_CONFIRM '+JSON.stringify(r.metrics));
+ const ana=await customer();const episode_id=await start(ana);const r=await ana.call('/intake/confirm',{episode_id,transaction_id:'demo-tx-001',customer_confirmed:true,idempotency_key:crypto.randomUUID()});assert.equal(r.status,201);assertContract('intakeReceipt',r.body);assert.ok(r.metrics);console.log('D1_INTAKE_CONFIRM '+JSON.stringify(r.metrics));await closeReport(r.body.protocol);
 });
 
 test('terminal receipt replay still requires live same-owner authority after session rotation',async()=>{
@@ -43,6 +44,7 @@ test('terminal receipt replay still requires live same-owner authority after ses
  const denied=await revoked.call('/intake/confirm',body);assert.equal(denied.status,401);assert.equal(denied.body.protocol,undefined);
  const replay=await ana.call('/intake/confirm',body);assert.equal(replay.status,200);assert.deepEqual(replay.body,{...original.body,replayed:true});
  const bruno=await customer('demo-bruno');const foreign=await bruno.call('/intake/confirm',body);assert.equal(foreign.status,404);assert.equal(foreign.body.protocol,undefined);
+ await closeReport(original.body.protocol);
 });
 
 test('incomplete handoff details reach the agent statement once on real D1, and only with the same key and content',async()=>{
@@ -57,4 +59,15 @@ test('incomplete handoff details reach the agent statement once on real D1, and 
  const bruno=await customer('demo-bruno');assert.equal((await bruno.call('/intake/handoff',{...body,idempotency_key:crypto.randomUUID()})).status,404);
  const fresh=await start(ana);for(const bad of [{details:'curto'},{details:'x'.repeat(2001)},{details:'nulo \u0000 aqui'},{details:7}])assert.equal((await ana.call('/intake/handoff',{episode_id:fresh,kind:'incomplete',idempotency_key:crypto.randomUUID(),...bad})).status,422);
  assert.equal((await ana.call('/intake/handoff',{episode_id:fresh,kind:'incomplete',idempotency_key:crypto.randomUUID()})).status,201,'the episode stayed open');
+});
+
+test('one open report per charge: a second confirm is refused until a person closes the first; replay still answers',async()=>{
+ const ana=await customer();const body={episode_id:await start(ana),transaction_id:'demo-tx-004',customer_confirmed:true,idempotency_key:crypto.randomUUID()};
+ const first=await ana.call('/intake/confirm',body);assert.equal(first.status,201);
+ const again=await ana.call('/intake/confirm',{...body,episode_id:await start(ana),idempotency_key:crypto.randomUUID()});
+ assert.equal(again.status,409);assertContract('error',again.body);assert.equal(again.body.detail,'This charge already has an open report');
+ const replay=await ana.call('/intake/confirm',body);assert.equal(replay.status,200);assert.deepEqual(replay.body,{...first.body,replayed:true});
+ await closeReport(first.body.protocol);
+ const reopened=await ana.call('/intake/confirm',{...body,episode_id:await start(ana),idempotency_key:crypto.randomUUID()});
+ assert.equal(reopened.status,201);assert.notEqual(reopened.body.protocol,first.body.protocol);await closeReport(reopened.body.protocol);
 });

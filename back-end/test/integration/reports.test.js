@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
-import { client } from '../support/client.js';
+import { client, closeReport } from '../support/client.js';
 import { assertContract } from '../support/contract.js';
 import { tokenHash } from '../../src/auth/session.js';
 
@@ -31,6 +31,7 @@ test('a customer lists only their own acknowledged reports, newest first, withou
   assert.equal(foreign.status, 200); assertContract('reportList', foreign.body);
   const anas = new Set(listed.body.items.map(x => x.protocol));
   assert.ok(!foreign.body.items.some(x => anas.has(x.protocol)), "bruno never sees ana's reports");
+  await closeReport(complete.body.protocol);
 });
 
 test('reports require a live customer session and take no parameters or other methods', async () => {

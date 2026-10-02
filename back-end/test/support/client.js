@@ -41,3 +41,13 @@ export async function idToken(customerId, { groups = ['customer'] } = {}) {
     .setIssuer(process.env.COGNITO_TEST_ISSUER).setAudience(process.env.COGNITO_TEST_CLIENT_ID).setIssuedAt().setExpirationTime('5m')
     .sign(await importJWK(jwk, 'RS256'));
 }
+
+/** Close one report as a person would (received → in_review → closed), releasing its charge for a new report. */
+export async function closeReport(protocol) {
+  const agent = client();
+  await agent.call('/demo/agent-session', {});
+  for (const status of ['in_review', 'closed']) {
+    const moved = await agent.call('/agent/intake-status', { protocol, status });
+    if (moved.status !== 200) throw new Error(`close ${protocol}: ${status} -> ${moved.status}`);
+  }
+}
