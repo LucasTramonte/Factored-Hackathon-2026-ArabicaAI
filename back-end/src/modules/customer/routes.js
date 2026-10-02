@@ -5,11 +5,9 @@
 import identities from '../../config/identities.json' with { type: 'json' };
 import { fail, json, readJsonBody } from '../../http.js';
 import { endSession, readSession, startSession } from '../../auth/session.js';
-import { validateCaseRequest } from './validation.js';
+import { CUSTOMER_ID, validateCaseRequest } from './validation.js';
 
 const COMMITTED = new Map(identities.customers.map(c => [c.customer_id, c]));
-/** Dataset ids are short ASCII codes; anything else is rejected before it reaches D1. */
-const CUSTOMER_ID = /^[A-Za-z0-9-]{1,64}$/;
 const COHORT_LIMIT = 1000;
 const PAGE = 20;
 const NOT_CONFIRMED = 'Acceptance not confirmed; retry with the same idempotency key';
