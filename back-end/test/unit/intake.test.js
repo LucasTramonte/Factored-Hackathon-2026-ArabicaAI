@@ -8,16 +8,14 @@ import { route } from '../../src/router.js';
 import { tokenHash } from '../../src/auth/session.js';
 import { assertContract } from '../support/contract.js';
 
-const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p',
-  ASSETS: { fetch: () => new Response('asset') } };
-const auth = 'Basic ' + Buffer.from('u:p').toString('base64');
+const env = { ASSETS: { fetch: () => new Response('asset') } };
 const token = 'a'.repeat(64);
 const body = { language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
   customer_statement: 'No reconozco este cargo.', idempotency_key: '0f8fad5b-d9cb-469f-a165-70867728950e' };
 
-function request(payload = body, { path = '/intake/start', method = 'POST', cookie = `demo_session=${token}`, authorization = auth } = {}) {
+function request(payload = body, { path = '/intake/start', method = 'POST', cookie = `demo_session=${token}` } = {}) {
   return new Request('https://d.example' + path, { method,
-    headers: { ...(authorization ? { Authorization: authorization } : {}), Cookie: cookie },
+    headers: { Cookie: cookie },
     ...(method === 'POST' ? { body: typeof payload === 'string' ? payload : JSON.stringify(payload) } : {}) });
 }
 
@@ -67,7 +65,7 @@ test('guided_start_is_owned_and_idempotent', async t => {
   assert.equal(db.prepare('SELECT count(*) AS n FROM intake_events').get().n, 1);
 });
 
-test('invalid starts, roles, expiry, gate, methods and paths never write intake rows', async t => {
+test('invalid starts, roles, expiry, methods and paths never write intake rows', async t => {
   const { db, store } = await setup(t);
   const invalid = [null, [], '"text"', '{bad', { ...body, customer_id: 'bruno' }, { ...body, language: 'en' },
     { ...body, mode: 'ai' }, { ...body, report_type: 'balance' }, { ...body, idempotency_key: 'bad' },
@@ -83,11 +81,9 @@ test('invalid starts, roles, expiry, gate, methods and paths never write intake 
   assert.equal((await route(request(), env, store)).status, 401);
   for (const method of ['GET', 'HEAD', 'PUT', 'DELETE', 'OPTIONS']) {
     assert.equal((await route(request(body, { method }), env, store)).status, 405);
-    assert.equal((await route(request(body, { method, authorization: null }), env, store)).status, 405, 'no team gate on customer paths');
   }
   for (const path of ['/intake', '/intake/', '/intake/unknown', '/intake/start/extra']) {
     assert.equal((await route(request(body, { path }), env, store)).status, 404);
-    assert.equal((await route(request(body, { path, authorization: null }), env, store)).status, 404, 'no team gate on customer paths');
   }
   assert.equal(db.prepare('SELECT count(*) AS n FROM intake_episodes').get().n, 0);
 });

@@ -12,6 +12,14 @@ describe('AgentService', () => {
     service = TestBed.inject(AgentService);
   });
 
+  it('sends the ID token as a Bearer header, and none for the local one-click session', async () => {
+    api.request.and.resolveTo({});
+    await service.signIn('id.token');
+    expect(api.request).toHaveBeenCalledWith('/demo/agent-session', {}, { Authorization: 'Bearer id.token' });
+    await service.signIn();
+    expect(api.request).toHaveBeenCalledWith('/demo/agent-session', {}, {});
+  });
+
   it('reads the intake queue with GET and keeps has_more', async () => {
     api.request.and.resolveTo({ items: [], has_more: true, scope: 'synthetic_demo_only' });
     expect((await service.intakes()).has_more).toBeTrue();

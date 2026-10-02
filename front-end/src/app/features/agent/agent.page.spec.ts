@@ -2,6 +2,7 @@ import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { ApiError } from '../../core/http/api.service';
+import { CognitoService } from '../../core/auth/cognito.service';
 import { LangService } from '../../shared/i18n/lang.service';
 import { AgentIntake, AgentIntakeDetail } from '../../shared/models/intake.model';
 import { AgentPage } from './agent.page';
@@ -20,6 +21,7 @@ const detail = (protocol: string, over: Partial<AgentIntakeDetail> = {}): AgentI
 
 describe('AgentPage', () => {
   let service: jasmine.SpyObj<AgentService>;
+  let cognito: jasmine.SpyObj<CognitoService>;
   let fixture: ComponentFixture<AgentPage>;
   let page: AgentPage;
   let t: () => ReturnType<LangService['t']>;
@@ -28,8 +30,11 @@ describe('AgentPage', () => {
   beforeEach(async () => {
     service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'intakes', 'intakeDetail', 'setStatus']);
     service.signIn.and.resolveTo();
+    cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
+    cognito.requestCode.and.resolveTo();
+    cognito.submitCode.and.resolveTo('id.token');
     service.intakes.and.resolveTo({ items: [intake(P1), intake(P2, 'technical')], has_more: true, scope: 'synthetic_demo_only' });
-    await TestBed.configureTestingModule({ imports: [AgentPage], providers: [{ provide: AgentService, useValue: service }, provideRouter([])] })
+    await TestBed.configureTestingModule({ imports: [AgentPage], providers: [{ provide: AgentService, useValue: service }, { provide: CognitoService, useValue: cognito }, provideRouter([])] })
       .compileComponents();
     fixture = TestBed.createComponent(AgentPage);
     page = fixture.componentInstance;
@@ -116,19 +121,22 @@ describe('AgentPage', () => {
     await loadAndOpen();
     await fixture.whenStable();
     fixture.detectChanges();
-    expect(document.activeElement).toBe(el().querySelector('button.ar-btn'));
+    expect(document.activeElement).toBe(el().querySelector('#agent-one-click'));
   });
 
   it('keeps keyboard focus on the page after loading: the queue heading on success, the sign-in button on failure', async () => {
     document.body.appendChild(el());
     fixture.autoDetectChanges();
-    const signIn = () => el().querySelector<HTMLButtonElement>('button.ar-btn')!;
+    const signIn = () => el().querySelector<HTMLButtonElement>('#agent-one-click')!;
     service.signIn.and.rejectWith(new ApiError(503, 'raw'));
     signIn().focus();
     signIn().click();
     await fixture.whenStable();
     expect(document.activeElement).toBe(signIn());
     service.signIn.and.resolveTo();
+    cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
+    cognito.requestCode.and.resolveTo();
+    cognito.submitCode.and.resolveTo('id.token');
     signIn().click();
     await fixture.whenStable();
     expect(document.activeElement).toBe(el().querySelector('#intake-queue-title'));
@@ -213,6 +221,70 @@ describe('AgentPage', () => {
     await page.open(P1, row);
     expect(page.detail()).toBeNull();
     expect(page.error()).not.toBe('');
+  });
+
+  describe('email sign-in', () => {
+    const production = () => { Object.defineProperty(page, 'demoPicker', { value: false }); fixture.detectChanges(); };
+    it('shows the one-click agent session only in development builds', () => {
+      fixture.detectChanges();
+      expect(el().querySelector('#agent-one-click')).not.toBeNull();
+      production();
+      expect(el().querySelector('#agent-one-click')).toBeNull();
+      expect(el().querySelector('#agent-email')).not.toBeNull();
+    });
+
+    it('goes email → code → queue, sending the ID token to the agent session and focusing the queue', async () => {
+      document.body.appendChild(el());
+      production();
+      page.email = ' agent@example.com ';
+      await page.requestCode();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(cognito.requestCode).toHaveBeenCalledOnceWith('agent@example.com');
+      expect(el().querySelector('#agent-email')).toBeNull();
+      expect(document.activeElement).toBe(el().querySelector('#agent-code'));
+      expect(el().querySelector('#agent-code-sent')!.textContent).toContain('agent@example.com');
+      page.code = '12345678';
+      await page.verify();
+      fixture.detectChanges();
+      expect(cognito.submitCode).toHaveBeenCalledOnceWith('agent@example.com', '12345678');
+      expect(service.signIn).toHaveBeenCalledOnceWith('id.token');
+      expect(page.loaded()).toBeTrue();
+      expect(el().querySelector('form')).toBeNull();
+      await fixture.whenStable();
+      expect(document.activeElement).toBe(el().querySelector('#intake-queue-title'));
+      service.signIn.calls.reset();
+      el().querySelector<HTMLButtonElement>('button.ar-btn')!.click();
+      await fixture.whenStable();
+      expect(service.signIn).not.toHaveBeenCalled();
+      expect(service.intakes).toHaveBeenCalledTimes(2);
+      el().remove();
+    });
+
+    it('maps sign-in errors: wrong code stays on the code step; not an agent, rate limits and outages go back to the email', async () => {
+      production();
+      page.email = 'agent@example.com';
+      cognito.requestCode.and.rejectWith(new ApiError(401));
+      await page.requestCode();
+      expect(page.error()).toBe(t().errSendCode);
+      expect(page.codeSent()).toBeFalse();
+      cognito.requestCode.and.resolveTo();
+      await page.requestCode();
+      cognito.submitCode.and.rejectWith(new ApiError(401));
+      await page.verify();
+      expect(page.error()).toBe(t().errCode);
+      expect(page.codeSent()).toBeTrue();
+      expect(service.signIn).not.toHaveBeenCalled();
+      cognito.submitCode.and.resolveTo('id.token');
+      for (const [status, text] of [[403, t().agentErr403], [429, t().errTooMany], [0, t().err503], [503, t().err503]] as const) {
+        await page.requestCode();
+        service.signIn.and.rejectWith(new ApiError(status));
+        await page.verify();
+        expect(page.error()).toBe(text);
+        expect(page.codeSent()).toBeFalse();
+        expect(page.loaded()).toBeFalse();
+      }
+    });
   });
 
   describe('status', () => {

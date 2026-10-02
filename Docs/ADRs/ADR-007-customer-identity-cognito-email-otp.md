@@ -14,10 +14,10 @@
 
 ## Decision
 
-1. **Customers sign in with a Cognito email one-time code.** Amazon Cognito's passwordless flow (`USER_AUTH` with `EMAIL_OTP`), pool `arabicaai-demo` in us-east-2, Essentials tier. Agents move to it later. Only an admin enrols users (`back-end/scripts/cognito/enroll.sh`). Each email maps to one demo customer through the immutable attribute `custom:customer_id`.
+1. **Customers sign in with a Cognito email one-time code.** Amazon Cognito's passwordless flow (`USER_AUTH` with `EMAIL_OTP`), pool `arabicaai-demo` in us-east-2, Essentials tier. Agents use it too (group `agent`, task 1.6). Only an admin enrols users (`back-end/scripts/cognito/enroll.sh`). Each email maps to one demo customer through the immutable attribute `custom:customer_id`.
 2. **The Worker owns the session.** The browser calls Cognito directly; Cognito's CORS was verified. The Worker verifies the ID token: RS256, issuer, audience, `token_use`, `email_verified`, and required `exp`, `iat` and `sub`. It then mints its own session cookie. From there identity comes from the session only, as before.
 3. **Roles are Cognito groups:** `customer`, `agent`, `admin`, `auditor`.
-4. **The Basic team gate covers only `/agent`, `/agent/*` and `/demo/*`.** Customer routes are public behind the session check. Public API paths are rate-limited per IP at 60 requests a minute.
+4. **No Basic team gate.** Customer and agent routes are public behind their session checks; an agent session needs an ID token in group `agent`. Every API path is rate-limited per IP at 60 requests a minute. (Until task 1.6 the Basic gate covered `/agent`, `/agent/*` and `/demo/*`.)
 5. **Cloudflare Access is removed from the hostname.**
 6. **The demo picker exists only in local development** (`DEMO_PICKER=1`).
 7. **The Worker and D1 stay the single runtime.** The rest of ADR-003 stands.
@@ -31,7 +31,7 @@
 - **−** Failed code attempts happen at Cognito. They appear in CloudTrail, not in the Worker's logs.
 - **−** Cognito's default sender caps at about 50 emails a day until SES is the sender.
 - **−** The rate limit is counted per Cloudflare location, so it is approximate, and it is keyed by IP, so a shared NAT shares it.
-- **−** Agents still use the shared team password until a later task moves them to Cognito.
+- **Resolved:** agents no longer share a team password; they sign in with a Cognito email code in group `agent` (`feat(agent): agents sign in with Cognito; the team password retires`, branch `feat/auth-hardening`).
 
 ## Alternatives considered
 
@@ -61,3 +61,5 @@ Commits on `feat/cognito-email-signin`:
 - `474b27b` The charges caption says only what every data source supports.
 
 Removing Cloudflare Access is a manual step in the Zero Trust dashboard after this branch deploys ([runbook](../Plans/intake-demo.md#customer-sign-in-cognito)).
+
+On `feat/auth-hardening`, `feat(agent): agents sign in with Cognito; the team password retires` removes the Basic gate and `src/auth/access-gate.js`. After it deploys, a person deletes the `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` Worker secrets ([runbook](../Plans/intake-demo.md#customer-sign-in-cognito)).

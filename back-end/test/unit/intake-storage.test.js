@@ -11,7 +11,7 @@ import { createStore } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
 import { close } from '../support/close.js';
 
-const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p', DEMO_PICKER: '1' };
+const env = { DEMO_PICKER: '1' };
 const EPISODES = 100;
 // A 77-code-point statement (the typical length used by ADR-004) and the 2,000-code-point maximum.
 const TYPICAL = 'No reconozco el cargo de Mercado Demo del 25 de septiembre; no hice la compra';
@@ -30,7 +30,7 @@ function setup() {
   let cookie = '';
   const call = async (path, body) => {
     const response = await route(new Request('https://demo.example' + path, { method: 'POST', body: JSON.stringify(body),
-      headers: { Authorization: 'Basic ' + Buffer.from('u:p').toString('base64'), ...(cookie ? { Cookie: cookie } : {}) } }), env, store);
+      headers: { ...(cookie ? { Cookie: cookie } : {}) } }), env, store);
     const set = response.headers.get('set-cookie'); if (set) cookie = set.split(';', 1)[0];
     return { status: response.status, body: await response.json() };
   };

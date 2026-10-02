@@ -1,8 +1,9 @@
 /** POST /auth/session: only a verified Cognito ID token for an enrolled, loaded customer starts a session. */
-import { test } from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { errors } from 'jose';
 import { startEmailSession } from '../../src/modules/customer/routes.js';
+import { startAgentSession } from '../../src/modules/agent/routes.js';
 import { assertContract } from '../support/contract.js';
 
 const env = { COGNITO_REGION: 'us-east-2', COGNITO_USER_POOL_ID: 'us-east-2_x', COGNITO_CLIENT_ID: 'client',
@@ -95,4 +96,58 @@ test('with EMAIL_KEY the address is stored encrypted in the session batch; witho
     assert.equal((await startEmailSession(req('Bearer ' + jwt), { ...env, EMAIL_KEY: bad }, t, {}, async () => claims)).status, 200);
     assert.equal(t.emailEnc, null);
   }
+});
+
+describe('POST /demo/agent-session', () => {
+  const agentReq = (authorization, body) => new Request('https://d.example/demo/agent-session', { method: 'POST',
+    headers: authorization ? { Authorization: authorization } : {}, body });
+  async function agent(authorization, verify, e = env, body) {
+    const s = store();
+    const res = await startAgentSession(agentReq(authorization, body), e, s, {}, verify);
+    return { status: res.status, body: await res.json(), cookie: res.headers.get('Set-Cookie'), calls: s.calls };
+  }
+
+  test('an agent-group token gets an agent session; the body is ignored', async () => {
+    const r = await agent('Bearer ' + jwt, async () => ({ ...claims, groups: ['agent'], customerId: null }), env, '{"role":"x"}');
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body, { role: 'agent', mode: 'email_otp' });
+    assertContract('agentSession', r.body);
+    assert.match(r.cookie, /^demo_agent_session=[0-9a-f]{64};/);
+    assert.deepEqual(r.calls, [['rotateSession', null, 'agent']]);
+  });
+
+  test('any other group is one 403 and writes nothing', async () => {
+    for (const groups of [['customer'], [], ['admin', 'auditor'], ['Agent']]) {
+      const r = await agent('Bearer ' + jwt, async () => ({ ...claims, groups }));
+      assert.equal(r.status, 403, groups.join());
+      assert.deepEqual(r.body, { detail: 'This account is not an agent in the demo' });
+      assert.equal(r.cookie, null);
+      assert.deepEqual(r.calls, []);
+    }
+  });
+
+  test('no, malformed or unverifiable tokens are 422 or 401, a JWKS outage 503, and none reach the store', async () => {
+    for (const [h, verify, status] of [[null, null, 422], ['Basic dTpw', null, 422], ['Bearer a.b', null, 422],
+      ['Bearer ' + jwt, async () => { throw new errors.JWSSignatureVerificationFailed(); }, 401],
+      ['Bearer ' + jwt, async () => { throw new errors.JWKSTimeout(); }, 503],
+      ['Bearer ' + jwt, async () => { throw new TypeError('fetch failed'); }, 503]]) {
+      const r = await agent(h, verify ?? (async () => assert.fail('verified')));
+      assert.equal(r.status, status, String(h));
+      assert.equal(r.cookie, null);
+      assert.deepEqual(r.calls, []);
+    }
+  });
+
+  test('only with DEMO_PICKER=1 does a request without Authorization get the local one-click session', async () => {
+    const never = async () => assert.fail('verified');
+    const local = await agent(null, never, { ...env, DEMO_PICKER: '1' });
+    assert.equal(local.status, 200);
+    assert.deepEqual(local.body, { role: 'agent', mode: 'simulated_login' });
+    assertContract('agentSession', local.body);
+    for (const picker of [{}, { DEMO_PICKER: '0' }, { DEMO_PICKER: 1 }]) {
+      assert.equal((await agent(null, never, { ...env, ...picker })).status, 422);
+    }
+    // A presented token is always verified, even locally.
+    assert.equal((await agent('Bearer ' + jwt, async () => claims, { ...env, DEMO_PICKER: '1' })).status, 403);
+  });
 });

@@ -98,6 +98,8 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
   measured.logout = within('logout', (await c.call('/auth/logout', {})).metrics);
   const agent = client();
   measured.agentLogin = within('agentLogin', (await agent.call('/demo/agent-session', {})).metrics);
+  measured.agentEmailLogin = within('agentLogin', (await client({ authorization: 'Bearer ' + await idToken('agent@test', { groups: ['agent'] }) })
+    .call('/demo/agent-session', {})).metrics);
   measured.agentList = within('agentList', (await agent.call('/agent/cases')).metrics);
   const episode = sum(measured, ['login', 'list', 'create']);
   console.log('D1_BUDGET ' + JSON.stringify({ per_request: measured, customer_episode: episode }));

@@ -1,15 +1,26 @@
 /** Agent routes: a separate simulated session, views of accepted cases and handoffs, and the review status a person sets. */
 import { fail, json, readCookies, readJsonBody } from '../../http.js';
 import { COOKIE, readSession, startSession, tokenHash } from '../../auth/session.js';
+import { bearerClaims, verifyIdToken } from '../../auth/cognito.js';
 import { UUID } from '../intake/validation.js';
 import { createStore } from '../../store/d1.js';
 import { deliver } from '../../notify/dispatch.js';
 
 const PAGE = 50;
 
-/** POST /demo/agent-session: start a simulated agent session. */
-export async function startAgentSession(request, env, store) {
-  return json({ role: 'agent', mode: 'simulated_login' }, 200,
+/**
+ * POST /demo/agent-session: an agent session from a verified Cognito ID token in group ``agent`` (``Authorization:
+ * Bearer``, as ``POST /auth/session``); any body is ignored. Only with ``DEMO_PICKER=1`` (local) does a request without
+ * ``Authorization`` get a simulated session in one click.
+ */
+export async function startAgentSession(request, env, store, ctx, verify = verifyIdToken) {
+  const local = env.DEMO_PICKER === '1' && !request.headers.has('Authorization');
+  if (!local) {
+    const signedIn = await bearerClaims(request, env, verify);
+    if (signedIn.error) return signedIn.error;
+    if (!signedIn.claims.groups.includes('agent')) return fail(403, 'This account is not an agent in the demo');
+  }
+  return json({ role: 'agent', mode: local ? 'simulated_login' : 'email_otp' }, 200,
     { 'Set-Cookie': await startSession(request, store, 'agent') });
 }
 

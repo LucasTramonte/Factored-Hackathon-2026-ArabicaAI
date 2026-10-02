@@ -1,35 +1,10 @@
-/** Access gate, session tokens and cookie handling. */
+/** Session tokens and cookie handling. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkAccessGate } from '../../src/auth/access-gate.js';
 import { COOKIE, newToken, tokenHash } from '../../src/auth/session.js';
 import { cookieHeader, readCookies } from '../../src/http.js';
 
-const env = { DEMO_ACCESS_USERNAME: 'reviewer', DEMO_ACCESS_PASSWORD: 'pa:ss wörd' };
-const basic = value => ({ headers: { Authorization: value } });
 const req = (headers = {}, url = 'https://demo.example.workers.dev/cases') => new Request(url, { headers });
-const encode = text => 'Basic ' + Buffer.from(text, 'utf8').toString('base64');
-
-test('gate fails closed when it is not configured', async () => {
-  for (const partial of [{}, { DEMO_ACCESS_USERNAME: 'reviewer' }, { DEMO_ACCESS_PASSWORD: 'x' }]) {
-    const res = checkAccessGate(req(basic(encode('reviewer:x')).headers), partial);
-    assert.equal(res.status, 503);
-    assert.deepEqual(await res.json(), { detail: 'Demo access gate is not configured' });
-  }
-});
-
-test('gate rejects every malformed or wrong credential', () => {
-  for (const value of [undefined, '', 'Bearer abc', 'Basic', 'Basic !!!not-base64', encode('reviewer'),
-    encode(':pa:ss wörd'), encode('Reviewer:pa:ss wörd'), encode('reviewer:pa:ss'), encode('reviewer:pa:ss wörd ')]) {
-    const res = checkAccessGate(req(value === undefined ? {} : { Authorization: value }), env);
-    assert.equal(res.status, 401, String(value));
-    assert.match(res.headers.get('WWW-Authenticate'), /^Basic realm=/);
-  }
-});
-
-test('gate accepts the exact credential, including colons and non-ASCII in the password', () => {
-  assert.equal(checkAccessGate(req({ Authorization: encode('reviewer:pa:ss wörd') }), env), null);
-});
 
 test('tokens are 256-bit hex and hashes are stable SHA-256', async () => {
   const tokens = new Set(Array.from({ length: 50 }, newToken));

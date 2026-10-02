@@ -35,7 +35,7 @@ test('run_worker_first and the router agree: every API path runs the Worker, and
 
 test('look-alike paths outside the API namespaces reach the static assets, not the API', async () => {
   const { route } = await import('../../src/router.js');
-  const env = { DEMO_ACCESS_USERNAME: 'u', DEMO_ACCESS_PASSWORD: 'p', ASSETS: { fetch: () => new Response('asset') } };
+  const env = { ASSETS: { fetch: () => new Response('asset') } };
   for (const path of ['/intakeX', '/intakes', '/intake-foo', '/casesX', '/transactionsX', '/reportsX']) {
     const response = await route(new Request('https://demo.example' + path), env, {});
     assert.equal(response.status, 200, path); assert.equal(await response.text(), 'asset', path);

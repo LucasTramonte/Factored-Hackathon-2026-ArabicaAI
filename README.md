@@ -74,7 +74,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 | Data quality register | [`DATA_QUALITY.md`](Docs/deliverables/DATA_QUALITY.md), `data_profiles/findings/` | Every dataset finding that changes or limits a decision, with its query, impact and handling |
 | Decisions | `Docs/ADRs/` | Scope, runtime, capacity, cost and cloud placement, each with its limitations and exit triggers |
 
-**Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Customers sign in with an email one-time code from Amazon Cognito; ask the team to enrol your email. The team gate covers only the agent view ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). Until this branch deploys, the live link still has Cloudflare Access and simulated sign-ins.
+**Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Customers sign in with an email one-time code from Amazon Cognito; ask the team to enrol your email. Agents sign in the same way, in the `agent` group; there is no team password ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). Until this branch deploys, the live link still has Cloudflare Access and simulated sign-ins.
 
 **Status (2026-10-01):**
 

@@ -71,7 +71,7 @@ The observed customer CSV has fields such as `first_name`, `last_name` and `last
 
 ## Deployed preview
 
-The Worker `factored-hackathon-2026-arabicaai` runs at https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Customers sign in with a Cognito email code; the Basic gate covers only the agent and demo paths ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)). Until Phase 1 deploys, Cloudflare Access (email allowlist) still fronts the whole hostname.
+The Worker `factored-hackathon-2026-arabicaai` runs at https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Customers and agents sign in with a Cognito email code; there is no team password once this branch deploys ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)). Until Phase 1 deploys, Cloudflare Access (email allowlist) still fronts the whole hostname.
 
 - On 2026-09-29, production D1 held both migrations, the fictitious seed and no cases.
 - Loading the Gold slice into production is a reviewed, manual step (`back-end/README.md`, "Deployment").
@@ -93,7 +93,9 @@ back-end/scripts/cognito/enroll.sh <email> <customer_id> [group]   # customer; n
 back-end/scripts/cognito/enroll.sh <email> - agent                 # agent, admin or auditor: no customer id
 ```
 
-Both use `--profile ${AWS_PROFILE:-arabica}` and can be rerun. Judges' and teammates' emails are enrolled with `enroll.sh`; the customer id cannot change after creation, so delete the user first to re-map one. Once Phase 1 deploys, a person removes Cloudflare Access from the hostname in the Zero Trust dashboard; until then Access still fronts the sign-in page.
+Both use `--profile ${AWS_PROFILE:-arabica}` and can be rerun. Judges' and teammates' emails are enrolled with `enroll.sh`; each person who reviews reports on `/agent` is enrolled with `enroll.sh <email> - agent` (a customer-only account gets 403 there); the customer id cannot change after creation, so delete the user first to re-map one. Once Phase 1 deploys, a person removes Cloudflare Access from the hostname in the Zero Trust dashboard; until then Access still fronts the sign-in page.
+
+After the agent sign-in deploys, a person deletes the retired team-password secrets: `cd back-end && npx wrangler secret delete DEMO_ACCESS_USERNAME && npx wrangler secret delete DEMO_ACCESS_PASSWORD`. The Worker no longer reads them.
 
 ### Notification email (SES)
 
@@ -120,7 +122,7 @@ Human steps (the access key never passes through an agent or the repository):
 
 ## Known limits
 
-- Customer identity is a Cognito email code mapped to one demo customer; it is not bank authentication. Agents still share the team password.
+- Customer identity is a Cognito email code mapped to one demo customer; it is not bank authentication. Agents sign in with their own email code in the `agent` group; there is no shared team password.
 - Sessions last one hour and are stored in D1.
 - A retry with the same key and content returns the same reference, and different content gets 409. A second case for the same charge under a new key is possible: there is no cross-key duplicate rule yet (tracked in the roadmap).
 - If the browser tab is closed with a request pending, the pending state is lost, but no duplicate is created.
