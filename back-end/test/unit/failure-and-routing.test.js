@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import worker, { withMetrics } from '../../src/index.js';
-import { route } from '../../src/router.js';
+import { API_ROUTES, ROLES, ROUTE_ROLES, route } from '../../src/router.js';
 import { listIdentities, startCustomerSession } from '../../src/modules/customer/routes.js';
 import { readJsonBody, MAX_BODY_BYTES } from '../../src/http.js';
 import { tokenHash } from '../../src/auth/session.js';
@@ -240,4 +240,20 @@ test('every API path is limited per IP before any store call; documents are not'
     assert.equal(res.status, 401);
   }
   assert.deepEqual(keys, ['unknown']);
+});
+
+test('every route has a declared role; admin and auditor own none; each protected route refuses the other actor\'s live session', async () => {
+  assert.deepEqual(Object.keys(ROUTE_ROLES).sort(), Object.keys(API_ROUTES).sort());
+  assert.deepEqual([...new Set(Object.values(ROUTE_ROLES))].sort(), ['agent', 'customer', 'public']);
+  assert.deepEqual(ROLES, ['public', 'customer', 'agent', 'admin', 'auditor']);
+  // The fake store accepts ``token`` only as a live customer session, so each request carries a session, just not this role's.
+  const store = await fakeStore();
+  const other = { customer: `demo_agent_session=${token}`, agent: `demo_session=${token}` };
+  for (const [path, role] of Object.entries(ROUTE_ROLES)) {
+    if (role === 'public') continue;
+    for (const method of Object.keys(API_ROUTES[path])) {
+      const res = await route(new Request('https://d.example' + path, { method, headers: { Cookie: other[role] } }), env, store);
+      assert.equal(res.status, 401, `${method} ${path} (${role})`);
+    }
+  }
 });

@@ -1,6 +1,6 @@
 /**
- * Exact route table. Every API route is protected by its handler's session check (customer or agent), behind a
- * per-IP limit (60 a minute). Unknown paths under API prefixes return JSON 404 and are never served as the app.
+ * Exact route table. Every API route has a declared role (``ROUTE_ROLES``); protected ones are checked by their
+ * handler's session read (customer or agent), behind a per-IP limit (60 a minute). Unknown paths under API prefixes return JSON 404 and are never served as the app.
  */
 import { fail, json } from './http.js';
 import { createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession } from './modules/customer/routes.js';
@@ -25,6 +25,29 @@ export const API_ROUTES = {
   '/agent/intake-detail': { GET: getAgentIntakeDetail },
   '/agent/intake-status': { POST: transitionIntake }
 };
+/** Who may call what. ``public`` needs no session; ``customer`` and ``agent`` need that actor's live session, which each
+ *  handler reads itself. ``admin`` and ``auditor`` exist as roles (Lucas's RBAC) and own no route until a feature needs
+ *  one. Declarative: adding a route without a role fails at module load. */
+export const ROLES = ['public', 'customer', 'agent', 'admin', 'auditor'];
+export const ROUTE_ROLES = {
+  '/demo/identities': 'public',
+  '/demo/session': 'public',
+  '/auth/session': 'public',
+  '/auth/logout': 'public',
+  '/transactions': 'customer',
+  '/cases': 'customer',
+  '/intake/start': 'customer',
+  '/intake/confirm': 'customer',
+  '/intake/handoff': 'customer',
+  '/reports': 'customer',
+  '/reports/update': 'customer',
+  '/demo/agent-session': 'public',
+  '/agent/cases': 'agent',
+  '/agent/intakes': 'agent',
+  '/agent/intake-detail': 'agent',
+  '/agent/intake-status': 'agent'
+};
+for (const path of Object.keys(API_ROUTES)) if (!ROLES.includes(ROUTE_ROLES[path])) throw new Error(`Route ${path} has no role`);
 export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/transactions/', '/cases/', '/intake/', '/reports/'];
 /** Bare API namespace paths that have no handler but must still answer JSON 404. */
 export const API_NAMESPACES = new Set(['/intake', '/auth']);
