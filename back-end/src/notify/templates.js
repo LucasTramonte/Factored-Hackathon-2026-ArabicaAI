@@ -27,14 +27,14 @@ export const TEMPLATES = {
       body: 'Estado actual de tu reporte {reference}: {status}\n\nTe avisaremos si cambia.\n\n{urgent}' }
   },
   pt: {
-    received: { subject: 'Recebemos sua denúncia {reference}',
-      body: 'Recebemos sua denúncia de uma cobrança não reconhecida. Sua referência é {reference}.\n\nUma pessoa vai analisá-la; avisaremos quando o status mudar.\n\n{urgent}' },
-    in_review: { subject: 'Sua denúncia {reference} está em análise',
-      body: 'Uma pessoa está analisando sua denúncia {reference}.\n\nAvisaremos quando a análise terminar.\n\n{urgent}' },
-    closed: { subject: 'A análise da sua denúncia {reference} terminou',
-      body: 'Uma pessoa terminou de analisar sua denúncia {reference}.\n\nO banco informará o resultado pelo canal habitual.\n\n{urgent}' },
-    update: { subject: 'Status da sua denúncia {reference}',
-      body: 'Status atual da sua denúncia {reference}: {status}\n\nAvisaremos se mudar.\n\n{urgent}' }
+    received: { subject: 'Recebemos seu relato {reference}',
+      body: 'Recebemos seu relato de uma cobrança não reconhecida. Sua referência é {reference}.\n\nUma pessoa vai analisá-lo; avisaremos quando o status mudar.\n\n{urgent}' },
+    in_review: { subject: 'Seu relato {reference} está em análise',
+      body: 'Uma pessoa está analisando seu relato {reference}.\n\nAvisaremos quando a análise terminar.\n\n{urgent}' },
+    closed: { subject: 'A análise do seu relato {reference} terminou',
+      body: 'Uma pessoa terminou de analisar seu relato {reference}.\n\nO banco informará o resultado pelo canal habitual.\n\n{urgent}' },
+    update: { subject: 'Status do seu relato {reference}',
+      body: 'Status atual do seu relato {reference}: {status}\n\nAvisaremos se mudar.\n\n{urgent}' }
   },
   en: {
     received: { subject: 'We received your report {reference}',

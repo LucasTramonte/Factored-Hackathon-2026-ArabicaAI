@@ -4,7 +4,7 @@
  */
 import { AwsClient } from 'aws4fetch';
 
-const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)));
+const b64 = bytes => btoa(Array.from(new Uint8Array(bytes), b => String.fromCharCode(b)).join(''));
 const unb64 = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
 
 /** The 256-bit key from ``env.EMAIL_KEY`` (base64); throws when it is missing or not 32 bytes. */

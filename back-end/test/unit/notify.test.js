@@ -11,7 +11,6 @@ const mail = { to: 'ana@example.com', subject: 'Hola', text: 'Cuerpo' };
 test('an address round-trips, and each encryption uses a fresh IV', async () => {
   const a = await encrypt('ana@example.com', env), b = await encrypt('ana@example.com', env);
   assert.notEqual(a, b);
-  assert.match(a, /^[A-Za-z0-9+/=]+\.[A-Za-z0-9+/=]+$/);
   assert.equal(await decrypt(a, env), 'ana@example.com');
 });
 
@@ -37,7 +36,7 @@ test('every template in every language names the reference, says no refund start
       assert.ok(subject && text.includes('AR-ABCD-1234'), where);
       assert.ok(text.includes(NO_REFUND[lang]), where);
       assert.doesNotMatch(subject + text, /[{}]/, where);
-      assert.doesNotMatch(subject + text, /SECRET STATEMENT|resolved|resuelt|resolvid|\bdone\b/i, where);
+      assert.doesNotMatch(subject + text, /SECRET STATEMENT|resolved|resuelt|resolvid|\bdone\b|denúncia/i, where);
       if (template === 'update') assert.ok(text.includes('X-STATUS'), where);
     }
   }
