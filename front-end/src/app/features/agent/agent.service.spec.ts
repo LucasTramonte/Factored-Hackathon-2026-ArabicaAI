@@ -23,4 +23,10 @@ describe('AgentService', () => {
     await service.intakeDetail('a&b=c');
     expect(api.request).toHaveBeenCalledOnceWith('/agent/intake-detail?protocol=a%26b%3Dc');
   });
+
+  it('posts exactly the protocol and the next status', async () => {
+    api.request.and.resolveTo({});
+    await service.setStatus('p', 'in_review');
+    expect(api.request).toHaveBeenCalledOnceWith('/agent/intake-status', { protocol: 'p', status: 'in_review' });
+  });
 });

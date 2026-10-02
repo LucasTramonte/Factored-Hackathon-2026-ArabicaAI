@@ -30,6 +30,7 @@
               <li>
                 <button #row type="button" class="intake-row" [attr.data-protocol]="item.protocol" [attr.aria-expanded]="openProtocol() === item.protocol" [attr.aria-controls]="openProtocol() === item.protocol && detail() ? 'intake-detail' : null" (click)="open(item.protocol, row)">
                   <span class="ar-chip" [class.ar-chip-ok]="item.kind === 'complete'" [class.ar-chip-err]="item.kind === 'technical'" [class.ar-chip-warn]="item.kind === 'incomplete'">{{ kindLabel(item.kind) }}</span>
+                  <span class="ar-chip status-chip">{{ statusLabel(item.status) }}</span>
                   <span class="ar-mono">{{ item.reference_short ?? item.protocol }}</span>
                   <span class="ar-small">{{ item.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span>
                   <span class="ar-small">{{ t().toolStatus }}: <code>{{ item.tool_status }}</code></span>
@@ -49,6 +50,12 @@
           <button type="button" class="ar-btn ar-btn-secondary" (click)="close()">{{ t().close }}</button>
         </div>
         <div class="box-body detail">
+          <div class="status-bar">
+            <p #statusText id="intake-status" class="status-line" role="status" tabindex="-1">{{ statusLabel(d.status) }}</p>
+            @if (d.status !== 'closed') {
+              <button type="button" class="ar-btn status-action" (click)="advance(d)" [disabled]="busy()">{{ d.status === 'received' ? t().takeCase : t().closeReview }}</button>
+            }
+          </div>
           <dl class="detail-meta">
             <div><dt>{{ t().reference }}</dt><dd class="ar-mono">{{ d.reference_short ?? d.protocol }}</dd></div>
             @if (d.reference_short) { <div><dt>{{ t().caseId }}</dt><dd class="ar-mono">{{ d.protocol }}</dd></div> }

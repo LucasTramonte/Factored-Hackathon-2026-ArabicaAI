@@ -10,7 +10,7 @@ import { AgentService } from './agent.service';
 const P1 = '11111111-1111-4111-8111-111111111111';
 const P2 = '22222222-2222-4222-8222-222222222222';
 const intake = (protocol: string, kind: AgentIntake['kind'] = 'complete'): AgentIntake =>
-  ({ protocol, reference_short: protocol === P1 ? 'AR-7K3M-2Q4X' : null, episode_id: P2, kind, tool_status: 'ok', destination: 'case_service', priority: 'normal', accepted_at: '2026-09-30T12:00:00.000Z' });
+  ({ protocol, reference_short: protocol === P1 ? 'AR-7K3M-2Q4X' : null, episode_id: P2, kind, status: 'received', tool_status: 'ok', destination: 'case_service', priority: 'normal', accepted_at: '2026-09-30T12:00:00.000Z' });
 const detail = (protocol: string, over: Partial<AgentIntakeDetail> = {}): AgentIntakeDetail => ({
   ...intake(protocol), language: 'es', customer_statement: 'No reconozco este cargo',
   verified_evidence: { transaction: { transaction_id: 'TX-9', merchant_name: 'Café', occurred_at: null, source_occurred_at: '2026-09-01 10:00:00', amount: '12.50', currency: 'MXN' } },
@@ -26,7 +26,7 @@ describe('AgentPage', () => {
   const el = () => fixture.nativeElement as HTMLElement;
 
   beforeEach(async () => {
-    service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'intakes', 'intakeDetail']);
+    service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'intakes', 'intakeDetail', 'setStatus']);
     service.signIn.and.resolveTo();
     service.intakes.and.resolveTo({ items: [intake(P1), intake(P2, 'technical')], has_more: true, scope: 'synthetic_demo_only' });
     await TestBed.configureTestingModule({ imports: [AgentPage], providers: [{ provide: AgentService, useValue: service }, provideRouter([])] })
@@ -213,5 +213,100 @@ describe('AgentPage', () => {
     await page.open(P1, row);
     expect(page.detail()).toBeNull();
     expect(page.error()).not.toBe('');
+  });
+
+  describe('status', () => {
+    const action = () => el().querySelectorAll<HTMLButtonElement>('#intake-detail .status-action');
+    const statusText = () => el().querySelector('#intake-status')!;
+
+    it('offers exactly one next step per status, and none once closed', async () => {
+      for (const [status, label] of [['received', t().takeCase], ['in_review', t().closeReview]] as const) {
+        service.intakeDetail.and.resolveTo(detail(P1, { status }));
+        await loadAndOpen();
+        expect(action().length).toBe(1);
+        expect(action()[0].textContent!.trim()).toBe(label);
+      }
+      service.intakeDetail.and.resolveTo(detail(P1, { status: 'closed' }));
+      await loadAndOpen();
+      expect(action().length).toBe(0);
+      expect(statusText().textContent).toContain(t().reviewClosed);
+    });
+
+    it('shows the status as text on every queue row', async () => {
+      await page.load();
+      fixture.detectChanges();
+      expect([...el().querySelectorAll('.intake-row .status-chip')].map(c => c.textContent!.trim())).toEqual([t().statusReceived, t().statusReceived]);
+    });
+
+    it('takes the case, then closes it, updating row and detail in place and focusing the new status', async () => {
+      document.body.appendChild(el());
+      service.intakeDetail.and.resolveTo(detail(P1));
+      service.setStatus.and.callFake(async (protocol, status) => ({ protocol, status, changed_at: '2026-10-02T10:00:00.000Z' }));
+      await loadAndOpen();
+      action()[0].click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(service.setStatus).toHaveBeenCalledOnceWith(P1, 'in_review');
+      expect(page.detail()!.status).toBe('in_review');
+      expect(page.intakes().find(i => i.protocol === P1)!.status).toBe('in_review');
+      expect(el().querySelector(`.intake-row[data-protocol="${P1}"] .status-chip`)!.textContent!.trim()).toBe(t().inReview);
+      expect(statusText().getAttribute('role')).toBe('status');
+      expect(document.activeElement).toBe(statusText());
+      action()[0].click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(service.setStatus).toHaveBeenCalledWith(P1, 'closed');
+      expect(action().length).toBe(0);
+      expect(statusText().textContent).toContain(t().reviewClosed);
+      expect(document.activeElement).toBe(statusText());
+      el().remove();
+    });
+
+    it('disables the action while the change is pending', async () => {
+      service.intakeDetail.and.resolveTo(detail(P1));
+      let finish!: () => void;
+      service.setStatus.and.returnValue(new Promise(r => (finish = () => r({ protocol: P1, status: 'in_review', changed_at: 'x' }))));
+      await loadAndOpen();
+      action()[0].click();
+      fixture.detectChanges();
+      expect(action()[0].disabled).toBeTrue();
+      finish();
+      await fixture.whenStable();
+    });
+
+    it('on 409 reloads the detail and says someone else changed it', async () => {
+      service.intakeDetail.and.returnValues(Promise.resolve(detail(P1)), Promise.resolve(detail(P1, { status: 'closed' })));
+      service.setStatus.and.rejectWith(new ApiError(409, 'Status can only move forward one step'));
+      await loadAndOpen();
+      action()[0].click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(service.intakeDetail).toHaveBeenCalledTimes(2);
+      expect(page.detail()!.status).toBe('closed');
+      expect(page.intakes().find(i => i.protocol === P1)!.status).toBe('closed');
+      expect(el().querySelector('[role="alert"]')!.textContent).toContain(t().agentErr409);
+      expect(action().length).toBe(0);
+    });
+
+    it('shows the generic error text for other failures', async () => {
+      service.intakeDetail.and.resolveTo(detail(P1));
+      service.setStatus.and.rejectWith(new ApiError(503, 'raw'));
+      await loadAndOpen();
+      action()[0].click();
+      await fixture.whenStable();
+      expect(page.error()).toBe(t().err503);
+      expect(page.detail()!.status).toBe('received');
+    });
+
+    it('offers no refund, block or verdict anywhere in the agent view, in any language', async () => {
+      for (const status of ['received', 'in_review', 'closed'] as const) {
+        for (const lang of ['es', 'pt', 'en'] as const) {
+          TestBed.inject(LangService).set(lang);
+          service.intakeDetail.and.resolveTo(detail(P1, { status }));
+          await loadAndOpen();
+          expect(el().textContent).not.toMatch(/reembols|bloque|fraude|refund|block|verdict/i);
+        }
+      }
+    });
   });
 });

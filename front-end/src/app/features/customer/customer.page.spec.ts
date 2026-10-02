@@ -657,6 +657,20 @@ describe('CustomerPage', () => {
       expect(el.textContent).not.toContain(p.t().moreReports);
     });
 
+    it('shows the status a person set: received, in review, closed; never resolved', async () => {
+      service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB'),
+        { ...report('complete', 'AR-CCCC-DDDD', undefined, '11111111-2222-4333-8444-555555555555'), status: 'in_review', next_step: 'being_reviewed' },
+        { ...report('complete', 'AR-EEEE-FFFF', undefined, '22222222-2222-4333-8444-555555555555'), status: 'closed', next_step: 'closed_by_person' }], has_more: false });
+      const { el, p } = await home();
+      const [received, inReview, closed] = rows(el);
+      expect(received).toContain(p.t().statusReceived + ': ' + p.t().nextStepReview);
+      expect(inReview).toContain(p.t().statusInReview);
+      expect(inReview).not.toContain(p.t().nextStepReview);
+      expect(closed).toContain(p.t().statusClosed);
+      expect(closed).not.toContain(p.t().nextStepReview);
+      expect(el.querySelector('.your-reports')!.textContent).not.toMatch(/resuelt|resolvid|resolved/i);
+    });
+
     it('reloads the reports after a receipt', async () => {
       const { fixture, p, el } = await home();
       expect(el.querySelector('.your-reports')).toBeNull();

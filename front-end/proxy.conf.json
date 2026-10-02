@@ -35,6 +35,10 @@
     "target": "http://127.0.0.1:8787",
     "secure": false
   },
+  "/agent/intake-status": {
+    "target": "http://127.0.0.1:8787",
+    "secure": false
+  },
   "/agent/intake-detail": {
     "target": "http://127.0.0.1:8787",
     "secure": false
