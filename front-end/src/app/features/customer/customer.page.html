@@ -170,6 +170,14 @@
                   <button type="button" class="ar-btn ar-btn-secondary" (click)="frozen() ? run() : cannotFind()" [disabled]="busy() || frozen()?.path === 'confirm'">{{ frozen()?.path === 'handoff' ? t().retry : t().chatCannotFind }}</button>
                 </div>
               }
+              @case ('details') {
+                <fieldset class="chat-form" [disabled]="busy() || !!frozen()">
+                  <label class="ar-field" for="chat-details"><span class="ar-field-label">{{ t().chatDetailsLabel }}</span></label>
+                  <textarea class="ar-textarea" id="chat-details" #detailsField [(ngModel)]="chatDetails" name="chat-details" rows="3" [attr.maxlength]="room" required
+                    [attr.aria-describedby]="chatError() ? 'chat-error' : promptLast() ? 'chat-prompt' : null" [attr.aria-invalid]="chatError() ? true : null"></textarea>
+                </fieldset>
+                <div class="report-actions chat-actions"><button type="button" class="ar-btn" (click)="handoff()" [disabled]="busy()">{{ frozen() ? t().retry : t().chatSend }}</button></div>
+              }
               @case ('receipt') {
                 @if (intakeReceipt(); as r) {
                   <div class="ar-panel ar-panel-ok" role="status" id="intake-receipt" #intakeReceiptEl tabindex="-1">

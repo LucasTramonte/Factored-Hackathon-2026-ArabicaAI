@@ -22,7 +22,9 @@ import { CustomerService } from './customer.service';
 /** Rejections that retrying can't fix; 401, 503 and network failures keep the frozen retry. */
 const DEFINITIVE = new Set([404, 409, 413, 422]);
 export type Step = 'intro' | 'login' | 'home';
-export type ChatStep = 'describe' | 'choose' | 'receipt' | 'ended';
+export type ChatStep = 'describe' | 'choose' | 'details' | 'receipt' | 'ended';
+/** The statement column holds 10–2000 code points, statement and details together (one newline between). */
+const STATEMENT_MAX = 2000;
 /** A chat line. Guide lines and FAQ questions are i18n keys, so they follow the interface language; the customer's own words are kept as typed. */
 export type ChatLine = { from: 'bot' | 'me'; key: keyof Strings } | { from: 'me'; text: string };
 type Frozen = { path: 'start'; body: IntakeStartBody } | { path: 'confirm'; body: IntakeConfirmBody } | { path: 'handoff'; body: IntakeHandoffBody };
@@ -70,14 +72,16 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly log = signal<ChatLine[]>([{ from: 'bot', key: 'chatHello' }]);
   /** The guide spoke last, so its line (id `chat-prompt`) describes the step that just took focus. */
   readonly promptLast = computed(() => this.log().at(-1)?.from === 'bot');
-  readonly chatStep = computed<ChatStep>(() => this.intakeReceipt() ? 'receipt' : this.ended() ? 'ended' : this.episode() ? 'choose' : 'describe');
+  /** "I can't find it" was pressed: the guide asks once what the customer remembers before anything is sent. */
+  readonly asking = signal(false);
+  readonly chatStep = computed<ChatStep>(() => this.intakeReceipt() ? 'receipt' : this.ended() ? 'ended' : !this.episode() ? 'describe' : this.asking() ? 'details' : 'choose');
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
   readonly receiptTitleKey = RECEIPT_TITLE;
   /** Charges already accepted in this session are not offered again. */
   readonly choosable = computed(() => this.transactions().filter(tx => !this.receipts().some(r => r.receipt.kind === 'complete' && r.transactionId === tx.transaction_id)));
   /** Locked while a request is frozen or a guided report is open: renewing must keep the same customer. */
-  readonly identityLocked = computed(() => this.frozen() !== null || this.chatStep() === 'choose');
+  readonly identityLocked = computed(() => this.frozen() !== null || this.chatStep() === 'choose' || this.chatStep() === 'details');
   readonly step = signal<Step>('intro');
   readonly booted = signal(false);
   /** The intro words play once (from 2.6 s, three 1.4 s slots: under 5 s of motion, WCAG 2.2.2); then only the current language's word stays. */
@@ -89,6 +93,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly sourceTime = formatSourceTime;
   identity = '';
   chatStatement = '';
+  chatDetails = '';
   choice = '';
   chatConfirmed = false;
   private bootTimer: ReturnType<typeof setTimeout> | undefined;
@@ -117,9 +122,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly initials = computed(() => initialsOf(this.displayName()) || 'AA');
 
   constructor() {
-    // Move focus to the receipt, the choose step (it replaces the focused Send button) and the chat heading when each appears;
-    // the heading is last, so opening the panel focuses it.
-    for (const name of ['intakeReceiptEl', 'chooseStep', 'chatPanel'] as const) {
+    // Move focus to the receipt, the choose step (it replaces the focused Send button), the details field (it replaces the
+    // focused "can't find" button) and the chat heading when each appears; the heading is last, so opening the panel focuses it.
+    for (const name of ['intakeReceiptEl', 'chooseStep', 'detailsField', 'chatPanel'] as const) {
       const el: Signal<ElementRef<HTMLElement> | undefined> = this[name];
       effect(() => el()?.nativeElement.focus());
     }
@@ -135,6 +140,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     afterNextRender(() => (this.opener?.isConnected ? this.opener : this.host.nativeElement.querySelector<HTMLElement>('.step h1'))?.focus(), { injector: this.injector });
   }
   private readonly chooseStep = viewChild<ElementRef<HTMLElement>>('chooseStep');
+  private readonly detailsField = viewChild<ElementRef<HTMLElement>>('detailsField');
 
   /** Load the identity choices from the API; they come from the same config as the server allowlist. */
   async ngOnInit(): Promise<void> {
@@ -213,6 +219,11 @@ export class CustomerPage implements OnInit, OnDestroy {
     if (transactionId && !this.frozen() && this.chatStep() !== 'receipt' && this.chatStep() !== 'ended') {
       this.choice = transactionId;
       this.chatConfirmed = false;
+      // The customer found the charge after all: back to choosing, with the guide's choose prompt as the current line.
+      if (this.asking()) {
+        this.asking.set(false);
+        this.log.update(l => [...l, { from: 'bot', key: 'chatChoose' }]);
+      }
     }
   }
 
@@ -257,13 +268,31 @@ export class CustomerPage implements OnInit, OnDestroy {
     await this.run();
   }
 
-  /** Ask for human review without a confirmed charge. */
-  async cannotFind(): Promise<void> {
+  /** Code points left for the details once the sent statement and a newline are counted. */
+  get room(): number {
+    return STATEMENT_MAX - 1 - [...this.chatStatement.trim()].length;
+  }
+
+  /** "I can't find it": nothing is sent yet; the guide asks once what the customer remembers (one extra turn, no more). */
+  cannotFind(): Promise<void> | void {
+    if (this.busy() || this.chatStep() !== 'choose' || this.frozen()) return;
+    if (this.room < 10) return this.handoff(); // no room for an answer: the statement already carries the detail
+    this.asking.set(true);
+    this.log.update(l => [...l, { from: 'me', key: 'chatCannotFind' }, { from: 'bot', key: 'chatDetailsPrompt' }]);
+  }
+
+  /** Ask for human review without a confirmed charge; what the customer remembers travels with the handoff and is appended to the statement. */
+  async handoff(): Promise<void> {
     const episode = this.episode();
-    if (this.busy() || !episode || this.chatStep() !== 'choose' || this.frozen()?.path === 'confirm') return;
+    if (this.busy() || !episode || (this.chatStep() !== 'choose' && this.chatStep() !== 'details') || this.frozen()?.path === 'confirm') return;
     if (!this.frozen()) {
-      this.frozen.set({ path: 'handoff', body: { episode_id: episode.episode_id, idempotency_key: crypto.randomUUID(), kind: 'incomplete' } });
-      this.log.update(l => [...l, { from: 'me', key: 'chatCannotFind' }]);
+      const details = this.asking() ? this.chatDetails.trim() : '';
+      if (this.asking() && [...details].length < 10) {
+        this.chatError.set(this.t().chatValidationShort);
+        return;
+      }
+      this.frozen.set({ path: 'handoff', body: { ...(details && { details }), episode_id: episode.episode_id, idempotency_key: crypto.randomUUID(), kind: 'incomplete' } });
+      this.log.update(l => [...l, details ? { from: 'me', text: details } : { from: 'me', key: 'chatCannotFind' }]);
     }
     await this.run();
   }
@@ -280,8 +309,10 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.episode.set(null);
     this.intakeReceipt.set(null);
     this.ended.set(false);
+    this.asking.set(false);
     this.chatError.set('');
     this.chatStatement = '';
+    this.chatDetails = '';
     this.choice = '';
     this.chatConfirmed = false;
     this.log.set([{ from: 'bot', key: 'chatHello' }]);
