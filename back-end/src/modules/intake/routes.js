@@ -33,31 +33,38 @@ export async function startIntake(request, env, store, ctx, approved = APPROVED_
   if (result.conflict) return fail(409, 'Key already used with different content');
   const { episode, replayed } = result;
   if (!episode) return fail(503, 'Start not confirmed; retry with the same idempotency key');
-  if (extractor && !replayed) {
-    // Shadow only: the answer is discarded, so the customer never waits for it. In the Worker it runs after the
-    // response, in ctx.waitUntil; without a ctx (direct calls in tests) it runs inline.
-    const shadow = async () => {
-      const { usage } = await extractShadow(env, extractor, checked.value);
-      try {
-        await store.recordIntakeExtraction({ customerId: current.customer_id, episodeId: episode.episode_id, producer: extractor.modelVersion, usage });
-      } catch { /* The start already recorded one call with unknown usage. */ }
-    };
-    if (ctx?.waitUntil) ctx.waitUntil(shadow().catch(() => { /* already recorded as one call with unknown usage */ }));
-    else await shadow();
-  }
+  if (extractor && !replayed) await inShadow(ctx, async () => {
+    const { usage } = await extractShadow(env, extractor, checked.value);
+    // The start already recorded one call with unknown usage; a failed write leaves it.
+    await store.recordIntakeExtraction({ customerId: current.customer_id, episodeId: episode.episode_id, producer: extractor.modelVersion, usage });
+  });
   return json({ ...JSON.parse(episode.response_json), replayed }, replayed ? 200 : 201);
+}
+
+/**
+ * Shadow only: the answer is discarded, so the customer never waits for it. In the Worker it runs after the response,
+ * in ctx.waitUntil; without a ctx (direct calls in tests) it runs inline. Never throws.
+ */
+async function inShadow(ctx, work) {
+  const run = () => work().catch(() => {});
+  if (ctx?.waitUntil) ctx.waitUntil(run());
+  else await run();
 }
 
 /** POST /intake/confirm: confirm current owned evidence, then verify the durable receipt. */
 export const confirmIntake = (request, env, store, ctx) => finishIntake(request, env, store, ctx, true);
-/** POST /intake/handoff: explicitly request human review without inventing a confirmed transaction. */
-export const handoffIntake = (request, env, store, ctx) => finishIntake(request, env, store, ctx, false);
+/**
+ * POST /intake/handoff: explicitly request human review without inventing a confirmed transaction. With the switch on,
+ * a new handoff with ``details`` also makes one shadow call on them (as the start does on the statement) and adds only
+ * its usage; ``approved`` is the same test seam as in ``startIntake``.
+ */
+export const handoffIntake = (request, env, store, ctx, approved = APPROVED_EXTRACTOR) => finishIntake(request, env, store, ctx, false, approved);
 
 /**
  * Reserve immutable handoff content; a failed write/read keeps the original key and never promises a reference.
  * The first acknowledgement may queue a "received" email; it is sent in ctx.waitUntil after the response.
  */
-async function finishIntake(request, env, store, ctx, complete) {
+async function finishIntake(request, env, store, ctx, complete, approved = null) {
   const started = performance.now();
   const current = await requireSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
@@ -117,6 +124,12 @@ async function finishIntake(request, env, store, ctx, complete) {
       return fail(401, 'Session expired; renew the same customer session and retry with the same idempotency key');
     }
     const protocol = receipt.complete_case_id ?? receipt.handoff_id;
+    // Only an episode the same extractor started; its events already carry that producer. A replay never calls again.
+    const extractor = details && !result.replayed ? await readyExtractor(env, approved) : null;
+    if (extractor && JSON.parse(episode.usage_json ?? '{}').model_version === extractor.modelVersion) await inShadow(ctx, async () => {
+      const { usage } = await extractShadow(env, extractor, { statement: details, language: episode.language });
+      await store.recordDetailsExtraction({ customerId, episodeId, producer: extractor.modelVersion, usage });
+    });
     // A store of its own, so the send's queries never count in this response's metrics; skipped without a ctx.
     if (emailId && ctx?.waitUntil) ctx.waitUntil(deliver(env, createStore(env.DB),
       { messageId: emailId, customerId, language: episode.language, reference: receipt.reference_short ?? protocol, urgent: receipt.urgency === 'high' }));

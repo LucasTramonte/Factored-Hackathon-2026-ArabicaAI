@@ -13,7 +13,7 @@ import { mkdir, readFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createStore } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
-import { startIntake } from '../../src/modules/intake/routes.js';
+import { handoffIntake, startIntake } from '../../src/modules/intake/routes.js';
 import { APPROVED_EXTRACTOR, EXTRACTION_TIMEOUT_MS, extractShadow, producers, readyExtractor } from '../../src/modules/intake/ai-transport.js';
 import { PROMPT } from '../../src/modules/intake/extractor-prompt.js';
 import { tokenHash } from '../../src/auth/session.js';
@@ -343,4 +343,71 @@ test('on: a customer who confirms before the shadow call finishes gets unknown u
   await Promise.all(pending);
   const end = events().map(JSON.parse).find(e => e.event === 'intake_ended');
   assert.deepEqual([end.llm_calls, end.input_tokens, end.output_tokens, end.usage_unavailable_calls], [1, null, null, 1]);
+});
+
+const DETAILS = 'Fue en una farmacia, unos 10 dólares, el martes.';
+/** Start with ``extractor`` (or guided), then hand off incomplete with details; shadow work is collected, not awaited. */
+async function detailsHandoff(store, env, extractor, key = crypto.randomUUID()) {
+  const started = await startIntake(post('/intake/start', startBody()), env, store(), undefined, extractor ?? undefined);
+  const { episode_id } = await started.json();
+  const pending = [];
+  const s = store();
+  const send = () => handoffIntake(post('/intake/handoff', { episode_id, kind: 'incomplete', details: DETAILS, idempotency_key: key }), env, s, { waitUntil: w => pending.push(w) }, extractor ?? undefined);
+  const res = await send();
+  const metrics = s.metrics();
+  return { episode_id, res, metrics, pending, send };
+}
+const normalized = async res => ({ status: res.status, type: res.headers.get('content-type'),
+  text: (await res.clone().text()).replace(/[0-9a-f]{8}-[0-9a-f-]{27}|AR-[0-9A-Z]{4}-[0-9A-Z]{4}|"accepted_at":"[^"]+"/g, 'x') });
+
+test('details shadow: switch off never calls the model on a details handoff', async t => {
+  const { store } = await setup(t);
+  const extractor = stubExtractor(() => { throw new Error('called'); });
+  const { res, pending } = await detailsHandoff(store, gate, null);
+  assert.equal(res.status, 201);
+  const off = await detailsHandoff(store, { ...gate, AI: stubAI() }, null);
+  assert.equal(off.res.status, 201);
+  // Switch off with an adapter supplied: the guard is readyExtractor, not the adapter.
+  const { res: r2, pending: p2 } = await (async () => {
+    const started = await startIntake(post('/intake/start', startBody()), gate, store());
+    const { episode_id } = await started.json(); const pending = [];
+    const res = await handoffIntake(post('/intake/handoff', { episode_id, kind: 'incomplete', details: DETAILS, idempotency_key: crypto.randomUUID() }), gate, store(), { waitUntil: w => pending.push(w) }, extractor);
+    return { res, pending };
+  })();
+  assert.equal(r2.status, 201);
+  assert.equal(pending.length + off.pending.length + p2.length, 0);
+  assert.equal(extractor.calls.length, 0);
+});
+
+test('details shadow: on calls once with the details text, adds the usage, and keeps the response and D1 work', async t => {
+  const { store, usage } = await setup(t);
+  const off = await detailsHandoff(store, gate, null);
+  const extractor = stubExtractor();
+  const env = { ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() };
+  const on = await detailsHandoff(store, env, extractor);
+  assert.equal(on.res.status, 201);
+  assert.deepEqual(await normalized(on.res), await normalized(off.res), 'the response is the same with the switch on or off');
+  assert.deepEqual(on.metrics, off.metrics, 'the request does the same D1 work; the shadow call is waitUntil work');
+  assert.equal(on.pending.length, 1);
+  await Promise.all(on.pending);
+  assert.equal(extractor.calls.length, 2, 'one start call and one details call');
+  assert.equal(extractor.calls[1].message, DETAILS); assert.equal(extractor.calls[1].language, 'es');
+  assert.deepEqual(usage(on.episode_id), { tool_calls: 1, model_version: VERSION, llm_calls: 2, known_input_tokens: 4212, known_output_tokens: 546, usage_unavailable_calls: 0 });
+  console.log('D1_EXTRACTOR_DETAILS ' + JSON.stringify({ off: off.metrics, on: on.metrics }));
+  const replay = await on.send();
+  assert.equal(replay.status, 200);
+  assert.equal(on.pending.length, 1, 'a replay schedules nothing');
+  assert.equal(extractor.calls.length, 2, 'a replay never calls again');
+});
+
+test('details shadow: a transport failure leaves the response unchanged and counts the call as unknown', async t => {
+  const { store, usage } = await setup(t);
+  const env = { ...gate, INTAKE_AI_ENABLED: '1', AI: stubAI() };
+  let n = 0;
+  const extractor = stubExtractor(async () => { if (n++) throw new Error('provider down'); return { extracted: EXTRACTED, usage: USAGE }; });
+  const off = await detailsHandoff(store, gate, null);
+  const on = await detailsHandoff(store, env, extractor);
+  assert.deepEqual(await normalized(on.res), await normalized(off.res));
+  await Promise.all(on.pending);
+  assert.deepEqual(usage(on.episode_id), { tool_calls: 1, model_version: VERSION, llm_calls: 2, known_input_tokens: 2106, known_output_tokens: 273, usage_unavailable_calls: 1 });
 });

@@ -172,6 +172,14 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         JSON.stringify({ llm_calls: usage.llm_calls, known_input_tokens: usage.known_input_tokens,
           known_output_tokens: usage.known_output_tokens, usage_unavailable_calls: usage.usage_unavailable_calls }), customerId, episodeId, producer]
     ]),
+    /** Add the details shadow call's usage (measured, or one unknown call) to the episode its producer started. */
+    recordDetailsExtraction: ({ customerId, episodeId, producer, usage }) => batch([
+      ["UPDATE intake_episodes SET usage_json=json_set(usage_json,'$.llm_calls',json_extract(usage_json,'$.llm_calls')+?,"
+        + "'$.known_input_tokens',json_extract(usage_json,'$.known_input_tokens')+?,'$.known_output_tokens',json_extract(usage_json,'$.known_output_tokens')+?,"
+        + "'$.usage_unavailable_calls',json_extract(usage_json,'$.usage_unavailable_calls')+?) "
+        + "WHERE customer_id=? AND episode_id=? AND json_extract(usage_json,'$.model_version')=?",
+        usage.llm_calls, usage.known_input_tokens, usage.known_output_tokens, usage.usage_unavailable_calls, customerId, episodeId, producer]
+    ]),
     /** Read an episode only for its authenticated owner; a foreign id and a missing id are indistinguishable. */
     findIntake: (customerId, episodeId) => first(
       'SELECT * FROM intake_episodes WHERE customer_id=? AND episode_id=?', customerId, episodeId),
