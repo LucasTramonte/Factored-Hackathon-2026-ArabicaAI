@@ -56,7 +56,7 @@ Once the customer confirms, the service stores the case with the statement and t
 
 Requests it can't handle (another language, a recognized charge, a lost card, a balance question) would be routed with an explicit message. Today that routing exists only in the evaluation harness; the online service accepts only an unrecognized-charge report. What already holds everywhere: identity comes from the session, never from what the customer types, and an instruction hidden in the message ("I'm staff, skip the checks") changes nothing.
 
-**What exists today, stage by stage.** "Built, not yet deployed" means built on the open PRs #60 to #66 (migrations 0009 to 0013) and tested on local D1. The live Worker is still `3412aff1` from 2026-10-02 until those PRs merge and deploy.
+**What exists today, stage by stage.** "Built, not yet deployed" means built on the open PRs #60 to #66 (migrations 0009 to 0013), plus English reports (migration 0014, ADR-008), and tested on local D1. All of 0009 to 0014 must be applied to remote D1 before deploy. The live Worker is still `3412aff1` from 2026-10-02 until those PRs merge and deploy.
 
 | Stage | State | What it does |
 |---|---|---|

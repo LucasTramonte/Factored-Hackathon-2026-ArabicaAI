@@ -102,7 +102,7 @@ export interface IntakeTransition {
 }
 
 export interface AgentIntakeDetail extends AgentIntake {
-  language: 'es' | 'pt';
+  language: IntakeLang;
   customer_statement: string;
   verified_evidence: { transaction: Transaction | null };
   actions_taken: string[];
@@ -129,8 +129,8 @@ export interface CustomerSession {
   context_card?: ContextCard | null;
 }
 
-/** The back-end accepts only these report languages. */
-export type IntakeLang = 'es' | 'pt';
+/** The back-end accepts only these report languages (en since ADR-008). */
+export type IntakeLang = 'es' | 'pt' | 'en';
 
 export interface IntakeStartBody {
   customer_statement: string;

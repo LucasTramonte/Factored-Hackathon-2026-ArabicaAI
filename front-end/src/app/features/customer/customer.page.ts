@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { formatSourceTime } from '../../shared/format/source-time.util';
-import { Lang, LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
+import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
@@ -31,10 +31,6 @@ const STATEMENT_MAX = 2000;
 export type ChatLine = { from: 'bot' | 'me'; key: keyof Strings } | { from: 'me'; text: string };
 type Frozen = { path: 'start'; body: IntakeStartBody } | { path: 'confirm'; body: IntakeConfirmBody } | { path: 'handoff'; body: IntakeHandoffBody };
 
-/** es and pt map to themselves; English has no report language, so the chat asks (no default). */
-export function intakeLanguage(ui: Lang): IntakeLang | null {
-  return ui === 'en' ? null : ui;
-}
 /** FAQ question → fixed answer. Only the dispute process; nothing is answered from free text. */
 export const FAQ = { faqNextQ: 'faqNextA', faqTimeQ: 'faqTimeA', faqMissingQ: 'faqMissingA' } as const;
 /** Receipt title per server-decided kind. */
@@ -74,9 +70,10 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly identitiesLoading = signal(false);
   readonly chatOpen = signal(false);
   readonly chosenLang = signal<IntakeLang | null>(null);
-  readonly reportLang = computed(() => this.chosenLang() ?? intakeLanguage(this.lang.lang()));
-  /** The report-language choice is shown when the interface has no report language, and stays once the customer has chosen. */
-  readonly askLang = computed(() => !this.reportLang() || this.chosenLang() !== null);
+  /** The customer's choice, else the interface language: every interface language is a report language (ADR-008). */
+  readonly reportLang = computed<IntakeLang>(() => this.chosenLang() ?? this.lang.lang());
+  /** The report-language choice is shown in an English interface, as before, and stays once the customer has chosen. */
+  readonly askLang = computed(() => this.lang.lang() === 'en' || this.chosenLang() !== null);
   readonly episode = signal<IntakeStart | null>(null);
   readonly frozen = signal<Frozen | null>(null);
   readonly intakeReceipt = signal<IntakeReceipt | null>(null);
@@ -386,8 +383,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     if (!this.frozen()) {
       const statement = this.chatStatement.trim();
       const language = this.reportLang();
-      if (!language || [...statement].length < 10) {
-        this.chatError.set(this.askLang() ? this.t().chatValidation : this.t().chatValidationShort);
+      if ([...statement].length < 10) {
+        this.chatError.set(this.t().chatValidationShort);
         return;
       }
       this.frozen.set({ path: 'start', body: { customer_statement: statement, idempotency_key: crypto.randomUUID(), language,

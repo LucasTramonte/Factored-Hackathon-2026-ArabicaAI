@@ -334,35 +334,57 @@ describe('CustomerPage', () => {
       expect(page.intakeReceipt()).toBeNull();
     });
 
-    it('maps pt to pt, and in English asks for the report language with no default', async () => {
+    it('defaults the report language to the interface language, English included', async () => {
       lang.set('pt');
       expect(page.reportLang()).toBe('pt');
       lang.set('en');
-      expect(page.reportLang()).toBeNull();
+      expect(page.reportLang()).toBe('en');
       page.chatStatement = 'I do not recognize this charge.';
+      service.startIntake.and.resolveTo({ ...started, language: 'en' });
       await page.send();
-      expect(service.startIntake).not.toHaveBeenCalled();
-      expect(page.chatError()).toBe(lang.t().chatValidation);
-      page.chosenLang.set('pt');
+      expect(service.startIntake.calls.mostRecent().args[0].language).toBe('en');
+    });
+
+    /** The chat rendered, for the report-language choice. */
+    async function chat() {
+      const fixture = TestBed.createComponent(CustomerPage);
+      fixture.componentInstance.identity = 'demo-ana';
+      await fixture.componentInstance.login();
+      fixture.componentInstance.openChat();
+      fixture.detectChanges();
+      return { fixture, p: fixture.componentInstance };
+    }
+
+    it('in English lists Español, Português and English, English checked, and sends the one chosen', async () => {
+      lang.set('en');
+      const { fixture, p } = await chat();
+      const radios = [...fixture.nativeElement.querySelectorAll('input[name="report-lang"]')] as HTMLInputElement[];
+      expect(radios.map(r => [r.value, r.checked, r.parentElement!.textContent!.trim()])).toEqual(
+        [['es', false, 'Español'], ['pt', false, 'Português'], ['en', true, 'English']]);
+      expect(fixture.nativeElement.querySelector('.chat-lang legend').textContent).not.toContain('not supported');
+      radios[1].click();
+      fixture.detectChanges();
+      p.chatStatement = 'Não reconheço esta cobrança.';
       service.startIntake.and.resolveTo({ ...started, language: 'pt' });
-      await page.send();
+      await p.send();
       expect(service.startIntake.calls.mostRecent().args[0].language).toBe('pt');
     });
 
-    it('refuses a statement under 10 code points; the error names the language only when it is asked', async () => {
+    it('asks for the report language only in English, as before', async () => {
+      const { fixture } = await chat();
+      expect(fixture.nativeElement.querySelector('input[name="report-lang"]')).toBeNull();
+      lang.set('pt'); fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('input[name="report-lang"]')).toBeNull();
+    });
+
+    it('refuses a statement under 10 code points in every interface language', async () => {
       page.chatStatement = '😀😀😀😀😀';
-      await page.send();
+      for (const code of ['es', 'pt', 'en'] as const) {
+        lang.set(code);
+        await page.send();
+        expect(page.chatError()).toBe(lang.t().chatValidationShort);
+      }
       expect(service.startIntake).not.toHaveBeenCalled();
-      expect(page.chatError()).toBe(lang.t().chatValidationShort);
-      lang.set('pt');
-      await page.send();
-      expect(page.chatError()).toBe(lang.t().chatValidationShort);
-      lang.set('en');
-      await page.send();
-      expect(page.chatError()).toBe(lang.t().chatValidation);
-      page.chosenLang.set('pt');
-      await page.send();
-      expect(page.chatError()).toBe(lang.t().chatValidation);
     });
 
     it('freezes the start and resends the same body after a 503, even if the text changes', async () => {
@@ -598,7 +620,7 @@ describe('CustomerPage', () => {
 
   describe('rendered home', () => {
     async function home(card: unknown = null) {
-      TestBed.inject(LangService).set('es'); // other specs may leave English selected, which asks for the report language
+      TestBed.inject(LangService).set('es'); // other specs may leave English selected, which shows the report-language choice
       service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: card as never });
       const fixture = TestBed.createComponent(CustomerPage);
       const p = fixture.componentInstance;

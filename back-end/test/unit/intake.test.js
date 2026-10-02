@@ -67,7 +67,7 @@ test('guided_start_is_owned_and_idempotent', async t => {
 
 test('invalid starts, roles, expiry, methods and paths never write intake rows', async t => {
   const { db, store } = await setup(t);
-  const invalid = [null, [], '"text"', '{bad', { ...body, customer_id: 'bruno' }, { ...body, language: 'en' },
+  const invalid = [null, [], '"text"', '{bad', { ...body, customer_id: 'bruno' }, { ...body, language: 'fr' }, { ...body, language: 'EN' },
     { ...body, mode: 'ai' }, { ...body, report_type: 'balance' }, { ...body, idempotency_key: 'bad' },
     { ...body, customer_statement: 'short' }, { ...body, customer_statement: 'x'.repeat(2001) },
     { ...body, customer_statement: '\ud800'.repeat(10) }, { ...body, extra: true },
@@ -124,10 +124,11 @@ test('Unicode code-point bounds and SQL-like statements remain data', async t =>
 });
 
 
-test('start contract rejects a case reference, language drift and extra identity fields', () => {
+test('start contract admits es, pt and en; rejects a case reference, other languages and extra identity fields', () => {
   const receipt = { episode_id: '11111111-2222-4333-8444-555555555555', state: 'selection_required', language: 'es', mode: 'guided', replayed: false };
   assertContract('intakeStart', receipt);
-  for (const invalid of [{ ...receipt, protocol: 'case-id' }, { ...receipt, language: 'en' },
+  assertContract('intakeStart', { ...receipt, language: 'en' });
+  for (const invalid of [{ ...receipt, protocol: 'case-id' }, { ...receipt, language: 'fr' },
     { ...receipt, customer_id: 'ana' }, { ...receipt, replayed: 'yes' }]) assert.throws(() => assertContract('intakeStart', invalid), /violated/);
 });
 

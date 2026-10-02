@@ -20,10 +20,11 @@ const VARIANTS = { typical: TYPICAL, max_ascii: 'x'.repeat(2000), max_4byte: '\u
 // measured on 2026-09-30; ADR-004 uses these bounds. Sessions are excluded: they are purged at expiry.
 const BOUND = { complete: { typical: 5500, max_ascii: 13800, max_4byte: 23400 }, incomplete: { typical: 3700, max_ascii: 7800, max_4byte: 12900 } };
 
-function setup() {
+/** A fresh in-memory D1 with every migration up to, not including, ``before`` (all of them by default). */
+function setup(before = '~') {
   const db = new DatabaseSync(':memory:'); db.exec('PRAGMA foreign_keys=ON');
   const dir = new URL('../../migrations/', import.meta.url);
-  for (const file of readdirSync(dir).sort()) db.exec(readFileSync(new URL(file, dir), 'utf8'));
+  for (const file of readdirSync(dir).sort().filter(f => f < before)) db.exec(readFileSync(new URL(file, dir), 'utf8'));
   db.exec(readFileSync(new URL('../../seeds/seed_fictitious.sql', import.meta.url), 'utf8'));
   const store = createStore({ prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
     batch: async statements => { db.exec('BEGIN'); try { const r = statements.map(s => s.all()); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } } });
@@ -101,5 +102,39 @@ test('the documented demo-activity reset respects intake foreign keys and keeps 
   for (const table of [...TABLES, 'sessions']) assert.equal(rows(db, table), 0, table);
   assert.deepEqual(['customers', 'transactions', 'context_cards', 'sample_provenance'].map(t => rows(db, t)), seed);
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
+  db.close();
+});
+
+test('migration 0014 admits English and keeps every episode, foreign key and index of intake_episodes', async () => {
+  const MIGRATION = '0014_english_reports.sql';
+  const { db, store, call } = setup(MIGRATION);
+  assert.equal((await call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
+  for (const [language, statement, complete] of [['es', 'No reconozco este cargo.', true], ['pt', 'Não reconheço esta cobrança.', false], ['es', 'No reconozco este otro cargo.', null]]) {
+    const start = await call('/intake/start', { language, mode: 'guided', report_type: 'unrecognized_charge', customer_statement: statement, idempotency_key: crypto.randomUUID() });
+    assert.equal(start.status, 201);
+    if (complete === null) continue; // an open episode with no handoff
+    const done = complete
+      ? await call('/intake/confirm', { episode_id: start.body.episode_id, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: crypto.randomUUID() })
+      : await call('/intake/handoff', { episode_id: start.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() });
+    assert.equal(done.status, 201);
+    if (complete) await close(store, done.body.protocol);
+  }
+  assert.throws(() => db.exec("UPDATE intake_episodes SET language='en'"), /CHECK/, 'before 0014 English is refused');
+  const indexes = () => db.prepare('PRAGMA index_list(intake_episodes)').all()
+    .map(({ name, unique, origin, partial }) => ({ name, unique, origin, partial })).sort((a, b) => a.name.localeCompare(b.name));
+  const columns = () => db.prepare('PRAGMA table_xinfo(intake_episodes)').all();
+  const episodes = () => db.prepare('SELECT * FROM intake_episodes ORDER BY episode_id').all();
+  const before = { indexes: indexes(), columns: columns(), episodes: episodes(), rows: TABLES.map(t => rows(db, t)) };
+  assert.equal(before.indexes.length, 4); // primary key, UNIQUE(customer_id,start_key), owner, idle (partial)
+  db.exec('BEGIN'); db.exec(readFileSync(new URL('../../migrations/' + MIGRATION, import.meta.url), 'utf8')); db.exec('COMMIT');
+  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  assert.deepEqual({ indexes: indexes(), columns: columns(), episodes: episodes(), rows: TABLES.map(t => rows(db, t)) }, before);
+  for (const child of ['intake_turns', 'intake_events', 'intake_handoffs']) {
+    assert.deepEqual(db.prepare(`PRAGMA foreign_key_list(${child})`).all().filter(k => k.from === 'episode_id').map(k => k.table), ['intake_episodes'], child);
+  }
+  const english = await call('/intake/start', { language: 'en', mode: 'guided', report_type: 'unrecognized_charge', customer_statement: 'I do not recognize this charge.', idempotency_key: crypto.randomUUID() });
+  assert.equal(english.status, 201);
+  assert.equal(db.prepare('SELECT language FROM intake_episodes WHERE episode_id=?').get(english.body.episode_id).language, 'en');
+  assert.throws(() => db.exec("UPDATE intake_episodes SET language='fr'"), /CHECK/);
   db.close();
 });
