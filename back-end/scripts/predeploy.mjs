@@ -52,7 +52,8 @@ async function main() {
   const pending = pendingMigrations(await localMigrations(), appliedFromWranglerJson(out));
   if (pending.length) {
     throw new Error(`Remote D1 is missing migrations ${pending.join(', ')}. After they pass the local tests, run `
-      + `npx wrangler d1 migrations apply ${db.database_name} --remote, then retry the deploy`);
+      + `npx wrangler d1 migrations apply ${db.database_name} --remote, then retry the deploy. `
+      + 'See CONTRIBUTING.md (migrations go remote before merge).');
   }
   console.log(`Remote D1 has all ${(await localMigrations()).length} migrations; deploying`);
 }
