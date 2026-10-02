@@ -194,9 +194,9 @@ rm -f data/charge-views/authored.jsonl && mkdir -p back-end/public && (cd back-e
 
 ## 9. Live service, as measured
 
-The deployed Worker's own record, exported on 2026-10-02 at 23:10 UTC from remote D1 (`back-end/scripts/export-intake-events.mjs`, which validates every event with `evals/intake/episodes.py` and publishes all of them or nothing). **Population:** every report episode in the live store at export, 5 of them, between 2026-10-01 12:40 and 2026-10-02 14:57 UTC. The demo reset clears episodes, so this is the traffic since the last reset: team and reviewer sessions, not a sample of customers. The live flow is `guided-0.1`, which calls no model.
+The deployed Worker's own record, exported on 2026-10-02 at 23:10 UTC from remote D1 (`back-end/scripts/export-intake-events.mjs`, which validates every event with `evals/intake/episodes.py` and publishes all of them or nothing). **Population:** every report episode in the live store at export, 5 of them (out-of-scope requests never start an episode, so they are not in this log), between 2026-10-01 12:40 and 2026-10-02 14:57 UTC. The demo reset clears episodes, so this is the traffic since the last reset: team and reviewer sessions, not a sample of customers. The live flow is `guided-0.1`, which calls no model.
 
-| | Started (denominator) | Reached the handoff (`accepted`) | Routed | Unsafe | Safety not assessed | Episode span p50 / p95 |
+| | Started (denominator) | Complete handoff accepted (`accepted`) | Routed (incomplete handoff) | Recorded unsafe | Safety not assessed | Episode span p50 / p95 |
 |---|---|---|---|---|---|---|
 | All | 5 | 4 | 1 | 0 | 5 | 11.6 s / 14.7 s |
 | Spanish | 1 | 1 | 0 | 0 | 1 | 14.7 s / 14.7 s |
@@ -209,7 +209,7 @@ The deployed Worker's own record, exported on 2026-10-02 at 23:10 UTC from remot
 - **English** shows 0 started because it became a report language after these episodes (ADR-008). It is listed so the column is never silently missing.
 - Five episodes support no rate. With one Spanish episode, its p50 and p95 are the same value.
 
-To reproduce, a person runs this from `back-end/` with the Worker's Cloudflare account selected (`CLOUDFLARE_ACCOUNT_ID`). The first command closes idle episodes at the export's cutoff (a remote write), and the second only reads:
+To reproduce, a person runs this from `back-end/` with the Worker's Cloudflare account selected (`CLOUDFLARE_ACCOUNT_ID`). The first command closes episodes idle at the time it runs, immediately before the export, and prints that `cutoff` (a remote write; [`intake-events.md`](../intake/intake-events.md) says to state it with the figures). This run's cutoff was 2026-10-02T23:10:09Z; no episode was pending or abandoned, so it does not change these figures. The second command only reads:
 
 ```bash
 node scripts/close-idle-intakes.mjs --remote --max-pages 100
