@@ -4,6 +4,8 @@
 # records calls. Case 1: the cascade merges forward and B's content wins.
 # Case 2: main also changed x on its own, so B is stopped and C is untouched.
 # Case 3: origin rejects the push, so B is stopped with a comment and C skipped.
+# Case 4: the top PR C is merged and its branch deleted; a fresh clone (as in
+# CI) lacks its head and nothing is stacked on it, so the script exits 0.
 # PRs from a fork, or based on a branch other than main/the merged one, are left alone.
 set -euo pipefail
 
@@ -93,5 +95,16 @@ git fetch -q origin
 [ "$(git rev-parse origin/C)" = "$c_before" ] || fail "C was pushed"
 grep -q '^pr comment 2 --body .*push rejected' "$GH_LOG" || fail "no comment on B"
 ! grep -q 'workflow run\|comment 3' "$GH_LOG" || fail "unexpected gh call"
+
+echo "case 4: top PR C merged and deleted, nothing stacked on it"
+mkdir "$tmp/c4"; export GH_LOG="$tmp/c4/gh.log"; : >"$GH_LOG"
+setup "$tmp/c4" >/dev/null
+cd "$tmp/c4/dev" && c=$(git rev-parse C)
+git push -q origin "$(git commit-tree "C^{tree}" -p origin/main -m 'C (#3)'):refs/heads/main"
+git push -q origin --delete C
+git clone -q --no-local "$tmp/c4/origin.git" "$tmp/c4/ci" 2>/dev/null
+cd "$tmp/c4/ci" && out=$("$script" "$c" 3 C) || fail "exit $? on a merged top PR"
+echo "$out" | grep -q 'nothing to cascade' || fail "no 'nothing to cascade' message: $out"
+! grep -q 'edit\|comment\|workflow run' "$GH_LOG" || fail "unexpected gh call"
 
 echo "PASS"
