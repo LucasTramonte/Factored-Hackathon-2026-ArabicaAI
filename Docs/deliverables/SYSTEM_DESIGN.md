@@ -74,9 +74,9 @@ A large charge you don't recognize causes panic. The customer wants it handled f
   - **Built.** On the earlier pick-and-confirm flow, the server work from sign-in to a reference was about 1.4 s in one measured episode ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)). The speed comes from the deterministic path: no model sits on the customer's critical path today.
   - **Not done yet.** The guided flow adds steps and hasn't been timed end to end the same way, and nobody has measured how long a customer takes to reach a reference.
 - **Correct means the right charge, safely stored, in front of the right person.** The customer confirms the exact charge, and the reference appears only after the case is read back (Tenet 3). The agent sees what was checked. Nothing is refunded, blocked or decided by the system, so nothing can be "decided wrong" by it.
-- **Few questions.** The guided report is three steps: say what happened, pick the charge, confirm. "I can't find it" goes straight to a person, with what is known.
+- **Few questions.** The guided report is three steps: say what happened, pick the charge, confirm. "I can't find it" asks one question (what the customer remembers: amount, approximate date, merchant), then goes to a person with the statement and that answer.
   - **Our question budget:** at most three customer turns before a reference.
-  - **Limitation:** the event contract's `clarifications_per_episode` is always 0 in this flow, because it asks no clarifying questions. The budget only becomes measurable once the model can ask them.
+  - **Limitation:** the event contract's `clarifications_per_episode` is always 0 in this flow. The one "what do you remember" question is asked by the client and is not emitted as a `clarification_requested` event, so the budget only becomes measurable once the server asks the questions.
 - **Never "Done".** The receipt has three wordings, chosen by the server:
   - "Report accepted in the demo";
   - "Sent for human review without a confirmed charge";

@@ -143,6 +143,8 @@ export interface IntakeConfirmBody {
 }
 
 export interface IntakeHandoffBody {
+  /** What the customer remembers about the charge (10–2000 code points); the server appends it to the statement. */
+  details?: string;
   episode_id: string;
   idempotency_key: string;
   kind: 'incomplete';

@@ -127,6 +127,22 @@ describe('CustomerPage focus', () => {
     fixture.nativeElement.remove();
   });
 
+  it('moves focus to the details field when "can\'t find it" replaces the choose step, described by the guide\'s question', async () => {
+    const { fixture, page, el } = await home();
+    page.chatOpen.set(true);
+    page.episode.set({ episode_id: 'E-1', state: 'selection_required', language: 'es', mode: 'guided', replayed: false } as never);
+    page.chatStatement = 'No reconozco este cargo.';
+    await fixture.whenStable();
+    const cannotFind = [...el.querySelectorAll('.chat .ar-btn-secondary')].find((b: Element) => b.textContent!.trim() === page.t().chatCannotFind) as HTMLButtonElement;
+    cannotFind.focus();
+    cannotFind.click();
+    await fixture.whenStable();
+    const field = el.querySelector<HTMLTextAreaElement>('#chat-details')!;
+    expect(document.activeElement).toBe(field);
+    expect(el.querySelector('#' + field.getAttribute('aria-describedby'))!.textContent).toContain(page.t().chatDetailsPrompt);
+    fixture.nativeElement.remove();
+  });
+
   it('focuses the chat heading when the panel is reopened on the choose step', async () => {
     const { fixture, page, el } = await home();
     page.chatOpen.set(true);
