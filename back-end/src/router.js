@@ -6,7 +6,7 @@
 import { checkAccessGate } from './auth/access-gate.js';
 import { fail, json } from './http.js';
 import { createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession } from './modules/customer/routes.js';
-import { startIntake, confirmIntake, handoffIntake, listReports } from './modules/intake/routes.js';
+import { startIntake, confirmIntake, handoffIntake, listReports, requestUpdate } from './modules/intake/routes.js';
 import { listAgentCases, listAgentIntakes, getAgentIntakeDetail, startAgentSession } from './modules/agent/routes.js';
 
 export const API_ROUTES = {
@@ -20,6 +20,7 @@ export const API_ROUTES = {
   '/intake/confirm': { POST: confirmIntake },
   '/intake/handoff': { POST: handoffIntake },
   '/reports': { GET: listReports },
+  '/reports/update': { POST: requestUpdate },
   '/demo/agent-session': { POST: startAgentSession },
   '/agent/cases': { GET: listAgentCases },
   '/agent/intakes': { GET: listAgentIntakes },

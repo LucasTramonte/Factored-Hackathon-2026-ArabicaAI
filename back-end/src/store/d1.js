@@ -339,6 +339,15 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,h.kind,h.accepted_at '
       + "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
       + 'ORDER BY h.accepted_at DESC,protocol LIMIT ?', customerId, limit),
+    /**
+     * One acknowledged report of this customer (same predicate as ``listCustomerHandoffs``) with its episode language
+     * and whether the customer has a notification target; null when missing or another customer's.
+     */
+    findCustomerReport: (customerId, protocol) => first(
+      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,e.language,'
+      + 'EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id) AS has_target '
+      + "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
+      + 'AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))', customerId, protocol, protocol),
     /** Optional complete evidence is one-to-one and owner-scoped; missing evidence never drops a handoff. */
     findIntakeHandoff: protocol => first(
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
@@ -363,9 +372,13 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       'SELECT template,language,provider_status FROM email_outbox WHERE customer_id=? AND reference=? ORDER BY created_at', customerId, reference),
     markEmail: (messageId, status, providerMessageId) => all(
       'UPDATE email_outbox SET provider_status=?,provider_message_id=? WHERE message_id=?', status, providerMessageId ?? null, messageId),
-    /** Emails for this customer and reference created at or after ``sinceMs``, for rate limits (index ``email_outbox_recent``). */
-    recentEmails: async (customerId, reference, sinceMs) => (await first(
-      'SELECT COUNT(*) AS n FROM email_outbox WHERE customer_id=? AND reference=? AND created_at>=?', customerId, reference, sinceMs)).n,
+    /**
+     * ``{ count, latest }`` of this customer's ``template`` emails for a reference created at or after ``sinceMs``, for
+     * rate limits (index ``email_outbox_recent``); ``latest`` is the newest ``created_at`` or null.
+     */
+    recentEmails: async (customerId, reference, sinceMs, template) => first(
+      'SELECT COUNT(*) AS count,MAX(created_at) AS latest FROM email_outbox WHERE customer_id=? AND reference=? AND created_at>=? AND template=?',
+      customerId, reference, sinceMs, template),
 
     listAgentCases: limit => all(
       'SELECT c.case_id AS protocol, c.customer_id, u.display_name, c.transaction_id, t.merchant_name, '

@@ -66,6 +66,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** "Your reports" from GET /reports, so it survives the tab; null until loaded. */
   readonly reports = signal<ReportList | null>(null);
   readonly reportsFailed = signal(false);
+  /** The report whose update request is in flight, and the last answer shown under its row. */
+  readonly updating = signal<string | null>(null);
+  readonly updateNote = signal<{ protocol: string; text: string } | null>(null);
   readonly transactions = signal<Transaction[]>([]);
   readonly hasMore = signal(false);
   readonly identities = signal<Identity[]>([]);
@@ -319,6 +322,22 @@ export class CustomerPage implements OnInit, OnDestroy {
     } catch {
       this.reportsFailed.set(true);
     }
+  }
+
+  /** "Email me an update" on a report row; the button keeps focus and the answer is announced under the row. */
+  async requestUpdate(protocol: string): Promise<void> {
+    this.updating.set(protocol);
+    let text: string;
+    try {
+      await this.service.requestUpdate(protocol);
+      text = this.t().updateSent;
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : -1;
+      text = status === 429 ? this.t().updateRecent : status === 409 ? this.t().updateNoEmail : errorText(this.t(), e);
+    } finally {
+      this.updating.set(null);
+    }
+    this.updateNote.set({ protocol, text });
   }
 
   /** Open the chat; from a charge row, that charge is preselected (the customer still confirms it). */

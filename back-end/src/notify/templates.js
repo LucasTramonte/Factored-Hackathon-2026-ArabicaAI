@@ -48,6 +48,11 @@ export const TEMPLATES = {
   }
 };
 
+/** The ``{status}`` text of an ``update`` email, per stored report status (today every report is ``received``). */
+export const STATUS_TEXT = {
+  received: { es: 'Recibido; una persona lo revisará', pt: 'Recebido; uma pessoa vai analisá-lo', en: 'Received; a person will review it' }
+};
+
 /** Render ``{ subject, text }``; only ``reference``, ``status`` and ``urgent`` are read, any other param is ignored. Throws on an unknown template or language. */
 export function render(template, lang, { reference, status = '', urgent = false }) {
   const t = TEMPLATES[lang]?.[template];

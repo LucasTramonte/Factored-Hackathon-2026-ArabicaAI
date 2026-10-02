@@ -3,16 +3,17 @@ import { decrypt, sendEmail } from './email.js';
 import { render } from './templates.js';
 
 /**
- * Read the customer's encrypted address, render ``received`` in ``language`` with ``reference`` and send it, then
- * mark the outbox row ``sent``, ``skipped`` (SES not configured) or ``failed`` (any error, including decryption).
+ * Read the customer's encrypted address, render the row's ``template`` (default ``received``) in ``language`` with
+ * ``reference`` and ``status`` and send it, then mark the outbox row ``sent``, ``skipped`` (SES not configured) or
+ * ``failed`` (any error, including decryption).
  */
-export async function deliver(env, store, { messageId, customerId, language, reference }, send = sendEmail) {
-  let status = 'failed', providerId = null;
+export async function deliver(env, store, { messageId, customerId, language, reference, template = 'received', status }, send = sendEmail) {
+  let outcome = 'failed', providerId = null;
   try {
     const target = await store.findNotificationTarget(customerId);
-    const result = await send(env, { to: await decrypt(target.email_enc, env), ...render('received', language, { reference }) });
-    status = result.ok ? 'sent' : result.skipped ? 'skipped' : 'failed';
+    const result = await send(env, { to: await decrypt(target.email_enc, env), ...render(template, language, { reference, status }) });
+    outcome = result.ok ? 'sent' : result.skipped ? 'skipped' : 'failed';
     providerId = result.messageId ?? null;
-  } catch { /* status stays failed */ }
-  try { await store.markEmail(messageId, status, providerId); } catch { /* the row stays queued */ }
+  } catch { /* outcome stays failed */ }
+  try { await store.markEmail(messageId, outcome, providerId); } catch { /* the row stays queued */ }
 }

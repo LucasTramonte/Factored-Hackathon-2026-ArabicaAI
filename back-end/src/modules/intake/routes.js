@@ -1,10 +1,11 @@
 /** Guided reports use authenticated ownership and durable start receipts; the extractor switch (off by default) only records a shadow call. */
 import { readSession, tokenHash } from '../../auth/session.js';
 import { fail, json, readJsonBody, readCookies } from '../../http.js';
-import { validateStartRequest, validateHandoffRequest } from './validation.js';
+import { UUID, validateStartRequest, validateHandoffRequest } from './validation.js';
 import { APPROVED_EXTRACTOR, extractShadow, readyExtractor } from './ai-transport.js';
 import { createStore } from '../../store/d1.js';
 import { deliver } from '../../notify/dispatch.js';
+import { STATUS_TEXT } from '../../notify/templates.js';
 
 /**
  * POST /intake/start: start or replay an explicit guided report; never return a case protocol. With the switch on,
@@ -147,4 +148,34 @@ export async function listReports(request, env, store) {
   return json({ items: rows.slice(0, REPORTS_PAGE).map(({ protocol, reference_short, kind, accepted_at }) =>
     ({ protocol, reference_short: reference_short ?? null, kind, status: 'received', next_step: 'review_pending', accepted_at })),
     has_more: rows.length > REPORTS_PAGE });
+}
+
+const UPDATE_EVERY_MS = 300000;
+/**
+ * POST /reports/update ``{ protocol }``: email the session customer the status of one of their acknowledged reports.
+ * Foreign and missing reports get the same 404; no target 409; one ``update`` email per report per 5 minutes (429).
+ */
+export async function requestUpdate(request, env, store, ctx) {
+  const current = await readSession(request, store, 'customer');
+  if (!current) return fail(401, 'Start a demo session first');
+  const body = await readJsonBody(request);
+  if (body.error) return body.error;
+  const value = body.value;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).join() !== 'protocol'
+    || typeof value.protocol !== 'string' || !UUID.test(value.protocol)) return fail(422, 'Invalid protocol');
+  const customerId = current.customer_id;
+  const report = await store.findCustomerReport(customerId, value.protocol.toLowerCase());
+  if (!report) return fail(404, 'Report not found');
+  if (!report.has_target) return fail(409, 'No email on file for this sign-in');
+  const reference = report.reference_short ?? report.protocol;
+  const now = Date.now();
+  // ponytail: check-then-insert, so two simultaneous requests can both queue; a conditional INSERT closes it if that matters.
+  const { count, latest } = await store.recentEmails(customerId, reference, now - UPDATE_EVERY_MS, 'update');
+  if (count) return fail(429, 'An update was sent recently', { 'Retry-After': String(Math.max(1, Math.ceil((latest + UPDATE_EVERY_MS - now) / 1000))) });
+  const messageId = crypto.randomUUID();
+  await store.enqueueEmail({ messageId, now, customerId, template: 'update', language: report.language, reference });
+  // Status is a constant until Phase 4 stores a review status per handoff; same as listReports.
+  ctx?.waitUntil?.(deliver(env, createStore(env.DB), { messageId, customerId, language: report.language, reference,
+    template: 'update', status: STATUS_TEXT.received[report.language] }));
+  return json({ queued: true }, 202);
 }
