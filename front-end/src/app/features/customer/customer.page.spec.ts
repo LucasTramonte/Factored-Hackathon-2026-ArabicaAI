@@ -107,6 +107,7 @@ describe('CustomerPage', () => {
   });
 
   describe('email sign-in', () => {
+    beforeEach(() => TestBed.inject(LangService).set('es')); // es has a report language; the chat specs rely on it
     async function open(demoPicker: boolean) {
       const fixture = TestBed.createComponent(CustomerPage);
       const p = fixture.componentInstance;
@@ -179,6 +180,33 @@ describe('CustomerPage', () => {
       await p.verify();
       expect([p.step(), p.chatStep()]).toEqual(['home', 'choose']);
       expect(service.logout).toHaveBeenCalledTimes(1); // a matching renewal keeps its session
+    });
+
+    it('in production an email renewal resends the frozen start with the same key and body, with no reset', async () => {
+      const { fixture, p, el } = await open(false);
+      await toCode(p);
+      await p.verify();
+      p.openChat();
+      service.startIntake.and.returnValues(Promise.reject(new ApiError(401)),
+        Promise.resolve({ episode_id: 'e', state: 'selection_required', language: 'es', mode: 'guided', replayed: false }));
+      p.chatStatement = 'No reconozco este cargo.';
+      await p.send();
+      const frozen = p.frozen();
+      expect(frozen?.path).toBe('start');
+      expect([p.chatError(), service.signIn.calls.count()]).toEqual([p.t().err401, 0]); // no silent demo renewal
+      fixture.detectChanges();
+      [...el.querySelectorAll<HTMLButtonElement>('.chat button')].find(b => b.textContent!.trim() === p.t().renew)!.click();
+      expect(p.step()).toBe('login');
+      await toCode(p);
+      await p.verify();
+      expect([p.step(), p.client(), p.frozen()]).toEqual(['home', 'CLI-1', frozen]);
+      expect(p.log()).toContain({ from: 'me', text: 'No reconozco este cargo.' });
+      expect(service.logout).not.toHaveBeenCalled();
+      await p.run();
+      const [first, second] = service.startIntake.calls.allArgs().map(a => a[0]);
+      expect(second).toEqual(first);
+      expect(second.idempotency_key).toBe((frozen!.body as { idempotency_key: string }).idempotency_key);
+      expect(p.chatStep()).toBe('choose');
     });
 
     it('in production renders no picker, never lists identities, and says the sign-in is an email code', async () => {
