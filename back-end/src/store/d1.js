@@ -95,6 +95,9 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     findContextCard: customerId => first(
       'SELECT card_version, snapshot_at, card_json FROM context_cards WHERE customer_id=?', customerId),
 
+    /** Revoke one session by token hash. */
+    revokeSession: hash => all('DELETE FROM sessions WHERE token_hash=?', hash),
+
     /** In one atomic batch: purge expired sessions, revoke the presented token, insert the new one. */
     rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt }) => batch([
       ['DELETE FROM sessions WHERE expires_at<=?', now],

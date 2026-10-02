@@ -4,7 +4,7 @@
  */
 import identities from '../../config/identities.json' with { type: 'json' };
 import { fail, json, readJsonBody } from '../../http.js';
-import { readSession, startSession } from '../../auth/session.js';
+import { endSession, readSession, startSession } from '../../auth/session.js';
 import { validateCaseRequest } from './validation.js';
 
 const COMMITTED = new Map(identities.customers.map(c => [c.customer_id, c]));
@@ -71,6 +71,11 @@ export async function startCustomerSession(request, env, store) {
   const card = contextCard(await store.findContextCard(customerId));
   return json({ customer_id: customerId, mode: 'simulated_login', context_card: card }, 200,
     { 'Set-Cookie': await startSession(request, store, 'customer', customerId) });
+}
+
+/** POST /auth/logout: revoke the presented customer session; always 204, so it reveals nothing. */
+export async function logout(request, env, store) {
+  return new Response(null, { status: 204, headers: { 'Set-Cookie': await endSession(request, store, 'customer') } });
 }
 
 /** GET /transactions: the session customer's charges, newest first, one page. */

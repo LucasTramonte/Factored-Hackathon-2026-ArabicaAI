@@ -71,3 +71,25 @@ test('starting a session is one atomic store call that revokes the old token and
   assert.equal(calls[1].oldHash, null);
   assert.ok(fresh.startsWith('demo_agent_session='));
 });
+
+test('ending a session deletes exactly the presented token hash and clears the cookie', async () => {
+  const { endSession } = await import('../../src/auth/session.js');
+  const calls = [];
+  const store = { revokeSession: async hash => { calls.push(hash); } };
+  const token = 'a'.repeat(64);
+  const header = await endSession(new Request('http://localhost:8787/auth/logout', { headers: { Cookie: `${COOKIE.customer}=${token}` } }), store, 'customer'); // localhost: no Secure attribute
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0], await tokenHash(token));
+  assert.match(header, new RegExp(`^${COOKIE.customer}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`));
+});
+
+test('ending a session with no or a malformed cookie revokes nothing and still clears the cookie', async () => {
+  const { endSession } = await import('../../src/auth/session.js');
+  const calls = [];
+  const store = { revokeSession: async hash => { calls.push(hash); } };
+  for (const headers of [{}, { Cookie: `${COOKIE.customer}=not-a-token` }]) {
+    const header = await endSession(new Request('http://localhost:8787/auth/logout', { headers }), store, 'customer');
+    assert.match(header, /Max-Age=0/);
+  }
+  assert.equal(calls.length, 0);
+});
