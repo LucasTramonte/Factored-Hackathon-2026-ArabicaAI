@@ -18,7 +18,7 @@
     },
     "intakeReceipt": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "episode_id", "protocol", "kind", "accepted_at", "replayed", "actions_taken", "unresolved_questions", "next_step_code"],
+      "required": ["reference_short", "episode_id", "protocol", "kind", "accepted_at", "replayed", "urgency", "actions_taken", "unresolved_questions", "next_step_code"],
       "properties": {
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "episode_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
@@ -26,6 +26,8 @@
         "kind": { "type": "string", "pattern": "^(complete|technical|incomplete)$" },
         "accepted_at": { "type": "string", "minLength": 1 },
         "replayed": { "type": "boolean" },
+        "urgency": { "type": "string", "pattern": "^(normal|high)$" },
+        "block_card_line": { "type": "string", "minLength": 1, "description": "Present only when urgency is high: the bank's card-block number (a demo number) for the customer to call; this service never blocks a card." },
         "actions_taken": { "type": "array", "items": { "type": "string", "pattern": "^(owned_transaction_retrieved|customer_confirmation_recorded|transaction_lookup_failed)$" } },
         "unresolved_questions": { "type": "array", "items": { "type": "string", "pattern": "^(matching_transaction|customer_confirmation)$" } },
         "next_step_code": { "const": "await_human_review" }
@@ -394,7 +396,7 @@
     },
     "agentIntake": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "accepted_at"],
+      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at"],
       "properties": {
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
@@ -404,6 +406,7 @@
         "tool_status": {"type": "string", "pattern": "^(ok|failed|timeout)$"},
         "destination": {"type": "string", "minLength": 1},
         "priority": {"type": "string", "minLength": 1},
+        "urgency": {"type": "string", "pattern": "^(normal|high)$"},
         "accepted_at": {"type": "string", "minLength": 1}
       }
     },
@@ -467,7 +470,7 @@
     },
     "agentIntakeDetail": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "accepted_at", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "scope"],
+      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "model_reading", "scope"],
       "properties": {
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
@@ -477,6 +480,7 @@
         "tool_status": {"type": "string", "pattern": "^(ok|failed|timeout)$"},
         "destination": {"type": "string", "minLength": 1},
         "priority": {"type": "string", "minLength": 1},
+        "urgency": {"type": "string", "pattern": "^(normal|high)$"},
         "accepted_at": {"type": "string", "minLength": 1},
         "language": {"type": "string", "pattern": "^(es|pt)$"},
         "customer_statement": {"type": "string", "minLength": 10, "maxLength": 2000},
@@ -485,6 +489,7 @@
         "unresolved_questions": {"type": "array", "items": {"type": "string", "minLength": 1}},
         "history": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/intakeServiceTransition"}},
         "history_has_more": {"type": "boolean"},
+        "model_reading": {"type": "object", "additionalProperties": false, "required": ["mode", "model_version", "llm_calls"], "description": "Whether a model read the case in shadow: version and call count only, never its output; it decides nothing.", "properties": {"mode": {"type": "string", "pattern": "^(off|shadow)$"}, "model_version": {"type": ["string", "null"], "minLength": 1}, "llm_calls": {"type": "integer"}}},
         "scope": {"const": "synthetic_demo_only"}
       }
     }

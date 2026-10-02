@@ -11,12 +11,12 @@ import { AgentService } from './agent.service';
 const P1 = '11111111-1111-4111-8111-111111111111';
 const P2 = '22222222-2222-4222-8222-222222222222';
 const intake = (protocol: string, kind: AgentIntake['kind'] = 'complete'): AgentIntake =>
-  ({ protocol, reference_short: protocol === P1 ? 'AR-7K3M-2Q4X' : null, episode_id: P2, kind, status: 'received', tool_status: 'ok', destination: 'case_service', priority: 'normal', accepted_at: '2026-09-30T12:00:00.000Z' });
+  ({ protocol, reference_short: protocol === P1 ? 'AR-7K3M-2Q4X' : null, episode_id: P2, kind, status: 'received', tool_status: 'ok', destination: 'case_service', priority: 'normal', urgency: 'normal', accepted_at: '2026-09-30T12:00:00.000Z' });
 const detail = (protocol: string, over: Partial<AgentIntakeDetail> = {}): AgentIntakeDetail => ({
   ...intake(protocol), language: 'es', customer_statement: 'No reconozco este cargo',
   verified_evidence: { transaction: { transaction_id: 'TX-9', merchant_name: 'Café', occurred_at: null, source_occurred_at: '2026-09-01 10:00:00', amount: '12.50', currency: 'MXN' } },
   actions_taken: ['owned_transaction_retrieved'], unresolved_questions: [], history: [{ seq: 1, event: 'intake_started', ts: '2026-09-30T11:59:00.000Z' }],
-  history_has_more: false, scope: 'synthetic_demo_only', ...over
+  history_has_more: false, model_reading: { mode: 'off', model_version: null, llm_calls: 0 }, scope: 'synthetic_demo_only', ...over
 });
 
 describe('AgentPage', () => {
@@ -141,6 +141,34 @@ describe('AgentPage', () => {
     await fixture.whenStable();
     expect(document.activeElement).toBe(el().querySelector('#intake-queue-title'));
     el().remove();
+  });
+
+  it('says in one line whether the model read the case, in every language', async () => {
+    service.intakeDetail.and.resolveTo(detail(P1));
+    await loadAndOpen();
+    const line = () => el().querySelector('#model-reading')!.textContent!.trim();
+    expect(line()).toBe('Model reading: off.');
+    service.intakeDetail.and.resolveTo(detail(P1, { model_reading: { mode: 'shadow', model_version: 'extractor-v1@a270773600cf', llm_calls: 2 } }));
+    await page.open(P1, el().querySelector<HTMLButtonElement>('.intake-row')!);
+    fixture.detectChanges();
+    expect(line()).toBe('Model reading: in shadow, 2 calls, version extractor-v1@a270773600cf. The model decides nothing.');
+    TestBed.inject(LangService).set('es');
+    fixture.detectChanges();
+    expect(line()).toBe('Lectura del modelo: en sombra, 2 llamadas, versión extractor-v1@a270773600cf. El modelo no decide nada.');
+    TestBed.inject(LangService).set('pt');
+    fixture.detectChanges();
+    expect(line()).toBe('Leitura do modelo: em sombra, 2 chamadas, versão extractor-v1@a270773600cf. O modelo não decide nada.');
+  });
+
+  it('says 1 call in the singular', async () => {
+    service.intakeDetail.and.resolveTo(detail(P1, { model_reading: { mode: 'shadow', model_version: 'v1', llm_calls: 1 } }));
+    await loadAndOpen();
+    const line = () => el().querySelector('#model-reading')!.textContent!.trim();
+    expect(line()).toBe('Model reading: in shadow, 1 call, version v1. The model decides nothing.');
+    TestBed.inject(LangService).set('es'); fixture.detectChanges();
+    expect(line()).toBe('Lectura del modelo: en sombra, 1 llamada, versión v1. El modelo no decide nada.');
+    TestBed.inject(LangService).set('pt'); fixture.detectChanges();
+    expect(line()).toBe('Leitura do modelo: em sombra, 1 chamada, versão v1. O modelo não decide nada.');
   });
 
   it('says so when there is no verified transaction', async () => {
@@ -308,6 +336,18 @@ describe('AgentPage', () => {
       await page.load();
       fixture.detectChanges();
       expect([...el().querySelectorAll('.intake-row .status-chip')].map(c => c.textContent!.trim())).toEqual([t().statusReceived, t().statusReceived]);
+    });
+
+    it('marks a high-urgency row with a translated chip, and only that row', async () => {
+      service.intakes.and.resolveTo({ items: [{ ...intake(P1), urgency: 'high' }, intake(P2)], has_more: false, scope: 'synthetic_demo_only' });
+      for (const lang of ['es', 'pt', 'en'] as const) {
+        TestBed.inject(LangService).set(lang);
+        await page.load();
+        fixture.detectChanges();
+        const chips = [...el().querySelectorAll('.intake-row')].map(row => row.querySelector('.urgency-chip')?.textContent?.trim() ?? null);
+        expect(chips).toEqual([t().urgencyHigh, null]);
+      }
+      expect(t().urgencyHigh).toBe('High priority');
     });
 
     it('takes the case, then closes it, updating row and detail in place and focusing the new status', async () => {

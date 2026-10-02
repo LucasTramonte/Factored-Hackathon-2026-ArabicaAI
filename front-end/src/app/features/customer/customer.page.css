@@ -24,3 +24,6 @@
 .login-email { display: flex; flex-direction: column; gap: 10px; margin: 0; }
 .login-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .report-status { display: block; }
+
+/* Urgency lane: the call-your-bank line on a high receipt; text only, never a block action. */
+.urgent-line { padding: 12px 16px; background: var(--warn-soft); border-left: 4px solid var(--warn); border-radius: var(--radius-md); }

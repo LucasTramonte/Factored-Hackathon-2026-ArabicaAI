@@ -57,6 +57,7 @@
                 <button #row type="button" class="intake-row" [attr.data-protocol]="item.protocol" [attr.aria-expanded]="openProtocol() === item.protocol" [attr.aria-controls]="openProtocol() === item.protocol && detail() ? 'intake-detail' : null" (click)="open(item.protocol, row)">
                   <span class="ar-chip" [class.ar-chip-ok]="item.kind === 'complete'" [class.ar-chip-err]="item.kind === 'technical'" [class.ar-chip-warn]="item.kind === 'incomplete'">{{ kindLabel(item.kind) }}</span>
                   <span class="ar-chip status-chip">{{ statusLabel(item.status) }}</span>
+                  @if (item.urgency === 'high') { <span class="ar-chip ar-chip-err urgency-chip">{{ t().urgencyHigh }}</span> }
                   <span class="ar-mono">{{ item.reference_short ?? item.protocol }}</span>
                   <span class="ar-small">{{ item.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span>
                   <span class="ar-small">{{ t().toolStatus }}: <code>{{ item.tool_status }}</code></span>
@@ -91,6 +92,8 @@
             <div><dt>{{ t().priority }}</dt><dd><code>{{ d.priority }}</code></dd></div>
             <div><dt>{{ t().languageCode }}</dt><dd><code>{{ d.language }}</code></dd></div>
           </dl>
+
+          <p id="model-reading" class="status-line">{{ modelLine(d) }}</p>
 
           <h3>{{ t().statement }}</h3>
           <p class="case-statement" [attr.lang]="d.language">{{ d.customer_statement }}</p>

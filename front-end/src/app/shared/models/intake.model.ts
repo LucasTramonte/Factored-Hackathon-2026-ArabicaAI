@@ -69,6 +69,8 @@ export interface AgentIntake {
   tool_status: 'ok' | 'failed' | 'timeout';
   destination: string;
   priority: string;
+  /** Stated policy (back-end config/urgency.json): open high reports head the queue. */
+  urgency: 'normal' | 'high';
   accepted_at: string;
 }
 
@@ -107,6 +109,8 @@ export interface AgentIntakeDetail extends AgentIntake {
   unresolved_questions: string[];
   history: IntakeServiceTransition[];
   history_has_more: boolean;
+  /** Whether a model read the case in shadow: version and call count only, never its output; it decides nothing. */
+  model_reading: { mode: 'off' | 'shadow'; model_version: string | null; llm_calls: number };
   scope: 'synthetic_demo_only';
 }
 
@@ -169,6 +173,10 @@ export interface IntakeReceipt {
   kind: 'complete' | 'technical' | 'incomplete';
   accepted_at: string;
   replayed: boolean;
+  /** ``high`` by stated policy (a large or unusually large charge); the handoff is prioritised, never a card block. */
+  urgency: 'normal' | 'high';
+  /** Only when ``urgency`` is high: the bank's number to call to block the card (a demo number). */
+  block_card_line?: string;
   /** Server codes read back with the handoff: what was checked and what is still open. */
   actions_taken: string[];
   unresolved_questions: string[];

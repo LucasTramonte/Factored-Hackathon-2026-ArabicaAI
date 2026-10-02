@@ -298,7 +298,7 @@ describe('CustomerPage', () => {
     const started: IntakeStart = { episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false };
     const intakeReceipt: IntakeReceipt = { episode_id: started.episode_id, protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
       accepted_at: '2026-09-30T12:00:00Z', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'],
-      unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review' };
+      unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review', urgency: 'normal' };
     let lang: LangService;
 
     beforeEach(async () => {
@@ -695,7 +695,7 @@ describe('CustomerPage', () => {
       service.reports.and.resolveTo({ items: [report('incomplete', 'AR-CCCC-DDDD')], has_more: false });
       service.handoffIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555',
         kind: 'incomplete', accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: [], reference_short: 'AR-CCCC-DDDD',
-        next_step_code: 'await_human_review' });
+        next_step_code: 'await_human_review', urgency: 'normal' });
       await p.handoff();
       fixture.detectChanges();
       expect(service.reports.calls.count()).toBe(before + 1);
@@ -818,7 +818,7 @@ describe('CustomerPage', () => {
       expect(el.querySelector('#chat-error')?.textContent).toContain(p.t().chatValidationShort);
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
       service.confirmIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
-        accepted_at: 'x', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'], unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review' });
+        accepted_at: 'x', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'], unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review', urgency: 'normal' });
       p.chatStatement = 'No reconozco este cargo.';
       await p.send();
       fixture.detectChanges();
@@ -848,7 +848,7 @@ describe('CustomerPage', () => {
       p.openChat();
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
       service.handoffIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'incomplete',
-        accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review' });
+        accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review', urgency: 'normal' });
       p.chatStatement = 'No reconozco este cargo.';
       await p.send();
       p.cannotFind();
@@ -865,6 +865,24 @@ describe('CustomerPage', () => {
       expect([...receiptEl.querySelectorAll('.open-questions li')].map(li => li.textContent?.trim()))
         .toEqual([p.t().check_matching_transaction, p.t().check_customer_confirmation]);
       expect(receiptEl.querySelector('.checks')?.textContent).toContain(p.t().none);
+    });
+
+    it('shows the call-your-bank line with the number as text only on a high-urgency receipt', async () => {
+      const { fixture, p, el } = await home();
+      p.openChat();
+      const base: IntakeReceipt = { episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
+        accepted_at: 'x', replayed: false, urgency: 'normal', actions_taken: [], unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review' };
+      p.intakeReceipt.set(base);
+      fixture.detectChanges();
+      expect(el.querySelector('#intake-receipt')).not.toBeNull();
+      expect(el.querySelector('.urgent-line')).toBeNull();
+      p.intakeReceipt.set({ ...base, urgency: 'high', block_card_line: '+52 55 0000 0000 (demo)' });
+      fixture.detectChanges();
+      const line = el.querySelector('.urgent-line')!;
+      expect(line.textContent).toContain(p.t().blockCardCall);
+      expect(line.textContent).toContain(p.t().blockCardNote);
+      expect(line.querySelector('.ar-mono')?.textContent?.trim()).toBe('+52 55 0000 0000 (demo)');
+      expect(line.querySelector('a')).toBeNull();
     });
 
     it('gives every charge a Report button named after its merchant that opens the chat on it', async () => {

@@ -30,3 +30,10 @@ test('the row\'s template is rendered, with the status text for "update"', async
   assert.match(sent[0].subject, /Status do seu relato AR-ABCD-1234/);
   assert.match(sent[0].text, /Status atual do seu relato AR-ABCD-1234: Recebido; uma pessoa vai analisá-lo/);
 });
+
+test('an urgent "received" email carries the call-your-bank paragraph; a normal one does not', async () => {
+  const urgent = await run(() => ({ ok: true }), undefined, { language: 'es', urgent: true });
+  assert.match(urgent.sent[0].text, /llama a tu banco para bloquearla\. Este servicio no bloquea tarjetas\./);
+  const normal = await run(() => ({ ok: true }), undefined, { language: 'es' });
+  assert.doesNotMatch(normal.sent[0].text, /bloquea/);
+});
