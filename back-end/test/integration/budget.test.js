@@ -43,6 +43,9 @@ const CEILING = {
   // Session, owned report with its target flag, the outbox insert that checks the 5-minute window itself (row, primary
   // key, email_outbox_recent); the send marks the row from its own store after the response (Task 3.3).
   reportsUpdate: [3, 14, 3, 3],
+  // Agent session, then one batch: history row (+ unique index), the customer's email (row, primary key,
+  // email_outbox_recent) and the status update; each statement resolves the handoff by its unique keys (ADR-004).
+  agentTransition: [5, 26, 6, 2],
   completeDetail: [3, 15, 0, 3],
   incompleteDetail: [3, 10, 0, 3],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
@@ -151,6 +154,10 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   const update = await cohort.call('/reports/update', { protocol: cohortReceipt.body.protocol });
   assert.equal(update.status, 202); assertContract('updateQueued', update.body);
   measured.reportsUpdate = within('reportsUpdate', update.metrics);
+  const transition = await agent.call('/agent/intake-status', { protocol: cohortReceipt.body.protocol, status: 'in_review' });
+  assert.equal(transition.status, 200); assertContract('intakeTransition', transition.body);
+  measured.agentTransition = within('agentTransition', transition.metrics);
+  assert.equal(transition.metrics.rows_written, CEILING.agentTransition[2], 'the in_review email was queued');
   const completeEpisode = sum(measured, ['login', 'list', 'start', 'confirm']);
   const incompleteEpisode = sum({ ...measured, start: measured.start2 }, ['login', 'list', 'start', 'incomplete']);
   within('complete episode', completeEpisode, EPISODE_CEILING.complete);

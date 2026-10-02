@@ -165,13 +165,13 @@ export interface IntakeReceipt {
   next_step_code: 'await_human_review';
 }
 
-/** GET /reports: the session customer's own handoffs, newest first, 20 per page. Status is a constant until reviews are stored. */
+/** GET /reports: the session customer's own handoffs, newest first, 20 per page, with the status a person set. */
 export interface Report {
   protocol: string;
   reference_short: string | null;
   kind: IntakeKind;
-  status: 'received';
-  next_step: 'review_pending';
+  status: 'received' | 'in_review' | 'closed';
+  next_step: 'review_pending' | 'being_reviewed' | 'closed_by_person';
   accepted_at: string;
 }
 export interface ReportList {

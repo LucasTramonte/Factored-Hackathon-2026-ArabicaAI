@@ -333,13 +333,13 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /** One handoff per episode; only acknowledged terminal rows enter this bounded queue. */
     listIntakeHandoffs: limit => all(
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
-      + 'h.destination,h.priority,h.accepted_at,h.reference_short FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+      + 'h.destination,h.priority,h.accepted_at,h.reference_short,h.status FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
       + "WHERE e.state=h.kind||'_handoff' ORDER BY h.accepted_at DESC,protocol LIMIT ?", Math.min(limit, 51)),
     /** The session customer's acknowledged handoffs, newest first. Only handoffs whose receipt was read back appear. */
     // ponytail: reads ~1 + 2 rows per episode of the customer (all states) then a temp sort; LIMIT does not cap it.
     // Upgrade: an index on handoffs keyed by customer and accepted_at, which needs a customer column there.
     listCustomerHandoffs: (customerId, limit) => all(
-      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,h.kind,h.accepted_at '
+      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,h.kind,h.status,h.accepted_at '
       + "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
       + 'ORDER BY h.accepted_at DESC,protocol LIMIT ?', customerId, limit),
     /**
@@ -347,19 +347,50 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      * and whether the customer has a notification target; null when missing or another customer's.
      */
     findCustomerReport: (customerId, protocol) => first(
-      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,e.language,'
+      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,h.status,e.language,'
       + 'EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id) AS has_target '
       + "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
       + 'AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))', customerId, protocol, protocol),
     /** Optional complete evidence is one-to-one and owner-scoped; missing evidence never drops a handoff. */
     findIntakeHandoff: protocol => first(
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
-      + 'h.destination,h.priority,h.accepted_at,h.reference_short,h.evidence_json,h.actions_json,h.questions_json,'
+      + 'h.destination,h.priority,h.accepted_at,h.reference_short,h.status,h.evidence_json,h.actions_json,h.questions_json,'
       + 'e.customer_statement,e.language,t.transaction_id AS verified_transaction_id '
       + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
       + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
       + 'LEFT JOIN transactions t ON t.transaction_id=c.transaction_id AND t.customer_id=e.customer_id '
       + "WHERE e.state=h.kind||'_handoff' AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))", protocol, protocol),
+    /**
+     * Move one acknowledged handoff (public ``protocol``) from ``from`` to ``to`` in one atomic batch: a history row,
+     * the customer's ``to`` email (when they have a target) and the status change, each guarded by ``status=from``.
+     * The email statement runs before the update, so ``status`` still equal to ``from`` while the ``to`` history row
+     * exists can only mean this batch inserted it: a replay or a concurrent loser queues nothing. Returns the final
+     * ``{ status, changed_at, customer_id, language, reference }`` (null when no acknowledged handoff matches) and the
+     * queued ``emailId`` or null.
+     */
+    transitionHandoff: async ({ protocol, from, to, now, agentSessionRef, emailId }) => {
+      const target = '(SELECT h.handoff_id FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+        + "WHERE (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?)) AND e.state=h.kind||'_handoff')";
+      const results = await batch([
+        ['INSERT INTO handoff_status_history(handoff_id,status,changed_at,agent_session_ref) SELECT handoff_id,?,?,? FROM intake_handoffs '
+          + 'WHERE handoff_id=' + target + ' AND status=?', to, now, agentSessionRef, protocol, protocol, from],
+        ["INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) "
+          + "SELECT ?,?,e.customer_id,?,e.language,COALESCE(h.reference_short,h.complete_case_id,h.handoff_id),'queued' "
+          + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE h.handoff_id=' + target + ' AND h.status=? '
+          + 'AND EXISTS(SELECT 1 FROM handoff_status_history WHERE handoff_id=h.handoff_id AND status=?) '
+          + "AND e.language IN ('es','pt','en') AND EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id) RETURNING message_id",
+          emailId, now, to, protocol, protocol, from, to],
+        ['UPDATE intake_handoffs SET status=? WHERE handoff_id=' + target + ' AND status=?', to, protocol, protocol, from],
+        ['SELECT h.status,(SELECT changed_at FROM handoff_status_history WHERE handoff_id=h.handoff_id AND status=h.status) AS changed_at,'
+          + 'e.customer_id,e.language,COALESCE(h.reference_short,h.complete_case_id,h.handoff_id) AS reference '
+          + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE h.handoff_id=' + target, protocol, protocol]
+      ]);
+      return { row: results.at(-1).results[0] ?? null, emailId: results[1].results[0]?.message_id ?? null };
+    },
+    /** One handoff's status history, oldest first (audit and tests). */
+    listStatusHistory: protocol => all(
+      'SELECT s.status,s.changed_at,s.agent_session_ref FROM handoff_status_history s JOIN intake_handoffs h USING(handoff_id) '
+      + 'WHERE h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?) ORDER BY s.changed_at,s.rowid', protocol, protocol),
     /** At most 101 indexed events, so overflow is explicit. Guided chains have at most 5 events; add a cursor before supporting more than 100. */
     listIntakeHistory: episodeId => all(
       'SELECT event_json FROM intake_events WHERE episode_id=? ORDER BY seq LIMIT 101', episodeId),

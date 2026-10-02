@@ -138,15 +138,16 @@ async function unreserved(request, store, { customerId, episodeId, toolCalls, st
 }
 
 const REPORTS_PAGE = 20;
+/** What happens next for the customer, per stored review status. */
+const NEXT_STEP = { received: 'review_pending', in_review: 'being_reviewed', closed: 'closed_by_person' };
 /** GET /reports: the session customer's own acknowledged reports, newest first; no statement, evidence or episode id. */
 export async function listReports(request, env, store) {
   const current = await readSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
   if (new URL(request.url).search) return fail(422, 'Unexpected parameters');
   const rows = await store.listCustomerHandoffs(current.customer_id, REPORTS_PAGE + 1);
-  // status and next_step are constants until Phase 4 stores a review status per handoff.
-  return json({ items: rows.slice(0, REPORTS_PAGE).map(({ protocol, reference_short, kind, accepted_at }) =>
-    ({ protocol, reference_short: reference_short ?? null, kind, status: 'received', next_step: 'review_pending', accepted_at })),
+  return json({ items: rows.slice(0, REPORTS_PAGE).map(({ protocol, reference_short, kind, status, accepted_at }) =>
+    ({ protocol, reference_short: reference_short ?? null, kind, status, next_step: NEXT_STEP[status], accepted_at })),
     has_more: rows.length > REPORTS_PAGE });
 }
 
@@ -174,8 +175,7 @@ export async function requestUpdate(request, env, store, ctx) {
     const { latest } = await store.recentEmails(customerId, reference, now - UPDATE_EVERY_MS, 'update');
     return fail(429, 'An update was sent recently', { 'Retry-After': String(Math.max(1, Math.ceil(((latest ?? now) + UPDATE_EVERY_MS - now) / 1000))) });
   }
-  // Status is a constant until Phase 4 stores a review status per handoff; same as listReports.
   ctx?.waitUntil?.(deliver(env, createStore(env.DB), { messageId, customerId, language: report.language, reference,
-    template: 'update', status: STATUS_TEXT.received[report.language] }));
+    template: 'update', status: STATUS_TEXT[report.status][report.language] }));
   return json({ queued: true }, 202);
 }

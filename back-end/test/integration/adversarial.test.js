@@ -9,7 +9,7 @@ import { auth, base, client, idToken } from '../support/client.js';
 
 const API = { '/demo/identities': 'GET', '/demo/session': 'POST', '/auth/logout': 'POST', '/transactions': 'GET', '/cases': 'POST', '/intake/start': 'POST',
   '/intake/confirm': 'POST', '/intake/handoff': 'POST', '/demo/agent-session': 'POST', '/agent/cases': 'GET', '/agent/intakes': 'GET',
-  '/agent/intake-detail': 'GET', '/reports': 'GET', '/reports/update': 'POST' };
+  '/agent/intake-detail': 'GET', '/agent/intake-status': 'POST', '/reports': 'GET', '/reports/update': 'POST' };
 const wrong = 'Basic ' + Buffer.from('local-reviewer:wrong').toString('base64');
 const uuid = () => crypto.randomUUID();
 
