@@ -129,6 +129,7 @@ So far:
 - The checklist gets 15 of 25 on phrases written without knowledge of its rules. It misses currency words, non-ISO and relative dates, and paraphrases.
 - On the development cases, two labels contradicted the written policy and were corrected (the correction still needs the unexposed reviewer's approval). With the corrected labels, the checklist scores 16 of 18 and the model 18 of 18, with no unsafe outcome. These are per-case scores on 18 development cases. The model's figure is inferred from its logged outputs. Two later runs repeated the calls: latency attempt 1 got 82 of its 83 returned calls right, and attempt 2 got all 180 calls right (ADR-006). Before the correction the figures were 18 of 18 and 16 of 18.
 - The frozen comparison has not run yet. It runs once, after the model is registered, and is reported on all 60 cases and on the 52 whose content never reached the repository.
+- The recent-charges view (provisional, ADR-009 Proposed) served and displayed the customer's own charges in 10 of 12 authored cases, with no unsafe outcome ([`EVALUATION.md` §8](EVALUATION.md#8-normal-resolution-path-provisional-adr-009-proposed)).
 
 How the sets were built, every leakage control, what 60 cases can and can't show, and every option we rejected are in [`EVALUATION.md`](EVALUATION.md).
 

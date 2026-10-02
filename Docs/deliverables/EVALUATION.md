@@ -166,6 +166,32 @@ So the frozen set can only show a **large** improvement. That may be enough, bec
 
 The Portuguese results show the system handles Portuguese, not that there is Portuguese demand. Offline results, simulations and projections are labelled separately, as the brief asks.
 
+## 8. Normal resolution path (provisional, ADR-009 Proposed)
+
+The recent-charges view shows a signed-in customer their own recent charges, read-only ([ADR-009](../ADRs/ADR-009-recent-charges-resolution.md)). It is scored by [`evals/inquiry/score.py`](../../evals/inquiry/score.py) on its own stream and never mixed with the intake episodes above.
+
+**Population:** 12 authored cases, each an explicit request run against local D1: Spanish, Portuguese and English × a normal list, an empty one and a first page with more to come, plus an expired session (es), another customer trying to acknowledge the view (pt) and a failure to record the view (en). They test stated situations. They are not a sample of how often customers ask.
+
+**Safe automated resolution** means a view was recorded, the client acknowledged it as displayed, its coverage was declared and nothing unsafe happened. **Unsafe** means another customer's row was served or acknowledged, or a view was recorded or acknowledged without a live session. It is a gate, reported as a count and never netted against successes.
+
+| | Cases | Attempted | Safe automated resolution (95% Wilson) | Unsafe |
+|---|---|---|---|---|
+| All | 12 | 11 | 10 of 12, 83% (55–95%) | 0 |
+| Spanish | 4 | 3 | 3 of 4, 75% (30–95%) | 0 |
+| Portuguese | 4 | 4 | 4 of 4, 100% (51–100%) | 0 |
+| English | 4 | 4 | 3 of 4, 75% (30–95%) | 0 |
+
+The two cases that are not successes are the designed ones: the expired session is refused before anything is served, and when recording the view fails the rows are still shown but there is no view to acknowledge. **Cost per success** is $0.00: the ADR-004 cost per attempted case on Workers Free ($0) × 11 attempts ÷ 10 successes. On Workers Paid it would depend on real monthly volume, which these cases do not measure.
+
+This shows that, in authored cases, the service served the customer's own charges and the client displayed them. It does not show that a bank resolved anything or that a customer was satisfied. The figures are provisional while ADR-009 is Proposed. To reproduce, from the repository root (the empty `public/` stands in for the compiled client, so `live-flow.test.js`, which needs the real pages, fails in this run):
+
+```bash
+rm -f data/charge-views/authored.jsonl && mkdir -p back-end/public && (cd back-end && INQUIRY_OUT=data/charge-views/authored.jsonl node test/run-local.mjs); rmdir back-end/public
+.venv/bin/python -m evals.inquiry.score data/charge-views/authored.jsonl
+```
+
+**Live page loads** are reported separately, as descriptive counts and display rates only, never as resolutions: a page load is not an explicit request. A person reads them with `cd back-end && npx wrangler d1 execute arabica-intake-demo --remote --json --command "SELECT language, row_count, has_more, coverage, retrieved_at, displayed_at FROM charge_views"`. Those figures are pending until the path is deployed.
+
 ## Where to look
 
 - Harness, baselines and splits: [`evals/intake/`](../../evals/intake/README.md)
