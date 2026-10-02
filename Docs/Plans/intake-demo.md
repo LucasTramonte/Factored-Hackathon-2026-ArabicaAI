@@ -7,7 +7,7 @@ The V1 workflow ([ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intak
 1. A customer signs in with an email one-time code and sees only their own charges.
 2. They pick one, describe it and explicitly confirm.
 3. They get a reference once the case is stored.
-4. A simulated agent reads the case.
+4. An agent, signed in with their own email code, reads the case.
 
 The reference means "accepted for human review". It is not a fraud decision, a refund, a card block or a resolution. The MVP is deterministic, and no model is called. The runtime is one Cloudflare Worker with D1 ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Capacity and cost are covered in [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md).
 
@@ -130,7 +130,7 @@ Human steps (the access key never passes through an agent or the repository):
 
 - Customer identity is a Cognito email code mapped to one demo customer; it is not bank authentication. Agents sign in with their own email code in the `agent` group; there is no shared team password.
 - Sessions last one hour and are stored in D1.
-- A retry with the same key and content returns the same reference, and different content gets 409. A second case for the same charge under a new key is possible: there is no cross-key duplicate rule yet (tracked in the roadmap).
+- A retry with the same key and content returns the same reference, and different content gets 409. A charge with a report still received or in review can't be reported again under a new key (409) until a person closes it; two confirmations in the same instant can still open two.
 - If the browser tab is closed with a request pending, the pending state is lost, but no duplicate is created.
 - No historical complaint is linked to a transaction, so none is joined here by `customer_id` alone.
 
