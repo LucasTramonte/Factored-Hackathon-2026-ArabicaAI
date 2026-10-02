@@ -60,7 +60,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
   };
 
   /** Reserve one immutable handoff and optional confirmed case in one atomic batch; SQL revalidates live session and ownership. */
-  const reserveIntakeHandoff = async ({ customerId, episodeId, turnKey, payloadHash, sessionHash, details, completeCase, kind, evidence, actions, questions, usage, now, referenceShort }) => {
+  const reserveIntakeHandoff = async ({ customerId, episodeId, turnKey, payloadHash, sessionHash, details, completeCase, kind, evidence, actions, questions, usage, now, referenceShort, urgency = 'normal' }) => {
     const handoffId = crypto.randomUUID();
     const caseId = kind === 'complete' ? crypto.randomUUID() : null;
     const eligible = "e.customer_id=? AND e.episode_id=? AND e.state='selection_required' "
@@ -75,11 +75,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         caseId, 'intake:' + episodeId, completeCase?.transaction_id ?? '', ...params
       ]] : []),
       ['INSERT INTO intake_handoffs(handoff_id,episode_id,complete_case_id,turn_key,payload_hash,kind,tool_status,'
-        + 'evidence_json,actions_json,questions_json,destination,priority,accepted_at,usage_json,reference_short) '
-        + "SELECT ?,e.episode_id,?,?,?,?,?,?,?,?,?,?,?,json_set(?,'$.tool_calls',json_extract(e.usage_json,'$.tool_calls'),'$.operation_duration_ms',COALESCE(json_extract(e.usage_json,'$.operation_duration_ms'),0)),? FROM intake_episodes e WHERE " + eligible
+        + 'evidence_json,actions_json,questions_json,destination,priority,accepted_at,usage_json,reference_short,urgency) '
+        + "SELECT ?,e.episode_id,?,?,?,?,?,?,?,?,?,?,?,json_set(?,'$.tool_calls',json_extract(e.usage_json,'$.tool_calls'),'$.operation_duration_ms',COALESCE(json_extract(e.usage_json,'$.operation_duration_ms'),0)),?,? FROM intake_episodes e WHERE " + eligible
         + (kind === 'complete' ? ' AND EXISTS(SELECT 1 FROM cases WHERE case_id=?)' : ''),
         handoffId,caseId,turnKey,payloadHash,kind,kind === 'technical' ? 'failed' : 'ok',
-        JSON.stringify(evidence),JSON.stringify(actions),JSON.stringify(questions),'case_service','normal',new Date(now).toISOString(),JSON.stringify(usage),referenceShort,
+        JSON.stringify(evidence),JSON.stringify(actions),JSON.stringify(questions),'case_service','normal',new Date(now).toISOString(),JSON.stringify(usage),referenceShort,kind === 'complete' ? urgency : 'normal',
         ...params,...(kind === 'complete' ? [caseId] : [])],
       ['INSERT INTO intake_turns(episode_id,turn_key,payload_hash,response_json) '
         + 'SELECT episode_id,turn_key,payload_hash,? FROM intake_handoffs WHERE handoff_id=?',
@@ -352,11 +352,18 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       'SELECT case_id, transaction_id, customer_statement, status, accepted_at FROM cases '
       + 'WHERE customer_id=? AND idempotency_key=?', customerId, idempotencyKey),
 
-    /** One handoff per episode; only acknowledged terminal rows enter this bounded queue. */
-    listIntakeHandoffs: limit => all(
-      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
-      + 'h.destination,h.priority,h.accepted_at,h.reference_short,h.status FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
-      + "WHERE e.state=h.kind||'_handoff' ORDER BY h.accepted_at DESC,protocol LIMIT ?", Math.min(limit, 51)),
+    /**
+     * One handoff per episode; only acknowledged terminal rows enter this bounded queue. Open high-urgency reports come
+     * first (partial index ``intake_handoffs_urgent``, migration 0013), then the rest newest first; one round trip.
+     */
+    listIntakeHandoffs: async limit => {
+      const lane = urgent => 'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
+        + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+        + "WHERE e.state=h.kind||'_handoff' AND " + (urgent ? '' : 'NOT ') + "(h.urgency='high' AND h.status<>'closed') "
+        + 'ORDER BY h.accepted_at DESC,protocol LIMIT ?';
+      const [high, rest] = await batch([[lane(true), Math.min(limit, 51)], [lane(false), Math.min(limit, 51)]]);
+      return [...high.results, ...rest.results].slice(0, Math.min(limit, 51));
+    },
     /** The session customer's acknowledged handoffs, newest first. Only handoffs whose receipt was read back appear. */
     // ponytail: reads ~1 + 2 rows per episode of the customer (all states) then a temp sort; LIMIT does not cap it.
     // Upgrade: an index on handoffs keyed by customer and accepted_at, which needs a customer column there.
@@ -376,7 +383,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /** Optional complete evidence is one-to-one and owner-scoped; missing evidence never drops a handoff. */
     findIntakeHandoff: protocol => first(
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
-      + 'h.destination,h.priority,h.accepted_at,h.reference_short,h.status,h.evidence_json,h.actions_json,h.questions_json,'
+      + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status,h.evidence_json,h.actions_json,h.questions_json,'
       + 'e.customer_statement,e.language,t.transaction_id AS verified_transaction_id '
       + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
       + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '

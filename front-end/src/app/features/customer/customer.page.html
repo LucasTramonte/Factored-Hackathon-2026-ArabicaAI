@@ -216,6 +216,7 @@
                     <h3 class="ar-panel-title">{{ receiptTitle() }}</h3>
                     <div class="ar-ref"><span class="ar-ref-label">{{ t().reference }}</span><span class="ar-ref-code">{{ r.reference_short ?? r.protocol }}</span></div>
                     <p class="next-step">{{ t().nextStep }}</p>
+                    @if (r.urgency === 'high' && r.block_card_line) { <p class="urgent-line"><strong>{{ t().blockCardCall }} <span class="ar-mono">{{ r.block_card_line }}</span>.</strong> {{ t().blockCardNote }}</p> }
                     @if (r.reference_short) { <p class="ar-small case-id">{{ t().caseId }}: <span class="ar-mono">{{ r.protocol }}</span></p> }
                     <h4>{{ t().whatWeChecked }}</h4>
                     <ul class="checks">@for (a of r.actions_taken; track $index) { <li>{{ check(a) }}</li> } @empty { <li>{{ t().none }}</li> }</ul>

@@ -59,7 +59,7 @@ export async function getAgentIntakeDetail(request, env, store) {
     return Object.fromEntries(historyKeys.filter(key => key in event).map(key => [key, event[key]]));
   });
   return json({ protocol: row.protocol, reference_short: row.reference_short ?? null, episode_id: row.episode_id, kind: row.kind, status: row.status, tool_status: row.tool_status,
-    destination: row.destination, priority: row.priority, accepted_at: row.accepted_at, language: row.language,
+    destination: row.destination, priority: row.priority, urgency: row.urgency, accepted_at: row.accepted_at, language: row.language,
     customer_statement: row.customer_statement, verified_evidence: { transaction },
     actions_taken: JSON.parse(row.actions_json), unresolved_questions: JSON.parse(row.questions_json),
     history, history_has_more: events.length > 100, scope: 'synthetic_demo_only' });

@@ -29,7 +29,7 @@ test('pages are public; customers are isolated; replay and handoff work', async 
 
   const anaRows = await ana.call('/transactions');
   assertContract('transactionList', anaRows.body);
-  assert.deepEqual(new Set(anaRows.body.items.map(x => x.transaction_id)), new Set(['demo-tx-001', 'demo-tx-002', 'demo-tx-004', 'demo-tx-005']));
+  assert.deepEqual(new Set(anaRows.body.items.map(x => x.transaction_id)), new Set(['demo-tx-001', 'demo-tx-002', 'demo-tx-004', 'demo-tx-005', 'demo-tx-006']));
   assert.deepEqual((await bruno.call('/transactions')).body.items.map(x => x.transaction_id), ['demo-tx-003']);
 
   const request = { transaction_id: 'demo-tx-001', customer_statement: 'I do not recognize this charge.',

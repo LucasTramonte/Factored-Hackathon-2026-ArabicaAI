@@ -6,6 +6,8 @@ import { APPROVED_EXTRACTOR, extractShadow, readyExtractor } from './ai-transpor
 import { UPDATE_EVERY_MS, createStore } from '../../store/d1.js';
 import { deliver } from '../../notify/dispatch.js';
 import { STATUS_TEXT } from '../../notify/templates.js';
+import { urgencyOf } from './urgency.js';
+import URGENCY from '../../config/urgency.json' with { type: 'json' };
 
 /**
  * POST /intake/start: start or replay an explicit guided report; never return a case protocol. With the switch on,
@@ -78,6 +80,7 @@ async function finishIntake(request, env, store, ctx, complete) {
   let kind = complete ? 'complete' : 'incomplete';
   let evidence = null;
   let toolCalls = 0;
+  let urgency = 'normal';
   if (!prior && complete) {
     try { toolCalls++; evidence = await store.findOwnedTransaction(customerId, transactionId); }
     catch { kind = 'technical'; }
@@ -85,6 +88,8 @@ async function finishIntake(request, env, store, ctx, complete) {
     // Only a new confirmation is checked: a replay has a prior reservation and returns its receipt above this branch.
     // ponytail: check-then-write, so two confirms within the same instant can still open two reports; the agent queue shows both.
     if (kind === 'complete' && await store.openReportForTransaction(customerId, transactionId)) return fail(409, 'This charge already has an open report');
+    // Stated policy, not a fitted threshold (DF-024); one read of the customer's served purchases, up to 20 others.
+    if (kind === 'complete') urgency = urgencyOf(evidence, (await store.listTransactions(customerId, 21)).filter(t => t.transaction_id !== transactionId), URGENCY);
   }
   const live = await requireSession(request, store, 'customer');
   if (!live || live.customer_id !== customerId) return fail(401, 'Start a demo session first');
@@ -92,7 +97,7 @@ async function finishIntake(request, env, store, ctx, complete) {
   try {
     toolCalls++;
     const result = await store.persistIntakeHandoff({ customerId, episodeId, turnKey, payloadHash,
-      sessionHash, details,
+      sessionHash, details, urgency,
       completeCase: kind === 'complete' ? evidence : null, kind,
       evidence: { transaction: evidence, tool_status: kind === 'technical' ? 'failed' : 'ok' },
       actions: kind === 'complete' ? ['owned_transaction_retrieved', 'customer_confirmation_recorded'] : kind === 'technical' ? ['transaction_lookup_failed'] : [],
@@ -112,9 +117,10 @@ async function finishIntake(request, env, store, ctx, complete) {
     const protocol = receipt.complete_case_id ?? receipt.handoff_id;
     // A store of its own, so the send's queries never count in this response's metrics; skipped without a ctx.
     if (emailId && ctx?.waitUntil) ctx.waitUntil(deliver(env, createStore(env.DB),
-      { messageId: emailId, customerId, language: episode.language, reference: receipt.reference_short ?? protocol }));
+      { messageId: emailId, customerId, language: episode.language, reference: receipt.reference_short ?? protocol, urgent: receipt.urgency === 'high' }));
     return json({ episode_id: episodeId, protocol,
       reference_short: receipt.reference_short ?? null, kind: receipt.kind, accepted_at: receipt.accepted_at, replayed: result.replayed,
+      urgency: receipt.urgency, ...(receipt.urgency === 'high' && { block_card_line: URGENCY.demo_block_line }),
       // From the read-back row, so the customer sees only what was durably recorded.
       actions_taken: JSON.parse(receipt.actions_json), unresolved_questions: JSON.parse(receipt.questions_json),
       next_step_code: 'await_human_review' }, result.replayed ? 200 : 201);
