@@ -54,6 +54,31 @@ describe('CustomerPage', () => {
     expect(p.discClass()).toBe('disc disc--home');
   });
 
+  it('shows the promise from the first frame of the intro, not hidden or faded by any animation', () => {
+    const fixture = TestBed.createComponent(CustomerPage);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const el = root.querySelector<HTMLElement>('.intro .promise-line');
+    expect(el?.textContent?.trim()).toBe(fixture.componentInstance.t().promiseLine);
+    for (let n: HTMLElement | null = el; n && n !== root.parentElement; n = n.parentElement) {
+      const style = getComputedStyle(n);
+      expect(style.visibility).withContext(n.className).not.toBe('hidden');
+      expect(style.opacity).withContext(n.className).toBe('1');
+    }
+  });
+
+  it('puts the promise above the email field on sign-in', async () => {
+    const fixture = TestBed.createComponent(CustomerPage);
+    const p = fixture.componentInstance;
+    Object.defineProperty(p, 'demoPicker', { value: false });
+    p.start();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const promise = el.querySelector('.login-form .promise-line');
+    expect(promise?.textContent?.trim()).toBe(p.t().promiseLine);
+    expect(promise!.compareDocumentPosition(el.querySelector('#login-email')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('says on sign-in that it is simulated and shows only your own charges', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     const p = fixture.componentInstance;
@@ -622,7 +647,12 @@ describe('CustomerPage', () => {
       expect(el.querySelectorAll('.report-btn').length).toBe(1);
     });
 
-    it('says when more charges exist than are listed', async () => {
+    it('captions the charges with the window they come from', async () => {
+    const { el, p } = await home();
+    expect(el.querySelector('#cargos .box-body > .ar-caption')?.textContent?.trim()).toBe(p.t().windowCaption);
+  });
+
+  it('says when more charges exist than are listed', async () => {
       service.transactions.and.resolveTo({ items: [tx], has_more: true, coverage: 'fictitious_demo_data_only' });
       const { el, p } = await home();
       expect(el.textContent).toContain(p.t().moreCharges);

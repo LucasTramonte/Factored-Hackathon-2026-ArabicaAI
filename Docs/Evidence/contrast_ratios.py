@@ -15,6 +15,7 @@ STYLES = Path(__file__).resolve().parents[2] / "front-end" / "src" / "styles.css
 TEXT_PAIRS = [
     ("body text on page", "--ink", "--surface", 4.5),
     ("body text on raised box", "--ink", "--surface-raised", 4.5),
+    ("promise line, intro and sign-in (22px/600; 18px/600 at 720px and below)", "--ink", "--surface", 4.5),
     ("muted text on page", "--ink-muted", "--surface", 4.5),
     ("muted text on raised box", "--ink-muted", "--surface-raised", 4.5),
     ("muted chip text on sunken chip", "--ink-muted", "--surface-sunken", 4.5),

@@ -133,6 +133,7 @@ Measured from the tokens in `front-end/src/styles.css` with `Docs/Evidence/contr
 |---|---|---|---|---|
 | body text on page (`--ink` on `--surface`) | 16.90 | 16.76 | 4.5 | pass |
 | body text on raised box (`--ink` on `--surface-raised`) | 17.98 | 15.48 | 4.5 | pass |
+| promise line, intro and sign-in, 22px/600 (18px/600 at 720 px and below) (`--ink` on `--surface`) | 16.90 | 16.76 | 4.5 | pass |
 | muted text on page (`--ink-muted` on `--surface`) | 5.54 | 7.40 | 4.5 | pass |
 | muted text on raised box (`--ink-muted` on `--surface-raised`) | 5.90 | 6.83 | 4.5 | pass |
 | muted chip text on sunken chip (`--ink-muted` on `--surface-sunken`) | 5.20 | 7.59 | 4.5 | pass |
@@ -154,6 +155,8 @@ Measured from the tokens in `front-end/src/styles.css` with `Docs/Evidence/contr
 | strong line (inputs) on page (`--line-strong` on `--surface`) | 3.17 | 4.03 | 3.0 | pass |
 
 Reading the surface rows: card and chip edges against the page do not reach 3:1 in either theme. WCAG 1.4.11 asks that of boundaries needed to identify a control or its state, not of decorative container edges whose content identifies them, so they are recorded, not treated as failures. The input boundary, which does matter, passes in both themes (`--line-strong`, 3.17 light and 4.03 dark).
+
+The promise line on the intro is visible from the first frame: the intro step has no rise animation, so it is never transparent, and the line sits below the Start button visually (after it in layout order, before it in reading order) so it clears the large boot disc. Measured in headless Chrome from `styles.css`, with the line's top against the disc circle's bottom: at least 41 px clear from 961 to 1440 px wide, 26 px at 721 px (two lines in PT and EN), and 31 to 57 px from 320 to 720 px wide (ES, PT, EN; 320×568 to 600×800). No horizontal overlap check was needed: the line is below the disc at every width.
 
 Screenshots, fictitious seed, 1280×900: `screenshots/direct-client-home-light.png`, `screenshots/direct-client-home-dark.png`.
 
