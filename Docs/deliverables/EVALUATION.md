@@ -12,7 +12,7 @@ This document is the evaluation deliverable, like [`DATA_QUALITY.md`](DATA_QUALI
 
 **Status (2026-09-30):**
 - **Ready:** the baselines are scored, the frozen test set is built, verified and committed by hash, and the harness and statistics are in place.
-- **Not run yet:** the frozen comparison, which runs once per system version after the extractor is pre-registered. No result for the learned component on the frozen set exists yet.
+- **Not run yet:** the frozen comparison, which runs once per system version after the extractor is pre-registered. No result for the learned component on the frozen set exists yet. It now runs on Amazon Bedrock (same model, ADR-006 amendment 6). The order is: a person enables the model and sets a key; the isolated builder sets the reasoning level and re-runs development; then the frozen run happens once (`intake_agent/extractor/README.md`).
 
 ## 1. What is compared
 
