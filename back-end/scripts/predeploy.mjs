@@ -1,9 +1,9 @@
 /**
- * Deploy step, run by `npm run deploy` (the Workers Build deploy command) before `wrangler deploy`. It stops the
+ * Deploy step, run by `npm run deploy` (in `.github/workflows/deploy.yml`) before `wrangler deploy`. It stops the
  * deploy while the D1 binding is a local placeholder or ``vars`` would ship a local-only or personal value. Then it
  * brings remote D1 up to the migrations this code ships with: pending migrations that are additive (new tables,
  * indexes or columns that old code can ignore) are applied here, before the new Worker exists, so the running Worker
- * never meets a schema it lacks. A pending migration that is not additive (DROP, RENAME, a table rebuild, a NOT NULL
+ * never meets a schema it lacks. A pending migration that is not additive (DROP, RENAME, a table rebuild, an UPDATE or DELETE of existing rows, a NOT NULL
  * column without a default) stops the deploy for a person to apply on purpose. PR #19 once deployed a Worker that read
  * `context_cards` before migration 0003 was applied; in October 2026 five builds failed because a migration merged
  * before anyone applied it by hand. The step fails closed: if the remote state cannot be read, nothing deploys.
@@ -79,8 +79,9 @@ function statementsOf(sql) {
 
 /**
  * Why a migration is not additive, or [] when it is. Additive means the Worker already running keeps working once it
- * is applied: CREATE TABLE / INDEX / TRIGGER / VIEW, ALTER TABLE … ADD COLUMN (a NOT NULL one needs a DEFAULT),
- * INSERT and UPDATE of rows. Anything that drops, renames or rebuilds is for a person.
+ * is applied, and a Worker rollback needs nothing undone: CREATE TABLE / INDEX / TRIGGER / VIEW, ALTER TABLE … ADD
+ * COLUMN (a NOT NULL one needs a DEFAULT) and INSERT of new rows. Anything that drops, renames, rebuilds, or rewrites or
+ * deletes existing rows (UPDATE, DELETE) is for a person: no rollback restores the old values.
  */
 export function additiveProblems(sql) {
   const { statements, unterminated } = statementsOf(sql);
@@ -91,7 +92,7 @@ export function additiveProblems(sql) {
     if (/\b(DROP|RENAME)\b/.test(head)) problems.push(`drops or renames: ${statement.slice(0, 80)}`);
     else if (/^ALTER TABLE /.test(head) && !/^ALTER TABLE [^ ]+ ADD (COLUMN )?/.test(head)) problems.push(`alters a table: ${statement.slice(0, 80)}`);
     else if (/^ALTER TABLE /.test(head) && /\bNOT NULL\b/.test(head) && !/\bDEFAULT\b/.test(head)) problems.push(`adds a NOT NULL column without a default: ${statement.slice(0, 80)}`);
-    else if (!/^(ALTER TABLE|CREATE (UNIQUE )?INDEX|CREATE TABLE|CREATE TRIGGER|CREATE VIEW|INSERT|UPDATE|PRAGMA)\b/.test(head)) problems.push(`not additive: ${statement.slice(0, 80)}`);
+    else if (!/^(ALTER TABLE|CREATE (UNIQUE )?INDEX|CREATE TABLE|CREATE TRIGGER|CREATE VIEW|INSERT|PRAGMA)\b/.test(head)) problems.push(`not additive: ${statement.slice(0, 80)}`);
   }
   return problems;
 }

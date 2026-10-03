@@ -21,7 +21,7 @@ concurrency:
 jobs:
   deploy:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     environment:
@@ -43,8 +43,6 @@ jobs:
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "::warning::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not set; nothing was deployed (back-end/README.md, Deployment)."
             go=false
-          elif [ "${{ github.ref }}" != "refs/heads/main" ] && [ "$AUTOMATIC" != true ]; then
-            echo "::error::Deploy only from main."; exit 1
           elif [ "$AUTOMATIC" = true ]; then
             # Checked inside the concurrency group: a rerun of an older quality run never replaces a newer Worker.
             head=$(gh api "repos/${{ github.repository }}/commits/main" --jq .sha)
@@ -91,14 +89,14 @@ jobs:
         run: |
           check() { [ "$(curl -s -o /dev/null -m 15 -w '%{http_code}' "$@")" = "$expected" ]; }
           ok=true
-          sleep 10
-          expected=200; check "$BASE/healthz" || ok=false
+          # The new version can take a few seconds to reach every location: retry /healthz before judging it.
+          expected=200; for attempt in 1 2 3 4 5 6; do check "$BASE/healthz" && break; [ "$attempt" = 6 ] && ok=false; sleep 5; done
           expected=200; check "$BASE/" || ok=false
           expected=422; check -X POST "$BASE/auth/session" || ok=false   # the API answers without a token
           expected=401; check "$BASE/transactions" || ok=false           # customer data needs a session
           if [ "$ok" != true ]; then
             echo "::error::Smoke test failed for ${SHA::7}; rolling the Worker back to the previous version."
-            npx wrangler rollback --message "smoke test failed for ${SHA::7}"
+            npx wrangler rollback --yes --message "smoke test failed for ${SHA::7}"
             exit 1
           fi
           echo "Smoke test passed for ${SHA::7}."

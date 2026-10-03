@@ -56,14 +56,14 @@ test('the guard refuses a config that would ship the local test JWKS or the demo
 test('the deploy applies only additive migrations; anything that drops, renames or rebuilds is for a person', () => {
   for (const sql of ['CREATE TABLE t (id INTEGER PRIMARY KEY);', 'CREATE UNIQUE INDEX i ON t(id);',
     "ALTER TABLE t ADD COLUMN c TEXT NOT NULL DEFAULT 'x' CHECK (c IN ('x','y'));", 'ALTER TABLE t ADD COLUMN d TEXT;',
-    "-- a comment; with a semicolon\nINSERT INTO t VALUES (1); UPDATE t SET id = 2 WHERE id = 1;",
+    "-- a comment; with a semicolon\nINSERT INTO t VALUES (1); INSERT INTO t VALUES (2);",
     'CREATE TRIGGER tr AFTER INSERT ON t BEGIN UPDATE u SET n = n + 1; DELETE FROM v WHERE id = 1; END;',
     "INSERT INTO t VALUES ('a;b'), ('drop it'), ('it''s -- fine');"]) {
     assert.deepEqual(additiveProblems(sql), [], sql);
   }
   for (const [sql, why] of [['DROP TABLE t;', /drops or renames/], ['ALTER TABLE t RENAME TO u;', /drops or renames/],
     ['ALTER TABLE t DROP COLUMN c;', /drops or renames/], ['ALTER TABLE t ADD COLUMN c TEXT NOT NULL;', /NOT NULL column without a default/],
-    ['DELETE FROM t;', /not additive/], ['CREATE TABLE t2 (id INTEGER); /* rebuild */ DROP TABLE t;', /drops or renames/],
+    ['DELETE FROM t;', /not additive/], ['UPDATE customers SET display_name = NULL;', /not additive/], ['CREATE TABLE t2 (id INTEGER); /* rebuild */ DROP TABLE t;', /drops or renames/],
     ["INSERT INTO t VALUES ('--'); DROP TABLE t;", /drops or renames/], ["INSERT INTO t VALUES ('/*'); DROP TABLE t;", /drops or renames/],
     ["INSERT INTO t VALUES ('never closed); DROP TABLE t;", /unterminated/], ['CREATE TABLE t2 (id INTEGER); /* never closed DROP TABLE t;', /unterminated/]]) {
     assert.match(additiveProblems(sql).join(), why, sql);
