@@ -1,12 +1,15 @@
 /**
- * Deploy guard, run by `npm run deploy` before `wrangler deploy`. It stops the deploy while the
- * D1 binding is a local placeholder, or while the remote database lacks a migration that this
- * code ships with. PR #19 once deployed a Worker that read `context_cards` before migration 0003
- * was applied, and login returned 503 until the migration ran. The guard fails closed: if the
- * remote state cannot be read, the deploy stops.
+ * Deploy step, run by `npm run deploy` (the Workers Build deploy command) before `wrangler deploy`. It stops the
+ * deploy while the D1 binding is a local placeholder or ``vars`` would ship a local-only or personal value. Then it
+ * brings remote D1 up to the migrations this code ships with: pending migrations that are additive (new tables,
+ * indexes or columns that old code can ignore) are applied here, before the new Worker exists, so the running Worker
+ * never meets a schema it lacks. A pending migration that is not additive (DROP, RENAME, a table rebuild, a NOT NULL
+ * column without a default) stops the deploy for a person to apply on purpose. PR #19 once deployed a Worker that read
+ * `context_cards` before migration 0003 was applied; in October 2026 five builds failed because a migration merged
+ * before anyone applied it by hand. The step fails closed: if the remote state cannot be read, nothing deploys.
  */
 import { execFileSync } from 'node:child_process';
-import { readdir } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { experimental_readRawConfig as readRawConfig } from 'wrangler';
@@ -41,6 +44,24 @@ export function appliedFromWranglerJson(text) {
 }
 
 /**
+ * Why a migration is not additive, or [] when it is. Additive means the Worker already running keeps working once it
+ * is applied: CREATE TABLE / INDEX / TRIGGER / VIEW, ALTER TABLE … ADD COLUMN (a NOT NULL one needs a DEFAULT),
+ * INSERT and UPDATE of rows. Anything that drops, renames or rebuilds is for a person.
+ */
+export function additiveProblems(sql) {
+  const statements = sql.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').split(';').map(t => t.trim().replace(/\s+/g, ' ')).filter(Boolean);
+  const problems = [];
+  for (const statement of statements) {
+    const head = statement.toUpperCase();
+    if (/\b(DROP|RENAME)\b/.test(head)) problems.push(`drops or renames: ${statement.slice(0, 80)}`);
+    else if (/^ALTER TABLE /.test(head) && !/^ALTER TABLE [^ ]+ ADD (COLUMN )?/.test(head)) problems.push(`alters a table: ${statement.slice(0, 80)}`);
+    else if (/^ALTER TABLE /.test(head) && /\bNOT NULL\b/.test(head) && !/\bDEFAULT\b/.test(head)) problems.push(`adds a NOT NULL column without a default: ${statement.slice(0, 80)}`);
+    else if (!/^(ALTER TABLE|CREATE (UNIQUE )?INDEX|CREATE TABLE|CREATE TRIGGER|CREATE VIEW|INSERT|UPDATE|PRAGMA)\b/.test(head)) problems.push(`not additive: ${statement.slice(0, 80)}`);
+  }
+  return problems;
+}
+
+/**
  * Throws when ``vars`` would ship a local-only variable: ``COGNITO_TEST_JWKS`` lets anyone holding its private key sign in,
  * and ``DEMO_PICKER`` lets anyone become any customer or agent without signing in. ``SES_FROM`` is a person's address,
  * so it is a secret, never a committed var (issue #70). Secrets are not checked here.
@@ -60,15 +81,24 @@ async function main() {
     throw new Error('Create the remote D1 database and replace the placeholder database_id before deployment');
   }
   const wrangler = resolve(ROOT, 'node_modules/wrangler/bin/wrangler.js');
-  const out = execFileSync(process.execPath, [wrangler, 'd1', 'execute', db.database_name, '--remote', '--json',
-    '--command', 'SELECT name FROM d1_migrations ORDER BY id'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
-  const pending = pendingMigrations(await localMigrations(), appliedFromWranglerJson(out));
+  const run = args => execFileSync(process.execPath, [wrangler, ...args], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+  const applied = () => appliedFromWranglerJson(run(['d1', 'execute', db.database_name, '--remote', '--json',
+    '--command', 'SELECT name FROM d1_migrations ORDER BY id']));
+  const files = await localMigrations();
+  const pending = pendingMigrations(files, applied());
   if (pending.length) {
-    throw new Error(`Remote D1 is missing migrations ${pending.join(', ')}. After they pass the local tests, run `
-      + `npx wrangler d1 migrations apply ${db.database_name} --remote, then retry the deploy. `
-      + 'See CONTRIBUTING.md (migrations go remote before merge).');
+    const blocked = (await Promise.all(pending.map(async f => [f, additiveProblems(await readFile(resolve(ROOT, 'migrations', f), 'utf8'))])))
+      .filter(([, problems]) => problems.length);
+    if (blocked.length) {
+      throw new Error(`Remote D1 is missing migrations that are not additive (${blocked.map(([f, p]) => `${f}: ${p[0]}`).join('; ')}). `
+        + `A person applies them on purpose: npx wrangler d1 migrations apply ${db.database_name} --remote, then retries the deploy.`);
+    }
+    console.log(`Applying ${pending.length} additive migration(s) to remote D1 before deploying: ${pending.join(', ')}`);
+    run(['d1', 'migrations', 'apply', db.database_name, '--remote']);
+    const still = pendingMigrations(files, applied());
+    if (still.length) throw new Error(`Remote D1 still lacks ${still.join(', ')} after applying; refusing to deploy`);
   }
-  console.log(`Remote D1 has all ${(await localMigrations()).length} migrations; deploying`);
+  console.log(`Remote D1 has all ${files.length} migrations; deploying`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

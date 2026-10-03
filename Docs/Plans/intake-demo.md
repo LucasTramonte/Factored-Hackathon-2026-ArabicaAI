@@ -77,6 +77,7 @@ The Worker `factored-hackathon-2026-arabicaai` runs at https://factored-hackatho
 - Loading the Gold slice into production is a reviewed, manual step (`back-end/README.md`, "Deployment").
 - On 2026-10-01, PR #54 merged migration 0008 without applying it to remote D1, so every Workers Build from `main` after 20:55 UTC stopped at the deploy guard and the live version stayed `17450a30`.
 - On 2026-10-02, the migration was applied by hand at 02:35 UTC and a manual `npm run deploy` at 02:40 UTC published `3412aff1` from `main` `093e0e7`; remote D1 holds migrations 0001-0008.
+- On 2026-10-02 and 2026-10-03 the same happened with migrations 0014, 0015 and 0016 (five failed builds). Since the review follow-ups PR, `npm run deploy` applies pending additive migrations itself, so a merge no longer waits for a person.
 - Build settings and the post-deploy checklist are in [back-end/README.md](../../back-end/README.md).
 
 ### Customer sign-in (Cognito)

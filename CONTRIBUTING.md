@@ -53,7 +53,7 @@ Add a scope when it helps, for example `feat(intake): …`, `fix(front-end): …
   - the risk and the rollback;
   - any D1 or data impact.
 - **Any API change comes with the adversarial tests** listed in [`AGENTS.md`](AGENTS.md).
-- **A PR that adds a file under `back-end/migrations/` applies it before it merges.** After the local tests pass, run `npx wrangler d1 migrations apply arabica-intake-demo --remote`, and say so in the PR body. Otherwise the Workers Build stops at the deploy guard.
+- **Migrations are additive, and the deploy applies them.** A file under `back-end/migrations/` passes the local tests and the additive check in CI (`test/unit/predeploy.test.js`); after the merge, the Workers Build's `npm run deploy` applies it to remote D1 before the new Worker goes live. Nobody runs `--remote` for it. A migration that must drop, rename or rebuild is split into additive steps, or a person applies it on purpose before the merge and says so in the PR.
 - **Before merging:** CI is green, one human has approved, and every review conversation is resolved.
 - **Squash merge by default.** Use a merge commit only for a deliberate integration PR whose commits must stay separate on `main`, and say so in the PR.
 - **Stacked PRs stay mergeable on their own.** After each squash merge, [`stack-cascade.yml`](.github/workflows/stack-cascade.yml) retargets the PR stacked on the merged one to `main` and merges `main` forward through the stack ([`scripts/stack-cascade.sh`](scripts/stack-cascade.sh)). It never rebases or force-pushes, and it comments on the PR when a person must resolve a real conflict.
