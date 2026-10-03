@@ -66,5 +66,5 @@ Tagged on `64ae03a` (#84) on 2026-10-03; [GitHub Release](https://github.com/Luc
 
 - Worker version `f76c7f7b-765d-4952-a22a-13263a8e060b`, tag `main-64ae03a`, deployed 2026-10-03 15:16 UTC by the GitHub Actions `deploy` workflow.
 - D1 migrations 0001–0017 on remote `arabica-intake-demo`.
-- Cohort: 796 dataset customers (`slice_version` not re-read at tag time); fictitious seed `b9e12385148edf82` (six identities).
+- Cohort: 796 dataset customers, `slice_version` `c32369c464eec13a` (one part, `4fe90381be8d8fef`), from the cohort manifest (`data/gold_cohort/2026-06-17/manifest.json`); remote `seed_loads` was not re-read at tag time. Fictitious seed: six identities.
 - Extractor switch: off.

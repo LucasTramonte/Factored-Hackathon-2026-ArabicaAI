@@ -8,7 +8,7 @@ The evaluators asked for exactly this: "properly explaining the problem (PLEASE 
 - **Data:** the local full Silver build (`data/full_local/latam_bank.duckdb`), opened read-only and queried with grouped SQL only (appendix). No record or identifier is reproduced here.
 - **Quality gate:** the adversarial review of 2026-10-03 re-ran it: 390 checks, 0 errors, 7 warnings. One of the warnings is that all 44,570 complaint→product links point to another customer's product (DF-002).
 - **Windows:** problem-sizing KPIs and design diagnostics use business timestamps from 2023-06-17 to 2025-12-31 (929 calendar days, empty days included), following [ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md). Survey figures marked *full period* (2023-06-17 to 2026-06-19) are exploratory. Outcome timestamps are bounded separately: 38 resolution dates and 7 closing dates of the design cohort fall in 2026.
-- **Re-run before publishing:** run every query again after `make pipeline` passes, and publish the SQL with the figures.
+- **Re-run before publishing:** run every query again after `make pipeline` passes, and publish the SQL with the figures. The appendix reproduces every figure in this document; the agent-level cell sizes in F1 come from the adversarial review's own grouped query.
 
 ## 1. Problem-sizing KPIs
 
@@ -62,8 +62,8 @@ Verdicts are from the adversarial review of 2026-10-03, reproduced before this e
 - **F1. No substantial association was found between the question answers and the measured experience.**
   - Answers to the wait question are approximately uniform across 1–5.
   - Its Pearson correlation with the interaction's `wait_time_seconds` is 0.0003, over 54,331 complete pairs. Its correlation with `main_score` (survey types mixed) is −0.0001. The design-window Spearman correlation is −0.0013.
-  - Mean answers stay between 2.98 and 3.03 across wait quintiles.
-  - Across countries and survey types, no correlation exceeds 0.022 in absolute value; across months, none exceeds 0.10.
+  - Mean answers stay between 2.99 and 3.02 across wait quintiles (full period, complete pairs).
+  - For the wait question, the largest absolute correlation with wait is 0.006 across countries, 0.013 across survey types and 0.07 across months (cells with at least 100 pairs). The adversarial review's broader check, over all five questions in the design window, found at most 0.022 and 0.10.
   - **Limits:** wait is observed only for Phone; agent-level cells have 5 to 61 pairs; and the fixed slot prevents a slot comparison. So "no signal at all" is not proven.
   - **Use:** don't chart these answers as evidence of wait or quality.
 - **F2. Comments go with lower scores, but not with longer waits.**
@@ -193,4 +193,43 @@ SELECT count(resolution_satisfaction) FILTER (WHERE closing_date < TIMESTAMP '20
        count(*) cohort
 FROM silver.fact_complaints
 WHERE subcategory = 'Cargo no reconocido' AND creation_date < TIMESTAMP '2026-01-01';
+-- §3: score ranges by survey type, and CSAT 4-5 share by resolution
+SELECT survey_type, count(*), min(main_score), max(main_score) FROM silver.fact_satisfaction_surveys GROUP BY 1;
+SELECT i.was_resolved, avg((s.main_score >= 4)::int) csat_4_5_share
+FROM silver.fact_satisfaction_surveys s JOIN silver.fact_call_center_interactions i USING (interaction_id)
+WHERE s.survey_type = 'CSAT' GROUP BY 1;
+
+-- §3: question occurrences, answers and slots; comment templates and counts
+WITH u AS (
+  SELECT 1 slot, question_1_text t, question_1_response r FROM silver.fact_satisfaction_surveys UNION ALL
+  SELECT 2, question_2_text, question_2_response FROM silver.fact_satisfaction_surveys UNION ALL
+  SELECT 3, question_3_text, question_3_response FROM silver.fact_satisfaction_surveys)
+SELECT t, count(*) occurrences, count(r) answers, min(slot), max(slot) FROM u WHERE t IS NOT NULL GROUP BY t;
+SELECT count(DISTINCT open_comments) templates, count(open_comments) comments FROM silver.fact_satisfaction_surveys;
+SELECT comment_sentiment, count(*) FROM silver.fact_satisfaction_surveys GROUP BY 1;
+
+-- §3: observed wait by channel (design window)
+SELECT i.channel, count(*) contacts, count(i.wait_time_seconds) observed_waits
+FROM silver.fact_satisfaction_surveys s JOIN silver.fact_call_center_interactions i USING (interaction_id)
+WHERE s.survey_date < TIMESTAMP '2026-01-01' GROUP BY 1;
+
+-- F1: mean wait answer by wait quintile, largest |r| by country, survey type and month (cells with >= 100 pairs),
+-- and the design-window Spearman correlation (midranks for ties)
+WITH w AS (
+  SELECT i.wait_time_seconds wait, s.survey_type, s.survey_date, cu.country,
+         CASE WHEN question_2_text LIKE '%espera%' THEN question_2_response END r      -- the wait question is always slot 2
+  FROM silver.fact_satisfaction_surveys s JOIN silver.fact_call_center_interactions i USING (interaction_id)
+  LEFT JOIN silver.dim_customers cu ON cu.customer_id = s.customer_id)
+SELECT b, min(wait), max(wait), avg(r) FROM (
+  SELECT ntile(5) OVER (ORDER BY wait) b, wait, r FROM w WHERE r IS NOT NULL AND wait IS NOT NULL) GROUP BY b ORDER BY b;
+-- (same CTE)
+SELECT dim, max(abs(rho)) FILTER (WHERE n >= 100) largest_abs_r FROM (
+  SELECT 'country' dim, country v, count(wait) FILTER (WHERE r IS NOT NULL) n, corr(r, wait) rho FROM w GROUP BY country UNION ALL
+  SELECT 'survey_type', survey_type, count(wait) FILTER (WHERE r IS NOT NULL), corr(r, wait) FROM w GROUP BY survey_type UNION ALL
+  SELECT 'month', strftime(survey_date, '%Y-%m'), count(wait) FILTER (WHERE r IS NOT NULL), corr(r, wait) FROM w GROUP BY 2) GROUP BY dim;
+-- (same CTE)
+SELECT corr(rr, wr) spearman FROM (
+  SELECT rank() OVER (ORDER BY r) + (count(*) OVER (PARTITION BY r) - 1) / 2.0 rr,
+         rank() OVER (ORDER BY wait) + (count(*) OVER (PARTITION BY wait) - 1) / 2.0 wr
+  FROM w WHERE r IS NOT NULL AND wait IS NOT NULL AND survey_date < TIMESTAMP '2026-01-01');
 ```
