@@ -11,7 +11,7 @@ REPORT_RUN ?= $(CURDIR)/data_foundation/runs/$(shell date -u +%Y%m%dT%H%M%SZ)
 
 export S3_BUCKET AWS_REGION AWS_PROFILE DATA_DIR
 
-.PHONY: setup test test-evaluation compile bronze bronze-full bronze-local-full silver quality findings gold pipeline pipeline-local pipeline-gold docker-build docker-test docker-pipeline report
+.PHONY: setup test test-evaluation compile bronze bronze-full bronze-local-full silver quality findings gold pipeline pipeline-local pipeline-gold docker-build docker-test docker-pipeline report product-report
 
 setup:
 	python3 -m venv .venv
@@ -66,6 +66,11 @@ pipeline-gold:
 report:
 	@test -n "$(QUALITY_REPORT)" || (echo "Set QUALITY_REPORT to a full quality_results.json" && exit 1)
 	$(PYTHON) -m data_foundation.scripts.run_marketing_product --db "$(DUCKDB_PATH)" --quality "$(QUALITY_REPORT)" --output "$(REPORT_RUN)"
+
+# The unrecognized-charge baseline (KPIs, the "before" picture, the segment cut). Add PUBLISH=data_foundation/reports after review.
+product-report:
+	@test -n "$(QUALITY_REPORT)" || (echo "Set QUALITY_REPORT to a full quality_results.json" && exit 1)
+	$(PYTHON) -m data_foundation.scripts.run_product_report --db "$(DUCKDB_PATH)" --quality "$(QUALITY_REPORT)" --output "$(REPORT_RUN)" $(if $(PUBLISH),--publish "$(PUBLISH)")
 
 docker-build:
 	docker build --tag latam-bank-pipeline:test .

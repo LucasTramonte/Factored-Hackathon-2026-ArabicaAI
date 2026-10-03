@@ -47,9 +47,9 @@ def _parse(path: Path) -> Query:
     return Query(meta["id"], meta["title"], meta["scope"], meta["memory"], text, path)
 
 
-def load_queries() -> list[Query]:
-    """All finding queries, ordered by file name (and so by id)."""
-    return [_parse(p) for p in sorted(QUERY_DIR.glob("DF-*.sql"))]
+def load_queries(query_dir: Path = QUERY_DIR, pattern: str = "DF-*.sql") -> list[Query]:
+    """All queries in ``query_dir`` with this header format, ordered by file name (and so by id)."""
+    return [_parse(p) for p in sorted(query_dir.glob(pattern))]
 
 
 def load_query(finding_id: str) -> Query:
