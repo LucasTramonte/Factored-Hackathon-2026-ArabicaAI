@@ -145,6 +145,17 @@ test("an update an admin asks for while acting is queued to the admin's own addr
   assert.equal(first.status, 202); assertContract('updateQueued', first.body); assert.deepEqual(first.body, { queued: true });
   const again = await admin.call('/reports/update', { protocol: receipt.protocol });
   assert.equal(again.status, 429, 'the 5-minute limit still applies'); assert.ok(Number(again.headers.get('Retry-After')) > 0);
+  const ana = await signedIn(['customer'], 'demo-ana');
+  const anaEpisode = (await ana.call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
+    customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() })).body.episode_id;
+  const anaReceipt = (await ana.call('/intake/handoff', { episode_id: anaEpisode, kind: 'incomplete', idempotency_key: crypto.randomUUID() })).body;
+  const foreign = await admin.call('/reports/update', { protocol: anaReceipt.protocol });
+  assert.equal(foreign.status, 404, "an acting admin can't ask an update for another customer's report");
+  assert.deepEqual(foreign.body, { detail: 'Report not found' });
+  await store(async s => {
+    assert.deepEqual(await s.findEmails('demo-diego', anaReceipt.reference_short), [], 'nothing queued to the admin');
+    assert.deepEqual((await s.findEmails('demo-ana', anaReceipt.reference_short)).filter(r => r.template === 'update'), [], 'nor to the owner');
+  });
   const agent = client(); assert.equal((await agent.call('/demo/agent-session', {})).status, 200);
   for (const status of ['in_review', 'closed']) {
     assert.equal((await agent.call('/agent/intake-status', { protocol: receipt.protocol, status })).status, 200);
