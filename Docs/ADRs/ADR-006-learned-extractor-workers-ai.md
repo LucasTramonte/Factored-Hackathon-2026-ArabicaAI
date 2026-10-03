@@ -53,7 +53,7 @@ The question is which model, doing what, and how we avoid spending more than the
 
 ## Pre-freeze amendments (2026-09-30)
 
-These were written before any frozen scoring. Amendments 1, 2, 6, 7 and 8 change how a result is measured and what follows from it, not the result itself. Amendments 3 and 4 change labels and policy, so they need Manoella's approval as the unexposed reviewer (decision 5), given in the PR that carries them.
+These were written before any frozen scoring. Amendments 1, 2, 6 and 7 change how a result is measured and what follows from it, not the result itself. Amendment 8 only supplies documentation sources for a choice amendment 2 already makes. Amendments 3 and 4 change labels and policy, so they need Manoella's approval as the unexposed reviewer (decision 5), given in the PR that carries them.
 
 1. **Latency is measured on enough calls to decide.** Forty-eight calls can't estimate a p95: a two-sided distribution-free 95% interval needs 72 values (a one-sided 95% upper bound needs 59), and at a true p95 of exactly 3 s the old trigger fires 43% of the time. The rule, fixed before the measurement it applies to:
    - **Sample:** at least 150 model-calling executions on the development split (10 repetitions of the 16 model-calling cases), each counted at its wall time, timeouts included at their full duration.
