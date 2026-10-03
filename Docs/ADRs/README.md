@@ -15,6 +15,7 @@ Technical and product-scope decisions for the ArabicaAI hackathon solution. Each
 | [007](ADR-007-customer-identity-cognito-email-otp.md) | Customer identity: Amazon Cognito email one-time codes | Proposed (2026-10-02) |
 | [008](ADR-008-english-report-language.md) | English as a report language | Proposed (2026-10-02) |
 | [009](ADR-009-recent-charges-resolution.md) | Recent charges as the normal resolution path (view and display acknowledgement) | Proposed (2026-10-02) |
+| [010](ADR-010-report-reasons-and-help-entry.md) | Report reasons (one tap, seven authored options) and the "?" help entry | Proposed (2026-10-03) |
 
 ## Format
 
