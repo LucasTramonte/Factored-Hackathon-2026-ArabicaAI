@@ -23,7 +23,7 @@ The question is which model, doing what, and how we avoid spending more than the
    - So the comparison with the checklist measures how well each system *reads the message*. Both sides follow the same policy.
 2. **Start with the smallest capable model in the runtime we already have:** Workers AI `@cf/openai/gpt-oss-20b`.
    - It runs inside the Cloudflare account that already serves the Worker, through the same binding. There is no new provider, no new credential in the Worker, and the data doesn't leave Cloudflare.
-   - It fits the free allocation. ADR-004's envelope, at 12k input and 2k output tokens, gives $0.0030 an episode and 36 free episodes a day, and extraction prompts are much shorter than that. The real tokens and cost are measured in the pre-registered run.
+   - It fits the free allocation. ADR-004's envelope, at 12k input and 2k output tokens, gives $0.0030 an episode and 36 free episodes a day, and extraction prompts are much shorter than that. The real tokens and cost are measured in the pre-registered run. (This was the Workers AI rationale; amendment 6 moves the evaluation to Bedrock, billed per token.)
 3. **Move to a bigger model only on evidence, in a fixed order.** The rungs are:
    1. `gpt-oss-20b`;
    2. a larger Workers AI model (for example `llama-3.3-70b`, $0.0080 an episode in ADR-004);
