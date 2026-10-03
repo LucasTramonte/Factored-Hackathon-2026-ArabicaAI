@@ -143,7 +143,7 @@ We asked the organizers (Factored) whether evaluators need a trusted identity se
 - **A trusted identity service is not mandatory** for the evaluator flow. What judges value is a well-defined problem, backed by KPIs and values, and a demo whose limitations are fully listed.
 - **Judges' emails:** after the submission, we ping the organizers' contacts and ask for them. We don't guess or hard-code evaluator emails.
 
-When the emails arrive, each evaluator is enrolled as `admin` on one of `demo-diego`, `demo-elena` and `demo-marco` (synthetic data only), and their address is verified in SES if they should receive report emails. The same identities are reused for later test runs. Evaluators never receive production credentials or records outside the synthetic demo.
+Evaluator admins can open individual reports in the approved agent queue (statement and verified evidence, no customer id); there is no unrestricted customer browser. When the emails arrive, each evaluator is enrolled as `admin` on one of `demo-diego`, `demo-elena` and `demo-marco` (synthetic data only), and their address is verified in SES if they should receive report emails. The same identities are reused for later test runs. Evaluators never receive production credentials or records outside the synthetic demo.
 
 ## Known limitations
 
@@ -155,3 +155,4 @@ When the emails arrive, each evaluator is enrolled as `admin` on one of `demo-di
 - **No RLS on D1;** isolation rests on Worker predicates and their tests.
 - **Sessions last one hour** and survive a Cognito disable until they expire, unless a person deletes them (section 9).
 - **SES sandbox:** only verified recipients get email.
+- **Email is attempted once,** after the response; a failure is not retried, and "sent" means SES accepted the request, not that it was delivered.
