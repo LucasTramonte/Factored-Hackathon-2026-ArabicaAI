@@ -1,6 +1,6 @@
 # Reproducing the data foundation and intake evidence
 
-**Recorded service state:** v0.2.0, Worker `f76c7f7b` (`main-64ae03a`), deployed 2026-10-03 with D1 migrations 0001–0017 and the extractor off ([release evidence](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0)). Cognito email sign-in and SES sandbox notifications are included. App changes in #87–#90 are built and unmerged; offline Bedrock evaluation in #91 is gated. A newer deployment has not been re-read. The [architecture](ARCHITECTURE.md) separates these states from the never-deployed Lambda/Postgres target.
+**Deployed service state:** main `79c324b`, Worker `79aa39a9` (`main-79c324b`), deployed 2026-10-03 by the GitHub Actions deploy workflow, D1 migrations 0001–0020, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0); #87–#92 are deployed and not yet tagged. Cognito email sign-in and SES sandbox notifications are included. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7) and the frozen comparison is gated. The [architecture](ARCHITECTURE.md) separates these states from the never-deployed Lambda/Postgres target.
 
 ## Prerequisites
 
@@ -69,14 +69,14 @@ The Worker and Angular client need Node 22+. `make intake-setup` installs their 
 The [auth runbook](../Plans/auth-runbook.md) describes Cognito enrolment and the SES sandbox. The online service remains deterministic, with the extractor off. Offline transport, reporting and freeze-integrity fixtures need no key and make no cloud/model request:
 
 ```bash
-.venv/bin/python -m pytest intake_agent/extractor/test_bedrock.py \
-  intake_agent/extractor/test_workers_ai.py evals/intake/test_report_cuts.py \
+.venv/bin/python -m pytest intake_agent/extractor/test_vertex.py \
+  intake_agent/extractor/test_bedrock.py intake_agent/extractor/test_workers_ai.py evals/intake/test_report_cuts.py \
   evals/intake/test_frozen_report.py evals/intake/preregistration/test_prereg.py -q
 ```
 
 One existing deadline fixture binds a loopback HTTP server, so a restricted environment must permit localhost sockets. The test still calls no external endpoint.
 
-Bedrock setup and key refresh are in the [extractor runbook](../../intake_agent/extractor/README.md). Short-term keys are region-bound and expire with the generating session, at most 12 hours later; credentials are supplied privately by a person, never read from files for this review. The frozen run remains blocked on Manoella's approval, the isolated builder's development revision and trigger report, checked prompt/transport/shared-code hashes and a human-created tag. No frozen messages, labels or model outputs are required to run the mocked checks above.
+Vertex AI sign-in and token refresh are in the [extractor runbook](../../intake_agent/extractor/README.md). The access token comes from `gcloud auth print-access-token` and lasts about an hour; a person supplies it in the environment, and it is never committed or read from files for this review. The frozen run remains blocked on Manoella's approval of amendment 7, the ADR-006 trigger reports, checked prompt/transport/shared-code hashes and a human-created tag. No frozen messages, labels or model outputs are required to run the mocked checks above.
 
 After the approved one-time batch, the custodian generates [language/family/authored-segment cuts](EVALUATION.md#language-and-segment-reporting) from its saved result and exact-hash-matched corpus. This calls no model. Missing metadata and sparse groups stay visible; D1 has no segment field, and authored fixture segments are not source-customer segment performance. Do not join fictitious frozen customers to source customers.
 

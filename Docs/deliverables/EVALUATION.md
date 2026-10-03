@@ -12,7 +12,7 @@ This document is the evaluation deliverable, like [`DATA_QUALITY.md`](DATA_QUALI
 
 **Status (2026-10-03):**
 - **Ready:** the baselines are scored, the frozen test set is built, verified and committed by hash, and the harness and statistics are in place.
-- **Not run yet:** the frozen comparison, which runs once per system version after the extractor is pre-registered. No result for the learned component on the frozen set exists yet. Bedrock is the proposed evaluation host (same model, ADR-006 amendment 6). It still needs Manoella's approval, the isolated builder's development-only reasoning revision and trigger report, a checked pre-registration and a human-created tag. A person supplies a valid region-bound key and checks quotas before the authorized batch ([extractor runbook](../../intake_agent/extractor/README.md)).
+- **Not run yet:** the frozen comparison, which runs once per system version after the extractor is pre-registered. No result for the learned component on the frozen set exists yet. Google Vertex AI is the evaluation host (same weights, ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan). On Vertex at the provider default reasoning level, development was 180 of 180 correct with 0 unsafe, but the latency trigger fired (p95 2.64 s, interval upper bound 3.08 s > 3.00 s). It still needs Manoella's approval of amendment 7, the isolated builder's development-only reasoning revision and trigger report, a checked pre-registration and a human-created tag. A person supplies a fresh access token before the authorized batch ([extractor runbook](../../intake_agent/extractor/README.md)).
 
 ## 1. What is compared
 
@@ -20,7 +20,7 @@ This document is the evaluation deliverable, like [`DATA_QUALITY.md`](DATA_QUALI
 |---|---|
 | Always-handoff reference | Sends every case to a person. It is the floor any useful system must beat |
 | Checklist baseline (`evals/intake/baseline.py`) | Hand-written rules. They read amounts, dates, currencies and merchants with fixed patterns |
-| Extractor v1 ([ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md)) | A pretrained gpt-oss-20b model that **only turns the message into facts**. Amendment 6 proposes Amazon Bedrock (`openai.gpt-oss-20b-1:0`) for offline evaluation; historical development used Workers AI. The same written policy as the checklist decides the action from those facts, the session and the customer's own purchases. The online extractor stays off; its future host is a separate decision |
+| Extractor v1 ([ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md)) | A pretrained gpt-oss-20b model that **only turns the message into facts**. Amendment 7 runs the offline evaluation on Google Vertex AI (`openai/gpt-oss-20b-maas`, the same weights); historical development used Workers AI. The same written policy as the checklist decides the action from those facts, the session and the customer's own purchases. The online extractor stays off; its future host is a separate decision |
 
 So the comparison measures one thing: **how well each system reads the message.** Identity, ownership, confirmation and permissions stay deterministic in both, outside anything a model writes.
 

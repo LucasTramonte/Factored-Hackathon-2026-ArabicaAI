@@ -6,9 +6,9 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 
 **Evaluators: start with [`SYSTEM_DESIGN.md`](Docs/deliverables/SYSTEM_DESIGN.md).** It tells the whole story in one narrative: the customer and the problem, what we built, how it works, how we know it works, what it costs, and what is missing. The [reading guide](Docs/README.md) then maps each point of the brief to the document that answers it.
 
-![Recorded v0.2.0 architecture: Angular, Cloudflare Worker and D1 with Cognito email sign-in and SES sandbox notifications; a read-only S3, Bronze, Silver, quality and Gold batch produces a reviewed D1 seed. Offline Bedrock evaluation remains gated and the online extractor is off. App PRs 87–90 are unmerged; the Lambda and Postgres target is design only](Docs/Evidence/diagrams/current-workflow.png)
+![Deployed architecture: Angular, Cloudflare Worker and D1 with Cognito email sign-in and SES sandbox notifications, deployed from GitHub Actions after CI; a read-only S3, Bronze, Silver, quality and Gold batch produces a reviewed D1 seed. The offline evaluation calls Vertex AI and has not run on the frozen set; the online extractor is off. The Lambda and PostgreSQL AWS target was never deployed.](Docs/Evidence/diagrams/current-workflow.png)
 
-*Recorded v0.2.0 deployment: Worker `f76c7f7b` (`main-64ae03a`), deployed on 2026-10-03, with D1 migrations 0001–0017 and the extractor off ([release evidence](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0)). Later deployment state has not been re-read here. Solid paths are the recorded deployment and existing batch; dashed paths are the proposed offline Bedrock evaluation, pending approval and pre-registration. Editable source: [`current-workflow.svg`](Docs/Evidence/diagrams/current-workflow.svg). The priced AWS production target is in the [appendix](#appendix-aws-production-target).*
+*Deployed state: main `79c324b`, Worker `79aa39a9` (`main-79c324b`), deployed 2026-10-03 by the GitHub Actions deploy workflow, D1 migrations 0001–0020, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0); the app changes of #87–#92 are deployed but not yet tagged. Solid paths are deployed; dashed paths are the offline evaluation, not run on the frozen set.*
 
 ## Contents
 
@@ -65,9 +65,9 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
             (email code → ID token)  evals/intake (checklist baseline, episode scorer) over HTTP
 ```
 
-The Worker and D1 remain the single runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito proves who signs in, and the Worker issues its own session from the verified token. SES only delivers email; cases stay in D1. These integrations are in the recorded v0.2.0 deployment, with Cognito replacing the former shared gates ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). SES remains in the sandbox, so only verified recipients receive email.
+The Worker and D1 remain the single runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito proves who signs in, and the Worker issues its own session from the verified token. SES only delivers email; cases stay in D1. These integrations are deployed, with Cognito replacing the former shared gates ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). SES remains in the sandbox, so only verified recipients receive email.
 
-The app changes in PRs #87–#90 are built and unmerged; they are not claimed as deployed. PR #91 prepares offline Bedrock evaluation. The frozen comparison still needs Manoella's approval, an isolated builder's development revision, checked pre-registration and a human tag ([evaluation status](Docs/deliverables/EVALUATION.md)). Bedrock is an evaluation host; no online model call is enabled.
+The app changes of #87–#92 (atomic one-open-report, the customer history and first-open time for agents, receipt feedback, "Not resolved" links, the sign-in code help) are merged and deployed. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan). The frozen comparison still needs Manoella's approval of amendment 7, a checked pre-registration and a human tag ([evaluation status](Docs/deliverables/EVALUATION.md)).
 
 | Component | Path | What it does |
 |---|---|---|
