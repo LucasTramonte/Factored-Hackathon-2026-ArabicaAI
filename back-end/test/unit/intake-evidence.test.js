@@ -21,7 +21,7 @@ async function setup(t) {
   db.exec("INSERT INTO customers(customer_id,display_name) VALUES('ana','Ana'),('bruno','Bruno'); INSERT INTO transactions VALUES('tx-ana','ana',NULL,'2026-06-17 12:00:00','Shop','10.00','ARS')");
   const store = createStore({ prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
     batch: async statements => { db.exec('BEGIN'); try { const result = statements.map(s => s.all()); db.exec('COMMIT'); return result; } catch(e) { db.exec('ROLLBACK'); throw e; } } });
-  const start = async (now,expiresAt,customerId='ana') => (await store.startIntake({customerId,language:'es',statement:'No reconozco este cargo.',key:crypto.randomUUID(),now,expiresAt})).episode;
+  const start = async (now,expiresAt,customerId='ana') => (await store.startIntake({customerId,language:'es',statement:'No reconozco este cargo.',reason:'not_mine',key:crypto.randomUUID(),now,expiresAt})).episode;
   return {db,store,start};
 }
 async function artifactDir(t) {

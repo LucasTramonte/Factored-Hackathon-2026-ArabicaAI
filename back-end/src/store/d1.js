@@ -138,7 +138,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      * ``producer`` (the extractor switch, on) labels the events and pre-records one call with unknown usage, so a
      * crash during the call is never counted as free; absent, the row and event are the guided ones.
      */
-    startIntake: async ({ customerId, language, statement, key, reason = 'not_mine', now, expiresAt, producer }) => {
+    startIntake: async ({ customerId, language, statement, key, reason, now, expiresAt, producer }) => {
       const episodeId = crypto.randomUUID();
       const sessionRef = crypto.randomUUID();
       const payloadHash = await tokenHash(JSON.stringify([language, statement, reason]));

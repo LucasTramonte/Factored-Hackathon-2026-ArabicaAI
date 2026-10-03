@@ -141,7 +141,7 @@ test('idle_close_and_export_keep_pending_and_unknown_visible on local D1',async 
   const open=await ana.call('/intake/start',startBody('pt'));assert.equal(open.status,201);
   let expired;
   await withIntakeStore({config},async store=>{
-    const now=Date.now();expired=(await store.startIntake({customerId:'demo-ana',language:'es',statement:'No reconozco este cargo.',key:crypto.randomUUID(),now:now-600000,expiresAt:now+100000})).episode;
+    const now=Date.now();expired=(await store.startIntake({customerId:'demo-ana',language:'es',statement:'No reconozco este cargo.',reason:'not_mine',key:crypto.randomUUID(),now:now-600000,expiresAt:now+100000})).episode;
     const closed=await closeIdleIntakes(store,{now,limit:100});assert.ok(closed.closed>=1);assert.equal(closed.complete,true);assert.equal((await store.findIntake('demo-ana',expired.episode_id)).state,'abandoned');
     const repeated=await closeIdleIntakes(store,{now,limit:100});assert.equal(repeated.closed,0);console.log('D1_IDLE_TWO_SWEEPS '+JSON.stringify(store.metrics()));
   });

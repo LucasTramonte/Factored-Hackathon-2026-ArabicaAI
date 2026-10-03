@@ -210,7 +210,7 @@ test('housekeeping and export store calls stay within their page budgets', async
   const now = Date.now();
   await withIntakeStore({ config: config() }, async store => {
     for (let i = 0; i < 100; i += 20) await Promise.all(Array.from({ length: 20 }, (_, j) => store.startIntake({ customerId: 'demo-bruno',
-      language: 'pt', statement: 'Não reconheço esta cobrança.', key: crypto.randomUUID(), now: now - 600000 - i - j, expiresAt: now + 3600000 })));
+      language: 'pt', statement: 'Não reconheço esta cobrança.', reason: 'not_mine', key: crypto.randomUUID(), now: now - 600000 - i - j, expiresAt: now + 3600000 })));
     const sweep = await storeCall(store, () => store.closeIdleIntakes({ now, limit: 100 }));
     assert.equal(sweep.result.length, 100, 'exactly the fixture page was due');
     within('idleSweepPage', sweep.metrics);
@@ -245,7 +245,7 @@ test('50-row queue scan budget is qualified against 50 terminal and 50 pending t
   await withIntakeStore({ config: config() }, async store => {
     await store.rotateSession({ now: Date.now(), oldHash: null, newHash: sessionHash, actor: 'customer', customerId: 'demo-ana', expiresAt: now + 3600000, requestId: 'budget-fixture' });
     const reserve = async i => {
-      const { episode } = await store.startIntake({ customerId: 'demo-ana', language: 'es', statement: 'No reconozco este cargo.', key: crypto.randomUUID(), now, expiresAt: now + 3600000 });
+      const { episode } = await store.startIntake({ customerId: 'demo-ana', language: 'es', statement: 'No reconozco este cargo.', reason: 'not_mine', key: crypto.randomUUID(), now, expiresAt: now + 3600000 });
       const { handoff } = await store.persistIntakeHandoff({ customerId: 'demo-ana', episodeId: episode.episode_id, turnKey: crypto.randomUUID(), payloadHash,
         sessionHash, completeCase: null, kind: 'incomplete', evidence: { transaction: null, tool_status: 'ok' }, actions: [],
         questions: ['matching_transaction', 'customer_confirmation'], usage: { tool_calls: 0, operation_duration_ms: 0 }, now });
