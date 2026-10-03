@@ -1219,6 +1219,17 @@ describe('CustomerPage', () => {
         expect(cannot.classList).toContain('ar-btn-secondary');
       });
 
+      it('"?" after a charge row drops the preselected charge', async () => {
+        const { fixture, p, el } = await home();
+        el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!.click();
+        expect(p.choice).toBe('demo-tx-001');
+        fab(el).click();
+        fixture.detectChanges();
+        expect(p.choice).toBe('');
+        expect(p.chatConfirmed).toBeFalse();
+        expect(p.log()).toEqual([{ from: 'bot', key: 'chatHelloGeneral' }]);
+      });
+
       it('a new report keeps the general greeting; a reset ends general mode', async () => {
         const { p, el } = await home();
         fab(el).click();

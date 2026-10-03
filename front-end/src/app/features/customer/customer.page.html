@@ -225,8 +225,8 @@
                   <label class="ar-check"><input type="checkbox" name="chat-confirmed" [(ngModel)]="chatConfirmed" [disabled]="!choice"> {{ t().confirm }}</label>
                 </fieldset>
                 <div class="report-actions chat-actions">
-                  <button type="button" [class]="general() ? 'ar-btn ar-btn-secondary' : 'ar-btn'" (click)="frozen() ? run() : confirmCharge()" [disabled]="busy() || frozen()?.path === 'handoff'">{{ frozen()?.path === 'confirm' ? t().retry : t().chatConfirmCharge }}</button>
-                  <button type="button" [class]="general() ? 'ar-btn' : 'ar-btn ar-btn-secondary'" (click)="frozen() ? run() : cannotFind()" [disabled]="busy() || frozen()?.path === 'confirm'">{{ frozen()?.path === 'handoff' ? t().retry : t().chatCannotFind }}</button>
+                  <button type="button" class="ar-btn" [class.ar-btn-secondary]="general()" (click)="frozen() ? run() : confirmCharge()" [disabled]="busy() || frozen()?.path === 'handoff'">{{ frozen()?.path === 'confirm' ? t().retry : t().chatConfirmCharge }}</button>
+                  <button type="button" class="ar-btn" [class.ar-btn-secondary]="!general()" (click)="frozen() ? run() : cannotFind()" [disabled]="busy() || frozen()?.path === 'confirm'">{{ frozen()?.path === 'handoff' ? t().retry : t().chatCannotFind }}</button>
                 </div>
               }
               @case ('details') {

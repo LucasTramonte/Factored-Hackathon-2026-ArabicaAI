@@ -370,6 +370,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     const restart = (!!transactionId || general) && !this.busy() && !this.frozen() && (this.chatStep() === 'receipt' || this.chatStep() === 'ended');
     this.general.set(general); // before clearChat(), which picks the greeting from it
+    if (general && !this.frozen()) { this.choice = ''; this.chatConfirmed = false; } // "?" never keeps a row's charge selected
     if (restart) {
       this.clearChat();
       this.chatPanel()?.nativeElement.focus(); // the panel stays open, so the heading would not take focus on its own
@@ -512,7 +513,7 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Guide lines are i18n keys; the greeting carries the customer's first name. */
   lineText(line: ChatLine): string {
-    return 'key' in line ? this.t()[line.key].replace('{name}', this.firstName()) : line.text;
+    return 'key' in line ? this.t()[line.key].replace('{name}', () => this.firstName()) : line.text;
   }
 
   ask(question: keyof typeof FAQ): void {
