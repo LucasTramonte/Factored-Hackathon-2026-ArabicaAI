@@ -254,7 +254,9 @@ export class CustomerPage implements OnInit, OnDestroy {
       const token = await this.cognito.submitCode(this.email.trim(), this.code.trim());
       spent = true;
       const s = await this.service.signInWithToken(token);
-      if (s.roles.includes('admin') && !this.agent.roles().length) await this.openAgentView(token);
+      // Not when enter() is about to refuse this sign-in (a report is open for another customer): nothing may outlive it.
+      const refused = this.identityLocked() && s.customer_id !== this.client();
+      if (s.roles.includes('admin') && !this.agent.roles().length && !refused) await this.openAgentView(token);
       return s;
     }, e => {
       if (spent) this.backToEmail();

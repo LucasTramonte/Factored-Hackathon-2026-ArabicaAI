@@ -259,6 +259,31 @@ describe('CustomerPage', () => {
       expect([p.step(), p.client(), p.frozen(), p.chatStep(), p.error()]).toEqual(['login', '', null, 'describe', p.t().err503]);
     });
 
+    it("an admin renewal for another customer, refused while a report is open, opens no agent session; the same customer's does", async () => {
+      const agent = TestBed.inject(AgentService);
+      const agentSignIn = spyOn(agent, 'signIn').and.resolveTo({ role: 'agent', mode: 'email_otp', roles: ['admin'] });
+      const { p } = await open(false);
+      await toCode(p);
+      await p.verify();
+      service.startIntake.and.resolveTo({ episode_id: 'e', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
+      p.chatStatement = 'No reconozco este cargo.';
+      p.reason.set('not_mine');
+      await p.send();
+      expect(p.identityLocked()).toBeTrue();
+      p.step.set('login');
+      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-2', mode: 'email_otp', context_card: null, roles: ['admin'] });
+      await toCode(p);
+      await p.verify();
+      expect(p.error()).toBe(p.t().errOtherCustomer);
+      expect(agentSignIn).not.toHaveBeenCalled();
+      expect(agent.roles()).toEqual([]);
+      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', context_card: null, roles: ['admin'] });
+      await toCode(p);
+      await p.verify();
+      expect(agentSignIn).toHaveBeenCalledOnceWith('id.token');
+      expect(p.step()).toBe('home');
+    });
+
     it('refuses a renewal that signs in another customer and keeps the open report', async () => {
       const { p } = await open(false);
       await toCode(p);
