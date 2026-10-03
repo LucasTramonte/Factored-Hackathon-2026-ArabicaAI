@@ -63,7 +63,8 @@ const CEILING = {
   agentTransition: [5, 26, 6, 2],
   // A high-priority charge (Task 5.1): its confirm writes one more row, the entry in the partial index
   // intake_handoffs_urgent; closing it writes what a normal close writes, since D1 counts no write for leaving that index.
-  intakeConfirmHigh: [21, 77, 28, 10],
+  // The confirm batch repeats the one-open-report check atomically (NOT EXISTS over cases_customer_transaction): +1 read.
+  intakeConfirmHigh: [21, 78, 28, 10],
   agentTransitionHigh: [5, 26, 6, 2],
   completeDetail: [3, 15, 0, 3],
   incompleteDetail: [3, 10, 0, 3],

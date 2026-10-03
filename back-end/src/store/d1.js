@@ -43,6 +43,13 @@ const AUTH_EVENT = 'INSERT INTO auth_events(ts,actor,event,session_ref,request_i
 /** The episode's reason only when the customer chose it (migration 0017); older rows read null, never 0016's default. */
 const REASON = "CASE WHEN e.reason_source='customer' THEN e.reason END AS reason";
 
+/**
+ * A confirmed case's report that no person has closed yet, counting a reservation still ``handoff_pending`` (its
+ * acknowledgement was lost and a same-key retry will finish it), so a second report can't slip in meanwhile.
+ */
+const OPEN_REPORT = 'SELECT 1 FROM cases c JOIN intake_handoffs oh ON oh.complete_case_id=c.case_id JOIN intake_episodes oe ON oe.episode_id=oh.episode_id';
+const STILL_OPEN = "oh.status<>'closed' AND oe.state IN ('handoff_pending','complete_handoff')";
+
 /** At most one ``update`` email per customer and reference in this window; ``enqueueEmail`` enforces it in SQL. */
 export const UPDATE_EVERY_MS = 300000;
 
@@ -74,7 +81,10 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       ...(kind === 'complete' ? [[
         'INSERT INTO cases(case_id,customer_id,transaction_id,idempotency_key,customer_statement,customer_confirmed) '
         + 'SELECT ?,e.customer_id,t.transaction_id,?,e.customer_statement,1 FROM intake_episodes e '
-        + 'JOIN transactions t ON t.customer_id=e.customer_id AND t.transaction_id=? WHERE ' + eligible,
+        + 'JOIN transactions t ON t.customer_id=e.customer_id AND t.transaction_id=? WHERE ' + eligible
+        // One open report per charge, checked inside the batch: D1 runs batches one at a time, so of two confirmations
+        // racing on the same charge only the first inserts a case; the second reserves nothing and is answered 409.
+        + ' AND NOT EXISTS(' + OPEN_REPORT + ' WHERE c.customer_id=e.customer_id AND c.transaction_id=t.transaction_id AND ' + STILL_OPEN + ')',
         caseId, 'intake:' + episodeId, completeCase?.transaction_id ?? '', ...params
       ]] : []),
       ['INSERT INTO intake_handoffs(handoff_id,episode_id,complete_case_id,turn_key,payload_hash,kind,tool_status,'
@@ -193,12 +203,12 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       'SELECT transaction_id,occurred_at,source_occurred_at,merchant_name,amount,currency FROM transactions '
       + 'WHERE customer_id=? AND transaction_id=?', customerId, transactionId),
     /**
-     * Whether this customer has an acknowledged complete report on the charge that no person has closed yet. Reads only
+     * Whether this customer has a complete report on the charge that no person has closed yet, acknowledged or still
+     * pending. The confirm batch repeats this check atomically (``reserveIntakeHandoff``); this read answers fast. Reads only
      * that charge's cases (index ``cases_customer_transaction``, migration 0011), never the customer's whole history.
      */
     openReportForTransaction: (customerId, transactionId) => first(
-      'SELECT 1 FROM cases c JOIN intake_handoffs h ON h.complete_case_id=c.case_id JOIN intake_episodes e ON e.episode_id=h.episode_id '
-      + "WHERE c.customer_id=? AND c.transaction_id=? AND h.status<>'closed' AND e.state='complete_handoff' LIMIT 1", customerId, transactionId),
+      OPEN_REPORT + ' WHERE c.customer_id=? AND c.transaction_id=? AND ' + STILL_OPEN + ' LIMIT 1', customerId, transactionId),
     /** Read a reservation only through its owning episode. */
     findOwnedIntakeHandoff: (customerId, episodeId) => first(
       'SELECT h.* FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.episode_id=?', customerId, episodeId),

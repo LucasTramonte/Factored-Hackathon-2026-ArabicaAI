@@ -207,3 +207,26 @@ test('incomplete handoff details are appended once to the statement, hashed into
   assert.equal([...statement(open).s].length, 2000);
   assert.deepEqual(events(db).filter(e => e.case_id === open).map(e => e.event), ['intake_started', 'handoff_created', 'intake_ended']);
 });
+
+test('two episodes confirming the same charge at once open one report; the loser is 409 and writes no case', async t => {
+  const { db,store,start }=await setup(t);
+  const [a,b]=[await start(),await start()];
+  // Both requests pass the fast pre-check before either batch runs, which is the race the batch condition closes.
+  const responses=await Promise.all([confirm(a),confirm(b)].map(body=>route(post('/intake/confirm',body),env,store)));
+  assert.deepEqual(responses.map(r=>r.status).sort(),[201,409]);
+  const loser=await responses.find(r=>r.status===409).json();
+  assertContract('error',loser); assert.equal(loser.detail,'This charge already has an open report');
+  assert.equal(db.prepare('SELECT count(*) n FROM cases').get().n,1);
+  assert.equal(db.prepare("SELECT count(*) n FROM intake_handoffs WHERE kind='complete'").get().n,1);
+  const open=db.prepare("SELECT state FROM intake_episodes WHERE episode_id IN (?,?) ORDER BY state").all(a,b).map(r=>r.state);
+  assert.deepEqual(open,['complete_handoff','selection_required'],'the loser stays open, so the customer can still hand it off');
+});
+
+test('a pending reservation (lost acknowledgement) also blocks a second report on its charge', async t => {
+  const { db,store,start }=await setup(t);
+  const first=await start(); assert.equal((await route(post('/intake/confirm',confirm(first)),env,store)).status,201);
+  db.prepare("UPDATE intake_episodes SET state='handoff_pending' WHERE episode_id=?").run(first);
+  const second=await route(post('/intake/confirm',confirm(await start())),env,store);
+  assert.equal(second.status,409); assert.equal((await second.json()).detail,'This charge already has an open report');
+  assert.equal(db.prepare('SELECT count(*) n FROM cases').get().n,1);
+});
