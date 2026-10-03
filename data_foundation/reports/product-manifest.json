@@ -1,0 +1,41 @@
+{
+  "generated_at_utc": "2026-10-03T18:25:05.829159+00:00",
+  "database_bytes": 4285542400,
+  "quality_generated_at_utc": "2026-10-02T23:23:23.720177+00:00",
+  "quality_checks": 390,
+  "quality_errors": 0,
+  "quality_warnings": 7,
+  "bronze_watermarks": [
+    {
+      "table": "call_center_interactions",
+      "last_loaded_date": "2026-06-17"
+    },
+    {
+      "table": "call_transcripts",
+      "last_loaded_date": "2026-06-17"
+    },
+    {
+      "table": "campaign_sends",
+      "last_loaded_date": "2026-06-17"
+    },
+    {
+      "table": "complaints",
+      "last_loaded_date": "2026-06-17"
+    },
+    {
+      "table": "digital_events",
+      "last_loaded_date": "2026-06-17"
+    },
+    {
+      "table": "satisfaction_surveys",
+      "last_loaded_date": "2026-06-17"
+    },
+    {
+      "table": "transactions",
+      "last_loaded_date": "2026-06-17"
+    }
+  ],
+  "memory_model": "DuckDB projected scans and grouped SQL with disk spill; Python holds aggregate rows only",
+  "database": "latam_bank.duckdb",
+  "quality_run": "20261002T232200Z/quality_results.json"
+}
