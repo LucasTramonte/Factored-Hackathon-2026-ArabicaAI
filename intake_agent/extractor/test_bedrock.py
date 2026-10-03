@@ -77,12 +77,13 @@ class BedrockTransportTests(unittest.TestCase):
 
     def test_invalid_region_stops_before_attaching_a_key_to_a_request(self):
         for region in ("us-east-2.amazonaws.com@attacker.example/", "../us-east-2", "us east 2"):
-            with self.subTest(region=region), mock.patch.dict(os.environ, {"AWS_REGION": region}), \
-                    mock.patch.object(bedrock._OPENER, "open", side_effect=AssertionError("no request")), \
-                    self.assertRaises(workers_ai.ConfigurationError) as ctx:
-                bedrock.extract(MESSAGE, "es", None, VOCABULARY)
-            self.assertNotIn(region, str(ctx.exception))
-            self.assertEqual(ctx.exception.usage, {"input_tokens": 0, "output_tokens": 0})
+            with self.subTest(region=region):
+                with mock.patch.dict(os.environ, {"AWS_REGION": region}), \
+                        mock.patch.object(bedrock._OPENER, "open", side_effect=AssertionError("no request")), \
+                        self.assertRaises(workers_ai.ConfigurationError) as ctx:
+                    bedrock.extract(MESSAGE, "es", None, VOCABULARY)
+                self.assertNotIn(region, str(ctx.exception))
+                self.assertEqual(ctx.exception.usage, {"input_tokens": 0, "output_tokens": 0})
 
     def test_status_codes_map_like_workers_ai_and_never_echo_the_body(self):
         cases = [(302, workers_ai.ConfigurationError), (403, workers_ai.CredentialsError), (401, workers_ai.CredentialsError), (429, ConnectionError),
@@ -93,7 +94,7 @@ class BedrockTransportTests(unittest.TestCase):
                 with self.assertRaises(expected) as ctx:
                     self.run_with(err)
                 self.assertNotIn(MESSAGE, str(ctx.exception))
-            self.assertEqual(ctx.exception.usage.get("usage_unavailable_calls"), 1)
+                self.assertEqual(ctx.exception.usage.get("usage_unavailable_calls"), 1)
 
     def test_a_non_json_body_is_a_service_failure_not_model_output(self):
         with self.assertRaises(ConnectionError) as ctx:
@@ -136,11 +137,12 @@ class BedrockTransportTests(unittest.TestCase):
     def test_failed_second_attempt_retains_the_first_attempt_tokens(self):
         for failure in (urllib.error.URLError(OSError(MESSAGE)), socket.timeout(MESSAGE)):
             expected = TimeoutError if isinstance(failure, socket.timeout) else ConnectionError
-            with self.subTest(failure=type(failure).__name__), self.assertRaises(expected) as ctx:
-                self.run_with(openai_payload("invalid", 50, 5), failure)
-            self.assertEqual(ctx.exception.usage, {"input_tokens": 50, "output_tokens": 5, "usage_unavailable_calls": 1})
-            self.assertNotIn(MESSAGE, str(ctx.exception))
-            self.assertIsNone(ctx.exception.__cause__)
+            with self.subTest(failure=type(failure).__name__):
+                with self.assertRaises(expected) as ctx:
+                    self.run_with(openai_payload("invalid", 50, 5), failure)
+                self.assertEqual(ctx.exception.usage, {"input_tokens": 50, "output_tokens": 5, "usage_unavailable_calls": 1})
+                self.assertNotIn(MESSAGE, str(ctx.exception))
+                self.assertIsNone(ctx.exception.__cause__)
 
     def test_malformed_usage_is_unknown_even_when_the_extraction_is_valid(self):
         for counts in ((True, 5), (-1, 5), ("100", 5), (100, None)):
