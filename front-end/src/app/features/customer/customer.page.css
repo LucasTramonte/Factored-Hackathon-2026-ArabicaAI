@@ -15,6 +15,7 @@
 /* The step's main actions stay visible while the panel scrolls (small screens, long charge lists). */
 .chat-actions { position: sticky; bottom: -20px; padding: 8px 0 20px; background: var(--surface-raised); } /* -20px covers the panel padding */
 .chat-faq { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.chat-faq-answer { margin: 0; color: var(--ink); } /* the answer text, not muted: it is the content asked for */
 .products { list-style: none; margin: 0; padding: 0; font: 400 12px/16px var(--font-mono); color: var(--ink-muted); } /* a colour token, not opacity: the ratio is then measurable */
 /* Wider than the 1180px breakpoint the page behind stays usable, so the panel must not grow over the topbar and its
    language switch (WCAG 2.4.11): its top stays at least 96px down (84px bottom + 180px - 84px). Keep the breakpoint in

@@ -779,9 +779,11 @@ describe('CustomerPage', () => {
       expect(page.reportOf('demo-tx-001')).toBeUndefined();
     });
 
-    it('answers FAQs from fixed translated text only', () => {
+    it('answers FAQs from fixed translated text only, beside the questions and never as the step prompt', () => {
+      const log = page.log();
       page.ask('faqTimeQ');
-      expect(page.log().slice(-2)).toEqual([{ from: 'me', key: 'faqTimeQ' }, { from: 'bot', key: 'faqTimeA' }]);
+      expect(page.faq()).toBe('faqTimeQ');
+      expect(page.log()).toEqual(log); // the guide's last line keeps describing the step (id chat-prompt)
       expect(() => page.ask('nope' as never)).toThrow();
     });
 
@@ -815,6 +817,22 @@ describe('CustomerPage', () => {
       const products = [...el.querySelectorAll('.products li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim());
       expect(products[0]).toContain('1234');
       expect(products[1]).toContain(TestBed.inject(LangService).t().notListed);
+    });
+
+    it('shows a frequent question\'s answer right under the questions, the newest replacing the last, without moving focus', async () => {
+      const { fixture, p, el } = await home();
+      p.openChat();
+      fixture.detectChanges();
+      const answer = el.querySelector('.chat-faq')!.nextElementSibling!;
+      expect(answer.getAttribute('role')).toBe('status'); // present before the first answer, so it is announced
+      expect(answer.textContent?.trim()).toBe('');
+      const [next, time] = el.querySelectorAll<HTMLButtonElement>('.chat-faq button');
+      next.focus(); next.click(); fixture.detectChanges();
+      expect(answer.textContent).toContain(p.t().faqNextA);
+      expect(document.activeElement).toBe(next);
+      time.click(); fixture.detectChanges();
+      expect(answer.textContent).toContain(p.t().faqTimeA);
+      expect(answer.textContent).not.toContain(p.t().faqNextA);
     });
 
     it('falls back to the display name without a context card', async () => {

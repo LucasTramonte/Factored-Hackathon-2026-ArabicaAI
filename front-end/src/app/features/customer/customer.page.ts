@@ -108,6 +108,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly chatStep = computed<ChatStep>(() => this.intakeReceipt() ? 'receipt' : this.ended() ? 'ended' : !this.episode() ? 'describe' : this.asking() ? 'details' : 'choose');
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
+  /** The frequent question answered last, shown under the questions; null until one is asked. */
+  readonly faq = signal<keyof typeof FAQ | null>(null);
+  readonly faqAnswer = FAQ;
   /** A charge whose newest server report is still open is not offered again (the server refuses it with 409). */
   readonly choosable = computed(() => this.transactions().filter(tx => (this.reportOf(tx.transaction_id)?.status ?? 'closed') === 'closed'));
   readonly statusChip = STATUS_CHIP;
@@ -637,6 +640,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.chatDetails = '';
     this.choice = '';
     this.chatConfirmed = false;
+    this.faq.set(null);
     this.log.set([{ from: 'bot', key: this.general() ? 'chatHelloGeneral' : 'chatHello' }]);
   }
 
@@ -647,10 +651,14 @@ export class CustomerPage implements OnInit, OnDestroy {
     return this.t()[key].replace('{name}', () => this.firstName());
   }
 
+  /**
+   * Answer a frequent question under the question buttons, where the customer is looking, not in the log above the step
+   * form (out of view there, and the log's last guide line must keep describing the step). Focus stays on the button (WCAG 3.2.2).
+   */
   ask(question: keyof typeof FAQ): void {
-    const answer = FAQ[question];
-    if (!answer) throw new Error('Unknown FAQ');
-    this.log.update(l => [...l, { from: 'me', key: question }, { from: 'bot', key: answer }]);
+    if (!FAQ[question]) throw new Error('Unknown FAQ');
+    this.faq.set(question);
+    afterNextRender(() => this.host.nativeElement.querySelector('.chat-faq-answer')?.scrollIntoView({ block: 'nearest' }), { injector: this.injector });
   }
 
   /** Send the frozen request. One 401 renews the same customer and retries the same body; after that the manual Renew/Retry stays. */
