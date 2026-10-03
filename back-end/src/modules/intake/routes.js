@@ -186,8 +186,13 @@ export async function recordFeedback(request, env, store) {
     return fail(422, 'Provide exactly a protocol and a boolean easy');
   }
   const protocol = value.protocol.toLowerCase();
-  const stored = await store.recordReportFeedback(current.customer_id, protocol, value.easy, Date.now());
-  if (!stored) return fail(404, 'Report not found');
+  const sessionHash = await tokenHash(readCookies(request).demo_session);
+  const stored = await store.recordReportFeedback(current.customer_id, protocol, value.easy, Date.now(), sessionHash);
+  if (!stored) {
+    const live = await requireSession(request, store, 'customer');
+    if (!live || live.customer_id !== current.customer_id) return fail(401, 'Start a demo session first');
+    return fail(404, 'Report not found');
+  }
   if (Boolean(stored.easy) !== value.easy) return fail(409, 'Feedback already recorded for this report');
   return json({ protocol, easy: value.easy, recorded_at: new Date(stored.created_at).toISOString() });
 }

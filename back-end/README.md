@@ -91,6 +91,42 @@ The only agent write is the review status; nothing refunds, blocks a card or dec
 
 `GET /agent/intakes` is the agents' only queue: the *approved queue* of acknowledged handoffs (`e.state = h.kind||'_handoff'`), the same predicate that detail and status transitions use. That is the ABAC rule for agents: role `agent`, a resource in the approved queue, and only the next workflow step. The legacy `GET /agent/cases`, which listed every confirmed case with its customer id and name, was removed (issue #69). A guided complete case whose reservation is still `handoff_pending` after a lost read-back is not in the queue: the customer got 503 and no reference, and a same-owner retry with the same key completes it. A case written by the legacy `POST /cases` is never in the queue. There is no per-agent assignment yet ([auth runbook](../Docs/Plans/auth-runbook.md#known-limitations)).
 
+
+## Receipt feedback and the aggregate report
+
+Migration `0019_report_feedback.sql` stores one boolean ease answer per acknowledged handoff, with an epoch-millisecond timestamp. The ownership check and live customer-session check run inside the same atomic insert/read-back batch. A repeated matching answer preserves both the answer and timestamp; a different answer gets 409. Expiry or revocation while the body arrives, or immediately before the insert, gets 401 without storing or returning feedback. Customer statements and answers never enter event exports or logs.
+
+The receipt currently asks one prototype question in each interface language:
+
+| Language | Question |
+|---|---|
+| Spanish | ¿Fue fácil reportar este cargo? |
+| Portuguese | Foi fácil relatar esta cobrança? |
+| English | Was it easy to report this charge? |
+
+These strings are in `front-end/src/app/shared/i18n/lang.service.ts`. **Bank approval is not recorded in the repository.** The [measurement contract](../Docs/intake/customer-and-measurement-contract.md#kpi-dictionary) proposes a 1–7 effort rating and does not approve the binary wording. Bank approval of the exact localized question and answer labels remains a human step before customer release; this prototype does not claim it has that approval. Binary thumbs are an ease signal, not the contract's 1–7 metric, CSAT, successful intake, assessed safety or resolution.
+
+While an answer is pending, the thumbs expose `aria-disabled` and the synchronous handler refuses duplicate clicks. They remain focusable so the focused button is not lost while waiting. A persistent empty status region receives the thanks text after success or 409; when a focused thumb disappears, thanks takes focus. Closing the chat, choosing another control or starting another receipt keeps the customer's chosen focus. A 409 records that an answer exists without inventing its value.
+
+For Manoella's report, `store.reportFeedbackSummary({ sinceMs, untilMs })` returns aggregate-only rows by report language: `reports`, `respondents`, `unanswered`, `thumbs_up`, `thumbs_down`. It joins each acknowledged handoff to its single episode and at most one feedback row, filters `accepted_at` to the half-open UTC window, and counts answers only when `created_at < untilMs`. Pending reservations are excluded; closed acknowledged reports remain included. No customer, transaction, episode or report identifier is returned. SQL groups the source rows; only at most three language rows enter JavaScript memory. This manual read is outside online request budgets.
+
+From `back-end/`, after applying local migrations, choose the desired UTC acceptance window and run this local-only read:
+
+```bash
+node --input-type=module <<'JS'
+import { quietThirdPartyDiagnostics, withIntakeStore } from './scripts/intake-store.mjs';
+quietThirdPartyDiagnostics();
+const window = { sinceMs: Date.parse('2026-10-03T00:00:00.000Z'), untilMs: Date.parse('2026-10-04T00:00:00.000Z') };
+try {
+  await withIntakeStore({}, async store => console.log(JSON.stringify({ window, by_language: await store.reportFeedbackSummary(window) })));
+} catch {
+  console.error('Feedback summary failed'); process.exitCode = 1;
+}
+JS
+```
+
+Report `thumbs_up / respondents` with both counts and `respondents / reports` beside it. A zero denominator is undefined; an absent language row means no acknowledged reports in that window. `unanswered` includes missing answers and answers after the cutoff, never negative ratings. Invitation display is not logged, so invitation coverage is unknown and older pre-feedback receipts can be in this cohort. This acceptance cohort excludes failed or abandoned starts; it cannot replace the eligible-start denominator in the measurement contract. Customer segment is absent from D1, so no segment comparison is produced. Prototype or synthetic answers are not real participant measurements and must be labelled accordingly.
+
 ## Access
 
 | Who | Cognito groups | Customer view | Agent view | Banner | Test |
@@ -148,7 +184,7 @@ D1 cost: off, nothing changes. On, a new start adds one query and one round trip
 
 ## Resetting demo activity
 
-`scripts/reset-demo-activity.sql` deletes intake events, turns, handoffs and episodes, then cases, then sessions: that order respects `intake_handoffs.complete_case_id → cases`, which makes the older `DELETE FROM cases; DELETE FROM sessions;` fail. Customers, transactions, context cards and provenance stay. Locally:
+`scripts/reset-demo-activity.sql` deletes report feedback and handoff status history, then intake events, turns, handoffs and episodes, then cases, then sessions: that order respects `intake_handoffs.complete_case_id → cases`, which makes the older `DELETE FROM cases; DELETE FROM sessions;` fail. Customers, transactions, context cards and provenance stay. Locally:
 
 ```bash
 npx wrangler d1 execute arabica-intake-demo --local --file scripts/reset-demo-activity.sql

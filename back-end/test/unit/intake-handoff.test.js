@@ -250,3 +250,62 @@ test('receipt feedback: one answer per own report, first answer stands, hostile 
   db.prepare("UPDATE intake_episodes SET customer_id='bruno'").run();
   const foreign=await send({protocol,easy:okBody.easy}); assert.equal(foreign.status,404);
 });
+
+test('feedback delayed bodies and revocation immediately before the batch cannot use captured authority', async t => {
+  const { db, store, start } = await setup(t);
+  const receipt = await (await route(post('/intake/handoff', { episode_id: await start(), kind: 'incomplete', idempotency_key: crypto.randomUUID() }), env, store)).json();
+  const hash = await tokenHash(token);
+  const body = { protocol: receipt.protocol, easy: true };
+  for (const mutation of ['DELETE FROM sessions', 'UPDATE sessions SET expires_at=1', "UPDATE sessions SET customer_id='bruno'", "UPDATE sessions SET actor='agent',customer_id=NULL"]) {
+    for (const delayBody of [true, false]) {
+      db.prepare('INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)').run(hash, 'customer', 'ana', Date.now() + 3600000);
+      let changedStore;
+      if (delayBody) {
+        let authenticated;
+        const ready = new Promise(done => { authenticated = done; });
+        let bodyStream;
+        const request = new Request('https://demo.example/reports/feedback', { method: 'POST', headers: { Cookie: `demo_session=${token}` }, duplex: 'half',
+          body: new ReadableStream({ start(controller) { bodyStream = controller; } }) });
+        changedStore = { ...store, findSession: async (...args) => { const current = await store.findSession(...args); authenticated(); return current; } };
+        const pending = route(request, env, changedStore);
+        await ready;
+        db.exec(mutation);
+        bodyStream.enqueue(new TextEncoder().encode(JSON.stringify(body))); bodyStream.close();
+        assert.equal((await pending).status, 401, mutation + ' while body delayed');
+      } else {
+        changedStore = { ...store, recordReportFeedback: (...args) => { db.exec(mutation); return store.recordReportFeedback(...args); } };
+        assert.equal((await route(post('/reports/feedback', body), env, changedStore)).status, 401, mutation + ' before insert');
+      }
+      assert.equal(db.prepare('SELECT count(*) n FROM report_feedback').get().n, 0, 'no answer stored without live authority');
+    }
+  }
+  db.prepare('INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)').run(hash, 'customer', 'ana', Date.now() + 3600000);
+  assert.equal((await route(post('/reports/feedback', body), env, store)).status, 200, 'same report remains unanswered for renewal');
+  const revokedReplay = { ...store, recordReportFeedback: (...args) => { db.exec('DELETE FROM sessions'); return store.recordReportFeedback(...args); } };
+  assert.equal((await route(post('/reports/feedback', body), env, revokedReplay)).status, 401, 'existing answer is not exposed after revocation');
+});
+
+test('receipt feedback summary preserves denominators, language and missingness at the acceptance cutoff', async t => {
+  const { db, store, start } = await setup(t);
+  const reports = [];
+  for (let i = 0; i < 6; i++) {
+    reports.push(await (await route(post('/intake/handoff', { episode_id: await start(), kind: 'incomplete', idempotency_key: crypto.randomUUID() }), env, store)).json());
+  }
+  const sinceMs = Date.parse('2026-10-03T00:00:00.000Z'), untilMs = sinceMs + 86400000;
+  for (const [i, r] of reports.entries()) {
+    db.prepare('UPDATE intake_episodes SET language=? WHERE episode_id=?').run(i < 3 ? 'es' : 'pt', r.episode_id);
+    db.prepare('UPDATE intake_handoffs SET accepted_at=? WHERE episode_id=?').run(new Date(i === 4 ? sinceMs - 1 : sinceMs + i).toISOString(), r.episode_id);
+  }
+  db.prepare("UPDATE intake_episodes SET state='handoff_pending' WHERE episode_id=?").run(reports[5].episode_id);
+  for (const [i, easy, at] of [[0, 1, sinceMs + 100], [1, 0, sinceMs + 101], [3, 1, untilMs]]) {
+    db.prepare('INSERT INTO report_feedback VALUES(?,?,?)').run(reports[i].protocol, easy, at);
+  }
+  assert.deepEqual((await store.reportFeedbackSummary({ sinceMs, untilMs })).map(r => ({ ...r })), [
+    { language: 'es', reports: 3, respondents: 2, unanswered: 1, thumbs_up: 1, thumbs_down: 1 },
+    { language: 'pt', reports: 1, respondents: 0, unanswered: 1, thumbs_up: 0, thumbs_down: 0 }
+  ]);
+  assert.deepEqual(await store.reportFeedbackSummary({ sinceMs: untilMs, untilMs: untilMs + 1 }), []);
+  for (const window of [{ sinceMs: -1, untilMs }, { sinceMs, untilMs: sinceMs }, { sinceMs, untilMs: Infinity }]) {
+    assert.throws(() => store.reportFeedbackSummary(window), /Invalid feedback window/);
+  }
+});

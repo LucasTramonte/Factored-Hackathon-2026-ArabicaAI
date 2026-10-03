@@ -411,18 +411,34 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       + "WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
       + 'ORDER BY h.accepted_at DESC,protocol LIMIT ?', customerId, limit),
     /**
-     * Record this customer's one receipt answer for an own acknowledged report (migration 0019), then read what is
-     * stored, in one batch: the first answer stands, so a concurrent or repeated answer inserts nothing. Returns
-     * ``{ easy, created_at }``, or null when the report is missing or another customer's (they look the same).
+     * Record the first answer for an own acknowledged report, then read it back in one atomic batch. Both statements
+     * recheck the same customer's live session, so delayed bodies or revocation cannot use captured authority.
+     * Returns ``{ easy, created_at }``, or null for lost authority, a missing report or a foreign report.
      */
-    recordReportFeedback: async (customerId, protocol, easy, now) => {
+    recordReportFeedback: async (customerId, protocol, easy, now, sessionHash) => {
       const mine = "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
-        + 'AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))';
+        + 'AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?)) '
+        + "AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=e.customer_id AND expires_at>?)";
+      const params = [customerId, protocol, protocol, sessionHash, now];
       const [, stored] = await batch([
         ['INSERT INTO report_feedback(handoff_id,easy,created_at) SELECT h.handoff_id,?,? ' + mine + ' ON CONFLICT(handoff_id) DO NOTHING',
-          easy ? 1 : 0, now, customerId, protocol, protocol],
-        ['SELECT f.easy,f.created_at FROM report_feedback f WHERE f.handoff_id=(SELECT h.handoff_id ' + mine + ')', customerId, protocol, protocol]]);
+          easy ? 1 : 0, now, ...params],
+        ['SELECT f.easy,f.created_at FROM report_feedback f WHERE f.handoff_id=(SELECT h.handoff_id ' + mine + ')', ...params]]);
       return stored.results[0] ?? null;
+    },
+    /**
+     * Aggregate receipt feedback by report language over an acknowledged-report acceptance window [sinceMs, untilMs).
+     * One-to-one handoff/episode/feedback joins preserve report counts; answers after the cutoff remain unknown. SQL
+     * performs the grouping and returns at most three rows, without customer identifiers or statements.
+     */
+    reportFeedbackSummary: ({ sinceMs, untilMs }) => {
+      if (!Number.isSafeInteger(sinceMs) || sinceMs < 0 || !Number.isSafeInteger(untilMs) || untilMs <= sinceMs) throw new Error('Invalid feedback window');
+      return all('SELECT e.language,COUNT(*) AS reports,COUNT(f.handoff_id) AS respondents,'
+        + 'COUNT(*)-COUNT(f.handoff_id) AS unanswered,COALESCE(SUM(f.easy=1),0) AS thumbs_up,COALESCE(SUM(f.easy=0),0) AS thumbs_down '
+        + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+        + 'LEFT JOIN report_feedback f ON f.handoff_id=h.handoff_id AND f.created_at<? '
+        + "WHERE e.state=h.kind||'_handoff' AND h.accepted_at>=? AND h.accepted_at<? GROUP BY e.language ORDER BY e.language",
+        untilMs, new Date(sinceMs).toISOString(), new Date(untilMs).toISOString());
     },
     /**
      * One acknowledged report of this customer (same predicate as ``listCustomerHandoffs``) with its episode language
