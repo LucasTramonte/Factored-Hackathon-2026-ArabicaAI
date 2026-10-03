@@ -111,7 +111,7 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
   // lost card reported without a listed charge still heads the queue; otherwise only a confirmed charge is ranked, by the
   // p95 of the customer's most recent 21 served purchases (newest first), without the chosen one. A failed read leaves
   // only the fixed amount; the report is still accepted.
-  // A charge the bank's own fraud score flagged (ADR-011, derived from the data) is high too.
+  // A charge the bank itself flagged (ADR-011: the bank's input, not an inference of ours) is high too.
   if (!prior) urgency = URGENCY.high_reasons.includes(episode.reason) || evidence?.bank_flagged === 1 ? 'high' : kind !== 'complete' ? 'normal'
     : urgencyOf(evidence, (await store.listTransactions(customerId, 21).catch(() => [])).filter(t => t.transaction_id !== transactionId), URGENCY);
   // The flag decides urgency only; the stored evidence keeps the charge's own fields, as before.

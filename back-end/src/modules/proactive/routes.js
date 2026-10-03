@@ -1,5 +1,5 @@
 /**
- * Proactive alert routes (ADR-011). The bank's fraud flag on a charge reaches the customer first: ``GET /alerts`` returns
+ * Proactive alert routes (ADR-011). A flag the bank itself set on a charge (its input; never a score) reaches the customer first: ``GET /alerts`` returns
  * at most one alert, for the customer's newest flagged charge not yet answered or reported; ``POST /alerts/answer``
  * records "mine" or "report". Both read the session customer only; no customer id ever comes from the request. An admin
  * acting as a customer answers as ``admin``, which never silences the alert for the customer (ADR-007, decision 10).
