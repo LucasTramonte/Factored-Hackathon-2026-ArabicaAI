@@ -76,6 +76,8 @@ export interface AgentIntake {
   reference_short: string | null;
   episode_id: string;
   kind: IntakeKind;
+  /** The kind of problem the customer chose (ADR-010). */
+  reason: Reason;
   status: HandoffStatus;
   tool_status: 'ok' | 'failed' | 'timeout';
   destination: string;
