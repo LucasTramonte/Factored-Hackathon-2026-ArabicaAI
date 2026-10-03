@@ -198,17 +198,17 @@ def _assert_json_equal_with_float_tolerance(actual, expected):
 def test_curated_report_and_simulation_match_published_aggregates(tmp_path):
     """A reviewed HTML release must remain reproducible from its source JSON."""
     published = Path(__file__).resolve().parents[1] / 'reports'
-    data = json.loads((published / 'aggregates.json').read_text())
+    data = json.loads((published / 'aggregates.json').read_text(encoding='utf-8'))
     expected = summarize_insights(data)
-    reviewed = json.loads((published / 'marketing-product-insights.json').read_text())
+    reviewed = json.loads((published / 'marketing-product-insights.json').read_text(encoding='utf-8'))
     _assert_json_equal_with_float_tolerance(reviewed, expected)
     write_reports(data, tmp_path)
-    generated = json.loads((tmp_path / 'marketing-product-insights.json').read_text())
+    generated = json.loads((tmp_path / 'marketing-product-insights.json').read_text(encoding='utf-8'))
     _assert_json_equal_with_float_tolerance(generated, reviewed)
     for name in ('aggregates.json', 'index.html', 'marketing-product.html',
                  'intake-decision.html'):
         assert (tmp_path / name).read_bytes() == (published / name).read_bytes()
-    html = (published / 'marketing-product.html').read_text()
+    html = (published / 'marketing-product.html').read_text(encoding='utf-8')
     assert html.index('What the synthetic data tells us') < html.index('What is measurable by month or year?')
     assert 'conditional 95% CI +2.56 to +3.58' in html
     assert 'conditional 95% CI -0.115 to +0.034' in html

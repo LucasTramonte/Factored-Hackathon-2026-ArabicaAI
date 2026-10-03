@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1040" viewBox="0 0 1440 1040" role="img" aria-labelledby="title description">
-  <title id="title">ArabicaAI: recorded deployment and offline evaluation</title>
-  <desc id="description">The recorded v0.2.0 deployment serves an Angular browser through Cloudflare Worker and D1 with Cognito email authentication and SES sandbox notification delivery. A read-only S3 batch goes through Bronze, Silver, quality and Gold to a reviewed D1 seed. Offline learned evaluation uses Bedrock and deterministic policy; its approved development revision and frozen run remain pending. App changes in PRs 87 through 90 are unmerged. The Lambda and Postgres AWS target has never been deployed.</desc>
+  <title id="title">ArabicaAI: deployed service and offline evaluation</title>
+  <desc id="description">The deployment serves an Angular browser through Cloudflare Worker and D1 with Cognito email authentication and SES sandbox notification delivery. A read-only S3 batch goes through Bronze, Silver, quality and Gold to a reviewed D1 seed. Offline learned evaluation uses Google Vertex AI and deterministic policy; its approved development revision and frozen run remain pending. The Lambda and Postgres AWS target has never been deployed.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="#41556b"/></marker>
     <style>
@@ -16,12 +16,12 @@
     </style>
   </defs>
   <rect width="1440" height="1040" fill="#f6f8fb"/>
-  <text x="40" y="49" class="title">ArabicaAI · recorded deployment + offline evaluation</text>
-  <text x="40" y="79" class="note">Status: 2026-10-03 · solid: recorded v0.2.0 / existing batch · dashed: evaluation awaiting approval</text>
+  <text x="40" y="49" class="title">ArabicaAI · deployed service + offline evaluation</text>
+  <text x="40" y="79" class="note">Status: 2026-10-03 · solid: deployed / existing batch · dashed: evaluation awaiting approval</text>
 
   <rect x="30" y="105" width="1380" height="360" rx="18" fill="#eaf4f2"/>
-  <text x="55" y="139" class="heading">Online · Cloudflare Worker + D1 · v0.2.0</text>
-  <text x="55" y="164" class="note">Recorded release: Worker f76c7f7b · main-64ae03a · D1 migrations 0001–0017 · extractor OFF</text>
+  <text x="55" y="139" class="heading">Online · Cloudflare Worker + D1 · main-79c324b</text>
+  <text x="55" y="164" class="note">Deployed by GitHub Actions: Worker 79aa39a9 · D1 migrations 0001–0020 · extractor OFF · latest tag v0.2.0</text>
   <rect x="55" y="280" width="270" height="100" class="node"/>
   <text x="75" y="312" class="heading">Angular browser</text>
   <text x="75" y="341" class="body">Customer · agent · admin</text>
@@ -71,13 +71,13 @@
   <text x="55" y="672" class="note">Worker never reads S3, DuckDB or Silver · source currency and timezone-free timestamps retained</text>
 
   <rect x="30" y="710" width="1380" height="230" rx="18" fill="#fff3d9"/>
-  <text x="55" y="748" class="heading">Offline learned evaluation · Bedrock transport built · frozen comparison NOT RUN</text>
+  <text x="55" y="748" class="heading">Offline learned evaluation · Vertex AI transport built · frozen comparison NOT RUN</text>
   <rect x="55" y="787" width="350" height="100" class="pending"/>
   <text x="75" y="819" class="heading">Authored ES / PT workload</text>
   <text x="75" y="848" class="body">Development revision pending</text>
   <text x="75" y="874" class="body">Frozen: needs approval + human tag</text>
   <rect x="527" y="787" width="340" height="100" class="pending"/>
-  <text x="547" y="819" class="heading">Amazon Bedrock</text>
+  <text x="547" y="819" class="heading">Google Vertex AI</text>
   <text x="547" y="848" class="body">gpt-oss-20b · facts only</text>
   <text x="547" y="874" class="body">Synthetic messages · no tools</text>
   <rect x="990" y="787" width="380" height="100" class="pending"/>
@@ -86,8 +86,8 @@
   <text x="1010" y="874" class="body">Counts · safety · latency · tokens</text>
   <path d="M405 837 H527" class="edge"/><text x="433" y="825" class="note">Message</text>
   <path d="M867 837 H990" class="edge"/><text x="889" y="825" class="note">Facts</text>
-  <text x="55" y="917" class="note">No online Bedrock call · Manoella approval → isolated builder → development triggers → registration → human tag</text>
+  <text x="55" y="917" class="note">No online model call · Manoella approval → isolated builder → development triggers → registration → human tag</text>
 
-  <text x="40" y="980" class="body">Built, unmerged: app review changes #87–#90. They are not part of the recorded release above.</text>
+  <text x="40" y="980" class="body">App follow-ups #87–#92 are deployed and not yet tagged (next: v0.3.0).</text>
   <text x="40" y="1012" class="body">AWS Lambda + Postgres production target: design and cost estimate only; never deployed.</text>
 </svg>

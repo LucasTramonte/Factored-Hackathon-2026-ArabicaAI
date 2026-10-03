@@ -1,0 +1,2221 @@
+{
+  "queries": {
+    "PR-01": {
+      "title": "KPI 1, unrecognized-charge demand: complaints by year and over the design window, with calendar days",
+      "scope": "design",
+      "query": "data_foundation/queries/product/PR-01_demand.sql",
+      "rows": [
+        {
+          "period": "2023",
+          "all_complaints": 12066,
+          "unrecognized_charges": 2199,
+          "calendar_days": 198
+        },
+        {
+          "period": "2024",
+          "all_complaints": 22318,
+          "unrecognized_charges": 4053,
+          "calendar_days": 366
+        },
+        {
+          "period": "2025",
+          "all_complaints": 22352,
+          "unrecognized_charges": 4118,
+          "calendar_days": 365
+        },
+        {
+          "period": "design window",
+          "all_complaints": 56736,
+          "unrecognized_charges": 10370,
+          "calendar_days": 929
+        }
+      ]
+    },
+    "PR-02": {
+      "title": "KPI 2, recorded claimed amounts of unrecognized-charge complaints, one row per source currency (never pooled)",
+      "scope": "design",
+      "query": "data_foundation/queries/product/PR-02_claimed_amounts.sql",
+      "rows": [
+        {
+          "currency": "(none)",
+          "complaints": 6929,
+          "amount_present": 155,
+          "source_amount_sum": 424881.76999999996,
+          "source_amount_p50": 2861.15,
+          "usd_convertible": 0,
+          "usd_amount_sum": null,
+          "usd_is_estimated": true
+        },
+        {
+          "currency": "ARS",
+          "complaints": 852,
+          "amount_present": 810,
+          "source_amount_sum": 2063542.8599999992,
+          "source_amount_p50": 2517.675,
+          "usd_convertible": 810,
+          "usd_amount_sum": 5899.878508350002,
+          "usd_is_estimated": true
+        },
+        {
+          "currency": "COP",
+          "complaints": 843,
+          "amount_present": 810,
+          "source_amount_sum": 1963189.5799999991,
+          "source_amount_p50": 2377.3450000000003,
+          "usd_convertible": 810,
+          "usd_amount_sum": 490.86318761000024,
+          "usd_is_estimated": true
+        },
+        {
+          "currency": "MXN",
+          "complaints": 875,
+          "amount_present": 841,
+          "source_amount_sum": 2205637.8199999994,
+          "source_amount_p50": 2706.62,
+          "usd_convertible": 841,
+          "usd_amount_sum": 129599.09664068988,
+          "usd_is_estimated": true
+        },
+        {
+          "currency": "USD",
+          "complaints": 871,
+          "amount_present": 835,
+          "source_amount_sum": 2161914.1999999997,
+          "source_amount_p50": 2555.9,
+          "usd_convertible": 835,
+          "usd_amount_sum": 2161914.1999999997,
+          "usd_is_estimated": false
+        }
+      ]
+    },
+    "PR-03": {
+      "title": "KPI 3 and the resolution gap: contact-centre contacts, observed duration and resolution by reason",
+      "scope": "design",
+      "query": "data_foundation/queries/product/PR-03_contacts.sql",
+      "rows": [
+        {
+          "reason": "(all contacts)",
+          "contacts": 580546,
+          "duration_observed": 499181,
+          "duration_seconds_sum": 160535327.0,
+          "resolution_known": 580546,
+          "resolved": 444741,
+          "escalated": 57841,
+          "reason_fields_differ": 0
+        },
+        {
+          "reason": "Comercial",
+          "contacts": 46417,
+          "duration_observed": 39895,
+          "duration_seconds_sum": 21534854.0,
+          "resolution_known": 46417,
+          "resolved": 30194,
+          "escalated": 4583,
+          "reason_fields_differ": 0
+        },
+        {
+          "reason": "Producto",
+          "contacts": 127444,
+          "duration_observed": 109505,
+          "duration_seconds_sum": 29175023.0,
+          "resolution_known": 127444,
+          "resolved": 114199,
+          "escalated": 12686,
+          "reason_fields_differ": 0
+        },
+        {
+          "reason": "Queja",
+          "contacts": 99122,
+          "duration_observed": 85261,
+          "duration_seconds_sum": 37063505.0,
+          "resolution_known": 99122,
+          "resolved": 43269,
+          "escalated": 9927,
+          "reason_fields_differ": 0
+        },
+        {
+          "reason": "Retención",
+          "contacts": 17396,
+          "duration_observed": 14958,
+          "duration_seconds_sum": 7170141.0,
+          "resolution_known": 17396,
+          "resolved": 10418,
+          "escalated": 1735,
+          "reason_fields_differ": 0
+        },
+        {
+          "reason": "Transaccional",
+          "contacts": 203127,
+          "duration_observed": 174692,
+          "duration_seconds_sum": 38607266.0,
+          "resolution_known": 203127,
+          "resolved": 185777,
+          "escalated": 20135,
+          "reason_fields_differ": 0
+        },
+        {
+          "reason": "Técnico",
+          "contacts": 87040,
+          "duration_observed": 74870,
+          "duration_seconds_sum": 26984538.0,
+          "resolution_known": 87040,
+          "resolved": 60884,
+          "escalated": 8775,
+          "reason_fields_differ": 0
+        }
+      ]
+    },
+    "PR-04": {
+      "title": "The before picture: unrecognized charges against other complaints, status, SLA and durations, by escalation",
+      "scope": "design",
+      "query": "data_foundation/queries/product/PR-04_before.sql",
+      "rows": [
+        {
+          "grp": "unrecognized charge",
+          "escalation": "all",
+          "complaints": 10370,
+          "open": 3105,
+          "in_process": 4114,
+          "escalated_status": 514,
+          "resolved": 2117,
+          "closed": 418,
+          "rejected": 102,
+          "sla_known": 10370,
+          "sla_breached": 2085,
+          "assigned": 6823,
+          "resolution_days_n": 2404,
+          "resolution_days_p50": 15.0,
+          "resolution_days_p90": 27.0,
+          "first_response_n": 6045,
+          "first_response_h_p50": 25.0,
+          "first_response_h_p90": 44.0,
+          "to_resolution_n": 2241,
+          "to_resolution_d_p50": 14.375,
+          "to_resolution_d_p90": 25.875,
+          "to_closing_n": 386,
+          "to_closing_d_p50": 17.333333333333336,
+          "to_closing_d_p90": 30.041666666666664,
+          "customer_wait_n": 2414,
+          "customer_wait_d_p50": 15.0,
+          "customer_wait_d_p90": 27.0,
+          "negative_intervals": 84,
+          "outcome_after_window": 52
+        },
+        {
+          "grp": "unrecognized charge",
+          "escalation": "escalated",
+          "complaints": 514,
+          "open": 0,
+          "in_process": 0,
+          "escalated_status": 514,
+          "resolved": 0,
+          "closed": 0,
+          "rejected": 0,
+          "sla_known": 514,
+          "sla_breached": 119,
+          "assigned": 492,
+          "resolution_days_n": 0,
+          "resolution_days_p50": null,
+          "resolution_days_p90": null,
+          "first_response_n": 0,
+          "first_response_h_p50": null,
+          "first_response_h_p90": null,
+          "to_resolution_n": 0,
+          "to_resolution_d_p50": null,
+          "to_resolution_d_p90": null,
+          "to_closing_n": 0,
+          "to_closing_d_p50": null,
+          "to_closing_d_p90": null,
+          "customer_wait_n": 0,
+          "customer_wait_d_p50": null,
+          "customer_wait_d_p90": null,
+          "negative_intervals": 0,
+          "outcome_after_window": 0
+        },
+        {
+          "grp": "unrecognized charge",
+          "escalation": "not escalated",
+          "complaints": 9856,
+          "open": 3105,
+          "in_process": 4114,
+          "escalated_status": 0,
+          "resolved": 2117,
+          "closed": 418,
+          "rejected": 102,
+          "sla_known": 9856,
+          "sla_breached": 1966,
+          "assigned": 6331,
+          "resolution_days_n": 2404,
+          "resolution_days_p50": 15.0,
+          "resolution_days_p90": 27.0,
+          "first_response_n": 6045,
+          "first_response_h_p50": 25.0,
+          "first_response_h_p90": 44.0,
+          "to_resolution_n": 2241,
+          "to_resolution_d_p50": 14.375,
+          "to_resolution_d_p90": 25.875,
+          "to_closing_n": 386,
+          "to_closing_d_p50": 17.333333333333336,
+          "to_closing_d_p90": 30.041666666666664,
+          "customer_wait_n": 2414,
+          "customer_wait_d_p50": 15.0,
+          "customer_wait_d_p90": 27.0,
+          "negative_intervals": 84,
+          "outcome_after_window": 52
+        },
+        {
+          "grp": "other complaint",
+          "escalation": "all",
+          "complaints": 46366,
+          "open": 13986,
+          "in_process": 18559,
+          "escalated_status": 2272,
+          "resolved": 9286,
+          "closed": 1763,
+          "rejected": 500,
+          "sla_known": 46366,
+          "sla_breached": 9286,
+          "assigned": 30289,
+          "resolution_days_n": 10520,
+          "resolution_days_p50": 16.0,
+          "resolution_days_p90": 28.0,
+          "first_response_n": 26742,
+          "first_response_h_p50": 25.0,
+          "first_response_h_p90": 44.0,
+          "to_resolution_n": 9695,
+          "to_resolution_d_p50": 14.666666666666666,
+          "to_resolution_d_p90": 26.166666666666668,
+          "to_closing_n": 1605,
+          "to_closing_d_p50": 18.166666666666668,
+          "to_closing_d_p90": 30.150000000000006,
+          "customer_wait_n": 10524,
+          "customer_wait_d_p50": 16.0,
+          "customer_wait_d_p90": 28.0,
+          "negative_intervals": 331,
+          "outcome_after_window": 249
+        },
+        {
+          "grp": "other complaint",
+          "escalation": "escalated",
+          "complaints": 2272,
+          "open": 0,
+          "in_process": 0,
+          "escalated_status": 2272,
+          "resolved": 0,
+          "closed": 0,
+          "rejected": 0,
+          "sla_known": 2272,
+          "sla_breached": 475,
+          "assigned": 2177,
+          "resolution_days_n": 0,
+          "resolution_days_p50": null,
+          "resolution_days_p90": null,
+          "first_response_n": 0,
+          "first_response_h_p50": null,
+          "first_response_h_p90": null,
+          "to_resolution_n": 0,
+          "to_resolution_d_p50": null,
+          "to_resolution_d_p90": null,
+          "to_closing_n": 0,
+          "to_closing_d_p50": null,
+          "to_closing_d_p90": null,
+          "customer_wait_n": 0,
+          "customer_wait_d_p50": null,
+          "customer_wait_d_p90": null,
+          "negative_intervals": 0,
+          "outcome_after_window": 0
+        },
+        {
+          "grp": "other complaint",
+          "escalation": "not escalated",
+          "complaints": 44094,
+          "open": 13986,
+          "in_process": 18559,
+          "escalated_status": 0,
+          "resolved": 9286,
+          "closed": 1763,
+          "rejected": 500,
+          "sla_known": 44094,
+          "sla_breached": 8811,
+          "assigned": 28112,
+          "resolution_days_n": 10520,
+          "resolution_days_p50": 16.0,
+          "resolution_days_p90": 28.0,
+          "first_response_n": 26742,
+          "first_response_h_p50": 25.0,
+          "first_response_h_p90": 44.0,
+          "to_resolution_n": 9695,
+          "to_resolution_d_p50": 14.666666666666666,
+          "to_resolution_d_p90": 26.166666666666668,
+          "to_closing_n": 1605,
+          "to_closing_d_p50": 18.166666666666668,
+          "to_closing_d_p90": 30.150000000000006,
+          "customer_wait_n": 10524,
+          "customer_wait_d_p50": 16.0,
+          "customer_wait_d_p90": 28.0,
+          "negative_intervals": 331,
+          "outcome_after_window": 249
+        }
+      ]
+    },
+    "PR-05": {
+      "title": "Escalated unrecognized-charge complaints: how long they have stayed open at the data end (a lower bound, not a closing time)",
+      "scope": "full",
+      "query": "data_foundation/queries/product/PR-05_escalated_age.sql",
+      "rows": [
+        {
+          "data_end": "2026-06-18",
+          "escalated": 618,
+          "created_in_design_window": 514,
+          "with_resolution_date": 0,
+          "with_closing_date": 0,
+          "age_since_creation_d_p50": 535.0,
+          "age_since_creation_d_p90": 973.3000000000001,
+          "with_first_response": 0,
+          "age_since_first_response_d_p50": null,
+          "age_since_first_response_d_p90": null
+        }
+      ]
+    },
+    "PR-06": {
+      "title": "Closed-case satisfaction of unrecognized-charge complaints (F5): scores of cases closed in the design window",
+      "scope": "design",
+      "query": "data_foundation/queries/product/PR-06_closed_case_satisfaction.sql",
+      "rows": [
+        {
+          "score": null,
+          "closed_in_window": false,
+          "complaints": 9953
+        },
+        {
+          "score": 1.0,
+          "closed_in_window": false,
+          "complaints": 7
+        },
+        {
+          "score": 2.0,
+          "closed_in_window": false,
+          "complaints": 2
+        },
+        {
+          "score": 3.0,
+          "closed_in_window": false,
+          "complaints": 11
+        },
+        {
+          "score": 4.0,
+          "closed_in_window": false,
+          "complaints": 3
+        },
+        {
+          "score": 5.0,
+          "closed_in_window": false,
+          "complaints": 3
+        },
+        {
+          "score": null,
+          "closed_in_window": true,
+          "complaints": 20
+        },
+        {
+          "score": 1.0,
+          "closed_in_window": true,
+          "complaints": 70
+        },
+        {
+          "score": 2.0,
+          "closed_in_window": true,
+          "complaints": 71
+        },
+        {
+          "score": 3.0,
+          "closed_in_window": true,
+          "complaints": 72
+        },
+        {
+          "score": 4.0,
+          "closed_in_window": true,
+          "complaints": 80
+        },
+        {
+          "score": 5.0,
+          "closed_in_window": true,
+          "complaints": 78
+        }
+      ]
+    },
+    "PR-07": {
+      "title": "Contact-centre surveys (CSAT, CES, NPS): score distribution by contact reason and resolution",
+      "scope": "design",
+      "query": "data_foundation/queries/product/PR-07_contact_surveys.sql",
+      "rows": [
+        {
+          "survey_type": "CES",
+          "reason": "Comercial",
+          "was_resolved": false,
+          "score": 1,
+          "surveys": 80
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Comercial",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 372
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Comercial",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 74
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Comercial",
+          "was_resolved": true,
+          "score": 2,
+          "surveys": 140
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Comercial",
+          "was_resolved": true,
+          "score": 3,
+          "surveys": 672
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Comercial",
+          "was_resolved": true,
+          "score": 4,
+          "surveys": 157
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Producto",
+          "was_resolved": false,
+          "score": 1,
+          "surveys": 61
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Producto",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 293
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Producto",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 66
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Producto",
+          "was_resolved": true,
+          "score": 2,
+          "surveys": 499
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Producto",
+          "was_resolved": true,
+          "score": 3,
+          "surveys": 2455
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Producto",
+          "was_resolved": true,
+          "score": 4,
+          "surveys": 564
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Queja",
+          "was_resolved": false,
+          "score": 1,
+          "surveys": 258
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Queja",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 1248
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Queja",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 279
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Queja",
+          "was_resolved": true,
+          "score": 2,
+          "surveys": 175
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Queja",
+          "was_resolved": true,
+          "score": 3,
+          "surveys": 930
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Queja",
+          "was_resolved": true,
+          "score": 4,
+          "surveys": 198
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Retención",
+          "was_resolved": false,
+          "score": 1,
+          "surveys": 31
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Retención",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 142
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Retención",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 24
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Retención",
+          "was_resolved": true,
+          "score": 2,
+          "surveys": 48
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Retención",
+          "was_resolved": true,
+          "score": 3,
+          "surveys": 249
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Retención",
+          "was_resolved": true,
+          "score": 4,
+          "surveys": 50
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Transaccional",
+          "was_resolved": false,
+          "score": 1,
+          "surveys": 79
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Transaccional",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 348
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Transaccional",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 66
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Transaccional",
+          "was_resolved": true,
+          "score": 2,
+          "surveys": 847
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Transaccional",
+          "was_resolved": true,
+          "score": 3,
+          "surveys": 4018
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Transaccional",
+          "was_resolved": true,
+          "score": 4,
+          "surveys": 838
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Técnico",
+          "was_resolved": false,
+          "score": 1,
+          "surveys": 107
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Técnico",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 542
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Técnico",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 127
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Técnico",
+          "was_resolved": true,
+          "score": 2,
+          "surveys": 306
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Técnico",
+          "was_resolved": true,
+          "score": 3,
+          "surveys": 1279
+        },
+        {
+          "survey_type": "CES",
+          "reason": "Técnico",
+          "was_resolved": true,
+          "score": 4,
+          "surveys": 283
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Comercial",
+          "was_resolved": false,
+          "score": 1,
+          "surveys": 427
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Comercial",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 2119
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Comercial",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 486
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Comercial",
+          "was_resolved": true,
+          "score": 2,
+          "surveys": 888
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Comercial",
+          "was_resolved": true,
+          "score": 3,
+          "surveys": 3929
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Comercial",
+          "was_resolved": true,
+          "score": 4,
+          "surveys": 828
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Producto",
+          "was_resolved": false,
+          "score": 1,
+          "surveys": 347
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Producto",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 1703
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Producto",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 351
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Producto",
+          "was_resolved": true,
+          "score": 2,
+          "surveys": 3154
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Producto",
+          "was_resolved": true,
+          "score": 3,
+          "surveys": 14853
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Producto",
+          "was_resolved": true,
+          "score": 4,
+          "surveys": 3107
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Queja",
+          "was_resolved": false,
+          "score": 1,
+          "surveys": 1564
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Queja",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 7311
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Queja",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 1585
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Queja",
+          "was_resolved": true,
+          "score": 2,
+          "surveys": 1188
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Queja",
+          "was_resolved": true,
+          "score": 3,
+          "surveys": 5690
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Queja",
+          "was_resolved": true,
+          "score": 4,
+          "surveys": 1176
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Retención",
+          "was_resolved": false,
+          "score": 1,
+          "surveys": 184
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Retención",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 918
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Retención",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 187
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Retención",
+          "was_resolved": true,
+          "score": 2,
+          "surveys": 290
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Retención",
+          "was_resolved": true,
+          "score": 3,
+          "surveys": 1355
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Retención",
+          "was_resolved": true,
+          "score": 4,
+          "surveys": 303
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Transaccional",
+          "was_resolved": false,
+          "score": 1,
+          "surveys": 512
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Transaccional",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 2276
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Transaccional",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 474
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Transaccional",
+          "was_resolved": true,
+          "score": 2,
+          "surveys": 5116
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Transaccional",
+          "was_resolved": true,
+          "score": 3,
+          "surveys": 24487
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Transaccional",
+          "was_resolved": true,
+          "score": 4,
+          "surveys": 5103
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Técnico",
+          "was_resolved": false,
+          "score": 1,
+          "surveys": 753
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Técnico",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 3500
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Técnico",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 712
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Técnico",
+          "was_resolved": true,
+          "score": 2,
+          "surveys": 1680
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Técnico",
+          "was_resolved": true,
+          "score": 3,
+          "surveys": 7906
+        },
+        {
+          "survey_type": "CSAT",
+          "reason": "Técnico",
+          "was_resolved": true,
+          "score": 4,
+          "surveys": 1698
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Comercial",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 515
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Comercial",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 500
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Comercial",
+          "was_resolved": false,
+          "score": 4,
+          "surveys": 471
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Comercial",
+          "was_resolved": true,
+          "score": 5,
+          "surveys": 952
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Comercial",
+          "was_resolved": true,
+          "score": 6,
+          "surveys": 943
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Comercial",
+          "was_resolved": true,
+          "score": 7,
+          "surveys": 933
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Producto",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 413
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Producto",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 411
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Producto",
+          "was_resolved": false,
+          "score": 4,
+          "surveys": 394
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Producto",
+          "was_resolved": true,
+          "score": 5,
+          "surveys": 3494
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Producto",
+          "was_resolved": true,
+          "score": 6,
+          "surveys": 3490
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Producto",
+          "was_resolved": true,
+          "score": 7,
+          "surveys": 3546
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Queja",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 1689
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Queja",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 1741
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Queja",
+          "was_resolved": false,
+          "score": 4,
+          "surveys": 1696
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Queja",
+          "was_resolved": true,
+          "score": 5,
+          "surveys": 1413
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Queja",
+          "was_resolved": true,
+          "score": 6,
+          "surveys": 1286
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Queja",
+          "was_resolved": true,
+          "score": 7,
+          "surveys": 1363
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Retención",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 231
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Retención",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 199
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Retención",
+          "was_resolved": false,
+          "score": 4,
+          "surveys": 211
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Retención",
+          "was_resolved": true,
+          "score": 5,
+          "surveys": 345
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Retención",
+          "was_resolved": true,
+          "score": 6,
+          "surveys": 330
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Retención",
+          "was_resolved": true,
+          "score": 7,
+          "surveys": 294
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Transaccional",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 506
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Transaccional",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 535
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Transaccional",
+          "was_resolved": false,
+          "score": 4,
+          "surveys": 574
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Transaccional",
+          "was_resolved": true,
+          "score": 5,
+          "surveys": 5860
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Transaccional",
+          "was_resolved": true,
+          "score": 6,
+          "surveys": 5817
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Transaccional",
+          "was_resolved": true,
+          "score": 7,
+          "surveys": 5699
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Técnico",
+          "was_resolved": false,
+          "score": 2,
+          "surveys": 768
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Técnico",
+          "was_resolved": false,
+          "score": 3,
+          "surveys": 732
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Técnico",
+          "was_resolved": false,
+          "score": 4,
+          "surveys": 795
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Técnico",
+          "was_resolved": true,
+          "score": 5,
+          "surveys": 1859
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Técnico",
+          "was_resolved": true,
+          "score": 6,
+          "surveys": 1899
+        },
+        {
+          "survey_type": "NPS",
+          "reason": "Técnico",
+          "was_resolved": true,
+          "score": 7,
+          "surveys": 1886
+        }
+      ]
+    },
+    "PR-08": {
+      "title": "Segment cut: unrecognized-charge complaints by the customer's current segment (a snapshot)",
+      "scope": "design",
+      "query": "data_foundation/queries/product/PR-08_segment_complaints.sql",
+      "rows": [
+        {
+          "segment": "Basic",
+          "complaints": 6221,
+          "customers": 6000,
+          "unresolved": 4635,
+          "escalated": 314,
+          "sla_known": 6221,
+          "sla_breached": 1238,
+          "closed_scored": 205,
+          "closed_score_sum": 617.0
+        },
+        {
+          "segment": "Plus",
+          "complaints": 2557,
+          "customers": 2469,
+          "unresolved": 1911,
+          "escalated": 135,
+          "sla_known": 2557,
+          "sla_breached": 549,
+          "closed_scored": 100,
+          "closed_score_sum": 328.0
+        },
+        {
+          "segment": "Premium",
+          "complaints": 1053,
+          "customers": 1021,
+          "unresolved": 788,
+          "escalated": 45,
+          "sla_known": 1053,
+          "sla_breached": 216,
+          "closed_scored": 45,
+          "closed_score_sum": 135.0
+        },
+        {
+          "segment": "Student",
+          "complaints": 539,
+          "customers": 523,
+          "unresolved": 399,
+          "escalated": 20,
+          "sla_known": 539,
+          "sla_breached": 82,
+          "closed_scored": 21,
+          "closed_score_sum": null
+        }
+      ]
+    },
+    "PR-09": {
+      "title": "Segment cut: CSAT of complaint contacts (Queja) against other reasons, by the customer's current segment",
+      "scope": "design",
+      "query": "data_foundation/queries/product/PR-09_segment_csat.sql",
+      "rows": [
+        {
+          "segment": "Basic",
+          "reason_group": "Queja",
+          "surveys": 11066,
+          "score_sum": 27013,
+          "top_score": 705,
+          "resolved": 4830
+        },
+        {
+          "segment": "Basic",
+          "reason_group": "other reasons",
+          "surveys": 53468,
+          "score_sum": 151533,
+          "top_score": 6616,
+          "resolved": 44595
+        },
+        {
+          "segment": "Plus",
+          "reason_group": "Queja",
+          "surveys": 4696,
+          "score_sum": 11381,
+          "top_score": 291,
+          "resolved": 2017
+        },
+        {
+          "segment": "Plus",
+          "reason_group": "other reasons",
+          "surveys": 22581,
+          "score_sum": 63902,
+          "top_score": 2763,
+          "resolved": 18787
+        },
+        {
+          "segment": "Premium",
+          "reason_group": "Queja",
+          "surveys": 1824,
+          "score_sum": 4460,
+          "top_score": 117,
+          "resolved": 818
+        },
+        {
+          "segment": "Premium",
+          "reason_group": "other reasons",
+          "surveys": 9021,
+          "score_sum": 25465,
+          "top_score": 1090,
+          "resolved": 7485
+        },
+        {
+          "segment": "Student",
+          "reason_group": "Queja",
+          "surveys": 928,
+          "score_sum": 2237,
+          "top_score": 63,
+          "resolved": 389
+        },
+        {
+          "segment": "Student",
+          "reason_group": "other reasons",
+          "surveys": 4576,
+          "score_sum": 12987,
+          "top_score": 570,
+          "resolved": 3830
+        }
+      ]
+    }
+  },
+  "summary": {
+    "window": {
+      "start": "2023-06-17",
+      "end_exclusive": "2026-01-01",
+      "calendar_days": 929
+    },
+    "kpi1_demand": {
+      "unrecognized_charges": 10370,
+      "all_complaints": 56736,
+      "per_day": 11.16,
+      "share": 0.1828,
+      "by_year": [
+        {
+          "period": "2023",
+          "all_complaints": 12066,
+          "unrecognized_charges": 2199,
+          "calendar_days": 198,
+          "share": 0.1822
+        },
+        {
+          "period": "2024",
+          "all_complaints": 22318,
+          "unrecognized_charges": 4053,
+          "calendar_days": 366,
+          "share": 0.1816
+        },
+        {
+          "period": "2025",
+          "all_complaints": 22352,
+          "unrecognized_charges": 4118,
+          "calendar_days": 365,
+          "share": 0.1842
+        }
+      ]
+    },
+    "kpi2_claimed": {
+      "complaints": 10370,
+      "usd_convertible": 3296,
+      "coverage": 0.3178,
+      "direct_usd_cases": 835,
+      "fx_estimated_cases": 2461,
+      "fx_estimated_usd": 135989.84,
+      "no_amount": 6919,
+      "amount_without_currency": 155,
+      "direct_usd_per_day": 2327.14,
+      "usd_with_fx_estimates_per_day": 2473.52,
+      "by_currency": [
+        {
+          "currency": "(none)",
+          "complaints": 6929,
+          "amount_present": 155,
+          "source_amount_sum": 424881.76999999996,
+          "source_amount_p50": 2861.15,
+          "usd_convertible": 0,
+          "usd_amount_sum": null,
+          "usd_is_estimated": true
+        },
+        {
+          "currency": "ARS",
+          "complaints": 852,
+          "amount_present": 810,
+          "source_amount_sum": 2063542.8599999992,
+          "source_amount_p50": 2517.675,
+          "usd_convertible": 810,
+          "usd_amount_sum": 5899.878508350002,
+          "usd_is_estimated": true
+        },
+        {
+          "currency": "COP",
+          "complaints": 843,
+          "amount_present": 810,
+          "source_amount_sum": 1963189.5799999991,
+          "source_amount_p50": 2377.3450000000003,
+          "usd_convertible": 810,
+          "usd_amount_sum": 490.86318761000024,
+          "usd_is_estimated": true
+        },
+        {
+          "currency": "MXN",
+          "complaints": 875,
+          "amount_present": 841,
+          "source_amount_sum": 2205637.8199999994,
+          "source_amount_p50": 2706.62,
+          "usd_convertible": 841,
+          "usd_amount_sum": 129599.09664068988,
+          "usd_is_estimated": true
+        },
+        {
+          "currency": "USD",
+          "complaints": 871,
+          "amount_present": 835,
+          "source_amount_sum": 2161914.1999999997,
+          "source_amount_p50": 2555.9,
+          "usd_convertible": 835,
+          "usd_amount_sum": 2161914.1999999997,
+          "usd_is_estimated": false
+        }
+      ]
+    },
+    "kpi3_workload": {
+      "contacts": 99122,
+      "per_day": 106.7,
+      "duration_observed": 85261,
+      "observed_hours_per_day": 11.08,
+      "mean_duration_seconds": 434.71,
+      "duration_missing": 13861,
+      "reason_fields_differ": 0
+    },
+    "resolution_gap": {
+      "queja_resolved": 43269,
+      "queja_contacts": 99122,
+      "queja_rate": 0.4365,
+      "all_resolved": 444741,
+      "all_contacts": 580546,
+      "all_rate": 0.7661
+    },
+    "before": {
+      "unrecognized charge / all": {
+        "grp": "unrecognized charge",
+        "escalation": "all",
+        "complaints": 10370,
+        "open": 3105,
+        "in_process": 4114,
+        "escalated_status": 514,
+        "resolved": 2117,
+        "closed": 418,
+        "rejected": 102,
+        "sla_known": 10370,
+        "sla_breached": 2085,
+        "assigned": 6823,
+        "resolution_days_n": 2404,
+        "resolution_days_p50": 15.0,
+        "resolution_days_p90": 27.0,
+        "first_response_n": 6045,
+        "first_response_h_p50": 25.0,
+        "first_response_h_p90": 44.0,
+        "to_resolution_n": 2241,
+        "to_resolution_d_p50": 14.375,
+        "to_resolution_d_p90": 25.875,
+        "to_closing_n": 386,
+        "to_closing_d_p50": 17.333333333333336,
+        "to_closing_d_p90": 30.041666666666664,
+        "customer_wait_n": 2414,
+        "customer_wait_d_p50": 15.0,
+        "customer_wait_d_p90": 27.0,
+        "negative_intervals": 84,
+        "outcome_after_window": 52
+      },
+      "unrecognized charge / escalated": {
+        "grp": "unrecognized charge",
+        "escalation": "escalated",
+        "complaints": 514,
+        "open": 0,
+        "in_process": 0,
+        "escalated_status": 514,
+        "resolved": 0,
+        "closed": 0,
+        "rejected": 0,
+        "sla_known": 514,
+        "sla_breached": 119,
+        "assigned": 492,
+        "resolution_days_n": 0,
+        "resolution_days_p50": null,
+        "resolution_days_p90": null,
+        "first_response_n": 0,
+        "first_response_h_p50": null,
+        "first_response_h_p90": null,
+        "to_resolution_n": 0,
+        "to_resolution_d_p50": null,
+        "to_resolution_d_p90": null,
+        "to_closing_n": 0,
+        "to_closing_d_p50": null,
+        "to_closing_d_p90": null,
+        "customer_wait_n": 0,
+        "customer_wait_d_p50": null,
+        "customer_wait_d_p90": null,
+        "negative_intervals": 0,
+        "outcome_after_window": 0
+      },
+      "unrecognized charge / not escalated": {
+        "grp": "unrecognized charge",
+        "escalation": "not escalated",
+        "complaints": 9856,
+        "open": 3105,
+        "in_process": 4114,
+        "escalated_status": 0,
+        "resolved": 2117,
+        "closed": 418,
+        "rejected": 102,
+        "sla_known": 9856,
+        "sla_breached": 1966,
+        "assigned": 6331,
+        "resolution_days_n": 2404,
+        "resolution_days_p50": 15.0,
+        "resolution_days_p90": 27.0,
+        "first_response_n": 6045,
+        "first_response_h_p50": 25.0,
+        "first_response_h_p90": 44.0,
+        "to_resolution_n": 2241,
+        "to_resolution_d_p50": 14.375,
+        "to_resolution_d_p90": 25.875,
+        "to_closing_n": 386,
+        "to_closing_d_p50": 17.333333333333336,
+        "to_closing_d_p90": 30.041666666666664,
+        "customer_wait_n": 2414,
+        "customer_wait_d_p50": 15.0,
+        "customer_wait_d_p90": 27.0,
+        "negative_intervals": 84,
+        "outcome_after_window": 52
+      },
+      "other complaint / all": {
+        "grp": "other complaint",
+        "escalation": "all",
+        "complaints": 46366,
+        "open": 13986,
+        "in_process": 18559,
+        "escalated_status": 2272,
+        "resolved": 9286,
+        "closed": 1763,
+        "rejected": 500,
+        "sla_known": 46366,
+        "sla_breached": 9286,
+        "assigned": 30289,
+        "resolution_days_n": 10520,
+        "resolution_days_p50": 16.0,
+        "resolution_days_p90": 28.0,
+        "first_response_n": 26742,
+        "first_response_h_p50": 25.0,
+        "first_response_h_p90": 44.0,
+        "to_resolution_n": 9695,
+        "to_resolution_d_p50": 14.666666666666666,
+        "to_resolution_d_p90": 26.166666666666668,
+        "to_closing_n": 1605,
+        "to_closing_d_p50": 18.166666666666668,
+        "to_closing_d_p90": 30.150000000000006,
+        "customer_wait_n": 10524,
+        "customer_wait_d_p50": 16.0,
+        "customer_wait_d_p90": 28.0,
+        "negative_intervals": 331,
+        "outcome_after_window": 249
+      },
+      "other complaint / escalated": {
+        "grp": "other complaint",
+        "escalation": "escalated",
+        "complaints": 2272,
+        "open": 0,
+        "in_process": 0,
+        "escalated_status": 2272,
+        "resolved": 0,
+        "closed": 0,
+        "rejected": 0,
+        "sla_known": 2272,
+        "sla_breached": 475,
+        "assigned": 2177,
+        "resolution_days_n": 0,
+        "resolution_days_p50": null,
+        "resolution_days_p90": null,
+        "first_response_n": 0,
+        "first_response_h_p50": null,
+        "first_response_h_p90": null,
+        "to_resolution_n": 0,
+        "to_resolution_d_p50": null,
+        "to_resolution_d_p90": null,
+        "to_closing_n": 0,
+        "to_closing_d_p50": null,
+        "to_closing_d_p90": null,
+        "customer_wait_n": 0,
+        "customer_wait_d_p50": null,
+        "customer_wait_d_p90": null,
+        "negative_intervals": 0,
+        "outcome_after_window": 0
+      },
+      "other complaint / not escalated": {
+        "grp": "other complaint",
+        "escalation": "not escalated",
+        "complaints": 44094,
+        "open": 13986,
+        "in_process": 18559,
+        "escalated_status": 0,
+        "resolved": 9286,
+        "closed": 1763,
+        "rejected": 500,
+        "sla_known": 44094,
+        "sla_breached": 8811,
+        "assigned": 28112,
+        "resolution_days_n": 10520,
+        "resolution_days_p50": 16.0,
+        "resolution_days_p90": 28.0,
+        "first_response_n": 26742,
+        "first_response_h_p50": 25.0,
+        "first_response_h_p90": 44.0,
+        "to_resolution_n": 9695,
+        "to_resolution_d_p50": 14.666666666666666,
+        "to_resolution_d_p90": 26.166666666666668,
+        "to_closing_n": 1605,
+        "to_closing_d_p50": 18.166666666666668,
+        "to_closing_d_p90": 30.150000000000006,
+        "customer_wait_n": 10524,
+        "customer_wait_d_p50": 16.0,
+        "customer_wait_d_p90": 28.0,
+        "negative_intervals": 331,
+        "outcome_after_window": 249
+      }
+    },
+    "escalated_age": {
+      "data_end": "2026-06-18",
+      "escalated": 618,
+      "created_in_design_window": 514,
+      "with_resolution_date": 0,
+      "with_closing_date": 0,
+      "age_since_creation_d_p50": 535.0,
+      "age_since_creation_d_p90": 973.3000000000001,
+      "with_first_response": 0,
+      "age_since_first_response_d_p50": null,
+      "age_since_first_response_d_p90": null
+    },
+    "closed_case_satisfaction": {
+      "scored_closed": 371,
+      "cohort": 10370,
+      "mean": 3.067,
+      "distribution": {
+        "1": 70,
+        "2": 71,
+        "3": 72,
+        "4": 80,
+        "5": 78
+      }
+    },
+    "satisfaction": {
+      "CES": {
+        "Queja": {
+          "all": {
+            "n": 3088,
+            "mean": 2.436,
+            "distribution": {
+              "1": 258,
+              "2": 1423,
+              "3": 1209,
+              "4": 198
+            }
+          },
+          "resolved": {
+            "n": 1303,
+            "mean": 3.018,
+            "distribution": {
+              "2": 175,
+              "3": 930,
+              "4": 198
+            }
+          },
+          "not resolved": {
+            "n": 1785,
+            "mean": 2.012,
+            "distribution": {
+              "1": 258,
+              "2": 1248,
+              "3": 279
+            }
+          }
+        },
+        "other reasons": {
+          "all": {
+            "n": 14817,
+            "mean": 2.841,
+            "distribution": {
+              "1": 358,
+              "2": 3537,
+              "3": 9030,
+              "4": 1892
+            }
+          },
+          "resolved": {
+            "n": 12405,
+            "mean": 3.004,
+            "distribution": {
+              "2": 1840,
+              "3": 8673,
+              "4": 1892
+            }
+          },
+          "not resolved": {
+            "n": 2412,
+            "mean": 2.0,
+            "distribution": {
+              "1": 358,
+              "2": 1697,
+              "3": 357
+            }
+          }
+        }
+      },
+      "CSAT": {
+        "Queja": {
+          "all": {
+            "n": 18514,
+            "mean": 2.436,
+            "distribution": {
+              "1": 1564,
+              "2": 8499,
+              "3": 7275,
+              "4": 1176
+            }
+          },
+          "resolved": {
+            "n": 8054,
+            "mean": 2.999,
+            "distribution": {
+              "2": 1188,
+              "3": 5690,
+              "4": 1176
+            }
+          },
+          "not resolved": {
+            "n": 10460,
+            "mean": 2.002,
+            "distribution": {
+              "1": 1564,
+              "2": 7311,
+              "3": 1585
+            }
+          }
+        },
+        "other reasons": {
+          "all": {
+            "n": 89646,
+            "mean": 2.832,
+            "distribution": {
+              "1": 2223,
+              "2": 21644,
+              "3": 54740,
+              "4": 11039
+            }
+          },
+          "resolved": {
+            "n": 74697,
+            "mean": 2.999,
+            "distribution": {
+              "2": 11128,
+              "3": 52530,
+              "4": 11039
+            }
+          },
+          "not resolved": {
+            "n": 14949,
+            "mean": 1.999,
+            "distribution": {
+              "1": 2223,
+              "2": 10516,
+              "3": 2210
+            }
+          }
+        }
+      },
+      "NPS": {
+        "Queja": {
+          "all": {
+            "n": 9188,
+            "mean": 4.322,
+            "distribution": {
+              "2": 1689,
+              "3": 1741,
+              "4": 1696,
+              "5": 1413,
+              "6": 1286,
+              "7": 1363
+            }
+          },
+          "resolved": {
+            "n": 4062,
+            "mean": 5.988,
+            "distribution": {
+              "5": 1413,
+              "6": 1286,
+              "7": 1363
+            }
+          },
+          "not resolved": {
+            "n": 5126,
+            "mean": 3.001,
+            "distribution": {
+              "2": 1689,
+              "3": 1741,
+              "4": 1696
+            }
+          }
+        },
+        "other reasons": {
+          "all": {
+            "n": 44602,
+            "mean": 5.509,
+            "distribution": {
+              "2": 2433,
+              "3": 2377,
+              "4": 2445,
+              "5": 12510,
+              "6": 12479,
+              "7": 12358
+            }
+          },
+          "resolved": {
+            "n": 37347,
+            "mean": 5.996,
+            "distribution": {
+              "5": 12510,
+              "6": 12479,
+              "7": 12358
+            }
+          },
+          "not resolved": {
+            "n": 7255,
+            "mean": 3.002,
+            "distribution": {
+              "2": 2433,
+              "3": 2377,
+              "4": 2445
+            }
+          }
+        }
+      }
+    },
+    "csat_by_reason": [
+      {
+        "reason": "Queja",
+        "contacts": 99122,
+        "resolved": 43269,
+        "resolved_rate": 0.4365,
+        "csat": {
+          "n": 18514,
+          "mean": 2.436,
+          "distribution": {
+            "1": 1564,
+            "2": 8499,
+            "3": 7275,
+            "4": 1176
+          }
+        },
+        "csat_resolved": {
+          "n": 8054,
+          "mean": 2.999,
+          "distribution": {
+            "2": 1188,
+            "3": 5690,
+            "4": 1176
+          }
+        },
+        "csat_not_resolved": {
+          "n": 10460,
+          "mean": 2.002,
+          "distribution": {
+            "1": 1564,
+            "2": 7311,
+            "3": 1585
+          }
+        }
+      },
+      {
+        "reason": "Retención",
+        "contacts": 17396,
+        "resolved": 10418,
+        "resolved_rate": 0.5989,
+        "csat": {
+          "n": 3237,
+          "mean": 2.607,
+          "distribution": {
+            "1": 184,
+            "2": 1208,
+            "3": 1542,
+            "4": 303
+          }
+        },
+        "csat_resolved": {
+          "n": 1948,
+          "mean": 3.007,
+          "distribution": {
+            "2": 290,
+            "3": 1355,
+            "4": 303
+          }
+        },
+        "csat_not_resolved": {
+          "n": 1289,
+          "mean": 2.002,
+          "distribution": {
+            "1": 184,
+            "2": 918,
+            "3": 187
+          }
+        }
+      },
+      {
+        "reason": "Comercial",
+        "contacts": 46417,
+        "resolved": 30194,
+        "resolved_rate": 0.6505,
+        "csat": {
+          "n": 8677,
+          "mean": 2.65,
+          "distribution": {
+            "1": 427,
+            "2": 3007,
+            "3": 4415,
+            "4": 828
+          }
+        },
+        "csat_resolved": {
+          "n": 5645,
+          "mean": 2.989,
+          "distribution": {
+            "2": 888,
+            "3": 3929,
+            "4": 828
+          }
+        },
+        "csat_not_resolved": {
+          "n": 3032,
+          "mean": 2.019,
+          "distribution": {
+            "1": 427,
+            "2": 2119,
+            "3": 486
+          }
+        }
+      },
+      {
+        "reason": "Técnico",
+        "contacts": 87040,
+        "resolved": 60884,
+        "resolved_rate": 0.6995,
+        "csat": {
+          "n": 16249,
+          "mean": 2.693,
+          "distribution": {
+            "1": 753,
+            "2": 5180,
+            "3": 8618,
+            "4": 1698
+          }
+        },
+        "csat_resolved": {
+          "n": 11284,
+          "mean": 3.002,
+          "distribution": {
+            "2": 1680,
+            "3": 7906,
+            "4": 1698
+          }
+        },
+        "csat_not_resolved": {
+          "n": 4965,
+          "mean": 1.992,
+          "distribution": {
+            "1": 753,
+            "2": 3500,
+            "3": 712
+          }
+        }
+      },
+      {
+        "reason": "Producto",
+        "contacts": 127444,
+        "resolved": 114199,
+        "resolved_rate": 0.8961,
+        "csat": {
+          "n": 23515,
+          "mean": 2.896,
+          "distribution": {
+            "1": 347,
+            "2": 4857,
+            "3": 15204,
+            "4": 3107
+          }
+        },
+        "csat_resolved": {
+          "n": 21114,
+          "mean": 2.998,
+          "distribution": {
+            "2": 3154,
+            "3": 14853,
+            "4": 3107
+          }
+        },
+        "csat_not_resolved": {
+          "n": 2401,
+          "mean": 2.002,
+          "distribution": {
+            "1": 347,
+            "2": 1703,
+            "3": 351
+          }
+        }
+      },
+      {
+        "reason": "Transaccional",
+        "contacts": 203127,
+        "resolved": 185777,
+        "resolved_rate": 0.9146,
+        "csat": {
+          "n": 37968,
+          "mean": 2.913,
+          "distribution": {
+            "1": 512,
+            "2": 7392,
+            "3": 24961,
+            "4": 5103
+          }
+        },
+        "csat_resolved": {
+          "n": 34706,
+          "mean": 3.0,
+          "distribution": {
+            "2": 5116,
+            "3": 24487,
+            "4": 5103
+          }
+        },
+        "csat_not_resolved": {
+          "n": 3262,
+          "mean": 1.988,
+          "distribution": {
+            "1": 512,
+            "2": 2276,
+            "3": 474
+          }
+        }
+      }
+    ],
+    "nps": {
+      "answers": 53790,
+      "max_score": 7,
+      "promoters": 0,
+      "detractors": 40069,
+      "detractor_share": 0.7449,
+      "formal_score_note": "Not reported: no answer reaches 9-10, so the formal NPS would be almost all detractors and says nothing about loyalty."
+    },
+    "segments": [
+      {
+        "segment": "Basic",
+        "complaints": 6221,
+        "customers": 6000,
+        "unresolved": 4635,
+        "escalated": 314,
+        "sla_known": 6221,
+        "sla_breached": 1238,
+        "closed_scored": 205,
+        "closed_score_sum": 617.0,
+        "too_few": false,
+        "unresolved_share": 0.7451,
+        "sla_breach_rate": 0.199,
+        "closed_mean": 3.01
+      },
+      {
+        "segment": "Plus",
+        "complaints": 2557,
+        "customers": 2469,
+        "unresolved": 1911,
+        "escalated": 135,
+        "sla_known": 2557,
+        "sla_breached": 549,
+        "closed_scored": 100,
+        "closed_score_sum": 328.0,
+        "too_few": false,
+        "unresolved_share": 0.7474,
+        "sla_breach_rate": 0.2147,
+        "closed_mean": 3.28
+      },
+      {
+        "segment": "Premium",
+        "complaints": 1053,
+        "customers": 1021,
+        "unresolved": 788,
+        "escalated": 45,
+        "sla_known": 1053,
+        "sla_breached": 216,
+        "closed_scored": 45,
+        "closed_score_sum": 135.0,
+        "too_few": false,
+        "unresolved_share": 0.7483,
+        "sla_breach_rate": 0.2051,
+        "closed_mean": 3.0
+      },
+      {
+        "segment": "Student",
+        "complaints": 539,
+        "customers": 523,
+        "unresolved": 399,
+        "escalated": 20,
+        "sla_known": 539,
+        "sla_breached": 82,
+        "closed_scored": 21,
+        "closed_score_sum": null,
+        "too_few": false,
+        "unresolved_share": 0.7403,
+        "sla_breach_rate": 0.1521,
+        "closed_mean": null
+      }
+    ],
+    "segment_csat": [
+      {
+        "segment": "Basic",
+        "reason_group": "Queja",
+        "surveys": 11066,
+        "score_sum": 27013,
+        "top_score": 705,
+        "resolved": 4830,
+        "too_few": false,
+        "mean": 2.441,
+        "top_score_share": 0.0637
+      },
+      {
+        "segment": "Basic",
+        "reason_group": "other reasons",
+        "surveys": 53468,
+        "score_sum": 151533,
+        "top_score": 6616,
+        "resolved": 44595,
+        "too_few": false,
+        "mean": 2.834,
+        "top_score_share": 0.1237
+      },
+      {
+        "segment": "Plus",
+        "reason_group": "Queja",
+        "surveys": 4696,
+        "score_sum": 11381,
+        "top_score": 291,
+        "resolved": 2017,
+        "too_few": false,
+        "mean": 2.424,
+        "top_score_share": 0.062
+      },
+      {
+        "segment": "Plus",
+        "reason_group": "other reasons",
+        "surveys": 22581,
+        "score_sum": 63902,
+        "top_score": 2763,
+        "resolved": 18787,
+        "too_few": false,
+        "mean": 2.83,
+        "top_score_share": 0.1224
+      },
+      {
+        "segment": "Premium",
+        "reason_group": "Queja",
+        "surveys": 1824,
+        "score_sum": 4460,
+        "top_score": 117,
+        "resolved": 818,
+        "too_few": false,
+        "mean": 2.445,
+        "top_score_share": 0.0641
+      },
+      {
+        "segment": "Premium",
+        "reason_group": "other reasons",
+        "surveys": 9021,
+        "score_sum": 25465,
+        "top_score": 1090,
+        "resolved": 7485,
+        "too_few": false,
+        "mean": 2.823,
+        "top_score_share": 0.1208
+      },
+      {
+        "segment": "Student",
+        "reason_group": "Queja",
+        "surveys": 928,
+        "score_sum": 2237,
+        "top_score": 63,
+        "resolved": 389,
+        "too_few": false,
+        "mean": 2.411,
+        "top_score_share": 0.0679
+      },
+      {
+        "segment": "Student",
+        "reason_group": "other reasons",
+        "surveys": 4576,
+        "score_sum": 12987,
+        "top_score": 570,
+        "resolved": 3830,
+        "too_few": false,
+        "mean": 2.838,
+        "top_score_share": 0.1246
+      }
+    ],
+    "min_cell": 30
+  }
+}
