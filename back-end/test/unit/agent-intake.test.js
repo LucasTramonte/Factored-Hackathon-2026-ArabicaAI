@@ -61,7 +61,11 @@ test('agent_detail_includes_incomplete_handoff_without_transaction', async t => 
   assert.equal(full.history.at(-1).outcome,'accepted');
   assert.deepEqual(db.prepare('SELECT * FROM intake_events ORDER BY episode_id,seq').all(),saved);
   assert.deepEqual(db.prepare('SELECT usage_json FROM intake_handoffs ORDER BY handoff_id').all(),usage);
-  assert.equal(changes(),writesBefore,'agent reads write nothing');
+  // The first open of each report stamps first_opened_at (migration 0018): two reports opened, two writes; nothing else changes.
+  assert.equal(changes(),writesBefore+2,'only the two first opens write');
+  const afterFirstOpens = changes();
+  await get('/agent/intake-detail?protocol=' + incomplete.receipt.protocol); await get('/agent/intakes');
+  assert.equal(changes(),afterFirstOpens,'later agent reads write nothing');
   for (const bad of [{...body,extra:'leak'},{...body,verified_evidence:{...body.verified_evidence,customer_id:'ana'}},
     {...body,history:[{...body.history[0],customer_statement:'leak'}]}]) assert.throws(()=>assertContract('agentIntakeDetail',bad),/violated/);
   assert.throws(()=>assertContract('agentIntakeList',{...list,items:[{...list.items[0],customer_statement:'leak'}]}),/violated/);
@@ -185,4 +189,90 @@ test('a report from before the customer could choose a reason reads reason null,
   const detail = await (await get('/agent/intake-detail?protocol=' + old.receipt.protocol)).json();
   assertContract('agentIntakeDetail', detail); assert.equal(detail.reason, null);
   assert.equal(db.prepare('SELECT reason FROM intake_episodes WHERE episode_id=?').get(old.episode_id).reason, 'not_mine', 'the stored value is kept; only its reading changes');
+});
+
+test('detail summarises only the same customer\'s other reports and stamps the first open once', async t => {
+  const { db, finish, get } = await setup(t);
+  // Bruno's report must never count in Ana's history (isolation), and the report itself is never in its own history.
+  const brunoToken = 'c'.repeat(64);
+  db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(brunoToken), 'customer', 'bruno', Date.now() + 3600000);
+  const asBruno = (path, body) => route(request(path, { method: 'POST', cookie: `demo_session=${brunoToken}`, body }), env, createStore({
+    prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
+    batch: async st => { db.exec('BEGIN'); try { const r = st.map(s => s.all()); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } } }));
+  const brunoStart = await (await asBruno('/intake/start', { language: 'pt', mode: 'guided', report_type: 'unrecognized_charge', reason: 'other', customer_statement: 'Não reconheço esta cobrança.', idempotency_key: crypto.randomUUID() })).json();
+  assert.equal((await asBruno('/intake/handoff', { episode_id: brunoStart.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() })).status, 201);
+
+  const first = await get('/agent/intake-detail?protocol=' + (await finish('incomplete')).receipt.protocol);
+  const firstBody = await first.json(); assertContract('agentIntakeDetail', firstBody);
+  assert.deepEqual(firstBody.customer_history, { reports: 0, open: 0, high_urgency: 0, last_status: null, last_accepted_at: null, has_more: false }, 'first report; Bruno\'s is not counted');
+
+  const older = await finish('incomplete'), latest = await finish('complete');
+  db.prepare("UPDATE intake_handoffs SET status='closed' WHERE complete_case_id IS NULL AND handoff_id=?").run(older.receipt.protocol);
+  const res = await get('/agent/intake-detail?protocol=' + latest.receipt.protocol);
+  const body = await res.json(); assertContract('agentIntakeDetail', body);
+  assert.equal(body.customer_history.reports, 2); assert.equal(body.customer_history.open, 1); assert.equal(body.customer_history.high_urgency, 0);
+  assert.ok(['received', 'closed'].includes(body.customer_history.last_status)); assert.ok(body.customer_history.last_accepted_at);
+  assert.ok(!JSON.stringify(body.customer_history).includes('ana'), 'the summary names no customer');
+
+  const stamped = db.prepare('SELECT first_opened_at FROM intake_handoffs WHERE complete_case_id=?').get(latest.receipt.protocol).first_opened_at;
+  assert.equal(body.first_opened_at, new Date(stamped).toISOString());
+  const again = await (await get('/agent/intake-detail?protocol=' + latest.receipt.protocol)).json();
+  assert.equal(again.first_opened_at, body.first_opened_at, 'a later read keeps the first open time');
+  assert.equal(db.prepare('SELECT count(*) n FROM intake_handoffs WHERE first_opened_at IS NOT NULL').get().n, 2, 'only opened reports are stamped');
+});
+
+test('a full customer episode window stays partial when starts and pending reservations hide older reports', async t => {
+  const { db, start, finish, store, get } = await setup(t);
+  const reports = [];
+  const created = Date.UTC(2026, 9, 3, 12);
+  for (let i = 0; i < 30; i++) {
+    const report = await finish('incomplete'); reports.push(report);
+    db.prepare('UPDATE intake_episodes SET created_at=? WHERE episode_id=?').run(created + i, report.episode_id);
+    db.prepare('UPDATE intake_handoffs SET accepted_at=? WHERE episode_id=?').run(new Date(created + i).toISOString(), report.episode_id);
+  }
+  const read = async protocol => {
+    const body = await (await get('/agent/intake-detail?protocol=' + protocol)).json();
+    assertContract('agentIntakeDetail', body); return body;
+  };
+  const old = await read(reports[0].receipt.protocol);
+  assert.equal(old.customer_history.reports, 20, 'opening an old report still caps its other reports at 20');
+  assert.equal(old.customer_history.has_more, true);
+
+  for (let i = 0; i < 5; i++) {
+    const episode_id = i < 2
+      ? (await finish('incomplete', { ...store, readIntakeReceipt: async () => { throw new Error('lost readback'); } })).episode_id
+      : await start();
+    db.prepare('UPDATE intake_episodes SET created_at=? WHERE episode_id=?').run(created + 30 + i, episode_id);
+    if (i === 2 || i === 3) db.prepare("UPDATE intake_episodes SET state='abandoned' WHERE episode_id=?").run(episode_id);
+  }
+  db.prepare("UPDATE intake_handoffs SET status='closed',urgency='high' WHERE episode_id=?").run(reports[28].episode_id);
+  const mixed = await read(reports[29].receipt.protocol);
+  assert.deepEqual(mixed.customer_history, { reports: 15, open: 14, high_urgency: 1, last_status: 'closed',
+    last_accepted_at: new Date(created + 28).toISOString(), has_more: true }, 'only acknowledged other reports count; the full raw window warns of omissions');
+
+  for (let i = 0; i < 21; i++) {
+    const episode_id = await start();
+    db.prepare("UPDATE intake_episodes SET state='abandoned',created_at=? WHERE episode_id=?").run(created + 40 + i, episode_id);
+  }
+  const obscured = await read(reports[29].receipt.protocol);
+  assert.deepEqual(obscured.customer_history, { reports: 0, open: 0, high_urgency: 0, last_status: null, last_accepted_at: null, has_more: true },
+    'zero visible reports in a saturated window never means this is the first report');
+  assert.equal(obscured.first_opened_at, mixed.first_opened_at);
+});
+
+test('simultaneous first opens write one epoch-ms stamp and SQL pickup preserves milliseconds', async t => {
+  const { db, store, finish } = await setup(t);
+  const { receipt } = await finish('incomplete');
+  const accepted = '2026-10-03T12:00:00.123Z', now = Date.parse(accepted) + 4567;
+  db.prepare('UPDATE intake_handoffs SET accepted_at=? WHERE handoff_id=?').run(accepted, receipt.protocol);
+  const changes = () => db.prepare('SELECT total_changes() AS n').get().n;
+  const before = changes();
+  const [first, concurrent] = await Promise.all([store.findIntakeHandoff(receipt.protocol, now), store.findIntakeHandoff(receipt.protocol, now + 100)]);
+  assert.equal(first.first_opened_at, now); assert.equal(concurrent.first_opened_at, now);
+  assert.equal(changes(), before + 1, 'concurrent opens stamp only once');
+  const pickup = db.prepare('SELECT typeof(first_opened_at) AS unit,first_opened_at - '
+    + 'CAST(ROUND((julianday(accepted_at)-2440587.5)*86400000) AS INTEGER) AS pickup_ms FROM intake_handoffs WHERE handoff_id=?').get(receipt.protocol);
+  assert.equal(pickup.unit, 'integer'); assert.equal(pickup.pickup_ms, 4567);
+  assert.equal((await store.findIntakeHandoff(receipt.protocol, now + 1000)).first_opened_at, now);
+  assert.equal(changes(), before + 1, 'later reads write nothing');
 });

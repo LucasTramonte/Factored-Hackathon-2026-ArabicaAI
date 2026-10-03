@@ -36,7 +36,8 @@ const CEILING = {
   audit: [2, 102, 0, 1],
   // The CHECK on intake_episodes.reason (migration 0016, ADR-010) adds one counted read to each statement that writes an
   // episode row, as 0004's CHECKs did: start 8 -> 9 and replay 6 -> 7 rows read, measured with and without it (ADR-004).
-  intakeStart: [6, 9, 11, 2],
+  // Migration 0018's index intake_episodes_owner_recent adds one write to the episode insert (11 -> 12).
+  intakeStart: [6, 9, 12, 2],
   intakeStartReplay: [6, 7, 2, 2],
   // The first acknowledgement queues one "received" email for a customer with a notification target (Task 3.2):
   // one more statement in the acknowledgement batch, 3 writes (row, primary key, email_outbox_recent).
@@ -44,7 +45,8 @@ const CEILING = {
   // (index cases_customer_transaction, migration 0011), and one more write for that index on the case insert (ADR-004).
   // Urgency lane (Task 5.1, migration 0013): one more query and round trip reads the customer's served purchases
   // (at most 21) to apply the stated policy; a normal charge writes no urgent-index entry (ADR-004).
-  intakeConfirm: [21, 74, 27, 10],
+  // Seven acknowledgement writes exclude newer or still-open same-charge reports: +28 reads in this fixture (ADR-004).
+  intakeConfirm: [21, 102, 27, 10],
   intakeConfirmReplay: [18, 54, 0, 7],
   intakeIncomplete: [15, 55, 18, 7],
   intakeIncompleteReplay: [15, 44, 0, 7],
@@ -58,15 +60,23 @@ const CEILING = {
   // Session, owned report with its target flag, the outbox insert that checks the 5-minute window itself (row, primary
   // key, email_outbox_recent); the send marks the row from its own store after the response (Task 3.3).
   reportsUpdate: [3, 14, 3, 3],
+  // POST /reports/feedback (migration 0019): session, then one batch that inserts the first answer (row + primary key)
+  // and reads it back; a repeated answer inserts nothing. Outside the episode ceilings: the customer may never answer.
+  reportFeedback: [3, 10, 2, 2],
   // Agent session, then one batch: history row (+ unique index), the customer's email (row, primary key,
   // email_outbox_recent) and the status update; each statement resolves the handoff by its unique keys (ADR-004).
   agentTransition: [5, 26, 6, 2],
   // A high-priority charge (Task 5.1): its confirm writes one more row, the entry in the partial index
   // intake_handoffs_urgent; closing it writes what a normal close writes, since D1 counts no write for leaving that index.
-  intakeConfirmHigh: [21, 77, 28, 10],
+  // The confirm batch repeats the one-open-report check atomically (NOT EXISTS over cases_customer_transaction): +1 read.
+  // Its earlier closed same-charge report makes those seven guards cost +42 reads (ADR-004).
+  intakeConfirmHigh: [21, 120, 28, 10],
   agentTransitionHigh: [5, 26, 6, 2],
-  completeDetail: [3, 15, 0, 3],
-  incompleteDetail: [3, 10, 0, 3],
+  // The detail batch (migration 0018): stamp the first open (1 write, once), the row, and the customer's newest 21
+  // episodes (index intake_episodes_owner_recent) with at most 20 other reports, so reads are bounded by window size.
+  // The raw window also keeps null pending/current slots internally so has_more cannot under-report a full window.
+  completeDetail: [5, 80, 1, 3],
+  incompleteDetail: [5, 80, 1, 3],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
   idleSweepPage: [2, 1210, 300, 1],
   idleSweepNoop: [2, 10, 0, 1],
@@ -80,7 +90,8 @@ const EXPORT_SLACK = 2;
 const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
 // Customer requests of one guided episode (login + list?lang= + displayed + start + terminal request), as the client
 // sends them from ADR-009 on; ADR-004 sizes capacity on these.
-const EPISODE_CEILING = { complete: [37, 97, 46, 20], incomplete: [31, 75, 37, 17] };
+// Migration 0018's episode index adds one write to each episode's start (complete 46 -> 47, incomplete 37 -> 38).
+const EPISODE_CEILING = { complete: [37, 125, 47, 20], incomplete: [31, 75, 38, 17] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);
@@ -151,6 +162,10 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   const confirmReplay = await c.call('/intake/confirm', confirmation);
   assert.equal(confirmReplay.status, 200); assert.equal(confirmReplay.body.protocol, complete.body.protocol);
   measured.confirmReplay = within('intakeConfirmReplay', confirmReplay.metrics);
+  const feedback = await c.call('/reports/feedback', { protocol: complete.body.protocol, easy: true });
+  assert.equal(feedback.status, 200); assertContract('reportFeedback', feedback.body);
+  measured.feedback = within('reportFeedback', feedback.metrics);
+  measured.feedbackReplay = within('reportFeedback', (await c.call('/reports/feedback', { protocol: complete.body.protocol, easy: true })).metrics);
   const open = await c.call('/intake/start', startBody()); assert.equal(open.status, 201);
   measured.start2 = within('intakeStart', open.metrics);
   const handoff = { episode_id: open.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() };
@@ -268,6 +283,9 @@ test('50-row queue scan budget is qualified against 50 terminal and 50 pending t
   const detail = await agent.call('/agent/intake-detail?protocol=' + receipts[0]);
   assert.equal(detail.status, 200); assertContract('agentIntakeDetail', detail.body);
   assert.equal(detail.body.verified_evidence.transaction, null);
+  assert.equal(detail.body.customer_history.has_more, true, 'the newest 21 episodes fill the window even with pending slots');
+  assert.ok(detail.body.customer_history.reports <= 20);
   within('incompleteDetail', detail.metrics);
   console.log('D1_FULL_QUEUE ' + JSON.stringify({ terminal: 50, pending: 50, tied: true, ...queue.metrics }));
+  console.log('D1_FULL_HISTORY ' + JSON.stringify({ ...detail.metrics, customer_history: detail.body.customer_history }));
 });

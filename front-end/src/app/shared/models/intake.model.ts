@@ -122,6 +122,10 @@ export interface AgentIntakeDetail extends AgentIntake {
   unresolved_questions: string[];
   history: IntakeServiceTransition[];
   history_has_more: boolean;
+  /** UTC ISO of the stored epoch-ms first open; pickup ms = Date.parse(this) - Date.parse(accepted_at). */
+  first_opened_at: string;
+  /** Up to 20 other acknowledged reports in the newest 21 episodes; has_more means the window may omit older reports. */
+  customer_history: { reports: number; open: number; high_urgency: number; last_status: HandoffStatus | null; last_accepted_at: string | null; has_more: boolean };
   /** Whether a model read the case in shadow: version and call count only, never its output; it decides nothing. */
   model_reading: { mode: 'off' | 'shadow'; model_version: string | null; llm_calls: number };
   scope: 'synthetic_demo_only';
@@ -156,6 +160,8 @@ export interface AgentSession {
 export type IntakeLang = 'es' | 'pt' | 'en';
 
 export interface IntakeStartBody {
+  /** Only "Not resolved": public protocol of the customer's closed acknowledged report; server resolves the link. */
+  previous_protocol?: string;
   customer_statement: string;
   idempotency_key: string;
   language: IntakeLang;

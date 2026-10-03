@@ -166,8 +166,12 @@
                       @if (r.kind === 'incomplete') { <span class="ar-chip ar-chip-warn report-kind">{{ t().kindIncomplete }}</span> }
                       @else if (r.kind === 'technical') { <span class="ar-chip ar-chip-err report-kind">{{ t().kindTechnical }}</span> }
                       <span class="ar-caption">@switch (r.status) { @case ('in_review') { {{ t().statusInReview }} } @case ('closed') { {{ t().statusClosed }} } @default { {{ t().nextStepReview }} } } · {{ r.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span></span>
-                    <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm update-btn" (click)="requestUpdate(r.protocol)" [disabled]="updating() !== null"
+                    <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm update-btn" (click)="requestUpdate(r.protocol)" [attr.aria-disabled]="updating() !== null"
                       [attr.aria-label]="t().updateMe + ': ' + (r.reference_short ?? r.protocol)">{{ t().updateMe }}</button>
+                    @if (r.status === 'closed') {
+                      <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm report-again-btn" (click)="reportAgain(r)" [disabled]="!!frozen()"
+                        [attr.aria-label]="t().reportAgain + ': ' + (r.reference_short ?? r.protocol)">{{ t().reportAgain }}</button>
+                    }
                     <span class="ar-caption" role="status">@if (updateNote()?.protocol === r.protocol) { {{ updateNote()!.text }} }</span></li>
                 }</ul>
                 @if (reports()!.has_more) { <span class="ar-caption">{{ t().moreReports }}</span> }
@@ -252,6 +256,15 @@
                       <ul class="open-questions">@for (q of r.unresolved_questions; track $index) { <li>{{ check(q) }}</li> }</ul>
                     }
                     @if (r.replayed) { <p class="ar-small">{{ t().replayed }}</p> }
+                    <div class="receipt-feedback" role="group" [attr.aria-label]="t().feedbackQuestion">
+                      @if (!feedbackRecorded()) {
+                        <span>{{ t().feedbackQuestion }}</span>
+                        <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm" (click)="sendFeedback(true)" [attr.aria-disabled]="feedbackSending()" [attr.aria-label]="t().feedbackYes">👍 {{ t().feedbackYesShort }}</button>
+                        <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm" (click)="sendFeedback(false)" [attr.aria-disabled]="feedbackSending()" [attr.aria-label]="t().feedbackNo">👎 {{ t().feedbackNoShort }}</button>
+                        @if (feedbackFailed()) { <span class="ar-small" role="alert">{{ t().feedbackFailed }}</span> }
+                      }
+                      <span class="feedback-thanks" role="status" tabindex="-1">{{ feedbackRecorded() ? t().feedbackThanks : '' }}</span>
+                    </div>
                   </div>
                 }
                 <div class="report-actions chat-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="newReport()">{{ t().chatNew }}</button></div>

@@ -133,7 +133,7 @@ Human steps (the access key never passes through an agent or the repository):
 
 - Customer identity is a Cognito email code mapped to one demo customer; it is not bank authentication. Agents sign in with their own email code in the `agent` group; there is no shared team password.
 - Sessions last one hour and are stored in D1.
-- A retry with the same key and content returns the same reference, and different content gets 409. A charge with a report still received or in review can't be reported again under a new key (409) until a person closes it; two confirmations in the same instant can still open two.
+- A retry with the same key and content returns the same reference, and different content gets 409. A charge with a report still received or in review can't be reported again under a new key (409) until a person closes it, even when two confirmations arrive in the same instant.
 - If the browser tab is closed with a request pending, the pending state is lost, but no duplicate is created.
 - No historical complaint is linked to a transaction, so none is joined here by `customer_id` alone.
 

@@ -71,24 +71,91 @@ There is no team password. Customers sign in with an email one-time code (`POST 
 | `POST /demo/session` | none | Simulated customer login for a committed identity or a D1 dataset customer; malformed ids are rejected before any query | 200, 422, 503 (committed identity not loaded); 404 without `DEMO_PICKER=1` |
 | `GET /transactions` | customer | The customer's own charges, one page, with `has_more` | 200, 401 |
 | `POST /cases` | customer | Legacy one-step confirmed case | 201, 200 (replay), 401, 404, 409, 422, 503 |
-| `POST /intake/start` | customer | Start an explicit guided ES/PT unrecognized-charge report (10–2,000 code points, no U+0000, UUID key). No case reference is returned. A same-key replay returns the original, immutable start receipt (`state: selection_required`) even after the episode was abandoned or handed off, so it does not describe the current state | 201, 200 (same key and content), 401, 409 (same key, other content), 422, 503 (retry the same key) |
+| `POST /intake/start` | customer | Start an explicit guided ES/PT/EN unrecognized-charge report (10–2,000 code points, no U+0000, UUID key); optional `previous_protocol` links an own acknowledged closed report. No case reference is returned. A same-key replay returns the original, immutable start receipt (`state: selection_required`) even after the episode was abandoned or handed off, so it does not describe the current state | 201, 200 (same key and content), 401, 404 (previous report missing/foreign/unacknowledged), 409 (key conflict or previous report open), 422, 503 (retry the same key) |
 | `POST /intake/confirm` | customer | Confirm one owned transaction; returns the protocol only after the case and handoff are read back | 201, 200 (same key and content replays the receipt), 401 (expired or revoked, including in the reservation itself; renew as the same customer and retry the same key), 404 (episode or transaction not owned; foreign and missing look identical), 409 ("Episode already submitted with different content or key" once a handoff exists; "Episode is no longer open" after abandonment, when there is no reservation), 422, 503 (acceptance unknown; retry the same key) |
 | `POST /intake/handoff` | customer | Ask for human review without a confirmed transaction (`kind: incomplete`); same receipt rules. Optional `details` (what the customer remembers; same text rules as the statement) is appended to the stored statement once, with a newline, and is part of the replay content | same as confirm, without the transaction 404; 422 when statement and details exceed 2,000 code points together |
 | `POST /auth/session` | none | Customer sign-in from `Authorization: Bearer <Cognito ID token>` in group `customer` or `admin`, with a loaded customer id | 200, 401, 403 (not enrolled), 422 (no token), 503 (JWKS unreachable) |
 | `POST /auth/logout` | none | Revokes the presented customer session | 204 |
 | `GET /reports` | customer | The customer's own acknowledged reports, newest first, 20 a page with `has_more`: reference, kind, status, next step and the confirmed charge id (null without one) | 200, 401, 422 (any query parameter) |
+| `POST /reports/feedback` | customer | The receipt's one question, "was it easy to report this charge?" (`{ protocol, easy }`), for an own report: the first answer stands, stored on the report and never in events | 200 (same answer again too), 401, 404 (foreign and missing look identical), 409 (a different answer), 422 |
 | `POST /reports/update` | customer | Queue one status email for an own report, at most one per report per five minutes | 202, 401, 404 (foreign and missing look identical), 409 (no email on file), 422, 429 |
 | `POST /demo/agent-session` | none | Agent login from `Authorization: Bearer <Cognito ID token>` in group `agent` or `admin` (`mode: email_otp`); any body is ignored. With `DEMO_PICKER=1` and no `Authorization`, a one-click local session (`mode: simulated_login`) | 200, 401, 403 (not in group `agent` or `admin`), 422 (no token), 503 (JWKS unreachable) |
 | `GET /agent/intakes` | agent | Newest 50 acknowledged intake handoffs (complete, incomplete, technical) with `has_more`; pending reservations are excluded | 200, 401 |
-| `GET /agent/intake-detail?protocol=<uuid>` | agent | Statement, verified evidence (or `null`), server actions, open questions and recorded service history (100 events, `history_has_more`) | 200, 401, 404, 422 (anything but exactly one valid `protocol`) |
+| `GET /agent/intake-detail?protocol=<uuid>` | agent | Statement, verified evidence (or `null`), server actions, open questions and recorded service history (100 events, `history_has_more`); `customer_history` summarises at most 20 other acknowledged reports in the customer's newest 21 episodes, with `has_more` when the window is full; `first_opened_at` is the UTC ISO first-agent-open timestamp (one epoch-ms write, then no writes on later reads) | 200, 401, 404, 422 (anything but exactly one valid `protocol`) |
 | `POST /agent/intake-status` | agent | Move a report one step, received → in review → closed, with a history row and one email to the customer; a replay writes nothing | 200, 401, 404, 409 (any other step), 422 |
 | `GET /audit/events?limit=` | none; `Authorization: Bearer <Cognito ID token>` in group `auditor` or `admin` on every call | The newest sign-in events and review-status changes, `limit` (1–100, default 50) of each, with `has_more`; references only (no customer id, email, statement or token); writes nothing | 200, 401, 403 (not `auditor` or `admin`), 422 (no token, or a bad `limit`), 503 (JWKS unreachable) |
 
 The client's "?" help entry ([ADR-010](../Docs/ADRs/ADR-010-report-reasons-and-help-entry.md), decision 5) starts with the same `POST /intake/start` and no charge selected. If the customer then finds the charge in the list, it goes through `POST /intake/confirm` and its ownership check, as from a charge row; otherwise `POST /intake/handoff` ends it as an incomplete handoff that a person reviews. A lost or stolen card is `high` on every kind of handoff, so the receipt carries the call-your-bank line either way.
 
-The only agent write is the review status; nothing refunds, blocks a card or decides fraud. A customer session never opens an agent route and an agent session never opens a customer route.
+A closed report offers "Not resolved" in the client. It starts a **new** report, never a reopened one, because closing records that a person finished the review, not a resolution. Any unfrozen draft is cleared first. The same charge is preselected when still listed; otherwise it uses the "?" entry. Normal customer clarification, confirmation, handoff read-back and one-open-report protection still apply.
+
+The optional `previous_protocol` on `POST /intake/start` is stored independently of the editable statement as `intake_episodes.previous_handoff_id` (additive migration 0020). The insertion resolves the public protocol through a 1:1 handoff/episode join and rechecks same-session ownership, acknowledged state, closed status and the live customer session atomically. A malformed protocol is 422, a missing/foreign/unacknowledged source 404, and an open source 409; none creates a new episode. The source stays closed. Repeating the same start key and link returns the same episode; changing/removing the link conflicts. Starts that omit it retain the original hash and response contract. No customer identifier or internal handoff id is accepted, and no link is inferred from free text.
+
+The relationship supports incomplete reports as well as confirmed charges. A reviewer's SQL can join the new episode directly to its previous handoff; the aggregate re-report metric counts acknowledged linked follow-ups divided by all acknowledged reports accepted in a specified UTC interval. The grain is one new handoff, `accepted_at` supplies event time, and pending reservations are excluded. This measures a customer asking for another review, not a confirmed failure or resolution:
+
+```sql
+SELECT COUNT(*) AS acknowledged_reports,
+       SUM(CASE WHEN pe.customer_id=e.customer_id THEN 1 ELSE 0 END) AS linked_followups
+FROM intake_handoffs h JOIN intake_episodes e ON e.episode_id=h.episode_id
+LEFT JOIN intake_handoffs previous ON previous.handoff_id=e.previous_handoff_id
+LEFT JOIN intake_episodes pe ON pe.episode_id=previous.episode_id
+WHERE e.state=h.kind||'_handoff' AND h.accepted_at>=:from_utc AND h.accepted_at<:to_utc;
+```
+
+Unlinked older reports are not retroactively inferred as follow-ups. `reset-demo-activity.sql` clears nullable previous links before handoffs, so the episode/handoff foreign-key cycle does not block the existing reset order.
+
+Native local D1 measured linked start `7 / 19 / 12 / 2`, linked replay `7 / 17 / 2 / 2` (queries / reads / writes / round trips), checked in `test/integration/report-again.test.js`. Unlinked-start ceilings remain unchanged. The additive deploy applies 0020 after local migration tests; no remote migration command is needed. Demo reset clears nullable links before deleting handoffs.
+
+
+Agent writes record the first detail open once and the review status; nothing refunds, blocks a card or decides fraud. A customer session never opens an agent route and an agent session never opens a customer route.
+
+The history counts and latest status/time describe only the bounded episode window. Pending, in-progress and abandoned episodes use slots but never count as acknowledged reports. `has_more` conservatively flags a full 21-episode window or 20-report summary, even when it contains zero reports; that is not evidence of a customer's first report. Late acknowledgements outside the creation-time window may also be omitted. The UI calls these **other** reports, since a newer report may appear when an agent opens an older one.
+
+Migration 0018 stores `first_opened_at` as epoch milliseconds and keeps it stable. `accepted_at` remains UTC ISO text, and both fields are returned as UTC ISO strings. In JavaScript, pickup milliseconds are `Date.parse(first_opened_at) - Date.parse(accepted_at)`. In D1 convert `accepted_at` before subtracting, retaining its milliseconds:
+
+```sql
+SELECT first_opened_at - CAST(ROUND((julianday(accepted_at)-2440587.5)*86400000) AS INTEGER) AS pickup_ms
+FROM intake_handoffs
+WHERE first_opened_at IS NOT NULL;
+```
 
 `GET /agent/intakes` is the agents' only queue: the *approved queue* of acknowledged handoffs (`e.state = h.kind||'_handoff'`), the same predicate that detail and status transitions use. That is the ABAC rule for agents: role `agent`, a resource in the approved queue, and only the next workflow step. The legacy `GET /agent/cases`, which listed every confirmed case with its customer id and name, was removed (issue #69). A guided complete case whose reservation is still `handoff_pending` after a lost read-back is not in the queue: the customer got 503 and no reference, and a same-owner retry with the same key completes it. A case written by the legacy `POST /cases` is never in the queue. There is no per-agent assignment yet ([auth runbook](../Docs/Plans/auth-runbook.md#known-limitations)).
+
+
+## Receipt feedback and the aggregate report
+
+Migration `0019_report_feedback.sql` stores one boolean ease answer per acknowledged handoff, with an epoch-millisecond timestamp. The ownership check and live customer-session check run inside the same atomic insert/read-back batch. A repeated matching answer preserves both the answer and timestamp; a different answer gets 409. Expiry or revocation while the body arrives, or immediately before the insert, gets 401 without storing or returning feedback. Customer statements and answers never enter event exports or logs.
+
+The receipt currently asks one prototype question in each interface language:
+
+| Language | Question |
+|---|---|
+| Spanish | ¿Fue fácil reportar este cargo? |
+| Portuguese | Foi fácil relatar esta cobrança? |
+| English | Was it easy to report this charge? |
+
+These strings are in `front-end/src/app/shared/i18n/lang.service.ts`. **Bank approval is not recorded in the repository.** The [measurement contract](../Docs/intake/customer-and-measurement-contract.md#kpi-dictionary) proposes a 1–7 effort rating and does not approve the binary wording. Bank approval of the exact localized question and answer labels remains a human step before customer release; this prototype does not claim it has that approval. Binary thumbs are an ease signal, not the contract's 1–7 metric, CSAT, successful intake, assessed safety or resolution.
+
+While an answer is pending, the thumbs expose `aria-disabled` and the synchronous handler refuses duplicate clicks. They remain focusable so the focused button is not lost while waiting. A persistent empty status region receives the thanks text after success or 409; when a focused thumb disappears, thanks takes focus. Closing the chat, choosing another control or starting another receipt keeps the customer's chosen focus. A 409 records that an answer exists without inventing its value.
+
+For Manoella's report, `store.reportFeedbackSummary({ sinceMs, untilMs })` returns aggregate-only rows by report language: `reports`, `respondents`, `unanswered`, `thumbs_up`, `thumbs_down`. It joins each acknowledged handoff to its single episode and at most one feedback row, filters `accepted_at` to the half-open UTC window, and counts answers only when `created_at < untilMs`. Pending reservations are excluded; closed acknowledged reports remain included. No customer, transaction, episode or report identifier is returned. SQL groups the source rows; only at most three language rows enter JavaScript memory. This manual read is outside online request budgets.
+
+From `back-end/`, after applying local migrations, choose the desired UTC acceptance window and run this local-only read:
+
+```bash
+node --input-type=module <<'JS'
+import { quietThirdPartyDiagnostics, withIntakeStore } from './scripts/intake-store.mjs';
+quietThirdPartyDiagnostics();
+const window = { sinceMs: Date.parse('2026-10-03T00:00:00.000Z'), untilMs: Date.parse('2026-10-04T00:00:00.000Z') };
+try {
+  await withIntakeStore({}, async store => console.log(JSON.stringify({ window, by_language: await store.reportFeedbackSummary(window) })));
+} catch {
+  console.error('Feedback summary failed'); process.exitCode = 1;
+}
+JS
+```
+
+Report `thumbs_up / respondents` with both counts and `respondents / reports` beside it. A zero denominator is undefined; an absent language row means no acknowledged reports in that window. `unanswered` includes missing answers and answers after the cutoff, never negative ratings. Invitation display is not logged, so invitation coverage is unknown and older pre-feedback receipts can be in this cohort. This acceptance cohort excludes failed or abandoned starts; it cannot replace the eligible-start denominator in the measurement contract. Customer segment is absent from D1, so no segment comparison is produced. Prototype or synthetic answers are not real participant measurements and must be labelled accordingly.
 
 ## Access
 
@@ -147,7 +214,7 @@ D1 cost: off, nothing changes. On, a new start adds one query and one round trip
 
 ## Resetting demo activity
 
-`scripts/reset-demo-activity.sql` deletes intake events, turns, handoffs and episodes, then cases, then sessions: that order respects `intake_handoffs.complete_case_id → cases`, which makes the older `DELETE FROM cases; DELETE FROM sessions;` fail. Customers, transactions, context cards and provenance stay. Locally:
+`scripts/reset-demo-activity.sql` deletes report feedback and handoff status history, then intake events, turns, handoffs and episodes, then cases, then sessions: that order respects `intake_handoffs.complete_case_id → cases`, which makes the older `DELETE FROM cases; DELETE FROM sessions;` fail. Customers, transactions, context cards and provenance stay. Locally:
 
 ```bash
 npx wrangler d1 execute arabica-intake-demo --local --file scripts/reset-demo-activity.sql

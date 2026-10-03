@@ -7,9 +7,11 @@ const KEYS = 'customer_statement,idempotency_key,language,mode,reason,report_typ
 export const REASONS = ['not_mine', 'duplicate', 'wrong_amount', 'cancelled_or_not_received', 'subscription', 'card_lost_or_stolen', 'other'];
 const invalid = detail => ({ error: { status: 422, detail } });
 
-/** Require exactly the guided report fields, one of ``REASONS``, and 10–2000 well-formed Unicode code points, excluding U+0000 (SQLite length stops there). */
+/** Require the guided fields and optional previous_protocol UUID; no identity or internal handoff id is accepted. */
 export function validateStartRequest(body) {
-  if (body === null || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).sort().join() !== KEYS) {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return invalid('Provide exactly the guided report fields');
+  const linked = Object.hasOwn(body, 'previous_protocol');
+  if (Object.keys(body).sort().join() !== (linked ? KEYS.replace('mode,', 'mode,previous_protocol,') : KEYS)) {
     return invalid('Provide exactly the guided report fields');
   }
   if (!['es', 'pt', 'en'].includes(body.language) || body.mode !== 'guided' || body.report_type !== 'unrecognized_charge') {
@@ -19,7 +21,9 @@ export function validateStartRequest(body) {
   const statement = checkText(body.customer_statement);
   if (statement.error) return statement;
   if (typeof body.idempotency_key !== 'string' || !UUID.test(body.idempotency_key)) return invalid('Invalid request key');
-  return { value: { language: body.language, statement: statement.value, key: body.idempotency_key.toLowerCase(), reason: body.reason } };
+  if (linked && (typeof body.previous_protocol !== 'string' || !UUID.test(body.previous_protocol))) return invalid('Invalid previous report protocol');
+  return { value: { language: body.language, statement: statement.value, key: body.idempotency_key.toLowerCase(), reason: body.reason,
+    ...(linked && { previousProtocol: body.previous_protocol.toLowerCase() }) } };
 }
 
 /** Customer free text: well-formed Unicode without U+0000, trimmed to 10–2000 code points. */
