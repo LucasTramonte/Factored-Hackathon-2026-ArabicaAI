@@ -158,6 +158,13 @@ describe('CustomerPage', () => {
       expect(el.querySelector('#code-sent')?.textContent).toContain('ana@example.com');
       const code = el.querySelector<HTMLInputElement>('#login-code')!;
       expect([code.inputMode, code.autocomplete, code.maxLength, code.pattern]).toEqual(['numeric', 'one-time-code', 8, '[0-9]*']);
+      const help = el.querySelector('#code-sent + p#code-help');
+      expect(help?.textContent?.trim()).toBe(p.t().codeHelp);
+      expect(code.getAttribute('aria-describedby')).toBe('code-sent code-help');
+      p.error.set(p.t().errCode);
+      fixture.detectChanges();
+      expect(code.getAttribute('aria-describedby')).toBe('code-sent code-help login-error');
+      p.error.set('');
       p.code = '12345678';
       await p.verify();
       expect(cognito.submitCode).toHaveBeenCalledWith('ana@example.com', '12345678');
