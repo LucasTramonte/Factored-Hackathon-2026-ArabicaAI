@@ -373,7 +373,9 @@ export class CustomerPage implements OnInit, OnDestroy {
     if (restart) {
       this.clearChat();
       this.chatPanel()?.nativeElement.focus(); // the panel stays open, so the heading would not take focus on its own
-    } else if (general && this.chatStep() === 'describe' && this.log().length === 1) this.log.set([{ from: 'bot', key: 'chatHelloGeneral' }]);
+    } else if ((general || transactionId) && this.chatStep() === 'describe' && this.log().length === 1) {
+      this.log.set([{ from: 'bot', key: general ? 'chatHelloGeneral' : 'chatHello' }]); // an untouched greeting follows the entry that opened the chat
+    }
     this.chatOpen.set(true);
     if (transactionId && !this.frozen() && this.chatStep() !== 'receipt' && this.chatStep() !== 'ended') {
       this.choice = transactionId;

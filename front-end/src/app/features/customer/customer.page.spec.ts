@@ -1205,6 +1205,20 @@ describe('CustomerPage', () => {
         expect(cannot.classList).toContain('ar-btn-secondary');
       });
 
+      it('a charge row on an untouched general chat switches to the usual greeting and button order', async () => {
+        const { fixture, p, el } = await home();
+        fab(el).click();
+        fixture.detectChanges();
+        p.openChat('demo-tx-001');
+        fixture.detectChanges();
+        expect(p.log()).toEqual([{ from: 'bot', key: 'chatHello' }]);
+        await toChoose(p);
+        fixture.detectChanges();
+        const { confirm, cannot } = actions(el, p);
+        expect(confirm.classList).not.toContain('ar-btn-secondary');
+        expect(cannot.classList).toContain('ar-btn-secondary');
+      });
+
       it('a new report keeps the general greeting; a reset ends general mode', async () => {
         const { p, el } = await home();
         fab(el).click();
