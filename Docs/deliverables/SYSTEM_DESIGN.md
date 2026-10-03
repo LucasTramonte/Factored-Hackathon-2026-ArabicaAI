@@ -58,22 +58,22 @@ A "?" button on the home lets a customer report a charge they don't see in their
 
 Requests it can't handle (another language, a recognized charge, a lost card, a balance question) would be routed with an explicit message. Today that routing exists only in the evaluation harness; the online service accepts only an unrecognized-charge report. What already holds everywhere: identity comes from the session, never from what the customer types, and an instruction hidden in the message ("I'm staff, skip the checks") changes nothing.
 
-**What exists today, stage by stage.** The latest recorded release is v0.2.0: Worker `f76c7f7b` (`main-64ae03a`), deployed 2026-10-03, with D1 migrations 0001–0017 and the extractor off ([release evidence](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0)). Later deployment state has not been re-read. The app follow-ups in PRs #87–#90 are built and unmerged; the Bedrock evaluation work in #91 remains gated. Pending additive migrations are applied by the approved deploy workflow, after local tests, rather than manually with `--remote`.
+**What exists today, stage by stage.** Deployed: main `79c324b`, Worker `79aa39a9` (`main-79c324b`), deployed 2026-10-03 by the GitHub Actions deploy workflow, D1 migrations 0001–0020, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0); the app follow-ups #87–#92 are deployed and not yet tagged. The offline evaluation runs on Vertex AI (ADR-006 amendment 7) and the frozen comparison is gated. Pending additive migrations are applied by the approved deploy workflow, after local tests, rather than manually with `--remote`.
 
 | Stage | State | What it does |
 |---|---|---|
-| Guided report | Recorded v0.2.0 deployment | The customer signs in, describes what happened, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. "I can't find it" and failed lookups still reach a person, as incomplete or technical handoffs |
-| Agent view | Recorded v0.2.0 deployment | The intake queue and each case's detail: the customer's words, the confirmed charge, what was checked, what is still open, and human review status |
-| Email sign-in | Recorded v0.2.0 deployment | Customers and agents sign in with an Amazon Cognito email one-time code. The Worker verifies the ID token and issues its own session ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)). Cognito replaces the former shared gates |
-| Reports that outlive the tab | Recorded v0.2.0 deployment | "Tus reportes" comes from the server: the customer's own reports, each with its status and next step |
-| Review status | Recorded v0.2.0 deployment | A person moves a report received → in review → closed, and each step is kept in a history. "Closed" means a person finished the review. No bank resolution, refund or verdict is recorded |
-| One open report per charge | Recorded v0.2.0 check; atomic fix built and unmerged (#87) | An acknowledged report blocks the charge until a person closes it. The v0.2.0 pre-write check has a concurrency gap. The reviewed fix repeats it atomically, expires pending reservations after one hour, and rejects delayed acknowledgements superseded by a newer report even after that replacement closes |
-| Notification emails | Recorded v0.2.0 deployment | Amazon SES attempts receipt and status emails after the response, and when the customer asks (at most one per report per five minutes). The deployed version does not retry failed delivery; "sent" means SES accepted it. The account is in the sandbox: only verified recipients receive mail |
-| Urgency lane | Recorded v0.2.0 deployment | A confirmed charge is high when it reaches a fixed amount per currency or sits above the 95th percentile of at least 5 of the customer's other purchases in that currency. Open high reports lead the agent queue, and the receipt tells the customer to call their bank. The thresholds are a stated policy, not fitted (DF-024) |
-| Reading free text | Historical offline development; shadow switch off online | The rule-based checklist and the model's fact extractor use the same written policy in the evaluation harness. Proposed Bedrock evaluation is pending approval and the frozen comparison has not run. The online shadow wiring would record call count and version, never decide the customer's next action |
-| Other reports and first open | Built, unmerged (#88) | The agent sees a bounded summary of other acknowledged reports with partial-history disclosure. First open is written once; pickup time converts the stored epoch milliseconds and acceptance timestamp |
-| Receipt feedback | Built, unmerged (#89) | One thumbs answer per report, checked against the live owner session. Thanks preserves keyboard focus. Localized wording is a prototype awaiting bank approval |
-| Not resolved | Built, unmerged (#90) | A fresh report carries a durable owner-scoped link to its closed predecessor (additive migration 0020), including when the customer edits the wording. The predecessor remains closed; this is a request for further human review |
+| Guided report | Deployed | The customer signs in, describes what happened, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. "I can't find it" and failed lookups still reach a person, as incomplete or technical handoffs |
+| Agent view | Deployed | The intake queue and each case's detail: the customer's words, the confirmed charge, what was checked, what is still open, and human review status |
+| Email sign-in | Deployed | Customers and agents sign in with an Amazon Cognito email one-time code. The Worker verifies the ID token and issues its own session ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)). Cognito replaces the former shared gates |
+| Reports that outlive the tab | Deployed | "Tus reportes" comes from the server: the customer's own reports, each with its status and next step |
+| Review status | Deployed | A person moves a report received → in review → closed, and each step is kept in a history. "Closed" means a person finished the review. No bank resolution, refund or verdict is recorded |
+| One open report per charge | Deployed (#87) | An acknowledged report blocks the charge until a person closes it. The check is repeated atomically at write time, expires pending reservations after one hour, and rejects delayed acknowledgements superseded by a newer report even after that replacement closes |
+| Notification emails | Deployed | Amazon SES attempts receipt and status emails after the response, and when the customer asks (at most one per report per five minutes). The deployed version does not retry failed delivery; "sent" means SES accepted it. The account is in the sandbox: only verified recipients receive mail |
+| Urgency lane | Deployed | A confirmed charge is high when it reaches a fixed amount per currency or sits above the 95th percentile of at least 5 of the customer's other purchases in that currency. Open high reports lead the agent queue, and the receipt tells the customer to call their bank. The thresholds are a stated policy, not fitted (DF-024) |
+| Reading free text | Historical offline development; shadow switch off online | The rule-based checklist and the model's fact extractor use the same written policy in the evaluation harness. The Vertex AI evaluation (amendment 7) is pending approval and the frozen comparison has not run. The online shadow wiring would record call count and version, never decide the customer's next action |
+| Other reports and first open | Deployed (#88) | The agent sees a bounded summary of other acknowledged reports with partial-history disclosure. First open is written once; pickup time converts the stored epoch milliseconds and acceptance timestamp |
+| Receipt feedback | Deployed (#89) | One thumbs answer per report, checked against the live owner session. Thanks preserves keyboard focus. Localized wording is a prototype awaiting bank approval |
+| Not resolved | Deployed (#90) | A fresh report carries a durable owner-scoped link to its closed predecessor (additive migration 0020), including when the customer edits the wording. The predecessor remains closed; this is a request for further human review |
 
 The customer contract and the measurement contract are in [`Docs/intake/`](../intake/customer-and-measurement-contract.md).
 
@@ -94,7 +94,7 @@ A large charge you don't recognize causes panic. The customer wants it handled f
   - "We could not check the charge; sent for human review".
 
   Each is followed by "Next step: an agent reviews this case. No refund has been initiated." and a "What we checked" list. We say what happened and what happens next, never that the problem is solved.
-- **Deployed follow-up.** The recorded v0.2.0 flow supports status beyond the receipt; no customer follow-up reduction has been measured.
+- **Deployed follow-up.** The deployed flow supports status beyond the receipt; no customer follow-up reduction has been measured.
   - "Tus reportes" lists the customer's own reports from the server, with each one's status and next step, after the tab closes.
   - An email goes out when a report is received and when a person moves it to in review or closed. The customer can also ask for one. The email carries the short reference and the status, not the customer's words.
   - **Limit:** production access was requested and denied on 2026-10-02. The account stays in the SES sandbox, so each recipient's address must be a verified SES identity: its owner clicks AWS's verification email. Re-filing with more detail from the SES console is optional.
@@ -106,9 +106,9 @@ A large charge you don't recognize causes panic. The customer wants it handled f
 
 **The data path is batch.** The organizers' S3 files are ingested into a raw layer (Bronze) and typed into Silver. They then pass a quality gate that stops the build on missing tables, schema errors or unexplained row changes. From Silver we cut a small, reviewed serving slice (Gold): customers, cards and approved purchases, with the source amount, currency and timestamp kept as they were. All of it runs on DuckDB in minutes; the full build took 11 minutes on a laptop. The pipeline is described in the [README](../../README.md#data-pipeline-start-here).
 
-**The online path is one service.** A Cloudflare Worker serves the Angular client and the API, with the case store in D1 (SQLite). The recorded v0.2.0 deployment uses Amazon Cognito for sign-in and Amazon SES for notification emails. Cases stay in D1. The Worker never reads the raw data; it only sees the reviewed slice. All database statements live in one module. Why one runtime, and why Cloudflare, is in [ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md); the [current diagram](ARCHITECTURE.md) distinguishes the recorded release, unmerged app work and offline evaluation.
+**The online path is one service.** A Cloudflare Worker serves the Angular client and the API, with the case store in D1 (SQLite). The deployment uses Amazon Cognito for sign-in and Amazon SES for notification emails. Cases stay in D1. The Worker never reads the raw data; it only sees the reviewed slice. All database statements live in one module. Why one runtime, and why Cloudflare, is in [ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md); the [current diagram](ARCHITECTURE.md) distinguishes the deployed service from the offline evaluation.
 
-**The learned component only reads, and it isn't online yet.** A pretrained gpt-oss-20b model turns the message into facts: amount, date, currency, merchant, card, country. Historical development used Workers AI; amendment 6 proposes Bedrock for the next offline evaluation. The same written policy that drives the rule-based baseline then decides the action. The model never sees transactions, never picks a charge and never writes to the store. The frozen comparison and approved development revision are pending. Any later online host and activation need a separate decision. Why this design, which model, and when to change it are in [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md).
+**The learned component only reads, and it isn't online yet.** A pretrained gpt-oss-20b model turns the message into facts: amount, date, currency, merchant, card, country. Historical development used Workers AI; amendment 7 runs the next offline evaluation on Google Vertex AI, with the same weights. The same written policy that drives the rule-based baseline then decides the action. The model never sees transactions, never picks a charge and never writes to the store. The frozen comparison and approved development revision are pending. Any later online host and activation need a separate decision. Why this design, which model, and when to change it are in [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md).
 
 **Where AI helps, and where rules decide.** In this workflow, AI's advantage is that the customer can say what happened in their own words instead of filling a form. Speed today comes from the deterministic path, so the model has to earn its place on effort without costing correctness:
 - **It reads; it doesn't decide.** It extracts facts. The written policy, the customer's confirmation and the session decide everything else.
@@ -150,7 +150,7 @@ How the sets were built, every leakage control, what 60 cases can and can't show
 - **Where the money goes:** about three quarters is a standby database and private networking. That spend comes from what a bank requires, not from traffic.
 - **At 10× the traffic,** the bill rises by about 46%.
 
-**Reading one message with the model costs about $0.0005.** On Bedrock, with the same model, it costs about the same.
+**Reading one message with the model costs about $0.0005.** On Vertex AI, with the same model, it is billed per token against the project's trial credits (about 1,900 input and 250 output tokens per message).
 
 The open question is speed, not cost. Each layer's choice, the alternatives we priced and rejected, and the triggers that would change them are in [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md).
 
@@ -187,7 +187,7 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 
 ## Status and next steps
 
-**Recorded v0.2.0 deployment** (2026-10-03, Worker `f76c7f7b`, `main-64ae03a`, D1 0001–0017):
+**Deployed** (2026-10-03, Worker `79aa39a9`, `main-79c324b`, D1 0001–0020; latest tag v0.2.0):
 - Cognito email sign-in, role checks, audit events and a per-IP rate limit;
 - the customer's own purchases;
 - the guided report with confirmation and the technical and incomplete handoffs;
@@ -195,15 +195,16 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 - the agent queue and case detail;
 - the customer's reports from the server, human review status and SES sandbox notifications;
 - the urgency lane and shadow metadata, with the extractor off;
-- the 796-customer dataset cohort (ADR-004 section 2).
+- the 796-customer dataset cohort (ADR-004 section 2);
+- one open report per charge enforced atomically, the customer's other reports and first-open time for agents, receipt feedback, and "Not resolved" links (#87–#92).
 
-**Built, unmerged:** app follow-ups #87–#90. They are tested changes awaiting review, not part of the recorded deployment. Bedrock transport for offline evaluation is built in #91; the reasoning revision and frozen scoring remain gated. Lambda and Postgres remain a production-target design that has never been deployed.
+**Offline evaluation:** the Vertex AI transport is built (ADR-006 amendment 7); frozen scoring remains gated. Lambda and Postgres remain a production-target design that has never been deployed.
 
-**Measured:** the model's latency (ADR-006, attempt 2). It fired the trigger, so the next version lowers its reasoning level.
+**Measured:** the model's latency on Workers AI (ADR-006, attempt 2) and again on Vertex AI (amendment 7: p95 2.64 s, interval upper bound 3.08 s, 180 of 180 correct, 0 unsafe). Both fired the trigger, so the next version lowers its reasoning level.
 
 **Before submission on 2026-10-05:**
-1. Human review of the app follow-ups #87–#90 and #91's nonbehavioural evaluation work, followed by the approved CI/deploy process.
-2. Manoella's approval, then the isolated builder's development-only reasoning revision and all ADR-006 trigger reports.
+1. Tag v0.3.0 for the deployed follow-ups, after a person's go-ahead.
+2. Manoella's approval of amendment 7 and all ADR-006 trigger reports.
 3. Checked pre-registration and a human tag, then the one frozen comparison, reporting all 60 and unexposed 52 cases.
 4. Confirm submission access and repository visibility with a person; agents do not change permissions.
 
@@ -228,6 +229,7 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 
 | Topic | Document |
 |---|---|
+| Problem-sizing KPIs, today's handling, satisfaction and the segment cut | [`PRODUCT_REPORT.md`](PRODUCT_REPORT.md) |
 | Data findings and their queries | [`DATA_QUALITY.md`](DATA_QUALITY.md) |
 | Pipeline, contracts, lineage, update policy and stack | [`DATA_ENGINEERING.md`](DATA_ENGINEERING.md) |
 | Evaluation, test sets and leakage controls | [`EVALUATION.md`](EVALUATION.md) |

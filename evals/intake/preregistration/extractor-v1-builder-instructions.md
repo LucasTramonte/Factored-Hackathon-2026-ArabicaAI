@@ -125,3 +125,14 @@ Everything in the 2026-10-02 revision stands, with these changes:
    `python -m evals.intake.run --split development --repetitions 10 --system extractor-v1=intake_agent.extractor.bedrock:extract --output data_foundation/runs/latency-v1-low-bedrock/results.json`
 4. **Pre-registration:** record the model as `openai.gpt-oss-20b-1:0`, the target as `intake_agent.extractor.bedrock:extract`, and both implementation files.
 
+---
+
+## Revision 2026-10-03 (later): the host is Google Vertex AI (ADR-006 amendment 7)
+
+Bedrock inference is blocked on the project's AWS Free plan, so the 2026-10-03 Bedrock revision is replaced by this one. Everything else in the 2026-10-02 revision stands. Follow this revision only if the orchestrator says the latency trigger fired on Vertex at the provider default; otherwise no reasoning change is made.
+
+1. **Where the reasoning level comes from:** read Google's current Vertex AI documentation for the managed `openai/gpt-oss-20b-maas` model and its OpenAI-compatible Chat Completions endpoint. Record in `DEV_LOG.md` the URL, the date, the exact request field for the reasoning level and its documented default. Don't guess; if it isn't documented, stop and report.
+2. **Where it goes:** set it in `workers_ai.build_body`, which `vertex.py` reuses. Assert it in `test_workers_ai.py` and `test_vertex.py`.
+3. **The run:** a person supplies `VERTEX_ACCESS_TOKEN`, `VERTEX_PROJECT` and `VERTEX_LOCATION=global` in the environment. There is no UTC-reset constraint.
+   `python -m evals.intake.run --split development --repetitions 10 --system extractor-v1=intake_agent.extractor.vertex:extract --output data_foundation/runs/latency-v1-low-vertex/results.json`
+4. **Pre-registration:** record the model as `openai/gpt-oss-20b-maas`, the target as `intake_agent.extractor.vertex:extract`, and both implementation files (`vertex.py`, `workers_ai.py`).

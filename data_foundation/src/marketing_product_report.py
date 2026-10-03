@@ -9,16 +9,69 @@ from pathlib import Path
 
 from data_foundation.src.marketing_product_insights import summarize_insights
 
+# The web app's look (ArabicaAI design system v2), shared by every page in data_foundation/reports.
+# Tokens are copied from front-end/src/styles.css, where they are generated from the design system's
+# tokens.json; update both together. Offline: no web font is fetched, so Geist shows only where it is
+# installed and the app's fallback stack otherwise.
 STYLE = """<style>
-:root{font-family:Inter,system-ui,sans-serif;color:#162b35;background:#edf2f0}*{box-sizing:border-box}body{margin:0}
-header{background:#10343a;color:#fff;padding:46px max(24px,calc((100vw - 1100px)/2))}header p{max-width:780px;line-height:1.6;color:#d0e5e1}
-main{max-width:1100px;margin:auto;padding:28px 24px 70px}h1{font-size:clamp(2rem,5vw,3.4rem);margin:0 0 12px}h2{font-size:1.5rem;margin:0 0 16px}
-section{background:#fff;border-radius:16px;padding:26px;margin:18px 0;box-shadow:0 2px 14px #173e3b12}p,li{line-height:1.55}small,.muted{color:#536970}
-nav{display:flex;gap:18px;flex-wrap:wrap;margin-top:22px}a{color:#0e746f}header a{color:#b8fff3}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.card{background:#eef7f4;padding:18px;border-radius:12px}.card b{display:block;font-size:1.8rem;color:#0b5f58}
-.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:.9rem}th,td{padding:10px;border-bottom:1px solid #d9e5e1;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{background:#eaf4f0;position:sticky;top:0}
-.bar{display:flex;align-items:center;gap:12px;margin:12px 0}.bar span:first-child{width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.track{height:22px;background:#e0ece8;border-radius:12px;flex:1;overflow:hidden}.fill{height:100%;background:#d68b53}.bar b{width:100px;text-align:right;font-size:.85rem}
-.note{border-left:4px solid #d68b53;padding:12px 16px;background:#fff6eb}.timeseries{width:100%;height:auto}.timeseries text{fill:#536970;font-size:11px}figure{margin:20px 0}figcaption{font-weight:650;margin-bottom:8px}select{padding:8px;border:1px solid #9db5ad;border-radius:6px}.filters{display:flex;gap:16px;flex-wrap:wrap;align-items:end}.filters label{display:grid;gap:5px}.filters select{min-width:130px}.decision{border-left:5px solid #0e746f}.decision table td:first-child{white-space:normal}.takeaways{display:grid;gap:12px}.takeaways article{padding:14px 18px;background:#eef7f4;border-radius:10px}.takeaways h3{margin:0 0 6px}.takeaways p{margin:0}details{margin:14px 0}summary{cursor:pointer;font-weight:650}footer{color:#617675;margin-top:30px}
+:root,[data-theme="light"]{--surface:#f4f5f7;--surface-raised:#fcfcfd;--surface-sunken:#eceef2;--line:#e3e5ea;--line-strong:#848a97;--ink:#121418;--ink-muted:#5c6370;--accent:#2f55d4;--accent-strong:#2444b0;--accent-soft:#e4eafb;--ok:#157a46;--ok-soft:#dcf2e6;--warn:#935800;--warn-soft:#fbefd3;--link:var(--accent)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--surface:#0c0d10;--surface-raised:#15171b;--surface-sunken:#08090b;--line:#262932;--line-strong:#6c7280;--ink:#edeef2;--ink-muted:#9aa0ac;--accent:#86a0ff;--accent-strong:#a8baff;--accent-soft:#1b2447;--ok:#5fd094;--ok-soft:#153524;--warn:#f2b955;--warn-soft:#3a2a0c}}
+[data-theme="dark"]{--surface:#0c0d10;--surface-raised:#15171b;--surface-sunken:#08090b;--line:#262932;--line-strong:#6c7280;--ink:#edeef2;--ink-muted:#9aa0ac;--accent:#86a0ff;--accent-strong:#a8baff;--accent-soft:#1b2447;--ok:#5fd094;--ok-soft:#153524;--warn:#f2b955;--warn-soft:#3a2a0c}
+:root{--radius-md:10px;--radius-lg:12px;--font-sans:"Geist","Segoe UI",sans-serif;--font-mono:"Geist Mono",ui-monospace,Menlo,monospace;color-scheme:light dark}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--surface);color:var(--ink);font:400 16px/24px var(--font-sans)}
+a{color:var(--link);text-decoration:none;font-weight:500}a:hover{color:var(--accent-strong)}p a,li a{text-decoration:underline;text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+header{border-bottom:1px solid var(--line);background:var(--surface-raised)}
+.top{max-width:1120px;margin:0 auto;padding:16px 40px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.ar-wordmark{font-size:22px;line-height:1;font-weight:600;letter-spacing:-.02em;color:var(--ink)}.ar-wordmark b{font-weight:400}
+nav{display:flex;gap:4px;flex-wrap:wrap;font-size:14px}nav a{padding:6px 10px;border-radius:var(--radius-md);color:var(--ink)}nav a[aria-current="page"]{background:var(--accent-soft);color:var(--accent)}
+main{max-width:1120px;margin:0 auto;padding:32px 40px 64px;display:flex;flex-direction:column;gap:24px}main>*{min-width:0}
+.intro h1{margin:0 0 8px;font:600 32px/40px var(--font-sans);letter-spacing:-.02em}.intro p{margin:0;font:400 18px/28px var(--font-sans);color:var(--ink-muted);max-width:760px}.intro p+p{margin-top:8px;font-size:14px;line-height:20px}
+section{background:var(--surface-raised);border:1px solid var(--line);border-radius:var(--radius-lg);padding:24px}
+section h2{margin:0 0 16px;font:600 20px/28px var(--font-sans);letter-spacing:-.01em}h3{margin:24px 0 12px;font:600 16px/24px var(--font-sans)}
+p,li{line-height:1.55}small,.muted{color:var(--ink-muted);font-size:13px;line-height:18px}code{font:400 13px/20px var(--font-mono)}
+.note{background:var(--warn-soft);color:var(--ink);border-left:3px solid var(--warn);padding:14px 18px;border-radius:var(--radius-md)}
+section.note{background:var(--surface-sunken);border:0;border-left:0}.note p{margin:0}
+.decision{border-left:3px solid var(--accent)}.decision table td:first-child{white-space:normal}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.card{display:flex;flex-direction:column;gap:6px;padding:16px 18px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface)}
+.card b{font:600 28px/34px var(--font-sans);letter-spacing:-.02em;color:var(--accent)}
+.takeaways{display:grid;gap:12px}.takeaways article{padding:14px 18px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md)}.takeaways h3{margin:0 0 6px}.takeaways p{margin:0}
+.tablewrap{overflow:auto;margin:8px 0}table{border-collapse:collapse;width:100%;font-size:14px;line-height:20px}
+th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left;padding-left:0}
+th{font:500 12px/16px var(--font-sans);color:var(--ink-muted);border-bottom-color:var(--line-strong);background:var(--surface-raised);position:sticky;top:0}td{font-variant-numeric:tabular-nums}tr:last-child td{border-bottom:0}
+figure{margin:20px 0 0}figcaption{font:600 14px/20px var(--font-sans);margin-bottom:8px}
+.timeseries{width:100%;height:auto}.timeseries text{fill:var(--ink-muted);font:400 11px var(--font-mono)}
+.bar{display:flex;align-items:center;gap:12px;margin:8px 0;font-size:14px}.bar span:first-child{width:260px;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track{height:10px;background:var(--surface-sunken);border-radius:999px;flex:1;overflow:hidden}.fill{height:100%;background:var(--accent);border-radius:999px}
+.bar b{width:200px;flex:none;text-align:right;font:500 13px/18px var(--font-mono);color:var(--ink-muted)}
+select{min-height:40px;padding:8px 12px;color:var(--ink);background:var(--surface-raised);border:1px solid var(--line-strong);border-radius:var(--radius-md);font:inherit}
+.filters{display:flex;gap:16px;flex-wrap:wrap;align-items:end}.filters label{display:grid;gap:6px;font:500 14px/20px var(--font-sans)}.filters select{min-width:130px}
+details{margin:14px 0}summary{cursor:pointer;font-weight:600}
+.dists{display:grid;gap:12px;margin-top:12px}.dist{padding:14px 18px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface)}
+.dist h4{margin:0 0 4px;font:600 15px/22px var(--font-sans)}.dist h4 small{margin-left:6px;font-weight:400}
+.dist th,.dist td{text-align:left;vertical-align:top;background:transparent}.dist th:not(:first-child){padding-left:12px}
+.dist th[scope="row"]{padding:10px 12px 10px 0;font:500 14px/20px var(--font-sans);color:var(--ink);white-space:normal;width:220px}.dist th[scope="row"] small{display:block;font:400 12px/16px var(--font-mono)}
+.dist td{min-width:84px}.dist td span{display:block;font:500 13px/18px var(--font-mono)}.dist td i{display:block;height:8px;margin-top:6px;background:var(--accent);border-radius:999px;min-width:2px}
+.dist tbody tr:first-child td i{background:var(--warn)}
+.fill.uc{background:var(--warn)}
+.legend{display:flex;gap:20px;flex-wrap:wrap;margin:8px 0 0;font-size:13px;color:var(--ink-muted)}.sw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:var(--accent)}.sw.uc{background:var(--warn)}
+.rp{margin:16px 0 0}.rp h4{margin:0 0 4px;font:600 14px/20px var(--font-sans)}
+.rp-row{display:grid;grid-template-columns:200px minmax(0,1fr) 280px;align-items:center;gap:12px;min-height:28px;font-size:14px}
+.rp-track{position:relative;height:20px;border-left:1px solid var(--line);border-right:1px solid var(--line);background:linear-gradient(var(--line),var(--line)) 0 50%/100% 1px no-repeat}
+.rp-range{position:absolute;top:8px;height:4px;border-radius:2px;background:var(--accent);opacity:.5}.rp-range.uc{background:var(--warn)}
+.rp-dot{position:absolute;top:4px;width:12px;height:12px;margin-left:-6px;border-radius:50%;background:var(--accent);border:2px solid var(--surface-raised)}.rp-dot.uc{background:var(--warn)}
+.rp-row em{font:500 12px/16px var(--font-mono);color:var(--ink-muted);font-style:normal}
+.rp-axis{min-height:0}.rp-axis div{display:flex;justify-content:space-between;font:400 11px/14px var(--font-mono);color:var(--ink-muted)}
+.scatter{display:block;width:100%;max-width:760px;height:auto;margin:8px 0}.scatter text{fill:var(--ink-muted);font:400 12px var(--font-sans)}.scatter text.lbl{fill:var(--ink);font-weight:500}
+.scatter line{stroke:var(--line)}.scatter circle{fill:var(--accent);stroke:var(--surface-raised);stroke-width:2}.scatter circle.uc{fill:var(--warn)}.dist tbody tr:last-child th{border-bottom:0}
+footer{color:var(--ink-muted);font:400 12px/16px var(--font-mono);text-align:center}
+@media (max-width:720px){.top,main{padding-left:16px;padding-right:16px}section{padding:16px}.bar{flex-wrap:wrap}.bar span:first-child,.bar b{width:auto}.bar b{text-align:left}.intro h1{font-size:26px;line-height:32px}.rp-row{grid-template-columns:minmax(0,1fr);gap:2px;margin-bottom:8px}.rp-axis span:empty{display:none}}
 </style>"""
+
+PAGES = [("index.html", "Report hub"), ("product-report.html", "Unrecognized-charge baseline"),
+         ("marketing-product.html", "Marketing & Product"), ("intake-decision.html", "Intake decision")]
 
 
 def esc(value) -> str:
@@ -53,10 +106,12 @@ def _movement(change: float) -> str:
     return "rose" if change > 0 else "fell" if change < 0 else "was unchanged"
 
 
-def shell(title: str, subtitle: str, body: str) -> str:
-    """Wrap an offline report in a shared visual system."""
+def shell(title: str, subtitle: str, body: str, current: str = "", links: str = "") -> str:
+    """Wrap an offline report page in the web app's header, type scale and tokens."""
+    current_attr = ' aria-current="page"'  # kept outside the f-string: Python 3.10 forbids backslashes in its expressions
+    nav = "".join(f'<a href="{href}"{current_attr if href == current else ""}>{esc(label)}</a>' for href, label in PAGES)
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(title)}</title>{STYLE}</head><body>
-<header><h1>{esc(title)}</h1><p>{esc(subtitle)}</p><nav><a href="index.html">Report hub</a><a href="marketing-product.html">Marketing & Product</a><a href="intake-decision.html">Intake decision</a></nav></header><main>{body}<footer>Aggregate synthetic data · Private repository · Offline report</footer></main></body></html>'''
+<header><div class="top"><span class="ar-wordmark">Arabica<b>AI</b></span><nav>{nav}</nav></div></header><main><div class="intro"><h1>{esc(title)}</h1><p>{esc(subtitle)}</p>{links}</div>{body}<footer>Aggregate synthetic data · Private repository · Offline report</footer></main></body></html>'''
 
 
 def complete_activity_rows(activity: dict) -> list[dict]:
@@ -278,11 +333,11 @@ function drawTimePlot(target,rows,metric,title){
  const y=v=>bottom-v*(bottom-top)/ceiling;
  const last=rows[rows.length-1].month.slice(0,7),globalLast=(metric==='sends'||metric==='rate'?sendMonths:activityMonths).at(-1).month.slice(0,7);
  const endDate=metric==='activity'?lastActivityDate:lastSendDate;const parts=endDate.slice(0,10).split('-').map(Number);const isPartial=parts[2]<new Date(parts[0],parts[1],0).getDate();
- if(last===globalLast&&last===endDate.slice(0,7)&&isPartial){const width=rows.length===1?100:(right-left)/(rows.length-1);node(svg,'rect',{x:(x(rows.length-1)-width/2).toFixed(1),y:top,width:width.toFixed(1),height:bottom-top,fill:'#fff2d8'});node(svg,'text',{x:right,y:top+15,'text-anchor':'end'},'Partial month')}
- for(const f of [0,.25,.5,.75,1]){const yy=y(ceiling*f);node(svg,'line',{x1:left,y1:yy,x2:right,y2:yy,stroke:'#d5e3de'});node(svg,'text',{x:left-8,y:yy+4,'text-anchor':'end'},metric==='rate'?(ceiling*f).toFixed(2)+'%':Math.round(ceiling*f).toLocaleString())}
- const color=metric==='sends'?'#0d756e':metric==='rate'?'#bc653a':'#385f9a';
- node(svg,'polyline',{points:values.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1)).join(' '),fill:'none',stroke:color,'stroke-width':3});
- rows.forEach((r,i)=>{const dot=node(svg,'circle',{cx:x(i),cy:y(values[i]),r:5,fill:color});const detail=metric==='activity'?`${r.month.slice(0,7)}: ${r.active_customers.toLocaleString()} active customers; ${r.approved_transactions.toLocaleString()} approved transactions; ${r.continuing_customers.toLocaleString()}/${r.prior_active_customers.toLocaleString()} continued from prior month`: `${r.month.slice(0,7)}: ${r.sends.toLocaleString()} sends; ${r.recorded_conversions.toLocaleString()} recorded conversions; ${rateOrNA(r.recorded_conversions,r.sends)} per send`;node(dot,'title',{},detail);if(i%3===0||i===rows.length-1)node(svg,'text',{x:x(i),y:bottom+22,'text-anchor':'middle'},r.month.slice(0,7))});
+ if(last===globalLast&&last===endDate.slice(0,7)&&isPartial){const width=rows.length===1?100:(right-left)/(rows.length-1);node(svg,'rect',{x:(x(rows.length-1)-width/2).toFixed(1),y:top,width:width.toFixed(1),height:bottom-top,style:'fill:var(--warn-soft)'});node(svg,'text',{x:right,y:top+15,'text-anchor':'end'},'Partial month')}
+ for(const f of [0,.25,.5,.75,1]){const yy=y(ceiling*f);node(svg,'line',{x1:left,y1:yy,x2:right,y2:yy,style:'stroke:var(--line)'});node(svg,'text',{x:left-8,y:yy+4,'text-anchor':'end'},metric==='rate'?(ceiling*f).toFixed(2)+'%':Math.round(ceiling*f).toLocaleString())}
+ const color=metric==='sends'?'var(--accent)':metric==='rate'?'var(--warn)':'var(--ok)';
+ node(svg,'polyline',{points:values.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1)).join(' '),style:'fill:none;stroke:'+color,'stroke-width':3});
+ rows.forEach((r,i)=>{const dot=node(svg,'circle',{cx:x(i),cy:y(values[i]),r:5,style:'fill:'+color});const detail=metric==='activity'?`${r.month.slice(0,7)}: ${r.active_customers.toLocaleString()} active customers; ${r.approved_transactions.toLocaleString()} approved transactions; ${r.continuing_customers.toLocaleString()}/${r.prior_active_customers.toLocaleString()} continued from prior month`: `${r.month.slice(0,7)}: ${r.sends.toLocaleString()} sends; ${r.recorded_conversions.toLocaleString()} recorded conversions; ${rateOrNA(r.recorded_conversions,r.sends)} per send`;node(dot,'title',{},detail);if(i%3===0||i===rows.length-1)node(svg,'text',{x:x(i),y:bottom+22,'text-anchor':'middle'},r.month.slice(0,7))});
 }
 function drawTime(){
  monthPick.disabled=yearPick.value==='all';if(monthPick.disabled)monthPick.value='all';
@@ -301,7 +356,7 @@ function rate(n,d){{return d? (100*n/d).toFixed(2)+'% ('+n.toLocaleString()+'/'+
 function draw(){{const dim=document.getElementById('dimension').value;chart.replaceChildren();const t=document.createElement('table');const head=document.createElement('tr');for(const name of ['Group','Sends','Delivery','Known opens','Known clicks','Recorded conversion']){{const th=document.createElement('th');th.textContent=name;head.append(th)}}t.append(head);
 for(const row of groups[dim]){{const r=row.sends?100*row.recorded_conversions/row.sends:0;const div=document.createElement('div');div.className='bar';const label=document.createElement('span');label.textContent=row.label;const track=document.createElement('div');track.className='track';const fill=document.createElement('div');fill.className='fill';fill.style.width=Math.min(r*10,100)+'%';track.append(fill);const value=document.createElement('b');value.textContent=r.toFixed(2)+'% · '+row.recorded_conversions.toLocaleString()+'/'+row.sends.toLocaleString();div.append(label,track,value);chart.append(div);
 const tr=document.createElement('tr');for(const val of [row.label,row.sends.toLocaleString(),rate(row.delivered,row.delivery_known),rate(row.opens,row.open_known),rate(row.clicks,row.click_known),rate(row.recorded_conversions,row.sends)]){{const td=document.createElement('td');td.textContent=val;tr.append(td)}}t.append(tr)}}groupTable.replaceChildren(t)}}document.getElementById('dimension').addEventListener('change',draw);draw()</script>'''
-    return shell('Marketing & Product evidence', 'Customer questions, measured patterns and decisions from one verified synthetic-data snapshot.', body)
+    return shell('Marketing & Product evidence', 'Customer questions, measured patterns and decisions from one verified synthetic-data snapshot.', body, 'marketing-product.html')
 
 
 def intake(data: dict) -> str:
@@ -318,7 +373,7 @@ def intake(data: dict) -> str:
     body += '<section><h2>Complete calendar years</h2><p>V1 complaint counts by creation date. The first and last observed years are partial.</p>'+table(complete_intake_years(i), [('year','Year'),('v1','V1 complaints')])+'</section>'
     body += '<details><summary>Monthly complaint counts by creation date</summary>'+table(i['monthly'], [('month','Creation month'),('v1','V1 only'),('broader_combined','Combined')])+'<p>Observed V1 dates: '+esc(v.get('first_created'))+' through '+esc(v.get('last_created'))+'. Boundary months can be partial.</p></details>'
     body += '<section><h2>What this cannot show</h2><ul>'+''.join('<li>'+esc(x)+'</li>' for x in i['limitations'])+'</ul><p>Do not infer that intake caused delays, reduced SLA breaches, or saved call time. Marketing targeting scores are unrelated to evidence for this V1. Next test: instrument every eligible start, customer approval, server-confirmed acceptance, reference delivery, failure, retry, handoff completeness, and unsafe outcomes. Accepted intake is not automated dispute resolution.</p></section>'
-    return shell('Suspicious-charge intake decision', 'Corrected complaint population and evidence for a human-handoff test.', body)
+    return shell('Suspicious-charge intake decision', 'Corrected complaint population and evidence for a human-handoff test.', body, 'intake-decision.html')
 
 
 def hub(data: dict, insights: dict | None = None) -> str:
@@ -344,6 +399,9 @@ def hub(data: dict, insights: dict | None = None) -> str:
         'Monte Carlo sensitivity →</a></p></section>'
     )
     body += (
+        '<section><h2>Unrecognized-charge intake</h2><p>The problem sized with KPIs, how disputes '
+        'are handled today, satisfaction with its populations and the segment cut.</p>'
+        '<p><a href="product-report.html">Read the unrecognized-charge baseline →</a></p></section>'
         '<section><h2>Other evidence</h2><p><a href="intake-decision.html">'
         'Selected intake workflow →</a> · <a href="aggregates.json">'
         'Verified aggregate counts →</a> · <a href="marketing-product-insights.json">'
@@ -353,18 +411,18 @@ def hub(data: dict, insights: dict | None = None) -> str:
         'LTV or customer retention.</p></section>'
     )
     return shell('Arabica evidence hub',
-                 'Private, offline review of verified synthetic data.', body)
+                 'Private, offline review of verified synthetic data.', body, 'index.html')
 
 
 def write_reports(data: dict, destination: Path) -> None:
     """Write offline HTML, source aggregates and deterministic derived insights."""
     destination.mkdir(parents=True,exist_ok=True)
     insights = summarize_insights(data)
-    (destination/'aggregates.json').write_text(
-        json.dumps(data,indent=2,ensure_ascii=False,default=str)+'\n',encoding='utf-8')
-    (destination/'marketing-product-insights.json').write_text(
-        json.dumps(insights,indent=2,ensure_ascii=False)+'\n',encoding='utf-8')
-    for name,content in [('index.html',hub(data,insights)),
+    # LF on every OS, so a rebuild on Windows is byte-identical to the committed files.
+    for name,content in [('aggregates.json',json.dumps(data,indent=2,ensure_ascii=False,default=str)+'\n'),
+                         ('marketing-product-insights.json',json.dumps(insights,indent=2,ensure_ascii=False)+'\n'),
+                         ('index.html',hub(data,insights)),
                          ('marketing-product.html',marketing_product(data,insights)),
                          ('intake-decision.html',intake(data))]:
-        (destination/name).write_text(content,encoding='utf-8')
+        with open(destination/name,'w',encoding='utf-8',newline='\n') as handle:
+            handle.write(content)

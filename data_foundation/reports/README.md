@@ -2,6 +2,8 @@
 
 Open [the offline report hub](index.html) to review the [Marketing and Product analysis](marketing-product.html), the [corrected intake decision](intake-decision.html), their [aggregate JSON](aggregates.json), and the deterministic [Marketing/Product insights](marketing-product-insights.json). The [manifest](manifest.json) records the verified Silver database, full quality run, source scope, table counts, and generation time. These files contain aggregate counts only and make no external requests.
 
+The [unrecognized-charge baseline](product-report.html) (KPIs, today's handling, satisfaction and the segment cut) is built separately by `make product-report`, from the queries in [`../queries/product/`](../queries/product/), into [`product-report.json`](product-report.json) and [`product-manifest.json`](product-manifest.json). Its summary for evaluators is [`PRODUCT_REPORT.md`](../../Docs/deliverables/PRODUCT_REPORT.md).
+
 ## Business decisions and temporal scope
 
 CAC, LTV, LTV/CAC, CAC versus average ticket, lead-to-customer conversion and retention are **not identifiable** from this dataset. There are no eligible lead records or verified campaign-to-new-customer outcomes; bank revenue, margin, full acquisition cost, cost currency and longitudinal exits are also missing. The familiar 3:1 LTV/CAC ratio cannot be tested here. Gross transaction value is not bank revenue.

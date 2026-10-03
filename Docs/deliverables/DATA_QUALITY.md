@@ -57,6 +57,7 @@ The key data risk for the intake service is currency ([DF-023](#df-023-amounts-s
 | [DF-024](#df-024-purchase-amounts-are-almost-flat-up-to-usd-509-with-no-high-value-tail) | Purchase amounts are almost flat up to USD 509, with no high-value tail | design | Medium | Accepted limitation | Lucas |
 | [DF-025](#df-025-dispute-outcomes-cant-show-friendly-fraud) | Dispute outcomes can't show friendly fraud | design | Medium | Accepted limitation | Lucas |
 | [DF-026](#df-026-the-dictionarys-row-counts-are-approximate) | The dictionary's row counts are approximate | full | Low | Accepted limitation | Lucas |
+| [DF-027](#df-027-wait-time-exists-only-for-phone-contacts-and-survey-wait-answers-dont-track-it) | Wait time exists only for Phone contacts, and survey wait answers don't track it | design | Medium | Accepted limitation | Manoella |
 
 ## Findings
 
@@ -286,6 +287,17 @@ The [bronze profile findings](../../data_profiles/bronze_data_profile/bronze_pro
 - **Interpretation:** customers, products, branches, agents and campaigns match the dictionary exactly. Most event tables are 11–16% smaller, digital events are 56% larger, and the exchange rates have 13,164 rows instead of 3,000. The dictionary describes the generator's targets, not this delivery.
 - **Factored's answer (2026-10-01):** the dictionary figures aren't ground truth for judging. Use the supplied data and document the differences.
 - **Handling:** every figure in our deliverables comes from the supplied data. The quality gate checks row counts between Bronze and Silver, never against the dictionary.
+
+### DF-027 Wait time exists only for Phone contacts, and survey wait answers don't track it
+
+- **Evidence** (design window, findings run `20261003T182506Z`, query `DF-027_wait_missingness.sql`):
+  - **Population:** the 580,546 contact-centre contacts of the design window, and their surveys (at most one per contact, so the join doesn't duplicate contacts).
+  - **Phone, measured wait:** `wait_time_seconds` is present on 406,622 of 493,375 Phone contacts; 86,753 are missing.
+  - **Every other channel** (Email, App, WhatsApp, Web Chat, Web), measured wait: present on 0 of 87,171 contacts. Their surveys still ask the wait question: 9,805 wait answers among the 26,883 surveyed non-Phone contacts, none with a measured wait behind it.
+  - **Answers against measured wait:** Phone has 55,575 wait answers among 152,972 surveyed Phone contacts. The 45,919 of them whose contact also has a measured wait are the pairs; 9,656 Phone answers have no measured wait. Over those 45,919 pairs the correlation is 0.000. Lucas's insights report (F1, #86) finds no substantial association in any country, survey type or month either.
+- **Interpretation:** wait is measured only on the phone, and what customers answer about waiting is not a proxy for it in this synthetic data.
+- **Impact on the product:** no "time saved waiting" claim can come from the historical data, and wait can't be compared across channels.
+- **Handling:** the product report shows wait only for Phone, labelled, and never charts survey answers or comments as evidence of wait or quality. Our own service measures its timings from the case status history instead.
 
 ## Disclosure
 
