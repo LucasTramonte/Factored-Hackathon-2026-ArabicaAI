@@ -1,8 +1,8 @@
 # Data and service architecture
 
-**Recorded deployment (2026-10-03):** v0.2.0, Worker `f76c7f7b` (`main-64ae03a`), D1 migrations 0001–0017, extractor off ([release evidence](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0)). A later deployment has not been re-read. App changes in #87–#90 are built and unmerged; the offline Bedrock evaluation in #91 remains gated.
+**Deployed state:** main `79c324b`, Worker `79aa39a9` (`main-79c324b`), deployed 2026-10-03 by the GitHub Actions deploy workflow, D1 migrations 0001–0020, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0); #87–#92 are deployed and not yet tagged. The offline evaluation on Vertex AI (ADR-006 amendment 7) has not run on the frozen set.
 
-![Recorded service, offline data path and gated Bedrock evaluation](../Evidence/diagrams/current-workflow.png)
+![Deployed service, offline data path and gated Vertex AI evaluation](../Evidence/diagrams/current-workflow.png)
 
 The editable diagram is [`current-workflow.svg`](../Evidence/diagrams/current-workflow.svg). The older Excalidraw/PNG records the former Access and Basic gates and is historical. This diagram labels deployed, built and pending work separately.
 
@@ -51,14 +51,14 @@ browser -> Cloudflare Worker (router, per-IP limit, session from the verified to
   -> Amazon SES: notification emails, sent after the response
 ```
 
-The Worker and D1 remain the single runtime ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito email sign-in and SES notification delivery are in the recorded v0.2.0 deployment ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)); the shared Access and Basic gates belong to the earlier checkpoint. The Worker enforces role and customer ownership outside model output, stores sessions and cases in D1, and returns a reference only after read-back. SES sandbox restrictions remain. Agent review status records a human workflow step, not a bank resolution.
+The Worker and D1 remain the single runtime ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito email sign-in and SES notification delivery are deployed ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)); the shared Access and Basic gates belong to the earlier checkpoint. The Worker enforces role and customer ownership outside model output, stores sessions and cases in D1, and returns a reference only after read-back. SES sandbox restrictions remain. Agent review status records a human workflow step, not a bank resolution.
 
 ## Offline learned evaluation
 
-The rule-based checklist and learned extractor are evaluated on the same authored ES/PT workload, under the same deterministic policy. Amendment 6 of [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md) proposes Bedrock `openai.gpt-oss-20b-1:0` in `us-east-2` as the evaluation host; historical development used Workers AI. `bedrock.py` reuses the committed prompt, body and parsing in `workers_ai.py`. Only synthetic messages, session language/time and a closed vocabulary reach the model. Customer identifiers, transactions and action authority do not.
+The rule-based checklist and learned extractor are evaluated on the same authored ES/PT workload, under the same deterministic policy. Amendment 7 of [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md) makes Google Vertex AI (`openai/gpt-oss-20b-maas`, the same weights) the evaluation host, because Bedrock inference is blocked on the project's AWS Free plan; historical development used Workers AI. `vertex.py` reuses the committed prompt, body and parsing in `workers_ai.py`. Only synthetic messages, session language/time and a closed vocabulary reach the model. Customer identifiers, transactions and action authority do not.
 
 The online extractor remains off. The frozen run has not occurred: Manoella's approval, the isolated builder's development-only reasoning update, the development trigger report, pre-registration of both implementation files and a human tag are prerequisites. Offline accuracy, live handoff counts and read-only inquiry results stay separate ([EVALUATION](EVALUATION.md)).
 
 ## AWS production target
 
-The [Lambda and RDS PostgreSQL target](../Costs/aws-target/) is a priced design with templates, never deployed. Its private networking, standby database and Bedrock endpoint are production-target assumptions. Current AWS use is Cognito/SES alongside the Cloudflare service and a separately gated Bedrock evaluation; it does not make the online service a Lambda/Postgres deployment.
+The [Lambda and RDS PostgreSQL target](../Costs/aws-target/) is a priced design with templates, never deployed. Its private networking, standby database and Bedrock endpoint are production-target assumptions. Current AWS use is Cognito/SES alongside the Cloudflare service; the offline evaluation calls Vertex AI; it does not make the online service a Lambda/Postgres deployment.

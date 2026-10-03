@@ -1,47 +1,63 @@
-# Extractor v1: running the evaluation on Amazon Bedrock
+# Extractor v1: running the evaluation on Google Vertex AI
 
-The learned component reads one customer message into the fixed vocabulary. The deterministic policy decides the action ([ADR-006](../../Docs/ADRs/ADR-006-learned-extractor-workers-ai.md)). Evaluation calls go to Amazon Bedrock (amendment 6): the same weights (`openai.gpt-oss-20b-1:0`) and the same prompt, body and parsing as `workers_ai.py`. The online Worker is unchanged, and the extractor stays off online.
+The learned component reads one customer message into the fixed vocabulary. The deterministic policy decides the action ([ADR-006](../../Docs/ADRs/ADR-006-learned-extractor-workers-ai.md)).
+
+Evaluation calls go to **Google Vertex AI** (amendment 7), using the managed open-model API `openai/gpt-oss-20b-maas`. That's the same weights as before, with the same prompt, body and parsing as `workers_ai.py`. Amazon Bedrock (amendment 6) is blocked on the project's AWS Free plan, so it isn't used. The online Worker is unchanged, and the extractor stays off online.
 
 | File | Role | Who may change it |
 |---|---|---|
 | `prompt.md`, `workers_ai.py` (`build_body`, `parse`) | Behaviour: what the model is asked and how its answer is read | The isolated builder, with Manoella's approval (decision 5) |
-| `bedrock.py` | Transport only: URL, Bearer key, the response wrapper | Anyone, including exposed authors |
+| `vertex.py` | Transport only: URL, Bearer token, the response wrapper | Anyone, including exposed authors |
+| `bedrock.py` | Transport for amendment 6; kept, not used (account blocked) | Anyone, including exposed authors |
 
-## 1. A person checks access and refreshes a key before running
+## 1. A person signs in once per run
 
-1. **Check access:** in the AWS console, account `arabica`, region **us-east-2**, confirm that the person generating the key is allowed to invoke `openai.gpt-oss-20b-1:0` and that the account has enough inference quota. OpenAI's gpt-oss models [do not require manual model activation](https://aws.amazon.com/about-aws/whats-new/2025/08/amazon-bedrock-automatic-access-openai-open-weight-models/); IAM controls still apply.
-2. **Create or refresh a key:** open **Amazon Bedrock → API keys → Short-term API keys**. The key expires when the console session expires, at most 12 hours after generation, and works only in the region where it was generated ([AWS key reference](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-reference.html)). Before any smoke, development or frozen run, replace an expired key and export the new value. Ensure the remaining session lifetime covers the batch; a credentials failure stops the run.
-3. **Enter it privately in your shell only.** This Bash prompt keeps the value out of shell history. Never commit or paste it into chat or logs:
-   ```bash
-   read -r -s -p 'Bedrock key: ' AWS_BEARER_TOKEN_BEDROCK
-   export AWS_BEARER_TOKEN_BEDROCK
-   export AWS_REGION=us-east-2
-   ```
+Use project `factored-hackathon-arabica-ai`. It is linked to the Google Cloud trial billing account, and the Vertex AI API (`aiplatform.googleapis.com`) is the only API needed. While the account isn't upgraded, the trial credits cover the calls and nothing more is charged.
 
-## 2. Smoke check (about 20 calls)
+```bash
+gcloud auth login                     # once per machine
+gcloud config set project factored-hackathon-arabica-ai
+export VERTEX_PROJECT=factored-hackathon-arabica-ai VERTEX_LOCATION=global
+export VERTEX_ACCESS_TOKEN="$(gcloud auth print-access-token)"   # valid about one hour: refresh before each run
+```
+
+Never commit or paste the token. If a run fails with `CredentialsError` and HTTP 401, the token has expired: run the last line again. HTTP 403 means the signed-in account lacks permission on the project; refreshing won't help (see the table in section 2).
+
+**Quick probe** (one call, a content-free message):
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $VERTEX_ACCESS_TOKEN" -H "Content-Type: application/json" \
+  "https://aiplatform.googleapis.com/v1/projects/$VERTEX_PROJECT/locations/global/endpoints/openapi/chat/completions" \
+  -d '{"model":"openai/gpt-oss-20b-maas","messages":[{"role":"user","content":"Say OK"}],"max_tokens":200}'
+```
+
+A working probe returns `choices[0].message.content` (the reasoning arrives separately, in `reasoning_content`), plus `usage` with `traffic_type: ON_DEMAND`.
+
+## 2. Development runs (never the frozen set)
 
 ```sh
 .venv/bin/python -m evals.intake.run --split development --repetitions 1 \
-  --system extractor-v1=intake_agent.extractor.bedrock:extract \
-  --output data_foundation/runs/bedrock-smoke/results.json
+  --system extractor-v1=intake_agent.extractor.vertex:extract \
+  --output data_foundation/runs/vertex-smoke/results.json
 ```
 
-Each outcome tells you what to do:
+Amendment 1's latency protocol is the same command with `--repetitions 10` (at least 150 model-calling executions). It decides on the pooled `latency_p95_interval_ms` upper bound (≤ 3,000 ms).
 
 | Outcome | What it means |
 |---|---|
-| `CredentialsError` (HTTP 401/403) | Check key expiry, its region and the principal's model-invocation permissions; refresh an expired key before a later authorized run |
-| `ConfigurationError` | Check the region and the model id |
-| Schema-valid outputs below 95% | Stop. Something in the answer format may differ, and fixing it is a parsing change: the builder's, with Manoella's approval |
+| `CredentialsError`, HTTP 401 | Expired or invalid token: refresh `VERTEX_ACCESS_TOKEN` |
+| `CredentialsError`, HTTP 403 | The account lacks Vertex AI permission: the project owner grants it the Vertex AI User role (`roles/aiplatform.user`) on `VERTEX_PROJECT`, and `gcloud auth list` shows the right account |
+| `ConfigurationError` | Check `VERTEX_PROJECT`, `VERTEX_LOCATION` and the model id |
+| Schema-valid outputs below 95% | Stop. Fixing it is a parsing change, which is the builder's job, with Manoella's approval |
 
-## 3. The isolated builder sets the reasoning level
+## 3. Reasoning level, only if the latency trigger fires
 
-Follow the 2026-10-03 revision in [`extractor-v1-builder-instructions.md`](../../evals/intake/preregistration/extractor-v1-builder-instructions.md). Run it in a history-free snapshot from `evals/intake/preregistration/make_clean_checkout.py`, by an agent that has seen no frozen case. It re-runs development (10 repetitions) and reports every ADR-006 trigger.
+Amendment 2 lowers the reasoning level only when the latency trigger fires. **On Vertex it fired** (2026-10-03: 180 executions at the provider default, p95 2.64 s, interval upper bound 3.08 s > 3.00 s; 180 of 180 correct, 0 unsafe). So the isolated builder follows [`extractor-v1-builder-instructions.md`](../../evals/intake/preregistration/extractor-v1-builder-instructions.md), in a history-free snapshot from `evals/intake/preregistration/make_clean_checkout.py`.
 
 ## 4. Pre-register, tag, then run the frozen set once
 
-A human reviews `extractor-v1.md` and tags `extractor-v1`. Then the frozen run happens **once** ([runbook](../../evals/intake/README.md)), and the result is reported on all 60 cases and on the 52 that were not exposed (amendment 5). This is still pending: Manoella approves amendment 6 and any behavioural revision, the isolated builder completes the development-only reasoning revision, and the pre-registration and human tag are checked before scoring.
+A human reviews `extractor-v1.md` and tags `extractor-v1`. Then the frozen run happens **once** ([runbook](../../evals/intake/README.md)). The result is reported on all 60 cases and on the 52 that were not exposed (amendment 5). Manoella approves amendment 7 first.
 
-The machine-readable registration must bind both the Bedrock transport and its shared behavioural implementation. After the approved builder changes are committed, use `--implementation intake_agent/extractor/bedrock.py --dependency intake_agent/extractor/workers_ai.py` with the Bedrock target and model id when running `prereg fill`. The prompt has its own required hash. `prereg check` verifies all three files in the working tree and at the registered commit; it accepts older single-file registrations for systems without dependencies. Filling records the current commit, so the later registration-document commit does not move the intended human tag.
+The registration binds the Vertex transport and its shared behavioural implementation. Run `prereg fill` with `--implementation intake_agent/extractor/vertex.py --dependency intake_agent/extractor/workers_ai.py`, the Vertex target `intake_agent.extractor.vertex:extract` and the model id `openai/gpt-oss-20b-maas`. The prompt has its own required hash. `prereg check` verifies all three files in the working tree and at the registered commit. Filling records the current commit, so the later registration-document commit doesn't move the intended human tag.
 
-**Cost:** about 360 calls before retries for the development re-check and the frozen run, billed per token on the team's AWS credits. Check [Bedrock pricing](https://aws.amazon.com/bedrock/pricing/) and [account/model quotas](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas.html) before running. There is no Workers AI UTC-reset constraint, but Bedrock quotas can still throttle a batch. Report every attempted call, known tokens and `usage_unavailable_calls`; unknown usage is never free.
+**Cost:** about 360 calls before retries, billed per token against the trial credits. That is roughly 1,900 input and 250 output tokens per call (development smoke, 2026-10-03). Check the [Vertex AI pricing page](https://cloud.google.com/vertex-ai/generative-ai/pricing) for the current per-token price. Report every attempted call, the known tokens and `usage_unavailable_calls`; unknown usage is never counted as free.
