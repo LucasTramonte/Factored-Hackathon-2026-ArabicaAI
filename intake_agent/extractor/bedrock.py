@@ -10,7 +10,7 @@ isolated builder (ADR-006, decision 5).
 Invariants (as ``workers_ai``):
 - Credentials come from ``AWS_BEARER_TOKEN_BEDROCK`` (a Bedrock API key) and ``AWS_REGION`` (default ``us-east-2``)
   and are never logged; the message text is never printed, logged or put in an exception message.
-- HTTP 401/403 raise ``CredentialsError`` (a rejected key, or model access not enabled in the Bedrock console);
+- HTTP 401/403 raise ``CredentialsError`` (a rejected key, or insufficient model-invocation permissions);
   429/5xx, network failures and non-JSON bodies raise ``ConnectionError``; other 4xx raise ``ConfigurationError``.
 - Every exception from ``extract`` carries ``usage``; an attempt that fails in transport, or returns no usable
   token counts, adds one to ``usage_unavailable_calls``, so unmeasured is never reported as free.
@@ -20,6 +20,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import re
 import socket
 import time
 import urllib.error
@@ -31,8 +32,21 @@ MODEL = "openai.gpt-oss-20b-1:0"
 _URL = "https://bedrock-runtime.{region}.amazonaws.com/openai/v1/chat/completions"
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects so a bearer key can never be forwarded to another origin."""
+
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(request.full_url, code, "Bedrock redirect refused", headers, fp)
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
 def _credentials() -> tuple[str, str]:
     region = os.environ.get("AWS_REGION", "").strip() or "us-east-2"
+    # Keep environment configuration inside an AWS DNS name before attaching the bearer key.
+    if len(region) > 63 or not re.fullmatch(r"[a-z]+(?:-[a-z0-9]+)+-\d+", region):
+        raise w.ConfigurationError("Invalid AWS_REGION: use an AWS region id such as us-east-2")
     token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK", "").strip()
     if not token:
         raise w.CredentialsError("Bedrock credentials missing: set AWS_BEARER_TOKEN_BEDROCK (a Bedrock API key) in the environment")
@@ -49,18 +63,18 @@ def _post(url: str, token: str, body: dict, timeout: float) -> dict:
     request = urllib.request.Request(url, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), method="POST",
                                      headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _OPENER.open(request, timeout=timeout) as response:
             raw = w._read_until(response, deadline)
     except urllib.error.HTTPError as exc:
         exc.close()
         # Status only: the error body is not echoed, so nothing from the request can leak into logs.
         if exc.code in (401, 403):
-            raise w.CredentialsError(f"Bedrock rejected the key or the model isn't enabled (HTTP {exc.code})") from None
+            raise w.CredentialsError(f"Bedrock rejected the key or model-invocation permissions (HTTP {exc.code})") from None
         if exc.code == 429 or exc.code >= 500:
             raise ConnectionError(f"Bedrock HTTP {exc.code}") from None
         raise w.ConfigurationError(f"Bedrock HTTP {exc.code}: check the model id, region and request") from None
-    except (socket.timeout, TimeoutError) as exc:
-        raise TimeoutError(f"Bedrock call exceeded {w.TIMEOUT_S:.0f} s") from exc
+    except (socket.timeout, TimeoutError):
+        raise TimeoutError(f"Bedrock call exceeded {w.TIMEOUT_S:.0f} s") from None
     except urllib.error.URLError as exc:
         if isinstance(exc.reason, (socket.timeout, TimeoutError)):
             raise TimeoutError(f"Bedrock call exceeded {w.TIMEOUT_S:.0f} s") from None
@@ -71,17 +85,25 @@ def _post(url: str, token: str, body: dict, timeout: float) -> dict:
         payload = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         raise ConnectionError("Bedrock returned a non-JSON body") from None
+    if isinstance(payload, dict) and "error" in payload:
+        # A provider error envelope is a transport failure, not an invalid model answer.
+        # Do not include its message, which may echo the customer's text or credentials.
+        raise ConnectionError("Bedrock reported a failure")
     # The OpenAI shape, wrapped as the Workers AI envelope so the shared readers apply unchanged.
     return {"result": payload, "success": True} if isinstance(payload, dict) else payload
 
 
 def extract(message: str, session_language, as_of, vocabulary: dict) -> dict:
     """Extract intent and stated facts from one message through Bedrock; same contract as ``workers_ai.extract``."""
-    region, token = _credentials()
-    url = _URL.format(region=region)
-    body = build_body(message, session_language, as_of, vocabulary)
-    deadline = time.monotonic() + w.TIMEOUT_S
     usage = {"input_tokens": 0, "output_tokens": 0}
+    try:
+        region, token = _credentials()
+        url = _URL.format(region=region)
+        body = build_body(message, session_language, as_of, vocabulary)
+    except Exception as exc:
+        exc.usage = dict(usage)  # No request was attempted, so these zeros are measured.
+        raise
+    deadline = time.monotonic() + w.TIMEOUT_S
     for attempt in range(w.ATTEMPTS):
         try:
             payload = w._within(deadline, _post, url, token, body)

@@ -20,6 +20,7 @@ class PreregTests(unittest.TestCase):
         git(self.repo, 'config', 'user.name', 'Test')
         (self.repo / 'prompt.md').write_text('Extract the stated facts.\n')
         (self.repo / 'ext.py').write_text('def extract(*a):\n    return {}\n')
+        (self.repo / 'shared.py').write_text('VERSION = 1\n')
         (self.repo / 'reg.md').write_text('# Pre-registration: x-v1\n')
         git(self.repo, 'add', '.')
         git(self.repo, 'commit', '-qm', 'prompt')
@@ -42,6 +43,8 @@ class PreregTests(unittest.TestCase):
         (self.repo / 'ext.py').write_text('def extract(*a):\n    return {"tuned": True}\n')
         with self.assertRaisesRegex(ValueError, 'implementation changed'):
             check(self.repo / 'reg.md', repo=self.repo, target='ext:extract')
+        with self.assertRaisesRegex(ValueError, 'implementation changed'):
+            check(self.repo / 'reg.md', repo=self.repo)  # The standalone check binds code too.
 
     def test_a_later_publication_commit_does_not_invalidate_the_registration(self):
         (self.repo / 'frozen.json').write_text('{}')
@@ -76,6 +79,25 @@ class PreregTests(unittest.TestCase):
         fill(self.repo / 'reg.md', 'x-v1', Path('prompt.md'), 'm2', {}, repo=self.repo)
         self.assertEqual((self.repo / 'reg.md').read_text().count('```json prereg'), 1)
         self.assertEqual(read(self.repo / 'reg.md')['model'], 'm2')
+
+    def test_shared_code_is_bound_now_and_at_the_registered_commit(self):
+        data = fill(self.repo / 'reg.md', 'x-v1', Path('prompt.md'), 'm', {}, repo=self.repo,
+                    target='ext:extract', implementation=Path('ext.py'), dependencies=[Path('shared.py')])
+        self.assertIn('shared.py', data['dependency_sha256'])
+        check(self.repo / 'reg.md', repo=self.repo, target='ext:extract')
+        (self.repo / 'shared.py').write_text('VERSION = 2\n')
+        with self.assertRaisesRegex(ValueError, 'dependency changed'):
+            check(self.repo / 'reg.md', repo=self.repo, target='ext:extract')
+        (self.repo / 'shared.py').unlink()
+        with self.assertRaisesRegex(ValueError, 'dependency changed'):
+            check(self.repo / 'reg.md', repo=self.repo)
+
+    def test_dependency_absent_at_registered_commit_is_refused(self):
+        (self.repo / 'late.py').write_text('VERSION = 1\n')
+        fill(self.repo / 'reg.md', 'x-v1', Path('prompt.md'), 'm', {}, repo=self.repo,
+             target='ext:extract', implementation=Path('ext.py'), dependencies=[Path('late.py')])
+        with self.assertRaisesRegex(ValueError, 'not in the registered commit'):
+            check(self.repo / 'reg.md', repo=self.repo, target='ext:extract')
 
 
 if __name__ == '__main__':

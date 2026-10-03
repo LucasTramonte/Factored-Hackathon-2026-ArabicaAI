@@ -2,6 +2,7 @@
 import io
 import json
 import os
+import socket
 import unittest
 import urllib.error
 from unittest import mock
@@ -47,7 +48,7 @@ def responder(*items):
 class BedrockTransportTests(unittest.TestCase):
     def run_with(self, *items):
         urlopen, calls = responder(*items)
-        with mock.patch.object(bedrock.urllib.request, "urlopen", urlopen):
+        with mock.patch.object(bedrock._OPENER, "open", urlopen):
             return bedrock.extract(MESSAGE, "es", "2026-06-12T10:00:00", VOCABULARY), calls
 
     def test_same_body_as_workers_ai_plus_the_model_id_and_a_bearer_key(self):
@@ -69,12 +70,22 @@ class BedrockTransportTests(unittest.TestCase):
 
     def test_missing_key_stops_before_any_request(self):
         with mock.patch.dict(os.environ, {"AWS_BEARER_TOKEN_BEDROCK": ""}), \
-                mock.patch.object(bedrock.urllib.request, "urlopen", side_effect=AssertionError("no request")):
-            with self.assertRaises(workers_ai.CredentialsError):
+                mock.patch.object(bedrock._OPENER, "open", side_effect=AssertionError("no request")):
+            with self.assertRaises(workers_ai.CredentialsError) as ctx:
                 bedrock.extract(MESSAGE, "es", None, VOCABULARY)
+        self.assertEqual(ctx.exception.usage, {"input_tokens": 0, "output_tokens": 0})
+
+    def test_invalid_region_stops_before_attaching_a_key_to_a_request(self):
+        for region in ("us-east-2.amazonaws.com@attacker.example/", "../us-east-2", "us east 2"):
+            with self.subTest(region=region), mock.patch.dict(os.environ, {"AWS_REGION": region}), \
+                    mock.patch.object(bedrock._OPENER, "open", side_effect=AssertionError("no request")), \
+                    self.assertRaises(workers_ai.ConfigurationError) as ctx:
+                bedrock.extract(MESSAGE, "es", None, VOCABULARY)
+            self.assertNotIn(region, str(ctx.exception))
+            self.assertEqual(ctx.exception.usage, {"input_tokens": 0, "output_tokens": 0})
 
     def test_status_codes_map_like_workers_ai_and_never_echo_the_body(self):
-        cases = [(403, workers_ai.CredentialsError), (401, workers_ai.CredentialsError), (429, ConnectionError),
+        cases = [(302, workers_ai.ConfigurationError), (403, workers_ai.CredentialsError), (401, workers_ai.CredentialsError), (429, ConnectionError),
                  (503, ConnectionError), (400, workers_ai.ConfigurationError)]
         for code, expected in cases:
             err = urllib.error.HTTPError("u", code, "x", {}, io.BytesIO(b"echo " + MESSAGE.encode()))
@@ -84,8 +95,28 @@ class BedrockTransportTests(unittest.TestCase):
             self.assertEqual(ctx.exception.usage.get("usage_unavailable_calls"), 1)
 
     def test_a_non_json_body_is_a_service_failure_not_model_output(self):
-        with self.assertRaises(ConnectionError):
+        with self.assertRaises(ConnectionError) as ctx:
             self.run_with(b"<html>502</html>")
+        self.assertEqual(ctx.exception.usage["usage_unavailable_calls"], 1)
+
+    def test_provider_error_envelope_is_not_retried_or_echoed(self):
+        urlopen, calls = responder({"error": {"message": MESSAGE + ENV["AWS_BEARER_TOKEN_BEDROCK"]}})
+        with mock.patch.object(bedrock._OPENER, "open", urlopen), self.assertRaises(ConnectionError) as ctx:
+            bedrock.extract(MESSAGE, "es", None, VOCABULARY)
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn(MESSAGE, str(ctx.exception))
+        self.assertNotIn(ENV["AWS_BEARER_TOKEN_BEDROCK"], str(ctx.exception))
+        self.assertEqual(ctx.exception.usage["usage_unavailable_calls"], 1)
+
+    def test_redirect_handler_refuses_before_forwarding_bearer_headers(self):
+        handler = bedrock._NoRedirect()
+        handler.parent = mock.Mock()
+        request = bedrock.urllib.request.Request("https://bedrock-runtime.us-east-2.amazonaws.com/",
+                                                data=b"{}", headers={"Authorization": "Bearer test-secret"})
+        with self.assertRaises(urllib.error.HTTPError):
+            handler.http_error_302(request, io.BytesIO(b""), 302, "redirect",
+                                   {"location": "https://attacker.example/"})
+        handler.parent.open.assert_not_called()
 
     def test_invalid_output_is_retried_once_then_counted_with_both_attempts_tokens(self):
         out, calls = self.run_with(openai_payload("not json", 50, 5), openai_payload(json.dumps(GOOD), 60, 6))
@@ -100,6 +131,21 @@ class BedrockTransportTests(unittest.TestCase):
         del body["usage"]
         out, _ = self.run_with(body)
         self.assertEqual(out["usage"]["usage_unavailable_calls"], 1)
+
+    def test_failed_second_attempt_retains_the_first_attempt_tokens(self):
+        for failure in (urllib.error.URLError(OSError(MESSAGE)), socket.timeout(MESSAGE)):
+            expected = TimeoutError if isinstance(failure, socket.timeout) else ConnectionError
+            with self.subTest(failure=type(failure).__name__), self.assertRaises(expected) as ctx:
+                self.run_with(openai_payload("invalid", 50, 5), failure)
+            self.assertEqual(ctx.exception.usage, {"input_tokens": 50, "output_tokens": 5, "usage_unavailable_calls": 1})
+            self.assertNotIn(MESSAGE, str(ctx.exception))
+            self.assertIsNone(ctx.exception.__cause__)
+
+    def test_malformed_usage_is_unknown_even_when_the_extraction_is_valid(self):
+        for counts in ((True, 5), (-1, 5), ("100", 5), (100, None)):
+            with self.subTest(counts=counts):
+                out, _ = self.run_with(openai_payload(json.dumps(GOOD), *counts))
+            self.assertEqual(out["usage"], {"input_tokens": 0, "output_tokens": 0, "usage_unavailable_calls": 1})
 
 
 if __name__ == "__main__":
