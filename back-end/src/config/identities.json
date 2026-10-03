@@ -2,8 +2,8 @@
   "description": "Simulated identities the demo accepts. The Worker's login allowlist and the Gold intake slice both read this file; edit it only together with a reviewed seed.",
   "customers": [
     { "customer_id": "demo-ana", "display_name": "Ana (demo)", "source": "fictitious" },
-    { "customer_id": "demo-bruno", "display_name": "Bruno (demo)", "source": "fictitious" },
-    { "customer_id": "demo-carla", "display_name": "Carla (demo)", "source": "fictitious" },
+    { "customer_id": "demo-bruno", "display_name": "Lucas (demo)", "source": "fictitious" },
+    { "customer_id": "demo-carla", "display_name": "Manoella (demo)", "source": "fictitious" },
     { "customer_id": "demo-diego", "display_name": "Diego (demo)", "source": "fictitious" },
     { "customer_id": "demo-elena", "display_name": "Elena (demo)", "source": "fictitious" },
     { "customer_id": "demo-marco", "display_name": "Marco (demo)", "source": "fictitious" },
