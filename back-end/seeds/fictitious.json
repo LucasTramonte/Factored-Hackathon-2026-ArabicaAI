@@ -6,6 +6,26 @@
     { "transaction_id": "demo-tx-004", "customer_id": "demo-ana", "occurred_at": "2026-09-27T10:30:00+00:00", "merchant_name": "Farmacia Demo", "amount": "47.30", "currency": "BRL" },
     { "transaction_id": "demo-tx-005", "customer_id": "demo-ana", "occurred_at": "2026-09-28T19:45:00+00:00", "merchant_name": "Posto Demo", "amount": "210.00", "currency": "BRL" },
     { "transaction_id": "demo-tx-006", "customer_id": "demo-ana", "occurred_at": "2026-09-29T09:15:00+00:00", "merchant_name": "Eletronicos Demo", "amount": "3890.00", "currency": "BRL" },
-    { "transaction_id": "demo-tx-003", "customer_id": "demo-bruno", "occurred_at": "2026-09-26T16:00:00+00:00", "merchant_name": "Cafe Demo", "amount": "32.00", "currency": "BRL" }
+    { "transaction_id": "demo-tx-003", "customer_id": "demo-bruno", "occurred_at": "2026-09-26T16:00:00+00:00", "merchant_name": "Cafe Demo", "amount": "32.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-007", "customer_id": "demo-carla", "occurred_at": "2026-09-22T11:05:00+00:00", "merchant_name": "Mercado Demo", "amount": "142.80", "currency": "BRL" },
+    { "transaction_id": "demo-tx-008", "customer_id": "demo-carla", "occurred_at": "2026-09-24T14:10:00+00:00", "merchant_name": "Restaurante Demo", "amount": "96.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-009", "customer_id": "demo-carla", "occurred_at": "2026-09-24T14:11:00+00:00", "merchant_name": "Restaurante Demo", "amount": "96.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-010", "customer_id": "demo-carla", "occurred_at": "2026-09-26T03:00:00+00:00", "merchant_name": "Streaming Demo", "amount": "29.90", "currency": "BRL" },
+    { "transaction_id": "demo-tx-011", "customer_id": "demo-carla", "occurred_at": "2026-09-29T18:40:00+00:00", "merchant_name": "Viagens Demo", "amount": "2890.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-012", "customer_id": "demo-diego", "occurred_at": "2026-09-23T08:15:00+00:00", "merchant_name": "Padaria Demo", "amount": "18.50", "currency": "BRL" },
+    { "transaction_id": "demo-tx-013", "customer_id": "demo-diego", "occurred_at": "2026-09-25T17:30:00+00:00", "merchant_name": "Posto Demo", "amount": "210.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-014", "customer_id": "demo-diego", "occurred_at": "2026-09-25T17:31:00+00:00", "merchant_name": "Posto Demo", "amount": "210.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-015", "customer_id": "demo-diego", "occurred_at": "2026-09-27T03:00:00+00:00", "merchant_name": "Musica Demo", "amount": "19.90", "currency": "BRL" },
+    { "transaction_id": "demo-tx-016", "customer_id": "demo-diego", "occurred_at": "2026-09-30T12:20:00+00:00", "merchant_name": "Moveis Demo", "amount": "3150.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-017", "customer_id": "demo-elena", "occurred_at": "2026-09-22T19:45:00+00:00", "merchant_name": "Farmacia Demo", "amount": "63.20", "currency": "BRL" },
+    { "transaction_id": "demo-tx-018", "customer_id": "demo-elena", "occurred_at": "2026-09-26T22:05:00+00:00", "merchant_name": "Taxi Demo", "amount": "42.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-019", "customer_id": "demo-elena", "occurred_at": "2026-09-26T22:06:00+00:00", "merchant_name": "Taxi Demo", "amount": "42.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-020", "customer_id": "demo-elena", "occurred_at": "2026-09-28T03:00:00+00:00", "merchant_name": "Nuvem Demo", "amount": "34.90", "currency": "BRL" },
+    { "transaction_id": "demo-tx-021", "customer_id": "demo-elena", "occurred_at": "2026-09-29T15:10:00+00:00", "merchant_name": "Joalheria Demo", "amount": "2650.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-022", "customer_id": "demo-marco", "occurred_at": "2026-09-23T13:40:00+00:00", "merchant_name": "Livraria Demo", "amount": "88.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-023", "customer_id": "demo-marco", "occurred_at": "2026-09-27T09:00:00+00:00", "merchant_name": "Cafe Demo", "amount": "24.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-024", "customer_id": "demo-marco", "occurred_at": "2026-09-27T09:01:00+00:00", "merchant_name": "Cafe Demo", "amount": "24.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-025", "customer_id": "demo-marco", "occurred_at": "2026-09-29T03:00:00+00:00", "merchant_name": "Jornal Demo", "amount": "15.90", "currency": "BRL" },
+    { "transaction_id": "demo-tx-026", "customer_id": "demo-marco", "occurred_at": "2026-09-30T20:05:00+00:00", "merchant_name": "Eletro Demo", "amount": "4120.00", "currency": "BRL" }
   ]
 }
