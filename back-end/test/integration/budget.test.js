@@ -36,9 +36,10 @@ const CEILING = {
   audit: [2, 102, 0, 1],
   // GET /admin/customers (ADR-007, decision 10): the session read, then the identities query above (every customers row:
   // 16 measured here, about 800 with the cohort loaded). POST /admin/act-as: session, customerSource and context card
-  // reads, then rotateSession's batch with one admin_actions insert (row and index). Measured, no margin (ADR-004).
+  // reads, then actAsSession's single-use batch: its inserts each check a session by primary key (the presented admin
+  // session, then the new one twice), which adds 4 reads over a plain rotation. Measured, no margin (ADR-004).
   adminCustomers: [2, 17, 0, 2],
-  adminActAs: [8, 5, 8, 4],
+  adminActAs: [8, 9, 8, 4],
   // The CHECK on intake_episodes.reason (migration 0016, ADR-010) adds one counted read to each statement that writes an
   // episode row, as 0004's CHECKs did: start 8 -> 9 and replay 6 -> 7 rows read, measured with and without it (ADR-004).
   // Migration 0018's index intake_episodes_owner_recent adds one write to the episode insert (11 -> 12).
