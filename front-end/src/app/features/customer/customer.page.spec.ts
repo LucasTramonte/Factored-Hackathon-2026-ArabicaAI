@@ -920,6 +920,20 @@ describe('CustomerPage', () => {
         expect(p.chatStatement).toContain('AR-CCCC-DDDD');
       });
 
+      it('during another open guided report it starts fresh: no old episode, statement or selected charge is kept', async () => {
+        service.reports.and.resolveTo({ items: [closed({ transaction_id: 'demo-tx-001' })], has_more: false });
+        const { p } = await home();
+        // Another report already at the choose step: an episode exists, with its own statement and a different charge picked.
+        p.openChat('demo-tx-002');
+        p.episode.set({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', mode: 'guided' } as never);
+        p.chatStatement = 'Otra cosa que estaba escribiendo.'; p.choice = 'demo-tx-002';
+        expect(p.chatStep()).toBe('choose');
+        p.reportAgain(closed({ transaction_id: 'demo-tx-001' }));
+        expect(p.episode()).toBeNull(); expect(p.chatStep()).toBe('describe');
+        expect(p.choice).toBe('demo-tx-001');
+        expect(p.chatStatement).toContain('AR-CCCC-DDDD'); expect(p.chatStatement).not.toContain('Otra cosa');
+      });
+
       it('without a listed charge it opens the "?" entry, and never runs while a request is frozen', async () => {
         service.reports.and.resolveTo({ items: [closed({ kind: 'incomplete' })], has_more: false });
         const { p } = await home();
