@@ -779,10 +779,35 @@ describe('CustomerPage', () => {
       expect(page.reportOf('demo-tx-001')).toBeUndefined();
     });
 
-    it('answers FAQs from fixed translated text only', () => {
+    it('answers FAQs from fixed translated text only, apart from the report conversation', () => {
+      const before = page.log();
       page.ask('faqTimeQ');
-      expect(page.log().slice(-2)).toEqual([{ from: 'me', key: 'faqTimeQ' }, { from: 'bot', key: 'faqTimeA' }]);
+      expect(page.faqLog()).toEqual([{ from: 'me', key: 'faqTimeQ' }, { from: 'bot', key: 'faqTimeA' }]);
+      expect(page.log()).toEqual(before, 'a FAQ never becomes the prompt for the current step');
       expect(() => page.ask('nope' as never)).toThrow();
+    });
+
+    it('shows a new FAQ answer right above the FAQ buttons and scrolls it into view, even below a long charge list', async () => {
+      const fixture = TestBed.createComponent(CustomerPage);
+      const p = fixture.componentInstance;
+      const el = fixture.nativeElement as HTMLElement;
+      document.body.appendChild(el);
+      p.identity = 'demo-ana';
+      await p.login();
+      p.openChat();
+      fixture.detectChanges();
+      const scrolled = spyOn(Element.prototype, 'scrollIntoView');
+      el.querySelector<HTMLButtonElement>('.chat-faq button')!.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const answer = el.querySelector('.chat-faq-log li:last-child')!;
+      expect(answer.textContent).toContain(p.t().faqNextA);
+      expect(answer.closest('.chat-faq-log')!.nextElementSibling!.classList).toContain('chat-faq');
+      expect(scrolled.calls.mostRecent().object).toBe(answer);
+      p['clearChat']();
+      fixture.detectChanges();
+      expect(el.querySelector('.chat-faq-log')).toBeNull('a new report starts without old answers');
+      el.remove();
     });
 
     it('titles the receipt by the server kind', async () => {

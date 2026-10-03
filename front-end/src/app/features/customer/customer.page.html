@@ -290,6 +290,13 @@
               <div class="report-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="renew()" [disabled]="busy()">{{ t().renew }}</button></div>
             }
             @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
+            @if (faqLog().length) {
+              <ol class="chat-log chat-faq-log" role="log" aria-live="polite" [attr.aria-label]="t().chatFaq">
+                @for (line of faqLog(); track $index) {
+                  <li [class]="'chat-' + line.from"><span class="sr-only">{{ line.from === 'me' ? t().chatYou : t().chatGuide }}: </span>{{ lineText(line) }}</li>
+                }
+              </ol>
+            }
             <div class="chat-faq" role="group" [attr.aria-label]="t().chatFaq">
               @for (q of faqs; track q) { <button type="button" class="link-btn" (click)="ask(q)">{{ t()[q] }}</button> }
             </div>
