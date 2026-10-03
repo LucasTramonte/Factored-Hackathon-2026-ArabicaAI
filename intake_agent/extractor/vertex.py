@@ -12,7 +12,7 @@ Invariants (as ``workers_ai``):
 - Credentials come from ``VERTEX_ACCESS_TOKEN`` (``gcloud auth print-access-token``, valid about one hour),
   ``VERTEX_PROJECT`` and ``VERTEX_LOCATION`` (default ``global``) and are never logged; the message text is never
   printed, logged or put in an exception message.
-- HTTP 401/403 raise ``CredentialsError`` (an expired token, or missing Vertex AI permissions on the project);
+- HTTP 401 raises ``CredentialsError`` (an expired or invalid token); 403 too (the account lacks Vertex AI permission on the project);
   429/5xx, network failures and non-JSON bodies raise ``ConnectionError``; other 4xx raise ``ConfigurationError``.
 - Every exception from ``extract`` carries ``usage``; an attempt that fails in transport, or returns no usable
   token counts, adds one to ``usage_unavailable_calls``, so unmeasured is never reported as free.
@@ -74,8 +74,10 @@ def _post(url: str, token: str, body: dict, timeout: float) -> dict:
     except urllib.error.HTTPError as exc:
         exc.close()
         # Status only: the error body is not echoed, so nothing from the request can leak into logs.
-        if exc.code in (401, 403):
-            raise w.CredentialsError(f"Vertex rejected the token or project permissions (HTTP {exc.code}); refresh VERTEX_ACCESS_TOKEN") from None
+        if exc.code == 401:
+            raise w.CredentialsError("Vertex rejected the token (HTTP 401); refresh VERTEX_ACCESS_TOKEN") from None
+        if exc.code == 403:
+            raise w.CredentialsError("Vertex denied access (HTTP 403); grant the account Vertex AI User on VERTEX_PROJECT") from None
         if exc.code == 429 or exc.code >= 500:
             raise ConnectionError(f"Vertex HTTP {exc.code}") from None
         raise w.ConfigurationError(f"Vertex HTTP {exc.code}: check the project, location, model id and request") from None

@@ -89,9 +89,10 @@ class BedrockTransportTests(unittest.TestCase):
                  (503, ConnectionError), (400, workers_ai.ConfigurationError)]
         for code, expected in cases:
             err = urllib.error.HTTPError("u", code, "x", {}, io.BytesIO(b"echo " + MESSAGE.encode()))
-            with self.subTest(code=code), self.assertRaises(expected) as ctx:
-                self.run_with(err)
-            self.assertNotIn(MESSAGE, str(ctx.exception))
+            with self.subTest(code=code):
+                with self.assertRaises(expected) as ctx:
+                    self.run_with(err)
+                self.assertNotIn(MESSAGE, str(ctx.exception))
             self.assertEqual(ctx.exception.usage.get("usage_unavailable_calls"), 1)
 
     def test_a_non_json_body_is_a_service_failure_not_model_output(self):
@@ -145,7 +146,7 @@ class BedrockTransportTests(unittest.TestCase):
         for counts in ((True, 5), (-1, 5), ("100", 5), (100, None)):
             with self.subTest(counts=counts):
                 out, _ = self.run_with(openai_payload(json.dumps(GOOD), *counts))
-            self.assertEqual(out["usage"], {"input_tokens": 0, "output_tokens": 0, "usage_unavailable_calls": 1})
+                self.assertEqual(out["usage"], {"input_tokens": 0, "output_tokens": 0, "usage_unavailable_calls": 1})
 
 
 if __name__ == "__main__":

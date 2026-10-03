@@ -21,7 +21,7 @@ export VERTEX_PROJECT=factored-hackathon-arabica-ai VERTEX_LOCATION=global
 export VERTEX_ACCESS_TOKEN="$(gcloud auth print-access-token)"   # valid about one hour: refresh before each run
 ```
 
-Never commit or paste the token. If a run fails with `CredentialsError` (401/403), the token has expired: run the last line again.
+Never commit or paste the token. If a run fails with `CredentialsError` and HTTP 401, the token has expired: run the last line again. HTTP 403 means the signed-in account lacks permission on the project; refreshing won't help (see the table in section 2).
 
 **Quick probe** (one call, a content-free message):
 
@@ -45,7 +45,8 @@ Amendment 1's latency protocol is the same command with `--repetitions 10` (at l
 
 | Outcome | What it means |
 |---|---|
-| `CredentialsError` (401/403) | Expired token or missing Vertex AI permission on the project: refresh `VERTEX_ACCESS_TOKEN` |
+| `CredentialsError`, HTTP 401 | Expired or invalid token: refresh `VERTEX_ACCESS_TOKEN` |
+| `CredentialsError`, HTTP 403 | The account lacks Vertex AI permission: the project owner grants it the Vertex AI User role (`roles/aiplatform.user`) on `VERTEX_PROJECT`, and `gcloud auth list` shows the right account |
 | `ConfigurationError` | Check `VERTEX_PROJECT`, `VERTEX_LOCATION` and the model id |
 | Schema-valid outputs below 95% | Stop. Fixing it is a parsing change, which is the builder's job, with Manoella's approval |
 
