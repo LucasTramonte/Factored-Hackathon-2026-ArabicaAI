@@ -52,10 +52,9 @@ jobs:
         if: steps.scope.outputs.python == 'true'
         run: python -m pip install -r data_pipelines/bronze/requirements.txt
 
-      # In parallel (pytest-xdist): about 500 small DuckDB tests, so the job stays inside one billed minute.
       - name: Run pipeline tests
         if: steps.scope.outputs.python == 'true'
-        run: python -m pytest data_pipelines data_foundation/tests data_profiles/findings evals/intake intake_agent scripts -q -n auto
+        run: python -m pytest data_pipelines data_foundation/tests data_profiles/findings evals/intake intake_agent scripts -q
 
       - name: Compile pipeline package
         if: steps.scope.outputs.python == 'true'
