@@ -414,6 +414,29 @@ describe('AgentPage', () => {
       expect(text).toContain(page.statusLabel('in_review'));
     });
 
+    it('does not claim a first report when earlier history may be outside the summary', async () => {
+      service.intakeDetail.and.resolveTo(detail(P1, { customer_history: { reports: 0, open: 0, high_urgency: 0, last_status: null, last_accepted_at: null, has_more: true } }));
+      await loadAndOpen();
+      for (const lang of ['es', 'pt', 'en'] as const) {
+        TestBed.inject(LangService).set(lang); fixture.detectChanges();
+        const row = [...el().querySelectorAll('#intake-detail .detail-meta div')].find(d => d.querySelector('dt')!.textContent === t().customerHistory)!;
+        expect(row.querySelector('dd')!.textContent!.trim()).toBe(t().historyPartial);
+        expect(row.querySelector('dd')!.textContent).not.toContain(t().historyNone);
+      }
+    });
+
+    it('uses other reports and singular or plural counts in all three languages', () => {
+      const one = detail(P1, { customer_history: { reports: 1, open: 1, high_urgency: 1, last_status: 'in_review', last_accepted_at: '2026-09-29T10:00:00.000Z', has_more: false } });
+      for (const [lang, expected] of [['es', '1 otro reporte: 1 abierto, 1 de prioridad alta. Último: En revisión.'],
+        ['pt', '1 outro relato: 1 aberto, 1 de prioridade alta. Último: Em análise.'],
+        ['en', '1 other report: 1 open, 1 high priority. Latest: In review.']] as const) {
+        TestBed.inject(LangService).set(lang);
+        expect(page.historyText(one)).toBe(expected);
+        expect(page.historyText({ ...one, customer_history: { ...one.customer_history, reports: 2, open: 2 } })).toContain('2 ' + t().historyReportMany);
+        expect(page.historyText({ ...one, customer_history: { ...one.customer_history, has_more: true } })).toContain('1+ ' + t().historyReportMany);
+      }
+    });
+
     it('shows the status as text on every queue row', async () => {
       await page.load();
       fixture.detectChanges();

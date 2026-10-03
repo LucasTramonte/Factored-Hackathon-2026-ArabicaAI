@@ -82,8 +82,11 @@ export class AgentPage {
 
   /** One line on the customer's other reports, so an agent sees a repeat or urgent customer first; names no one. */
   historyText({ customer_history: h }: AgentIntakeDetail): string {
-    if (!h.reports) return this.t().historyNone;
-    return this.t().historyLine.replace('{n}', h.has_more ? h.reports + '+' : String(h.reports)).replace('{open}', String(h.open)).replace('{high}', String(h.high_urgency))
+    const t = this.t();
+    if (!h.reports) return h.has_more ? t.historyPartial : t.historyNone;
+    return t.historyLine.replace('{n}', h.has_more ? h.reports + '+' : String(h.reports))
+      .replace('{reports}', h.reports === 1 && !h.has_more ? t.historyReportOne : t.historyReportMany)
+      .replace('{open}', String(h.open)).replace('{openLabel}', h.open === 1 ? t.historyOpenOne : t.historyOpenMany).replace('{high}', String(h.high_urgency))
       .replace('{status}', h.last_status ? this.statusLabel(h.last_status) : '—');
   }
 

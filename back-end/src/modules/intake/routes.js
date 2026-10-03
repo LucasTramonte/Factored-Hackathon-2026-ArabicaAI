@@ -1,5 +1,5 @@
 /** Guided reports use authenticated ownership and durable start receipts; the extractor switch (off by default) only records a shadow call. */
-import { requireSession, tokenHash } from '../../auth/session.js';
+import { SESSION_MS, requireSession, tokenHash } from '../../auth/session.js';
 import { fail, json, readJsonBody, readCookies } from '../../http.js';
 import { UUID, validateStartRequest, validateHandoffRequest } from './validation.js';
 import { APPROVED_EXTRACTOR, UNKNOWN, extractShadow, readyExtractor } from './ai-transport.js';
@@ -81,6 +81,8 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
   const payloadHash = await tokenHash(JSON.stringify([complete ? 'complete' : 'incomplete', transactionId, ...(details ? [details] : [])]));
   const prior = await store.findOwnedIntakeHandoff(customerId, episodeId);
   if (prior && (prior.turn_key !== turnKey || prior.payload_hash !== payloadHash)) return fail(409, 'Episode already submitted with different content or key');
+  if (prior?.kind === 'complete' && episode.state === 'handoff_pending' && Date.parse(prior.accepted_at) + SESSION_MS <= Date.now())
+    return fail(409, 'Reservation expired; start a new report');
   if (!prior && episode.state !== 'selection_required') return fail(409, 'Episode is no longer open');
   // The statement column holds 10–2000 code points; the appended details must fit (one newline between).
   if (!prior && details && [...episode.customer_statement].length + 1 + [...details].length > 2000) return fail(422, 'Statement and details exceed 2000 characters together');
@@ -122,6 +124,8 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
     toolCalls++;
     const { acknowledged, emailId } = await store.finishIntakeHandoff({ customerId, episode, receipt, sessionHash, now: Date.now(), operationDuration: Math.floor(performance.now() - started), toolCalls });
     if (!acknowledged) {
+      if (receipt.kind === 'complete' && Date.parse(receipt.accepted_at) + SESSION_MS <= Date.now())
+        return fail(409, 'Reservation expired; start a new report');
       await store.recordIntakeAttempt({ customerId, episodeId, toolCalls, operationDuration: Math.floor(performance.now() - started) });
       return fail(401, 'Session expired; renew the same customer session and retry with the same idempotency key');
     }

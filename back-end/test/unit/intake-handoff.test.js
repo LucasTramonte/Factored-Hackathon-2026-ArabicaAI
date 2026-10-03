@@ -309,3 +309,35 @@ test('receipt feedback summary preserves denominators, language and missingness 
     assert.throws(() => store.reportFeedbackSummary(window), /Invalid feedback window/);
   }
 });
+
+test('expired pending confirmations release the charge and cannot acknowledge after a new report', async t => {
+  const { db, store, start } = await setup(t);
+  const episodeId = await start(); const body = confirm(episodeId);
+  const failedRead = { ...store, readIntakeReceipt: async () => { throw new Error('readback down'); } };
+  assert.equal((await route(post('/intake/confirm', body), env, failedRead)).status, 503);
+  const cutoff = Date.now() - 3600000;
+  db.prepare('UPDATE intake_handoffs SET accepted_at=? WHERE episode_id=?').run(new Date(cutoff).toISOString(), episodeId);
+  assert.equal(await store.openReportForTransaction('ana', 'tx-ana', cutoff + 3600000), null, 'the exact one-hour boundary is expired');
+  const episode = await store.findIntake('ana', episodeId);
+  const receipt = await store.readIntakeReceipt('ana', episodeId, { sessionHash: await tokenHash(token), now: Date.now() });
+  const replacement = await route(post('/intake/confirm', confirm(await start())), env, store);
+  assert.equal(replacement.status, 201, 'an expired pending reservation does not block a fresh report');
+  const before = db.prepare('SELECT total_changes() n').get().n;
+  assert.deepEqual(await store.finishIntakeHandoff({ customerId: 'ana', episode, receipt, sessionHash: await tokenHash(token),
+    now: Date.now(), operationDuration: 0, toolCalls: 0 }), { acknowledged: false, emailId: null }, 'the SQL batch refuses a stale acknowledgement');
+  assert.equal(db.prepare('SELECT total_changes() n').get().n, before, 'expired acknowledgement writes nothing');
+  const retry = await route(post('/intake/confirm', body), env, store);
+  assert.equal(retry.status, 409); assert.equal((await retry.json()).detail, 'Reservation expired; start a new report');
+  assert.equal((await store.findIntake('ana', episodeId)).state, 'handoff_pending', 'reservation retained for audit and denominator');
+  assert.deepEqual(events(db).filter(e => e.case_id === episodeId).map(e => e.event), ['intake_started']);
+  assert.equal(db.prepare("SELECT count(*) n FROM intake_episodes WHERE state='complete_handoff'").get().n, 1);
+});
+
+test('acknowledged reports never expire at the pending cutoff and their receipts still replay', async t => {
+  const { db, store, start } = await setup(t); const body = confirm(await start());
+  const first = await route(post('/intake/confirm', body), env, store); assert.equal(first.status, 201);
+  db.prepare('UPDATE intake_handoffs SET accepted_at=?').run(new Date(Date.now() - 7200000).toISOString());
+  assert.ok(await store.openReportForTransaction('ana', 'tx-ana'));
+  assert.equal((await route(post('/intake/confirm', confirm(await start())), env, store)).status, 409);
+  assert.equal((await route(post('/intake/confirm', body), env, store)).status, 200);
+});

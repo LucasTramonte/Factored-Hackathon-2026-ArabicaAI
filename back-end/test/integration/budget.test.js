@@ -71,7 +71,8 @@ const CEILING = {
   intakeConfirmHigh: [21, 78, 28, 10],
   agentTransitionHigh: [5, 26, 6, 2],
   // The detail batch (migration 0018): stamp the first open (1 write, once), the row, and the customer's newest 21
-  // episodes (index intake_episodes_owner_recent) with at most 20 other reports, so reads are bounded by history size.
+  // episodes (index intake_episodes_owner_recent) with at most 20 other reports, so reads are bounded by window size.
+  // The raw window also keeps null pending/current slots internally so has_more cannot under-report a full window.
   completeDetail: [5, 80, 1, 3],
   incompleteDetail: [5, 80, 1, 3],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
@@ -280,6 +281,9 @@ test('50-row queue scan budget is qualified against 50 terminal and 50 pending t
   const detail = await agent.call('/agent/intake-detail?protocol=' + receipts[0]);
   assert.equal(detail.status, 200); assertContract('agentIntakeDetail', detail.body);
   assert.equal(detail.body.verified_evidence.transaction, null);
+  assert.equal(detail.body.customer_history.has_more, true, 'the newest 21 episodes fill the window even with pending slots');
+  assert.ok(detail.body.customer_history.reports <= 20);
   within('incompleteDetail', detail.metrics);
   console.log('D1_FULL_QUEUE ' + JSON.stringify({ terminal: 50, pending: 50, tied: true, ...queue.metrics }));
+  console.log('D1_FULL_HISTORY ' + JSON.stringify({ ...detail.metrics, customer_history: detail.body.customer_history }));
 });

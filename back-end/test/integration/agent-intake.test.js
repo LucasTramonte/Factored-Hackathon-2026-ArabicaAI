@@ -68,4 +68,5 @@ test('agent handoff reads reject method path customer swaps forged tokens expiry
     const res=await agent.call('/agent/intake-detail'+query); assert.equal(res.status,422); assertContract('error',res.body);
   }
   const missing=await agent.call('/agent/intake-detail?protocol='+crypto.randomUUID()); assert.equal(missing.status,404); assertContract('error',missing.body);
+  assert.equal(missing.metrics.rows_written,0,'an unknown protocol never stamps any report');
 });
