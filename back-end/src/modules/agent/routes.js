@@ -9,9 +9,9 @@ import { deliver } from '../../notify/dispatch.js';
 const PAGE = 50;
 
 /**
- * POST /demo/agent-session: an agent session from a verified Cognito ID token in group ``agent`` (an ``admin`` token
- * counts as both; ``roles`` lists the verified groups that are roles) (``Authorization:
- * Bearer``, as ``POST /auth/session``); any body is ignored. Only with ``DEMO_PICKER=1`` (local) does a request without
+ * POST /demo/agent-session: an agent session from a verified Cognito ID token in ``Authorization: Bearer`` (as
+ * ``POST /auth/session``) in group ``agent``, or ``admin``, which counts as both; ``roles`` lists the verified groups
+ * that are roles, and any body is ignored. Only with ``DEMO_PICKER=1`` (local) does a request without
  * ``Authorization`` get a simulated session in one click.
  */
 export async function startAgentSession(request, env, store, ctx, verify = verifyIdToken) {

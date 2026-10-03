@@ -37,7 +37,7 @@ export async function verifyIdToken(token, { jwks, issuer, clientId }) {
   return { sub: payload.sub, email: payload.email, groups, customerId: typeof id === 'string' && CUSTOMER_ID.test(id) ? id : null };
 }
 
-const GRANTED = ['customer', 'agent', 'admin', 'auditor'];
+export const GRANTED = ['customer', 'agent', 'admin', 'auditor'];
 /** The verified groups that are roles, in a fixed order. ``admin`` is listed as itself; ``hasRole`` makes it imply the rest. */
 export const rolesOf = groups => GRANTED.filter(r => groups.includes(r));
 /** ``admin`` may do anything a customer, agent or auditor may (ADR-007, decision 8). */

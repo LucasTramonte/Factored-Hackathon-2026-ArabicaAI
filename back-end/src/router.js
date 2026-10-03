@@ -3,6 +3,7 @@
  * handler's session read (customer or agent), behind a per-IP limit (60 a minute). Unknown paths under API prefixes return JSON 404 and are never served as the app.
  */
 import { fail, json } from './http.js';
+import { GRANTED } from './auth/cognito.js';
 import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession } from './modules/customer/routes.js';
 import { startIntake, confirmIntake, handoffIntake, listReports, requestUpdate } from './modules/intake/routes.js';
 import { listAgentCases, listAgentIntakes, getAgentIntakeDetail, startAgentSession, transitionIntake } from './modules/agent/routes.js';
@@ -29,7 +30,7 @@ export const API_ROUTES = {
 /** Who may call what. ``public`` needs no session; ``customer`` and ``agent`` need that actor's live session, which each
  *  handler reads itself. ``admin`` and ``auditor`` exist as roles (Lucas's RBAC) and own no route until a feature needs
  *  one. Declarative: adding a route without a role fails at module load. */
-export const ROLES = ['public', 'customer', 'agent', 'admin', 'auditor'];
+export const ROLES = ['public', ...GRANTED];
 export const ROUTE_ROLES = {
   '/demo/identities': 'public',
   '/demo/session': 'public',
