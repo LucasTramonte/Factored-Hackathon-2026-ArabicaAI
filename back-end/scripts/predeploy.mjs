@@ -93,6 +93,12 @@ async function main() {
       throw new Error(`Remote D1 is missing migrations that are not additive (${blocked.map(([f, p]) => `${f}: ${p[0]}`).join('; ')}). `
         + `A person applies them on purpose: npx wrangler d1 migrations apply ${db.database_name} --remote, then retries the deploy.`);
     }
+    // The current Time Travel bookmark, so a bad migration is undone with one command (back-end/README.md, "Rollback").
+    try {
+      console.log(run(['d1', 'time-travel', 'info', db.database_name]).trim());
+    } catch {
+      console.warn('Could not read the D1 Time Travel bookmark; restore by timestamp instead (back-end/README.md, "Rollback")');
+    }
     console.log(`Applying ${pending.length} additive migration(s) to remote D1 before deploying: ${pending.join(', ')}`);
     run(['d1', 'migrations', 'apply', db.database_name, '--remote']);
     const still = pendingMigrations(files, applied());

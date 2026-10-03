@@ -1,0 +1,92 @@
+name: deploy
+
+# Production deploy from a green main (back-end/README.md, "Deployment"). It runs only after the quality workflow
+# passes on a push to main, so nothing reaches users that CI refused. One deploy at a time, in merge order.
+# `npm run deploy` (scripts/predeploy.mjs) records a D1 Time Travel bookmark, applies pending additive migrations,
+# then deploys; a smoke test rolls the Worker back when the new version doesn't answer as expected.
+on:
+  workflow_run:
+    workflows: [quality]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      BASE: https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev
+    steps:
+      - name: Skip until the Cloudflare secrets exist
+        id: ready
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not set; nothing was deployed (back-end/README.md, Deployment)."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out the tested commit
+        if: steps.ready.outputs.go == 'true'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ env.SHA }}
+          persist-credentials: false
+
+      - name: Set up Node
+        if: steps.ready.outputs.go == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            front-end/package-lock.json
+            back-end/package-lock.json
+
+      - name: Build the client and bundle it into the Worker
+        if: steps.ready.outputs.go == 'true'
+        run: |
+          npm --prefix front-end ci
+          npm --prefix back-end ci
+          npm --prefix front-end run build
+          npm --prefix back-end run prepare-assets
+
+      - name: Migrate and deploy
+        if: steps.ready.outputs.go == 'true'
+        working-directory: back-end
+        run: npm run deploy -- --tag "main-${SHA::7}" --message "main ${SHA::7}"
+
+      - name: Smoke test; roll the Worker back if it fails
+        if: steps.ready.outputs.go == 'true'
+        working-directory: back-end
+        run: |
+          check() { [ "$(curl -s -o /dev/null -m 15 -w '%{http_code}' "$@")" = "$expected" ]; }
+          ok=true
+          sleep 10
+          expected=200; check "$BASE/healthz" || ok=false
+          expected=200; check "$BASE/" || ok=false
+          expected=422; check -X POST "$BASE/auth/session" || ok=false   # the API answers without a token
+          expected=401; check "$BASE/transactions" || ok=false           # customer data needs a session
+          if [ "$ok" != true ]; then
+            echo "::error::Smoke test failed for ${SHA::7}; rolling the Worker back to the previous version."
+            npx wrangler rollback --message "smoke test failed for ${SHA::7}"
+            exit 1
+          fi
+          echo "Smoke test passed for ${SHA::7}."

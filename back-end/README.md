@@ -157,13 +157,30 @@ The remote run is ADR-004's retention step after 2026-10-20 and follows a final 
 
 ## Deployment
 
-The Worker `factored-hackathon-2026-arabicaai` deploys through Cloudflare Workers Builds from the production branch. Build settings:
+The Worker `factored-hackathon-2026-arabicaai` deploys from GitHub Actions ([`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml)), and only from a green `main`:
 
-- **Root directory:** `back-end`
-- **Build command:** `npm ci && npm --prefix ../front-end ci && npm --prefix ../front-end run build && npm run prepare-assets && npm test`
-- **Python for `npm test`:** the event-export tests run the stdlib-only scorer. The build image needs `python3` on `PATH`, or the build environment must set `INTAKE_PYTHON`. This is a deployer action in the Workers Builds settings; it isn't verified from this repository.
-- **Deploy command:** `npm run deploy`
-- **Watch paths:** `back-end/**`, `front-end/**`
+```
+merge to main → quality (Python, Angular, Worker unit + local D1) ──green──► deploy
+  deploy: build → D1 Time Travel bookmark → apply pending additive migrations → wrangler deploy → smoke test
+                                                                                   └─ fails → wrangler rollback
+```
+
+- **Gated by CI:** the job starts only when the `quality` workflow succeeds on a push to `main`, so a red spec never ships. `workflow_dispatch` reruns it by hand.
+- **One at a time, in order:** the `deploy-production` concurrency group never runs two deploys at once, and a newer merge supersedes a queued older one.
+- **Migrate on deploy:** `npm run deploy` (`scripts/predeploy.mjs`) applies pending *additive* migrations before the new Worker exists and stops on anything else (see below).
+- **Labelled:** each Worker version is tagged `main-<short sha>`; a release deploy uses `--tag vX.Y.Z` ([`CONTRIBUTING.md`](../CONTRIBUTING.md#releasing)).
+- **Smoke test and automatic rollback:** `/healthz` and `/` answer 200, `POST /auth/session` without a token 422, `/transactions` without a session 401; otherwise `wrangler rollback` restores the previous Worker version and the job fails.
+- **Secrets:** the repository secrets `CLOUDFLARE_API_TOKEN` (Cloudflare template "Edit Cloudflare Workers" plus **D1 Edit**, on this account only) and `CLOUDFLARE_ACCOUNT_ID`. Without them the job warns and deploys nothing.
+- **Cloudflare Workers Builds is disconnected** so the same commit never deploys twice (Workers & Pages → the Worker → Settings → Builds → Disconnect). It used to build and deploy in parallel with CI, without waiting for it.
+
+### Rollback
+
+- **Worker:** `npx wrangler rollback` (the previous version) or `npx wrangler rollback <version-id>`; `npx wrangler deployments list` shows the versions and their `main-<sha>` tags. Because migrations are additive, an older Worker runs on the newer schema.
+- **Database:** D1 Time Travel keeps 30 days. Each deploy that migrates prints the bookmark taken just before it; restore with `npx wrangler d1 time-travel restore arabica-intake-demo --bookmark=<bookmark>` (or `--timestamp=<unix seconds>`). A restore discards every write after that point, so it is a person's decision, never automatic.
+
+### Staging (not yet)
+
+There is one D1 database, so preview builds stay disabled: a preview would bind production data. A staging environment is the next step after `v1.0.0`: a second D1 (`npx wrangler d1 create arabica-intake-staging`), an `env.staging` block in `wrangler.jsonc` with its id, and a `staging` job in `deploy.yml` that migrates and smoke-tests it before `production`. Until then, every migration runs on a fresh local D1 in CI and must be additive.
 
 Preview builds share the production D1 binding. Keep them disabled until a separate preview database exists.
 
