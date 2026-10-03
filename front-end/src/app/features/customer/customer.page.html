@@ -113,6 +113,21 @@
               </details>
             </aside>
           }
+          @if (alert(); as a) {
+            <!-- ADR-011: the bank's fraud flag on one of the customer's charges; at most one, answered once. -->
+            <section class="ar-panel ar-panel-warn proactive-alert" aria-labelledby="alert-title">
+              <h2 class="ar-panel-title" id="alert-title">{{ t().alertTitle }}</h2>
+              <p><strong>{{ a.merchant_name || t().noMerchant }}</strong> · <span class="ar-mono">{{ a.amount }} {{ a.currency }}</span> ·
+                @if (a.source_occurred_at) { {{ sourceTime(a.source_occurred_at) }} } @else if (a.occurred_at) { {{ a.occurred_at | date:'yyyy-MM-dd HH:mm':'UTC' }} {{ t().utc }} }</p>
+              <p>{{ t().alertBody }}</p>
+              <div class="report-actions">
+                <button type="button" class="ar-btn" (click)="answerAlert('report')" [disabled]="busy()">{{ t().alertReport }}</button>
+                <button type="button" class="ar-btn ar-btn-secondary" (click)="answerAlert('mine')" [disabled]="busy()">{{ t().alertMine }}</button>
+              </div>
+            </section>
+          }
+          <p class="sr-only" role="status">{{ alertNote() }}</p>
+          @if (alertNote()) { <p class="ar-small alert-note" aria-hidden="true">{{ alertNote() }}</p> }
           <div class="topbar">
             <div style="display: flex; flex-direction: column; gap: 4px">
               <h1 class="ar-h1" tabindex="-1">{{ t().hello }}, {{ card()?.first_name || displayName() }}</h1>

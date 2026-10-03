@@ -87,7 +87,8 @@ test('no path has a Basic gate: documents are served and every API path reaches 
     ['DELETE', '/transactions', 405], ['GET', '/agent/intakes', 401], ['GET', '/agent/cases', 404], ['GET', '/agent/intake-detail', 401], ['GET', '/audit/events', 422],
     ['POST', '/agent/intake-status', 401], ['OPTIONS', '/agent/intakes', 405], ['POST', '/audit/events', 405], ['POST', '/agent', 405], ['GET', '/demo/identities', 200],
     ['GET', '/admin/customers', 401], ['POST', '/admin/act-as', 401], ['POST', '/admin/customers', 405], ['GET', '/admin/act-as', 405],
-    ['GET', '/admin', 404], ['GET', '/admin/customers/x', 404]]) {
+    ['GET', '/admin', 404], ['GET', '/admin/customers/x', 404],
+    ['GET', '/alerts', 401], ['POST', '/alerts/answer', 401], ['POST', '/alerts', 405], ['GET', '/alerts/answer', 405], ['GET', '/alerts/x', 404]]) {
     const res = await anon(path, method);
     assert.equal(res.headers.get('WWW-Authenticate'), null, `${method} ${path}`);
     assert.equal(res.status, status, `${method} ${path}`);

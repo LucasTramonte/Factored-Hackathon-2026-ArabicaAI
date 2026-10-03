@@ -9,6 +9,7 @@ import { startIntake, confirmIntake, handoffIntake, listReports, recordFeedback,
 import { listAgentIntakes, getAgentIntakeDetail, startAgentSession, transitionIntake } from './modules/agent/routes.js';
 import { listAuditEvents } from './modules/audit/routes.js';
 import { actAs, listCustomers } from './modules/admin/routes.js';
+import { answerAlert, getAlert } from './modules/proactive/routes.js';
 
 export const API_ROUTES = {
   '/demo/identities': { GET: listIdentities },
@@ -30,7 +31,9 @@ export const API_ROUTES = {
   '/agent/intake-status': { POST: transitionIntake },
   '/audit/events': { GET: listAuditEvents },
   '/admin/customers': { GET: listCustomers },
-  '/admin/act-as': { POST: actAs }
+  '/admin/act-as': { POST: actAs },
+  '/alerts': { GET: getAlert },
+  '/alerts/answer': { POST: answerAlert }
 };
 /** Who may call what. ``public`` needs no session; ``customer`` and ``agent`` need that actor's live session, which each
  *  handler reads itself; ``auditor`` needs a verified Cognito token on every call (no session). ``admin`` needs a customer
@@ -58,10 +61,12 @@ export const ROUTE_ROLES = {
   '/agent/intake-status': 'agent',
   '/audit/events': 'auditor',
   '/admin/customers': 'admin',
-  '/admin/act-as': 'admin'
+  '/admin/act-as': 'admin',
+  '/alerts': 'customer',
+  '/alerts/answer': 'customer'
 };
 for (const path of Object.keys(API_ROUTES)) if (!ROLES.includes(ROUTE_ROLES[path])) throw new Error(`Route ${path} has no role`);
-export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/audit/', '/admin/', '/transactions/', '/cases/', '/intake/', '/reports/'];
+export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/audit/', '/admin/', '/alerts/', '/transactions/', '/cases/', '/intake/', '/reports/'];
 /** Bare API namespace paths that have no handler but must still answer JSON 404. */
 export const API_NAMESPACES = new Set(['/intake', '/auth', '/audit', '/admin']);
 /** HTML documents the Worker sees first; all are public. Hashed bundles skip the Worker. */

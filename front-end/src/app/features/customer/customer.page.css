@@ -40,3 +40,8 @@
 .act-as { flex-basis: 100%; }
 .act-as summary { cursor: pointer; font-weight: 600; }
 .act-as[open] summary { margin-bottom: 12px; }
+
+/* ADR-011: the proactive alert sits above the greeting; one at a time. */
+.proactive-alert { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.proactive-alert p { margin: 0; }
+.alert-note { margin: 0 0 12px; }

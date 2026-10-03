@@ -15,6 +15,11 @@ export interface Identity {
   country?: string | null;
 }
 
+/** GET /alerts (ADR-011): the customer's newest bank-flagged charge not yet answered or reported, or null. */
+export interface AlertResponse {
+  alert: Transaction | null;
+}
+
 export interface Transaction {
   transaction_id: string;
   merchant_name: string;

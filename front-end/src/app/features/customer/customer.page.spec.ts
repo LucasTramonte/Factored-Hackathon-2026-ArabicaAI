@@ -808,6 +808,61 @@ describe('CustomerPage', () => {
       return { fixture, p, el: fixture.nativeElement as HTMLElement };
     }
 
+    describe('proactive alert (ADR-011)', () => {
+      const flagged: Transaction = { transaction_id: 'demo-tx-001', merchant_name: 'Mercado', occurred_at: null,
+        source_occurred_at: '2026-02-26T13:21:51', amount: '125.50', currency: 'BRL' };
+      const withAlert = (alert: Transaction | null) => Object.assign(service, {
+        alert: jasmine.createSpy('alert').and.resolveTo({ alert }), answerAlert: jasmine.createSpy('answerAlert').and.resolveTo({}) }) as never as {
+        alert: jasmine.Spy; answerAlert: jasmine.Spy };
+      const settle = async (fixture: { whenStable(): Promise<unknown>; detectChanges(): void }) => { await fixture.whenStable(); fixture.detectChanges(); };
+
+      it('shows no banner without a flagged charge, nor when the alert read fails', async () => {
+        withAlert(null);
+        let { fixture, el } = await home(); await settle(fixture);
+        expect(el.querySelector('.proactive-alert')).toBeNull();
+        withAlert(null).alert.and.rejectWith(new ApiError(503));
+        ({ fixture, el } = await home()); await settle(fixture);
+        expect(el.querySelector('.proactive-alert')).toBeNull('the home works without the alert');
+      });
+
+      it('"it\'s mine" records the answer once, removes the banner and thanks the customer', async () => {
+        const spies = withAlert(flagged);
+        const { fixture, p, el } = await home(); await settle(fixture);
+        const banner = el.querySelector('.proactive-alert')!;
+        expect(banner.textContent).toContain('Mercado');
+        expect(banner.textContent).toContain('125.50 BRL');
+        expect(banner.textContent).toContain(p.t().alertTitle);
+        expect(banner.textContent).not.toMatch(/fraude|bloque|reembols/i);
+        banner.querySelectorAll<HTMLButtonElement>('button')[1].click();
+        await settle(fixture);
+        expect(spies.answerAlert).toHaveBeenCalledOnceWith('demo-tx-001', 'mine');
+        expect(el.querySelector('.proactive-alert')).toBeNull();
+        expect(el.querySelector('[role="status"]')!.textContent).toContain(p.t().alertThanks);
+        expect(p.chatOpen()).toBeFalse();
+      });
+
+      it('"I don\'t recognize it" records the answer and opens the guided report on that charge', async () => {
+        const spies = withAlert(flagged);
+        const { fixture, p, el } = await home(); await settle(fixture);
+        el.querySelector<HTMLButtonElement>('.proactive-alert button')!.click();
+        await settle(fixture);
+        expect(spies.answerAlert).toHaveBeenCalledOnceWith('demo-tx-001', 'report');
+        expect(p.chatOpen()).toBeTrue();
+        expect(el.querySelector('.proactive-alert')).toBeNull();
+      });
+
+      it('a failed answer keeps the banner and says why', async () => {
+        const spies = withAlert(flagged);
+        spies.answerAlert.and.rejectWith(new ApiError(503));
+        const { fixture, p, el } = await home(); await settle(fixture);
+        el.querySelector<HTMLButtonElement>('.proactive-alert button')!.click();
+        await settle(fixture);
+        expect(el.querySelector('.proactive-alert')).not.toBeNull();
+        expect(p.chatOpen()).toBeFalse();
+        expect(p.error()).not.toBe('');
+      });
+    });
+
     it('greets by the context card name and lists products with last4, showing missing fields as missing', async () => {
       const { el } = await home({ version: 1, snapshot_at: '2026-06-01', first_name: 'Ana', locale_hint: 'es-CO',
         products: [{ product_type: 'credit_card', last4: '1234', currency: 'COP' }, { product_type: null, last4: null, currency: null }] });
