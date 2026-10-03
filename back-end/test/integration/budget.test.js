@@ -33,8 +33,10 @@ const CEILING = {
   create: [4, 12, 6, 4],
   agentLogin: [3, 6, 6, 1],
   agentList: [2, 250, 0, 2],
-  intakeStart: [6, 8, 11, 2],
-  intakeStartReplay: [6, 6, 2, 2],
+  // The CHECK on intake_episodes.reason (migration 0016, ADR-010) adds one counted read to each statement that writes an
+  // episode row, as 0004's CHECKs did: start 8 -> 9 and replay 6 -> 7 rows read, measured with and without it (ADR-004).
+  intakeStart: [6, 9, 11, 2],
+  intakeStartReplay: [6, 7, 2, 2],
   // The first acknowledgement queues one "received" email for a customer with a notification target (Task 3.2):
   // one more statement in the acknowledgement batch, 3 writes (row, primary key, email_outbox_recent).
   // One open report per charge (Task 4.4): one more query and round trip that reads only that charge's cases

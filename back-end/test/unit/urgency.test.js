@@ -38,6 +38,7 @@ test('an unknown currency uses the relative rule only', () => {
 test('the policy names every served currency with a positive round amount and a demo block line', () => {
   for (const currency of ['BRL', 'USD', 'COP', 'ARS', 'MXN']) assert.ok(config.fixed[currency] > 0, currency);
   assert.equal(config.relative_min_others, 5);
+  assert.deepEqual(config.high_reasons, ['card_lost_or_stolen']);
   assert.match(config.demo_block_line, /\(demo\)$/);
 });
 

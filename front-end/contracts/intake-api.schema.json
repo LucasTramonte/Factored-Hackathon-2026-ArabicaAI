@@ -417,7 +417,7 @@
     },
     "agentIntake": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at"],
+      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at", "reason"],
       "properties": {
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
@@ -428,6 +428,7 @@
         "destination": {"type": "string", "minLength": 1},
         "priority": {"type": "string", "minLength": 1},
         "urgency": {"type": "string", "pattern": "^(normal|high)$"},
+        "reason": {"type": "string", "pattern": "^(not_mine|duplicate|wrong_amount|cancelled_or_not_received|subscription|card_lost_or_stolen|other)$"},
         "accepted_at": {"type": "string", "minLength": 1}
       }
     },
@@ -492,7 +493,7 @@
     },
     "agentIntakeDetail": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "model_reading", "scope"],
+      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at", "reason", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "model_reading", "scope"],
       "properties": {
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
@@ -503,6 +504,7 @@
         "destination": {"type": "string", "minLength": 1},
         "priority": {"type": "string", "minLength": 1},
         "urgency": {"type": "string", "pattern": "^(normal|high)$"},
+        "reason": {"type": "string", "pattern": "^(not_mine|duplicate|wrong_amount|cancelled_or_not_received|subscription|card_lost_or_stolen|other)$"},
         "accepted_at": {"type": "string", "minLength": 1},
         "language": {"type": "string", "pattern": "^(es|pt|en)$"},
         "customer_statement": {"type": "string", "minLength": 10, "maxLength": 2000},

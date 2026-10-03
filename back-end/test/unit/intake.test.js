@@ -68,7 +68,7 @@ test('guided_start_is_owned_and_idempotent', async t => {
 test('invalid starts, roles, expiry, methods and paths never write intake rows', async t => {
   const { db, store } = await setup(t);
   const invalid = [null, [], '"text"', '{bad', { ...body, customer_id: 'bruno' }, { ...body, language: 'fr' }, { ...body, language: 'EN' },
-    { ...body, mode: 'ai' }, { ...body, report_type: 'balance' }, { ...body, idempotency_key: 'bad' },
+    { ...body, mode: 'ai' }, { ...body, report_type: 'balance' }, { ...body, reason: 'nope' }, { ...body, idempotency_key: 'bad' },
     { ...body, customer_statement: 'short' }, { ...body, customer_statement: 'x'.repeat(2001) },
     { ...body, customer_statement: '\ud800'.repeat(10) }, { ...body, extra: true },
     { ...body, session_ref: 'forged' }, { ...body, language: null }, { ...body, customer_statement: null }];

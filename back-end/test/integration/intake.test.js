@@ -47,6 +47,31 @@ test('guided_start_is_owned_and_idempotent against local D1', async () => {
   console.log('D1_INTAKE_START_REPLAY ' + JSON.stringify(replay.metrics));
 });
 
+test('the reason is part of the start and shown to agents, never in events (ADR-010)', async () => {
+  const ana = await customer();
+  const body = { ...startBody(), reason: 'duplicate', customer_statement: 'Me cobraron dos veces la misma compra.' };
+  const started = await ana.call('/intake/start', body);
+  assert.equal(started.status, 201); assertContract('intakeStart', started.body);
+  const conflict = await ana.call('/intake/start', { ...body, reason: 'other' });
+  assert.equal(conflict.status, 409); assert.equal(conflict.body.detail, 'Key already used with different content');
+  const handoff = await ana.call('/intake/handoff', { episode_id: started.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() });
+  assert.equal(handoff.status, 201);
+  const agent = client(); assert.equal((await agent.call('/demo/agent-session', {})).status, 200);
+  const list = await agent.call('/agent/intakes'); assertContract('agentIntakeList', list.body);
+  assert.ok(list.body.items.every(item => typeof item.reason === 'string'));
+  assert.equal(list.body.items.find(item => item.protocol === handoff.body.protocol).reason, 'duplicate');
+  const detail = await agent.call('/agent/intake-detail?protocol=' + handoff.body.protocol);
+  assert.equal(detail.status, 200); assertContract('agentIntakeDetail', detail.body); assert.equal(detail.body.reason, 'duplicate');
+  const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
+  const { resolve } = await import('node:path');
+  await withIntakeStore({ config: resolve(process.cwd(), 'wrangler.jsonc') }, async store => {
+    const events = await store.listIntakeHistory(started.body.episode_id);
+    assert.ok(events.length >= 2);
+    for (const { event_json } of events) assert.ok(!('reason' in JSON.parse(event_json)), event_json);
+  });
+  await closeReport(handoff.body.protocol);
+});
+
 test('guided start gate, path, session-role and malformed-input boundaries', async () => {
   for (const path of ['/intake/start', '/intake', '/intake/', '/intake/unknown', '/intake/start/extra']) {
     for (const method of ['GET', 'POST', 'HEAD', 'OPTIONS', 'DELETE', 'PUT']) {

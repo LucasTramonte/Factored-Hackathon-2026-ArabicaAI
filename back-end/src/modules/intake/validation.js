@@ -7,7 +7,7 @@ const KEYS = 'customer_statement,idempotency_key,language,mode,reason,report_typ
 export const REASONS = ['not_mine', 'duplicate', 'wrong_amount', 'cancelled_or_not_received', 'subscription', 'card_lost_or_stolen', 'other'];
 const invalid = detail => ({ error: { status: 422, detail } });
 
-/** Require exactly the guided report fields and 10–2000 well-formed Unicode code points, excluding U+0000 (SQLite length stops there). */
+/** Require exactly the guided report fields, one of ``REASONS``, and 10–2000 well-formed Unicode code points, excluding U+0000 (SQLite length stops there). */
 export function validateStartRequest(body) {
   if (body === null || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).sort().join() !== KEYS) {
     return invalid('Provide exactly the guided report fields');
@@ -15,10 +15,11 @@ export function validateStartRequest(body) {
   if (!['es', 'pt', 'en'].includes(body.language) || body.mode !== 'guided' || body.report_type !== 'unrecognized_charge') {
     return invalid('Select an ES/PT/EN guided unrecognized-charge report');
   }
+  if (!REASONS.includes(body.reason)) return invalid('Choose one of the report reasons');
   const statement = checkText(body.customer_statement);
   if (statement.error) return statement;
   if (typeof body.idempotency_key !== 'string' || !UUID.test(body.idempotency_key)) return invalid('Invalid request key');
-  return { value: { language: body.language, statement: statement.value, key: body.idempotency_key.toLowerCase() } };
+  return { value: { language: body.language, statement: statement.value, key: body.idempotency_key.toLowerCase(), reason: body.reason } };
 }
 
 /** Customer free text: well-formed Unicode without U+0000, trimmed to 10–2000 code points. */

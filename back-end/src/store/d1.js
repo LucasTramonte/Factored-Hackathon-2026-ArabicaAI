@@ -138,10 +138,10 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      * ``producer`` (the extractor switch, on) labels the events and pre-records one call with unknown usage, so a
      * crash during the call is never counted as free; absent, the row and event are the guided ones.
      */
-    startIntake: async ({ customerId, language, statement, key, now, expiresAt, producer }) => {
+    startIntake: async ({ customerId, language, statement, key, reason = 'not_mine', now, expiresAt, producer }) => {
       const episodeId = crypto.randomUUID();
       const sessionRef = crypto.randomUUID();
-      const payloadHash = await tokenHash(JSON.stringify([language, statement]));
+      const payloadHash = await tokenHash(JSON.stringify([language, statement, reason]));
       const response = JSON.stringify({ episode_id: episodeId, state: 'selection_required', language, mode: 'guided' });
       const event = JSON.stringify({ event: 'intake_started', version: '2', case_id: episodeId,
         ts: new Date(now).toISOString(), seq: 0, session_ref: sessionRef, language, model_version: producer ?? 'guided-0.1' });
@@ -149,9 +149,9 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         known_output_tokens: 0, usage_unavailable_calls: 1 } : { tool_calls: 1 });
       const results = await batch([
         ['INSERT INTO intake_episodes(episode_id,customer_id,session_ref,language,mode,state,customer_statement,'
-          + 'start_key,payload_hash,created_at,updated_at,expires_at,usage_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) '
+          + 'start_key,payload_hash,created_at,updated_at,expires_at,usage_json,reason) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) '
           + 'ON CONFLICT(customer_id,start_key) DO NOTHING',
-          episodeId, customerId, sessionRef, language, 'guided', 'selection_required', statement, key, payloadHash, now, now, expiresAt, usage],
+          episodeId, customerId, sessionRef, language, 'guided', 'selection_required', statement, key, payloadHash, now, now, expiresAt, usage, reason],
         ['INSERT INTO intake_turns(episode_id,turn_key,payload_hash,response_json) '
           + 'SELECT episode_id,?,?,? FROM intake_episodes WHERE episode_id=?', key, payloadHash, response, episodeId],
         ['INSERT INTO intake_events(episode_id,seq,event_json) '
@@ -374,7 +374,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      */
     listIntakeHandoffs: async limit => {
       const lane = urgent => 'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
-        + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+        + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status,e.reason FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
         + "WHERE e.state=h.kind||'_handoff' AND " + (urgent ? '' : 'NOT ') + "(h.urgency='high' AND h.status<>'closed') "
         + 'ORDER BY h.accepted_at DESC,protocol LIMIT ?';
       const [high, rest] = await batch([[lane(true), Math.min(limit, 51)], [lane(false), Math.min(limit, 51)]]);
@@ -408,7 +408,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     findIntakeHandoff: protocol => first(
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
       + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status,h.evidence_json,h.actions_json,h.questions_json,'
-      + 'e.customer_statement,e.language,t.transaction_id AS verified_transaction_id,'
+      + 'e.customer_statement,e.language,e.reason,t.transaction_id AS verified_transaction_id,'
       + "json_extract(e.usage_json,'$.model_version') AS model_version,COALESCE(json_extract(e.usage_json,'$.llm_calls'),0) AS llm_calls "
       + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
       + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
