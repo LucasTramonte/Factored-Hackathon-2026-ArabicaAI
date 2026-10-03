@@ -5,7 +5,7 @@
  * that another customer exists: the listing is only behind that mark.
  */
 import { fail, json, readJsonBody } from '../../http.js';
-import { requireSession, startSession } from '../../auth/session.js';
+import { actAsSession, requireSession } from '../../auth/session.js';
 import { cardOf, identityList, refuseIdentity } from '../customer/routes.js';
 
 const NOT_ADMIN = 'This session was not opened by an admin';
@@ -28,7 +28,8 @@ export async function listCustomers(request, env, store) {
  * POST /admin/act-as with exactly ``{ customer_id }``: replace the admin's customer session with one for that customer.
  * The new session keeps the admin mark (so the admin can switch again), stores no email (notifications never go to the
  * admin's address for another customer's reports, and the customer's own address on file is untouched), and the same
- * batch records one reference-only ``admin_actions`` row. From here identity comes from the session, as everywhere.
+ * batch records one reference-only ``admin_actions`` row. The swap is single-use: of concurrent calls with one cookie,
+ * the first wins and the rest are 401. From here identity comes from the session, as everywhere.
  */
 export async function actAs(request, env, store) {
   const { error } = await adminSession(request, store);
@@ -42,6 +43,8 @@ export async function actAs(request, env, store) {
   const refused = await refuseIdentity(store, value.customer_id);
   if (refused) return refused;
   const customerId = value.customer_id;
-  return json({ customer_id: customerId, mode: 'admin_act_as', context_card: await cardOf(store, customerId), roles: ['admin'] }, 200,
-    { 'Set-Cookie': await startSession(request, store, 'customer', customerId, null, { admin: true, actAs: true }) });
+  const card = await cardOf(store, customerId);
+  const cookie = await actAsSession(request, store, customerId);
+  if (!cookie) return fail(401, 'Sign in as an admin first');
+  return json({ customer_id: customerId, mode: 'admin_act_as', context_card: card, roles: ['admin'] }, 200, { 'Set-Cookie': cookie });
 }

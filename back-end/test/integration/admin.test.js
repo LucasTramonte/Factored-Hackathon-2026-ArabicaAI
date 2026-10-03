@@ -110,14 +110,21 @@ test("act-as never stores the admin's email for another customer, and leaves tha
   assert.deepEqual(await store(s => s.findNotificationTarget('demo-elena')), elena);
 });
 
-test('concurrent act-as calls on one admin session never fail open or error', async () => {
+test('act-as is single-use: of concurrent calls on one admin session exactly one wins, with one audit row', async () => {
   const admin = await signedIn(['admin']);
   const cookie = admin.cookie;
-  const results = await Promise.all(['CLI-COHORT-1', 'CLI-COHORT-2', 'CLI-COHORT-3', 'demo-ana'].map(customer_id => {
-    const c = client(); c.cookie = cookie;
-    return c.call('/admin/act-as', { customer_id });
+  const targets = ['CLI-COHORT-1', 'CLI-COHORT-2', 'CLI-COHORT-3', 'demo-ana', 'CLI-COHORT-4', 'demo-bruno'];
+  const callers = targets.map(() => client());
+  const results = await Promise.all(callers.map((c, i) => {
+    c.cookie = cookie;
+    return c.call('/admin/act-as', { customer_id: targets[i] });
   }));
-  for (const r of results) assert.ok([200, 401].includes(r.status), String(r.status));
-  assert.ok(results.some(r => r.status === 200));
-  for (const r of results.filter(r => r.status === 200)) assertContract('actAsSession', r.body);
+  const won = results.filter(r => r.status === 200);
+  assert.equal(won.length, 1, results.map(r => r.status).join());
+  for (const r of results.filter(r => r.status !== 200)) { assert.equal(r.status, 401); assertContract('error', r.body); }
+  assertContract('actAsSession', won[0].body);
+  const losers = callers.filter((c, i) => results[i].status !== 200);
+  for (const c of losers) assert.equal((await c.call('/transactions')).status, 401, 'a losing call holds no session');
+  const original = await ref(cookie);
+  assert.equal((await store(s => s.listAdminActions(50))).filter(r => r.admin_session_ref === original).length, 1);
 });
