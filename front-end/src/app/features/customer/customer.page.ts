@@ -523,6 +523,21 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * "Not resolved" on a closed report starts a *new* report, never a reopened one: closing records that a person
+   * finished the review, not a resolution, and the one-open-report rule allows a new report once the first is closed.
+   * The guided chat opens on the same charge when it is in the list, otherwise as the "?" entry, with a statement that
+   * cites the earlier reference. The customer can edit it, and a reason chip never overwrites it.
+   */
+  reportAgain(r: Report): void {
+    if (this.frozen() || r.status !== 'closed') return;
+    const charge = r.transaction_id && this.chargeOf(r.transaction_id) ? r.transaction_id : undefined;
+    this.openChat(charge, !charge);
+    if (this.chatStep() === 'describe' && this.chatStatement.trim() === '') {
+      this.chatStatement = this.lang.stringsFor(this.reportLang()).reportAgainStatement.replace('{ref}', () => r.reference_short ?? r.protocol);
+    }
+  }
+
   /** Customer-initiated only: a fresh report with a new start key. The button that called it is removed, so focus goes to the chat heading. */
   newReport(): void {
     if (this.busy() || this.frozen()) return;
