@@ -657,7 +657,7 @@ describe('CustomerPage', () => {
       await p.login();
       fixture.detectChanges();
       expect(service.roles()).toEqual(['admin']);
-      const banner = el.querySelector('aside.role-banner[role=status]');
+      const banner = el.querySelector('aside.role-banner');
       expect(banner?.textContent).toContain(p.t().adminChip);
       expect(banner?.querySelector('a[href="/agent"]')).not.toBeNull();
       p['reset']();

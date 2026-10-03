@@ -96,7 +96,7 @@
 
         <main class="home-main" id="inicio" [inert]="chatOpen() && narrow()">
           @if (roles().includes('admin')) {
-            <aside class="role-banner" role="status">
+            <aside class="role-banner" [attr.aria-label]="t().adminChip">
               <span class="ar-chip">{{ t().adminChip }}</span><span>{{ t().adminOnCustomer }}</span>
               <a [routerLink]="frozen() ? null : '/agent'">{{ t().agentView }}</a>
             </aside>

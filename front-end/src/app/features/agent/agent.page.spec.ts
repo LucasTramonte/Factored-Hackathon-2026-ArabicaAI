@@ -149,7 +149,7 @@ describe('AgentPage', () => {
     service.signIn.and.resolveTo({ role: 'agent', mode: 'email_otp', roles: ['admin'] });
     await page.load();
     fixture.detectChanges();
-    expect(el().querySelector('aside.role-banner[role=status] a[href="/"]')).not.toBeNull();
+    expect(el().querySelector('aside.role-banner a[href="/"]')!.textContent!.trim()).toBe(t().customerView);
     expect(el().querySelector('.role-banner')!.textContent).toContain(t().adminChip);
     await page.refresh();
     fixture.detectChanges();
