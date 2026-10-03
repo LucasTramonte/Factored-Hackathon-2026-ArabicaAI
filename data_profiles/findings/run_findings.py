@@ -60,7 +60,8 @@ def load_query(finding_id: str) -> Query:
     raise ValueError(f"Unknown finding {finding_id}")
 
 
-def _json_safe(value):
+def json_safe(value):
+    """One DuckDB aggregate value as JSON: dates as ISO strings, decimals as floats, the rest unchanged."""
     if isinstance(value, (datetime, date)):
         return value.isoformat()
     if isinstance(value, Decimal):
@@ -87,7 +88,7 @@ def run(db_path: Path, only: tuple[str, ...] = ()) -> dict:
             params = {"design_end": datetime.fromisoformat(DESIGN_END)} if q.scope == "design" else {}
             cursor = con.execute(q.sql, params)
             columns = [c[0] for c in cursor.description]
-            rows = [[_json_safe(v) for v in row] for row in cursor.fetchall()]
+            rows = [[json_safe(v) for v in row] for row in cursor.fetchall()]
             results.append({"id": q.id, "title": q.title, "scope": q.scope, "query": str(q.path.relative_to(QUERY_DIR.parent.parent.parent)),
                             "columns": columns, "rows": rows, "seconds": round(time.monotonic() - started, 2)})
             print(f"{q.id} ({q.scope}) done in {results[-1]['seconds']}s", flush=True)

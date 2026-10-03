@@ -11,7 +11,7 @@ from pathlib import Path
 import duckdb
 
 from data_foundation.scripts.run_marketing_product import published_manifest, validate_quality_identity
-from data_foundation.src.product_report import build, write_report
+from data_foundation.src.product_report import build, silver_counts, write_report
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,6 +38,7 @@ def main(argv: list[str] | None = None) -> int:
             con.execute('SET threads=?', [int(os.environ.get('DUCKDB_THREADS', '2'))])
             con.execute('SET temp_directory=?', [str(tmp)])
             report = build(con)
+            counts = silver_counts(con)
     finally:
         shutil.rmtree(tmp)
     manifest = published_manifest({
@@ -48,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
         'quality_errors': metadata['errors'],
         'quality_warnings': metadata['warnings'],
         'bronze_watermarks': metadata['watermarks'],
+        'silver_counts': counts,
         'memory_model': 'DuckDB projected scans and grouped SQL with disk spill; Python holds aggregate rows only',
     }, args.db, args.quality)
     write_report(report, manifest, args.output)

@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from data_foundation.src.marketing_product_report import card, esc, num, pct, shell, table
-from data_profiles.findings.run_findings import DESIGN_END, _json_safe, load_queries
+from data_profiles.findings.run_findings import DESIGN_END, json_safe, load_queries
 
 DESIGN_START = "2023-06-17"
 QUERY_DIR = Path(__file__).resolve().parents[1] / "queries" / "product"
@@ -44,8 +44,13 @@ def run_queries(con) -> dict:
         cursor = con.execute(q.sql, {k: v for k, v in bounds.items() if f"${k}" in q.sql})
         columns = [c[0] for c in cursor.description]
         results[q.id] = {"title": q.title, "scope": q.scope, "query": q.path.relative_to(REPO_ROOT).as_posix(),
-                         "rows": [{c: _json_safe(v) for c, v in zip(columns, row)} for row in cursor.fetchall()]}
+                         "rows": [{c: json_safe(v) for c, v in zip(columns, row)} for row in cursor.fetchall()]}
     return results
+
+
+def silver_counts(con) -> dict[str, int]:
+    """Row counts of the Silver tables the report reads, for the manifest's reconciliation against the quality run."""
+    return {t: int(con.execute(f"SELECT count(*) FROM silver.{t}").fetchone()[0]) for t in sorted(REQUIRED)}
 
 
 def _ratio(n, d):
@@ -57,9 +62,11 @@ def _by(rows: list[dict], key: str) -> dict:
 
 
 def _scores(rows: list[dict]) -> dict:
-    """Count, mean and distribution of survey scores in long-format rows."""
+    """Count, mean and distribution of survey scores in long-format rows; surveys without a score are left out."""
     dist: dict[int, int] = {}
     for r in rows:
+        if r["score"] is None:
+            continue
         dist[r["score"]] = dist.get(r["score"], 0) + r["surveys"]
     n = sum(dist.values())
     return {"n": n, "mean": round(sum(s * c for s, c in dist.items()) / n, 3) if n else None,
@@ -107,10 +114,11 @@ def summarize(results: dict) -> dict:
 
     segments = []
     for r in results["PR-08"]["rows"]:
-        segments.append({**r, "too_few": r["complaints"] < MIN_CELL,
-                         "unresolved_share": _ratio(r["unresolved"], r["complaints"]),
-                         "sla_breach_rate": _ratio(r["sla_breached"], r["sla_known"]),
-                         "closed_mean": round(r["closed_score_sum"] / r["closed_scored"], 3) if r["closed_scored"] >= MIN_CELL else None})
+        too_few = r["complaints"] < MIN_CELL
+        segments.append({**r, "too_few": too_few,
+                         "unresolved_share": None if too_few else _ratio(r["unresolved"], r["complaints"]),
+                         "sla_breach_rate": None if too_few else _ratio(r["sla_breached"], r["sla_known"]),
+                         "closed_mean": round(r["closed_score_sum"] / r["closed_scored"], 3) if r["closed_score_sum"] is not None else None})
     segment_csat = [{**r, "too_few": r["surveys"] < MIN_CELL,
                      "mean": round(r["score_sum"] / r["surveys"], 3) if r["surveys"] >= MIN_CELL else None,
                      "top_score_share": _ratio(r["top_score"], r["surveys"]) if r["surveys"] >= MIN_CELL else None}
@@ -156,9 +164,23 @@ def summarize(results: dict) -> dict:
     }
 
 
+def suppress_small_cells(results: dict) -> dict:
+    """Null, in place, the raw numerators of segment cells under MIN_CELL, so a hidden rate or mean can't be
+    recomputed from the published JSON. Cell counts stay, so the page can say how small a cell is."""
+    for r in results["PR-08"]["rows"]:
+        if r["complaints"] < MIN_CELL:
+            r.update(unresolved=None, escalated=None, sla_known=None, sla_breached=None, closed_score_sum=None)
+        elif r["closed_scored"] < MIN_CELL:
+            r["closed_score_sum"] = None
+    for r in results["PR-09"]["rows"]:
+        if r["surveys"] < MIN_CELL:
+            r.update(score_sum=None, top_score=None, resolved=None)
+    return results
+
+
 def build(con) -> dict:
-    """Run the queries and derive the summary from one verified Silver snapshot."""
-    results = run_queries(con)
+    """Run the queries, suppress small cells, and derive the summary from one verified Silver snapshot."""
+    results = suppress_small_cells(run_queries(con))
     return {"queries": results, "summary": summarize(results)}
 
 

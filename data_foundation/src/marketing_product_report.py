@@ -108,7 +108,8 @@ def _movement(change: float) -> str:
 
 def shell(title: str, subtitle: str, body: str, current: str = "", links: str = "") -> str:
     """Wrap an offline report page in the web app's header, type scale and tokens."""
-    nav = "".join(f'<a href="{href}"{" aria-current=\"page\"" if href == current else ""}>{esc(label)}</a>' for href, label in PAGES)
+    current_attr = ' aria-current="page"'  # kept outside the f-string: Python 3.10 forbids backslashes in its expressions
+    nav = "".join(f'<a href="{href}"{current_attr if href == current else ""}>{esc(label)}</a>' for href, label in PAGES)
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(title)}</title>{STYLE}</head><body>
 <header><div class="top"><span class="ar-wordmark">Arabica<b>AI</b></span><nav>{nav}</nav></div></header><main><div class="intro"><h1>{esc(title)}</h1><p>{esc(subtitle)}</p>{links}</div>{body}<footer>Aggregate synthetic data · Private repository · Offline report</footer></main></body></html>'''
 

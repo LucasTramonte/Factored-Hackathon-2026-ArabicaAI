@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-10-03T19:58:48.055323+00:00",
+  "generated_at_utc": "2026-10-03T21:03:12.646778+00:00",
   "database_bytes": 4285542400,
   "quality_generated_at_utc": "2026-10-02T23:23:23.720177+00:00",
   "quality_checks": 390,
@@ -35,6 +35,13 @@
       "last_loaded_date": "2026-06-17"
     }
   ],
+  "silver_counts": {
+    "dim_customers": 150000,
+    "dim_fx_rates": 13164,
+    "fact_call_center_interactions": 686296,
+    "fact_complaints": 67095,
+    "fact_satisfaction_surveys": 212759
+  },
   "memory_model": "DuckDB projected scans and grouped SQL with disk spill; Python holds aggregate rows only",
   "database": "latam_bank.duckdb",
   "quality_run": "20261002T232200Z/quality_results.json"

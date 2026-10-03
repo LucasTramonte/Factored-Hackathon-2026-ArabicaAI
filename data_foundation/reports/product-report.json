@@ -1254,7 +1254,7 @@
           "sla_known": 539,
           "sla_breached": 82,
           "closed_scored": 21,
-          "closed_score_sum": 58.0
+          "closed_score_sum": null
         }
       ]
     },
@@ -2119,7 +2119,7 @@
         "sla_known": 539,
         "sla_breached": 82,
         "closed_scored": 21,
-        "closed_score_sum": 58.0,
+        "closed_score_sum": null,
         "too_few": false,
         "unresolved_share": 0.7403,
         "sla_breach_rate": 0.1521,
