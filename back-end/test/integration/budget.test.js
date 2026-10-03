@@ -44,7 +44,8 @@ const CEILING = {
   // (index cases_customer_transaction, migration 0011), and one more write for that index on the case insert (ADR-004).
   // Urgency lane (Task 5.1, migration 0013): one more query and round trip reads the customer's served purchases
   // (at most 21) to apply the stated policy; a normal charge writes no urgent-index entry (ADR-004).
-  intakeConfirm: [21, 74, 27, 10],
+  // Seven acknowledgement writes exclude newer or still-open same-charge reports: +28 reads in this fixture (ADR-004).
+  intakeConfirm: [21, 102, 27, 10],
   intakeConfirmReplay: [18, 54, 0, 7],
   intakeIncomplete: [15, 55, 18, 7],
   intakeIncompleteReplay: [15, 44, 0, 7],
@@ -63,7 +64,9 @@ const CEILING = {
   agentTransition: [5, 26, 6, 2],
   // A high-priority charge (Task 5.1): its confirm writes one more row, the entry in the partial index
   // intake_handoffs_urgent; closing it writes what a normal close writes, since D1 counts no write for leaving that index.
-  intakeConfirmHigh: [21, 77, 28, 10],
+  // The confirm batch repeats the one-open-report check atomically (NOT EXISTS over cases_customer_transaction): +1 read.
+  // Its earlier closed same-charge report makes those seven guards cost +42 reads (ADR-004).
+  intakeConfirmHigh: [21, 120, 28, 10],
   agentTransitionHigh: [5, 26, 6, 2],
   completeDetail: [3, 15, 0, 3],
   incompleteDetail: [3, 10, 0, 3],
@@ -80,7 +83,7 @@ const EXPORT_SLACK = 2;
 const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
 // Customer requests of one guided episode (login + list?lang= + displayed + start + terminal request), as the client
 // sends them from ADR-009 on; ADR-004 sizes capacity on these.
-const EPISODE_CEILING = { complete: [37, 97, 46, 20], incomplete: [31, 75, 37, 17] };
+const EPISODE_CEILING = { complete: [37, 125, 46, 20], incomplete: [31, 75, 37, 17] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);

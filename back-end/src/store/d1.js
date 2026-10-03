@@ -6,7 +6,7 @@
  * queries, rows read, rows written and round trips for the current request; the budget tests use it.
  * A batch is one round trip and one atomic transaction.
  */
-import { tokenHash } from '../auth/session.js';
+import { SESSION_MS, tokenHash } from '../auth/session.js';
 
 /** Export cursors are server-minted episode ids: lowercase RFC 4122 UUIDs, so text order matches the keyset. */
 const EPISODE_CURSOR = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -43,6 +43,14 @@ const AUTH_EVENT = 'INSERT INTO auth_events(ts,actor,event,session_ref,request_i
 /** The episode's reason only when the customer chose it (migration 0017); older rows read null, never 0016's default. */
 const REASON = "CASE WHEN e.reason_source='customer' THEN e.reason END AS reason";
 
+/**
+ * A confirmed case's report that no person has closed yet, counting a reservation still ``handoff_pending`` (its
+ * acknowledgement was lost and a same-key retry can finish it for one session lifetime). Expired reservations
+ * no longer block the charge and cannot later be acknowledged; acknowledged reports never expire here.
+ */
+const OPEN_REPORT = 'SELECT 1 FROM cases c JOIN intake_handoffs oh ON oh.complete_case_id=c.case_id JOIN intake_episodes oe ON oe.episode_id=oh.episode_id';
+const STILL_OPEN = "oh.status<>'closed' AND (oe.state='complete_handoff' OR (oe.state='handoff_pending' AND oh.accepted_at>?))";
+
 /** At most one ``update`` email per customer and reference in this window; ``enqueueEmail`` enforces it in SQL. */
 export const UPDATE_EVERY_MS = 300000;
 
@@ -74,8 +82,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       ...(kind === 'complete' ? [[
         'INSERT INTO cases(case_id,customer_id,transaction_id,idempotency_key,customer_statement,customer_confirmed) '
         + 'SELECT ?,e.customer_id,t.transaction_id,?,e.customer_statement,1 FROM intake_episodes e '
-        + 'JOIN transactions t ON t.customer_id=e.customer_id AND t.transaction_id=? WHERE ' + eligible,
-        caseId, 'intake:' + episodeId, completeCase?.transaction_id ?? '', ...params
+        + 'JOIN transactions t ON t.customer_id=e.customer_id AND t.transaction_id=? WHERE ' + eligible
+        // One open report per charge, checked inside the batch: D1 runs batches one at a time, so of two confirmations
+        // racing on the same charge only the first inserts a case; the second reserves nothing and is answered 409.
+        + ' AND NOT EXISTS(' + OPEN_REPORT + ' WHERE c.customer_id=e.customer_id AND c.transaction_id=t.transaction_id AND ' + STILL_OPEN + ')',
+        caseId, 'intake:' + episodeId, completeCase?.transaction_id ?? '', ...params, new Date(now - SESSION_MS).toISOString()
       ]] : []),
       ['INSERT INTO intake_handoffs(handoff_id,episode_id,complete_case_id,turn_key,payload_hash,kind,tool_status,'
         + 'evidence_json,actions_json,questions_json,destination,priority,accepted_at,usage_json,reference_short,urgency) '
@@ -193,12 +204,12 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       'SELECT transaction_id,occurred_at,source_occurred_at,merchant_name,amount,currency FROM transactions '
       + 'WHERE customer_id=? AND transaction_id=?', customerId, transactionId),
     /**
-     * Whether this customer has an acknowledged complete report on the charge that no person has closed yet. Reads only
+     * Whether this customer has a complete report on the charge that no person has closed yet, acknowledged or still
+     * pending within one session lifetime. The confirm batch repeats this check atomically (``reserveIntakeHandoff``); this read answers fast. Reads only
      * that charge's cases (index ``cases_customer_transaction``, migration 0011), never the customer's whole history.
      */
-    openReportForTransaction: (customerId, transactionId) => first(
-      'SELECT 1 FROM cases c JOIN intake_handoffs h ON h.complete_case_id=c.case_id JOIN intake_episodes e ON e.episode_id=h.episode_id '
-      + "WHERE c.customer_id=? AND c.transaction_id=? AND h.status<>'closed' AND e.state='complete_handoff' LIMIT 1", customerId, transactionId),
+    openReportForTransaction: (customerId, transactionId, now = Date.now()) => first(
+      OPEN_REPORT + ' WHERE c.customer_id=? AND c.transaction_id=? AND ' + STILL_OPEN + ' LIMIT 1', customerId, transactionId, new Date(now - SESSION_MS).toISOString()),
     /** Read a reservation only through its owning episode. */
     findOwnedIntakeHandoff: (customerId, episodeId) => first(
       'SELECT h.* FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.episode_id=?', customerId, episodeId),
@@ -243,6 +254,17 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       const reference = receipt.complete_case_id ?? receipt.handoff_id;
       const emailId = crypto.randomUUID();
       const complete = receipt.kind === 'complete';
+      // Check both age and persisted charge ownership in every pending write: an acknowledgement captured before
+      // expiry can arrive after its replacement. A newer reservation permanently supersedes this pending one,
+      // even after a person closes the replacement. Already acknowledged receipts still replay without writes.
+      const cutoff = new Date(now - SESSION_MS).toISOString();
+      // A stored completed episode only replays: SQL pending predicates prevent every write, so it needs no charge scan.
+      const checkPendingCharge = complete && episode.state !== 'complete_handoff';
+      const pendingAuthority = authority + (checkPendingCharge ? ' AND ?>? AND NOT EXISTS(' + OPEN_REPORT
+        + ' WHERE c.customer_id=? AND c.transaction_id=(SELECT transaction_id FROM cases WHERE case_id=? AND customer_id=?) '
+        + 'AND oh.handoff_id<>? AND (oh.accepted_at>? OR ' + STILL_OPEN + '))' : '');
+      const pendingParams = [...authorityParams, ...(checkPendingCharge ? [receipt.accepted_at, cutoff,
+        customerId, receipt.complete_case_id, customerId, receipt.handoff_id, receipt.accepted_at, cutoff] : [])];
       const extras = [
         ...(complete ? [{ event:'transaction_confirmed',transaction_ref:receipt.handoff_id }] : []),
         { event:'handoff_created',kind:receipt.kind,case_ref:reference,tool_status:receipt.tool_status },
@@ -256,15 +278,15 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       const results = await batch([
         ["UPDATE intake_handoffs SET usage_json=json_set(usage_json,'$.tool_calls',json_extract(usage_json,'$.tool_calls')+?,"
           + "'$.operation_duration_ms',json_extract(usage_json,'$.operation_duration_ms')+?) WHERE handoff_id=? "
-          + "AND EXISTS(SELECT 1 FROM intake_episodes WHERE episode_id=? AND customer_id=? AND state='handoff_pending')" + authority,
-          toolCalls,operationDuration,receipt.handoff_id,episode.episode_id,customerId,...authorityParams],
+          + "AND EXISTS(SELECT 1 FROM intake_episodes WHERE episode_id=? AND customer_id=? AND state='handoff_pending')" + pendingAuthority,
+          toolCalls,operationDuration,receipt.handoff_id,episode.episode_id,customerId,...pendingParams],
         ...extras.map((extra,index) => [
           'INSERT INTO intake_events(episode_id,seq,event_json) SELECT e.episode_id,?,'
           + (extra.event === 'intake_ended' ? "json_set(?,'$.tool_calls',(SELECT json_extract(usage_json,'$.tool_calls') FROM intake_handoffs WHERE episode_id=e.episode_id))" : '?')
           + ' FROM intake_episodes e '
           + "WHERE e.customer_id=? AND e.episode_id=? AND e.state='handoff_pending' "
           + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=e.episode_id) '
-          + authority + ' ON CONFLICT(episode_id,seq) DO NOTHING', receipt.next_seq+index,JSON.stringify({...base,seq:receipt.next_seq+index,...extra}),customerId,episode.episode_id,receipt.handoff_id,...authorityParams
+          + pendingAuthority + ' ON CONFLICT(episode_id,seq) DO NOTHING', receipt.next_seq+index,JSON.stringify({...base,seq:receipt.next_seq+index,...extra}),customerId,episode.episode_id,receipt.handoff_id,...pendingParams
         ]),
         // Before the state change, so only the acknowledgement that moves the episode out of handoff_pending queues it.
         ["INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) "
@@ -272,11 +294,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + "WHERE e.customer_id=? AND e.episode_id=? AND e.state='handoff_pending' "
           + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=e.episode_id) '
           // A language the templates lack skips the email instead of failing the outbox CHECK and rolling back the handoff.
-          + "AND e.language IN ('es','pt','en') AND EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id)" + authority + ' RETURNING message_id',
-          emailId,now,receipt.reference_short ?? reference,customerId,episode.episode_id,receipt.handoff_id,...authorityParams],
+          + "AND e.language IN ('es','pt','en') AND EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id)" + pendingAuthority + ' RETURNING message_id',
+          emailId,now,receipt.reference_short ?? reference,customerId,episode.episode_id,receipt.handoff_id,...pendingParams],
         ['UPDATE intake_episodes SET state=?,updated_at=? WHERE customer_id=? AND episode_id=? '
-          + "AND state='handoff_pending' AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=intake_episodes.episode_id)" + authority,
-          complete ? 'complete_handoff' : receipt.kind === 'technical' ? 'technical_handoff' : 'incomplete_handoff',now,customerId,episode.episode_id,receipt.handoff_id,...authorityParams],
+          + "AND state='handoff_pending' AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=intake_episodes.episode_id)" + pendingAuthority,
+          complete ? 'complete_handoff' : receipt.kind === 'technical' ? 'technical_handoff' : 'incomplete_handoff',now,customerId,episode.episode_id,receipt.handoff_id,...pendingParams],
         ['SELECT 1 AS acknowledged FROM intake_episodes e JOIN intake_handoffs h USING(episode_id) '
           + "WHERE e.customer_id=? AND e.episode_id=? AND h.handoff_id=? AND e.state IN ('complete_handoff','technical_handoff','incomplete_handoff')" + authority,
           customerId,episode.episode_id,receipt.handoff_id,...authorityParams]

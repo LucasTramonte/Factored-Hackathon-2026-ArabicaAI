@@ -1,5 +1,5 @@
 /** Guided reports use authenticated ownership and durable start receipts; the extractor switch (off by default) only records a shadow call. */
-import { requireSession, tokenHash } from '../../auth/session.js';
+import { SESSION_MS, requireSession, tokenHash } from '../../auth/session.js';
 import { fail, json, readJsonBody, readCookies } from '../../http.js';
 import { UUID, validateStartRequest, validateHandoffRequest } from './validation.js';
 import { APPROVED_EXTRACTOR, UNKNOWN, extractShadow, readyExtractor } from './ai-transport.js';
@@ -81,6 +81,8 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
   const payloadHash = await tokenHash(JSON.stringify([complete ? 'complete' : 'incomplete', transactionId, ...(details ? [details] : [])]));
   const prior = await store.findOwnedIntakeHandoff(customerId, episodeId);
   if (prior && (prior.turn_key !== turnKey || prior.payload_hash !== payloadHash)) return fail(409, 'Episode already submitted with different content or key');
+  if (prior?.kind === 'complete' && episode.state === 'handoff_pending' && Date.parse(prior.accepted_at) + SESSION_MS <= Date.now())
+    return fail(409, 'Reservation expired; start a new report');
   if (!prior && episode.state !== 'selection_required') return fail(409, 'Episode is no longer open');
   // The statement column holds 10–2000 code points; the appended details must fit (one newline between).
   if (!prior && details && [...episode.customer_statement].length + 1 + [...details].length > 2000) return fail(422, 'Statement and details exceed 2000 characters together');
@@ -93,7 +95,7 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
     catch { kind = 'technical'; }
     if (kind === 'complete' && !evidence) return fail(404, 'Transaction not found for this session');
     // Only a new confirmation is checked: a replay has a prior reservation and returns its receipt above this branch.
-    // ponytail: check-then-write, so two confirms within the same instant can still open two reports; the agent queue shows both.
+    // A fast refusal; the reservation batch repeats this check atomically, so two confirms in the same instant still open one report.
     if (kind === 'complete' && await store.openReportForTransaction(customerId, transactionId)) return fail(409, 'This charge already has an open report');
   }
   // Stated policy, not a fitted threshold (DF-024): a reason in ``high_reasons`` (ADR-010) is high on every kind, so a
@@ -115,13 +117,15 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
       questions: kind === 'complete' ? [] : ['matching_transaction', 'customer_confirmation'],
       usage: { tool_calls: 0, operation_duration_ms: 0 }, now: Date.now() });
     if (result.conflict) return fail(409, 'Episode already submitted with different content or key');
-    if (!result.handoff) return await unreserved(request, store, { customerId, episodeId, toolCalls, started });
+    if (!result.handoff) return await unreserved(request, store, { customerId, episodeId, toolCalls, started, transactionId: kind === 'complete' ? transactionId : null });
     toolCalls++;
     const receipt = await store.readIntakeReceipt(customerId, episodeId, { sessionHash, now: Date.now() });
     if (!receipt) throw new Error('Receipt not read back');
     toolCalls++;
     const { acknowledged, emailId } = await store.finishIntakeHandoff({ customerId, episode, receipt, sessionHash, now: Date.now(), operationDuration: Math.floor(performance.now() - started), toolCalls });
     if (!acknowledged) {
+      if (receipt.kind === 'complete' && Date.parse(receipt.accepted_at) + SESSION_MS <= Date.now())
+        return fail(409, 'Reservation expired; start a new report');
       await store.recordIntakeAttempt({ customerId, episodeId, toolCalls, operationDuration: Math.floor(performance.now() - started) });
       return fail(401, 'Session expired; renew the same customer session and retry with the same idempotency key');
     }
@@ -153,15 +157,17 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
 }
 
 /**
- * The reservation's SQL checks refused to reserve (session expired in SQL, a sweep closed the episode, or the owned
- * transaction vanished). Record the attempt's usage while the episode is open, then answer from a fresh read:
- * no live same-owner session -> 401; episode closed without a reservation -> 409; otherwise acceptance stays unknown.
+ * The reservation's SQL checks refused to reserve (session expired in SQL, a sweep closed the episode, the owned
+ * transaction vanished, or another report on the charge won a race). Record the attempt's usage while the episode is
+ * open, then answer from a fresh read: no live same-owner session -> 401; an open report on the confirmed charge -> 409;
+ * episode closed without a reservation -> 409; otherwise acceptance stays unknown.
  */
-async function unreserved(request, store, { customerId, episodeId, toolCalls, started }) {
+async function unreserved(request, store, { customerId, episodeId, toolCalls, started, transactionId = null }) {
   try { await store.recordIntakeAttempt({ customerId, episodeId, toolCalls, operationDuration: Math.floor(performance.now() - started) }); } catch { /* best effort */ }
   try {
     const live = await requireSession(request, store, 'customer');
     if (!live || live.customer_id !== customerId) return fail(401, 'Session expired; renew the same customer session and retry with the same idempotency key');
+    if (transactionId && await store.openReportForTransaction(customerId, transactionId)) return fail(409, 'This charge already has an open report');
     const [episode, reservation] = [await store.findIntake(customerId, episodeId), await store.findOwnedIntakeHandoff(customerId, episodeId)];
     if (episode && episode.state !== 'selection_required' && !reservation) return fail(409, 'Episode is no longer open');
   } catch { /* Storage may be unavailable; never promise a receipt. */ }
