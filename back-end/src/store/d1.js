@@ -422,7 +422,8 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /**
      * One acknowledged handoff by public ``protocol``, in one round trip: the first read stamps ``first_opened_at``
      * (migration 0018; later reads keep it), then the detail row, then a summary of the same customer's *other*
-     * acknowledged reports among their newest episodes (at most ``HISTORY_REPORTS``; ``has_more`` when that many),
+     * acknowledged reports among their newest 21 episodes (at most ``HISTORY_REPORTS``; ``has_more`` when the episode
+     * window or report bound fills, even when pending/abandoned starts use slots),
      * which names no customer. Optional complete evidence
      * is one-to-one and owner-scoped; missing evidence never drops a handoff. ``model_version`` and ``llm_calls`` come
      * from the episode's usage (set only by shadow extraction), never the model's output.
@@ -441,19 +442,21 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + 'LEFT JOIN transactions t ON t.transaction_id=c.transaction_id AND t.customer_id=e.customer_id '
           + "WHERE e.state=h.kind||'_handoff' AND " + match, protocol, protocol],
         // The customer's newest 21 episodes (index intake_episodes_owner_recent), so the read stays bounded however long
-        // their history is; at most 20 other acknowledged reports come back, newest first.
+        // their history is. Keep empty/pending/current slots as null rows internally, so a full window is still
+        // marked partial even when it contains fewer than 20 other acknowledged reports. No identifier leaves SQL.
         ['WITH me AS (SELECT e.customer_id,h.handoff_id FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE ' + match + ') '
           + 'SELECT h.status,h.urgency,h.accepted_at FROM (SELECT episode_id,state FROM intake_episodes '
           + 'WHERE customer_id=(SELECT customer_id FROM me) ORDER BY created_at DESC LIMIT 21) e '
-          + "JOIN intake_handoffs h ON h.episode_id=e.episode_id AND e.state=h.kind||'_handoff' "
-          + 'WHERE h.handoff_id<>(SELECT handoff_id FROM me) ORDER BY h.accepted_at DESC LIMIT ' + HISTORY_REPORTS,
+          + "LEFT JOIN intake_handoffs h ON h.episode_id=e.episode_id AND e.state=h.kind||'_handoff' "
+          + 'AND h.handoff_id<>(SELECT handoff_id FROM me) ORDER BY h.accepted_at DESC,h.handoff_id',
           protocol, protocol]]);
       const row = detail.results[0];
       if (!row) return null;
-      const others = history.results;
+      const others = history.results.filter(o => o.status !== null).slice(0, HISTORY_REPORTS);
       return { ...row, customer_history: { reports: others.length, open: others.filter(o => o.status !== 'closed').length,
         high_urgency: others.filter(o => o.urgency === 'high').length, last_status: others[0]?.status ?? null,
-        last_accepted_at: others[0]?.accepted_at ?? null, has_more: others.length === HISTORY_REPORTS } };
+        last_accepted_at: others[0]?.accepted_at ?? null,
+        has_more: history.results.length === HISTORY_REPORTS + 1 || others.length === HISTORY_REPORTS } };
     },
     /**
      * Move one acknowledged handoff (public ``protocol``) from ``from`` to ``to`` in one atomic batch: a history row,
