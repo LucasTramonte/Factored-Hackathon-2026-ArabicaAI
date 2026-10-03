@@ -41,7 +41,7 @@ Tagged on `64ae03a` (#84) on 2026-10-03; [GitHub Release](https://github.com/Luc
 
 ### Evaluation
 
-- Live metrics by language from the remote export (#76).
+- Live metrics by language from the remote export (#76). That export holds five team and reviewer episodes (Spanish 1, Portuguese 4, English 0), all with safety not assessed; its p50/p95 measure episode span, not service latency ([EVALUATION §9](../deliverables/EVALUATION.md)).
 - The frozen AI-vs-rules comparison is prepared but not run: it waits for the evaluation-host decision in #77.
 
 ### Documentation
@@ -56,6 +56,9 @@ Tagged on `64ae03a` (#84) on 2026-10-03; [GitHub Release](https://github.com/Luc
 - The admin banner lives in the tab: a reload drops it with the sign-in.
 - Urgency is a stated policy, not fitted; reasons are authored, not learned from real statements.
 - Reports from before migration 0017's deploy show "Not recorded" as their reason.
+- The one-open-report check is not atomic across different episodes: two simultaneous confirmations of the same charge can open two reports.
+- Notification email is attempted once, after the response; a failure is not retried, and "sent" means SES accepted the request, not that it was delivered.
+- Closing a report records that a person finished the review; it does not record a bank resolution, a refund or the customer's satisfaction.
 - The extractor is off online; the frozen comparison hasn't run.
 - The rate limit is approximate (per Cloudflare location) and keyed by IP; the data is synthetic.
 
