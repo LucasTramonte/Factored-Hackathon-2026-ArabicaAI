@@ -294,6 +294,8 @@ describe('AgentPage', () => {
       expect(el().querySelector('#agent-email')).toBeNull();
       expect(document.activeElement).toBe(el().querySelector('#agent-code'));
       expect(el().querySelector('#agent-code-sent')!.textContent).toContain('agent@example.com');
+      expect(el().querySelector('#agent-code-sent + p#agent-code-help')?.textContent?.trim()).toBe(t().codeHelp);
+      expect(el().querySelector('#agent-code')!.getAttribute('aria-describedby')).toBe('agent-code-sent agent-code-help');
       page.code = '12345678';
       await page.verify();
       fixture.detectChanges();

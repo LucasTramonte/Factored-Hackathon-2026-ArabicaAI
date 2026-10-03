@@ -50,9 +50,10 @@
             } @else {
               <form class="login-email" ngNativeValidate (ngSubmit)="verify()">
                 <p class="ar-small" id="code-sent">{{ t().codeSentTo }} <b>{{ email.trim() }}</b></p>
+                <p class="ar-small" id="code-help">{{ t().codeHelp }}</p>
                 <label class="ar-field" for="login-code"><span class="ar-field-label">{{ t().codeLabel }}</span></label>
                 <input class="ar-input" id="login-code" #codeField inputmode="numeric" autocomplete="one-time-code" maxlength="8" pattern="[0-9]*"
-                  name="code" required [(ngModel)]="code" [attr.aria-describedby]="error() ? 'code-sent login-error' : 'code-sent'">
+                  name="code" required [(ngModel)]="code" [attr.aria-describedby]="error() ? 'code-sent code-help login-error' : 'code-sent code-help'">
                 <div class="login-actions">
                   <button type="submit" class="ar-btn" [disabled]="busy()">{{ t().verify }}</button>
                   <button type="button" class="link-btn" (click)="requestCode()" [disabled]="busy()">{{ t().newCode }}</button>
