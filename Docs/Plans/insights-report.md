@@ -66,7 +66,7 @@ Verdicts are from the adversarial review of 2026-10-03, reproduced before this e
   - For the wait question, the largest absolute correlation with wait is 0.006 across countries, 0.013 across survey types and 0.07 across months (cells with at least 100 pairs). The adversarial review's broader check, over all five questions in the design window, found at most 0.022 and 0.10.
   - **Limits:** wait is observed only for Phone; agent-level cells have 5 to 61 pairs; and the fixed slot prevents a slot comparison. So "no signal at all" is not proven.
   - **Use:** don't chart these answers as evidence of wait or quality.
-- **F2. Comments go with lower scores, but not with longer waits.**
+- **F2. Comments go with lower scores; mean waits are similar.**
   - People who wrote a wait complaint ("Tardaron mucho en atenderme.", "Tuve que esperar demasiado tiempo.") waited 120.61 s on average, against 119.88 s for those who left no comment (full period).
   - Their CSAT is 2.606 (21,629 CSAT surveys), against 2.764 for no comment (66,928) and 2.855 for other comments (39,299).
   - The mechanism that generated the comments is not known. Don't claim it.
