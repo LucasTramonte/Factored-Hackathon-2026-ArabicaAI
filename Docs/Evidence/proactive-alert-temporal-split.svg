@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-labelledby="t d"><title id="t">Proactive alert rule: temporal split</title>
-<desc id="d">Monthly fraud count (grey bars) and charges flagged by fraud_score above 30 (dark bars), June 2023 to December 2025, with the train (to Dec 2024), validation (H1 2025) and test (H2 2025) periods shaded. Every flagged charge is fraud in every month.</desc>
+<desc id="d">Monthly fraud count (grey bars) and charges flagged by fraud_score above 30 (dark bars), June 2023 to December 2025, with the train (to Dec 2024), validation (H1 2025) and test (H2 2025) periods shaded. Every flagged charge is fraud in every month; the score's provenance is unconfirmed, so this is volume and separation, not a performance estimate.</desc>
 <rect width="960" height="420" fill="#ffffff"/>
 <style>text{font-family:Arial,sans-serif;fill:#1d2b3a}.s{font-size:12px}.h{font-size:16px;font-weight:700}</style>
 <rect x="60.0" y="50" width="539.4" height="300" fill="#e8eef7"/>
@@ -82,5 +82,5 @@
 <rect x="920.1" y="234.5" width="11.4" height="115.5" fill="#1f4e79"/>
 <text class="h" x="60" y="28">Charges flagged by the bank score (&gt; 30) vs all fraud, per month</text>
 <rect x="60" y="390" width="12" height="12" fill="#9aa5b1"/><text class="s" x="78" y="400">all fraud (is_fraud)</text>
-<rect x="230" y="390" width="12" height="12" fill="#1f4e79"/><text class="s" x="248" y="400">flagged: fraud_score &gt; 30 (precision 1.000 in every period; recall 0.54–0.55)</text>
+<rect x="230" y="390" width="12" height="12" fill="#1f4e79"/><text class="s" x="248" y="400">flagged: fraud_score &gt; 30 (separates the label in every period; provenance unconfirmed, see ADR-011)</text>
 </svg>

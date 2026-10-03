@@ -1,4 +1,4 @@
-# ADR-011 — Proactive alert: the bank's fraud flag, not the charge amount
+# ADR-011 — Proactive alert: the bank's own fraud flag as an input, never the charge amount
 
 - **Status:** Proposed
 - **Date:** 2026-10-04
@@ -8,69 +8,68 @@
 
 The product owner asked for a proactive experience, following an evaluator's feedback (André): when a case is urgent enough, the service should reach the customer first instead of waiting for them to start every interaction. The challenge documents don't require this. It is a product decision, kept inside ADR-002's scope (intake with human handoff; nothing refunds, blocks a card or decides fraud).
 
-Roberto's plan (#100) designed the experience: one dismissible banner on the home, two taps, the guided chat prefilled, and "a person reviews every report". It proposed the amount tier of the urgency lane as the trigger. That tier is a stated policy, not a measured one (DF-024). This ADR asks what the data says should trigger the alert.
+Roberto's plan (#100) designed the experience: one dismissible banner on the home, two taps, the guided chat prefilled, and "a person reviews every report". It proposed the amount tier of the urgency lane as the trigger. That tier is a stated policy, not a measured one (DF-024). The requirement for this ADR is that urgency be derived from the data, not stated.
 
-**Target and unit.** One transaction. The target is the dataset's label `is_fraud`, the closest observable stand-in for "a charge the customer will not recognize". Complaints can't be linked to transactions (DF-002, DF-003), so they can't serve as the target. Only signals that exist when the charge is recorded are candidates; outcomes recorded later (complaints, SLA, surveys) are not.
+**A constraint the team already recorded.** [`fraud_readiness_findings.md`](../../data_profiles/fraud_readiness_findings.md) (Roberto, 2026-09-28) found that `fraud_score` is deterministically tied to `is_fraud`: no legitimate row scores above 30.0. The snapshot can't show which was set first, and `is_fraud` has no availability timestamp. The team therefore keeps `fraud_score` out of every model and intake decision until the organizers confirm its provenance, and ADR-002 rejects fraud triage on the same grounds. This ADR keeps that rule.
 
-**Evidence** (Silver, design window 2023-06-17 to 2025-12-31, ADR-005; 3,738,506 transactions, 3,713 fraud, 0.099%; aggregates only; queries in [`PA-01_fraud_signal.sql`](../../data_foundation/queries/proactive/PA-01_fraud_signal.sql)):
+**Target and unit.** One transaction. The only transaction-level outcome is the label `is_fraud`. Complaints can't be linked to transactions (DF-002, DF-003), so they can't serve as the target for a pre-complaint signal. Only fields that exist when the charge is recorded are candidates.
 
-1. **The amount does not separate fraud.** `amount_usd` for fraud against legitimate: median 450.82 against 466.78, p90 4,821 against 5,117, p99 9,456 against 9,510. A "high charge" alert would mostly reach legitimate charges.
-2. **Nothing else observable at transaction time separates it either.** Fraud rates are all around 0.10% across transaction type, category, channel, status, merchant category and currency, and 0.110% against 0.099% for foreign against home-country charges.
-3. **The bank's own `fraud_score` does, and the separation is stable over time.** Legitimate transactions never score above 30.0 in any of the 31 months. Temporal split: the cut is chosen on 2023-06-17 to 2024-12-31, then checked on the first and second halves of 2025 ([chart](../Evidence/proactive-alert-temporal-split.svg)):
+**Evidence** (Silver, design window 2023-06-17 to 2025-12-31, ADR-005; 3,738,506 transactions, 3,713 fraud, 0.099%; aggregates only; queries in [`PA-01_fraud_signal.sql`](../../data_foundation/queries/proactive/PA-01_fraud_signal.sql)). Each field is compared on its own, per period of a temporal split: train 2023-06-17 to 2024-12-31, validation 2025 H1, test 2025 H2.
 
-   | `fraud_score > 30` | Days | Flagged | Alerts a day (whole bank) | Precision | Recall |
-   |---|---|---|---|---|---|
-   | Train (2023-06-17 to 2024-12-31) | 564 | 1,265 | 2.24 | 1.000 | 0.551 |
-   | Validation (2025 H1) | 181 | 386 | 2.13 | 1.000 | 0.538 |
-   | Test (2025 H2) | 184 | 375 | 2.04 | 1.000 | 0.537 |
+1. **The amount does not separate fraud, in any period.** `amount_usd` p50, p90 and p99, fraud against legitimate:
 
-   Lower cuts collapse: at `> 25`, test alerts rise to about 540 a day at 0.4% precision; at `> 20`, to about 1,076 a day at 0.2%. Higher cuts only lose recall (`> 50`: 0.37). So 30 is where the data puts the cut, not a number we chose.
-4. **Coverage.** About 20% of transactions have no score, and so do about 20% of frauds (137 of 699 in the test half). With the frauds whose score falls in the legitimate range, about 46% of fraud is not flagged. Nothing in the data recovers them, because no other field separates fraud.
-5. **Volume.** The test half flagged 375 charges for 373 customers in 184 days. Almost every flagged customer gets one alert, and the bank as a whole about two a day.
+   | Period | Fraud | Legitimate |
+   |---|---|---|
+   | Train | 452.5 / 4,824.8 / 9,344.8 | 466.9 / 5,124.1 / 9,510.7 |
+   | Validation | 447.8 / 4,888.1 / 9,666.8 | 466.0 / 5,095.8 / 9,505.1 |
+   | Test | 451.0 / 4,720.5 / 9,671.3 | 467.2 / 5,120.0 / 9,508.5 |
 
-**Caveat.** Perfect precision is almost certainly an artifact of the synthetic generator: legitimate scores are capped at 30.0, which real scores would not be. It is reported as a property of this dataset, not a claim about production. A real deployment would set the cut from the bank's own score calibration and a measured false-positive cost.
+   A "high charge" trigger would reach legitimate and fraudulent charges alike. This is the finding that decides the trigger.
+2. **No other field separates it on its own, in any period.** Across transaction type, channel, status, merchant category and currency (categories with at least 1,000 rows), the fraud rate stays within 0.05–0.13% in every period. Foreign against home-country charges goes 0.123% against 0.100% in train, 0.106% against 0.099% in validation, and 0.076% against 0.095% in test: no stable lift.
+3. **`fraud_score` separates the label, but that is not evidence that it predicts fraud.** `fraud_score > 30` flags 2.24, 2.13 and 2.04 charges a day bank-wide in the three periods, at precision 1.000 and recall 0.551, 0.538 and 0.537 ([chart](../Evidence/proactive-alert-temporal-split.svg)). Legitimate scores never exceed 30.0 in any of the 31 months. Two readings fit: the score was derived from the label (leakage), or the label was set by a rule on the score (the score is then an upstream fraud-engine output). One snapshot can't tell them apart (the 2026-09-28 finding). Read as an operational volume (about two flags a day, almost one per customer), the figure is useful. Read as a performance estimate, it is not.
+
+**What the data supports.** It does not support amount, or any other single transaction field, as an urgency trigger. It does not validate any field as a pre-outcome urgency signal: the one strong separator has unconfirmed provenance. A proactive alert can therefore only be triggered by an urgency signal the bank provides. In a real bank that is the fraud engine's flag at authorization.
 
 ## Decision
 
-1. **The alert fires on the bank's fraud flag**, `fraud_score > 30`, computed offline in the Gold slice. Only a boolean `bank_flagged` reaches D1, on the customer's own transaction. The score itself never leaves Silver (data minimization). The cut lives in one reviewed constant with this ADR's evidence. A change to it is a data change, reviewed like any other Gold change.
-2. **In-app first.** At sign-in, the home shows at most one banner, for the newest flagged charge the customer hasn't answered: "We noticed a charge that looks unusual: {merchant}, {amount} {currency}, {date}. Do you recognize it?"
+1. **The alert fires on a flag the bank provides, `bank_flagged`, on the customer's own charge.** This service neither computes nor judges fraud; it shows the bank's flag and asks the customer.
+   - **In this prototype** the flag is set only on authored fictitious charges: three small ones (Diego, Elena, Marco). The demo shows the experience without relying on a field that may leak the label.
+   - **The dataset cohort is not flagged from `fraud_score`.** That waits until the organizers confirm the score is assigned before, and independently of, the label. If they confirm it, the flag becomes `fraud_score > 30`, computed offline in Gold; only the boolean reaches D1, never the score. The measured volume of about two a day bank-wide then applies.
+2. **In-app first.** At sign-in, the home shows at most one banner, for the newest flagged charge the customer hasn't answered: "We noticed an unusual charge on your account: {merchant}, {amount} {currency}, {date}. Do you recognize it?"
    - "Yes, it's mine" records the answer.
-   - "I don't recognize it" opens the guided chat on that charge, prefilled; it then follows the normal confirmation path.
-   - The banner never says fraud, blocked or refunded, and it says that a person reviews every report (ADR-002).
-3. **Email is designed, not built for the demo.** A proactive email needs something that runs without the customer signing in (a scheduled trigger), and SES production access. The demo data is a fixed seed, so no new charges arrive. When those two exist, the same flag sends **one** email per flagged charge, keyed by the transaction in the outbox (idempotent under retries), with reference-level content only and no amount or merchant in the subject.
+   - "I don't recognize it, report it" opens the guided chat on that charge; it then follows the normal confirmation path.
+   - It never says fraud, blocked or refunded, and it says that a person reviews every report (ADR-002).
+3. **Email is designed, not built for the demo.** It needs something that runs without the customer signing in (a scheduled trigger), and SES production access. When both exist, it sends **one** email per flagged charge, keyed by the transaction in the outbox (idempotent under retries), with reference-level content only.
 4. **No repeated or unnecessary alerts.**
    - One alert per charge.
-   - Once answered either way, it never shows again; the answer is stored server-side, keyed by customer and transaction.
-   - An already reported charge never alerts.
-   - Only flagged charges alert, never "high" ones.
-   - At about two a day for the whole bank, alert fatigue is not a measured risk at this cut.
-5. **Routing.** A report that starts from the alert, or any report on a bank-flagged charge, joins the urgent lane of the agent queue and is marked "from the bank's alert". This is the one routing change the evidence supports: at this cut the charges flagged are fraud in this data. The amount tier stays in the lane as the stated policy it is (DF-024), not as evidence.
+   - Once answered either way, it never shows again; the answer is stored server-side by customer and transaction.
+   - A charge that already has a report never alerts.
+   - Only flagged charges alert; the amount never triggers one.
+5. **Routing.** A report on a flagged charge joins the urgent lane of the agent queue. The bank's own signal ranks it, not an inference of ours. The amount tier stays in the lane as the stated policy it is (DF-024); this ADR shows that the data doesn't support it as evidence of urgency.
 6. **No trained model, no SageMaker, no new cloud service.**
-   - A rule on an existing score already reaches precision 1.000 on held-out periods.
-   - The remaining recall can't be learned from fields that don't separate fraud.
-   - Infrastructure cost: one boolean column, one small table of answers in D1, and the existing Worker and outbox.
+   - There is no validated pre-outcome signal to learn from: `is_fraud` has no availability time, and the one strong separator may leak it.
+   - The tested fields don't separate fraud one at a time. Joint models were not tested, and with a label of unknown timing their evaluation couldn't be trusted either.
+   - Infrastructure cost: one boolean column, one small table of answers in D1, and the existing Worker.
 7. **Security.**
    - The alert is read from the session customer's own transactions only; there is no customer id in any request.
    - Answers are idempotent writes checked against the live session.
-   - Events carry references only.
    - An admin acting as a customer (ADR-007, decision 10) sees that customer's alert, but its answer is recorded as the admin's, so it never silences the alert for the real customer.
 
 ## Consequences
 
-- **+** The trigger is measured and held out in time, and the threshold comes from the data.
-- **+** About two alerts a day bank-wide: proactive help without notification noise.
-- **+** Customers whose charge the bank already doubts are reached before they have to find it.
-- **+** Agents see those reports first.
+- **+** The trigger is not invented. The data rules out the amount and every other single field. What remains is the bank's own flag, used as an input and not as a claim of ours.
+- **+** No field that may leak the label reaches the online service.
+- **+** Customers whose charge the bank doubts are reached before they have to find it, and agents see those reports first.
 - **+** Nothing new to run or pay for.
-- **−** About half of fraud is never flagged, so the alert supplements the customer-initiated report and doesn't replace it.
-- **−** Precision on this dataset is too clean to be a production estimate; the caveat travels with every figure.
+- **−** In this prototype the flags are authored. Until the organizers confirm `fraud_score`'s provenance, the alert demonstrates the experience, not a measured detection rate.
+- **−** Even if the provenance is confirmed, about half of fraud would not be flagged (no score, or a score in the legitimate range). The alert supplements the customer-initiated report; it doesn't replace it.
 - **−** Email waits for a scheduled trigger and SES production access.
-- **−** The flag reaches D1 only through a Gold rebuild and a reviewed seed load (a person's step).
 
 ## Alternatives considered
 
-- **The amount tier as trigger (#100's proposal).** Fraud and legitimate amounts have the same distribution, so it alerts on legitimate charges. Rejected: not supported by the data. Reopen if the bank supplies a loss-weighted target where amount is the cost.
-- **Above the customer's own p95 (the lane's second rule).** By definition about 5% of any customer's charges sit above their own p95, so every customer with enough history would see banners. Rejected: unbounded notification volume with no evidence of urgency. Reopen with a target that shows it separates.
-- **A trained classifier (logistic regression or gradient boosting, SageMaker).** No field other than the score separates fraud, so a model can't recover the missed half, and the score already gives held-out precision of 1.000. Rejected: no measurable gain for added cost and operations. Reopen if non-synthetic data adds signals (device, velocity, merchant history) with real separation.
-- **Email only.** It can't run without a scheduled trigger and SES production access, and it reaches customers outside the session where they can act. Rejected for the demo. Reopen when both exist (decision 3).
-- **No proactive alert.** It ignores a signal the bank already has and the product requirement. Rejected.
+- **The amount tier as trigger (#100's proposal).** Fraud and legitimate amounts have the same distribution in every period, so it alerts on legitimate charges as often as on fraudulent ones. Rejected: contradicted by the data. Reopen if the bank supplies a loss-weighted target where amount is the cost.
+- **Above the customer's own p95 (the lane's second rule).** By definition about 5% of any customer's charges sit above their own p95, so every customer with enough history would see banners. Rejected: unbounded volume with no evidence of urgency. Reopen with a target that shows it separates.
+- **Derive the flag from `fraud_score > 30` now, for the dataset cohort.** The numbers look perfect, which is exactly why the team treats the score as possible leakage. Rejected for now: it would put a possibly leaky field in front of customers and evaluators. Reopen when the organizers confirm that the score is assigned before the label (decision 1).
+- **A trained classifier (logistic regression or gradient boosting, SageMaker).** The label has no availability time, the tested fields don't separate it one at a time, and the strongest field may leak it. Rejected: nothing trustworthy to train or evaluate on. Reopen with a timestamped label or new pre-outcome fields (device, velocity, merchant history) that separate on held-out periods.
+- **Email only.** It needs a scheduled trigger and SES production access, and it reaches customers outside the session where they can act. Rejected for the demo. Reopen when both exist (decision 3).
+- **No proactive alert.** The product requirement stands, and the bank's own flag is a legitimate input even when this dataset can't validate it. Rejected: the experience can be built and demonstrated honestly with authored flags. Reopen if the bank has no fraud engine whose flag the service can receive.
