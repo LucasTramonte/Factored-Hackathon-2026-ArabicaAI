@@ -1369,6 +1369,11 @@
       "complaints": 10370,
       "usd_convertible": 3296,
       "coverage": 0.3178,
+      "direct_usd_cases": 835,
+      "fx_estimated_cases": 2461,
+      "fx_estimated_usd": 135989.84,
+      "no_amount": 6919,
+      "amount_without_currency": 155,
       "direct_usd_per_day": 2327.14,
       "usd_with_fx_estimates_per_day": 2473.52,
       "by_currency": [
@@ -1429,6 +1434,8 @@
       "per_day": 106.7,
       "duration_observed": 85261,
       "observed_hours_per_day": 11.08,
+      "mean_duration_seconds": 434.71,
+      "duration_missing": 13861,
       "reason_fields_differ": 0
     },
     "resolution_gap": {
@@ -1843,6 +1850,212 @@
         }
       }
     },
+    "csat_by_reason": [
+      {
+        "reason": "Queja",
+        "contacts": 99122,
+        "resolved": 43269,
+        "resolved_rate": 0.4365,
+        "csat": {
+          "n": 18514,
+          "mean": 2.436,
+          "distribution": {
+            "1": 1564,
+            "2": 8499,
+            "3": 7275,
+            "4": 1176
+          }
+        },
+        "csat_resolved": {
+          "n": 8054,
+          "mean": 2.999,
+          "distribution": {
+            "2": 1188,
+            "3": 5690,
+            "4": 1176
+          }
+        },
+        "csat_not_resolved": {
+          "n": 10460,
+          "mean": 2.002,
+          "distribution": {
+            "1": 1564,
+            "2": 7311,
+            "3": 1585
+          }
+        }
+      },
+      {
+        "reason": "Retención",
+        "contacts": 17396,
+        "resolved": 10418,
+        "resolved_rate": 0.5989,
+        "csat": {
+          "n": 3237,
+          "mean": 2.607,
+          "distribution": {
+            "1": 184,
+            "2": 1208,
+            "3": 1542,
+            "4": 303
+          }
+        },
+        "csat_resolved": {
+          "n": 1948,
+          "mean": 3.007,
+          "distribution": {
+            "2": 290,
+            "3": 1355,
+            "4": 303
+          }
+        },
+        "csat_not_resolved": {
+          "n": 1289,
+          "mean": 2.002,
+          "distribution": {
+            "1": 184,
+            "2": 918,
+            "3": 187
+          }
+        }
+      },
+      {
+        "reason": "Comercial",
+        "contacts": 46417,
+        "resolved": 30194,
+        "resolved_rate": 0.6505,
+        "csat": {
+          "n": 8677,
+          "mean": 2.65,
+          "distribution": {
+            "1": 427,
+            "2": 3007,
+            "3": 4415,
+            "4": 828
+          }
+        },
+        "csat_resolved": {
+          "n": 5645,
+          "mean": 2.989,
+          "distribution": {
+            "2": 888,
+            "3": 3929,
+            "4": 828
+          }
+        },
+        "csat_not_resolved": {
+          "n": 3032,
+          "mean": 2.019,
+          "distribution": {
+            "1": 427,
+            "2": 2119,
+            "3": 486
+          }
+        }
+      },
+      {
+        "reason": "Técnico",
+        "contacts": 87040,
+        "resolved": 60884,
+        "resolved_rate": 0.6995,
+        "csat": {
+          "n": 16249,
+          "mean": 2.693,
+          "distribution": {
+            "1": 753,
+            "2": 5180,
+            "3": 8618,
+            "4": 1698
+          }
+        },
+        "csat_resolved": {
+          "n": 11284,
+          "mean": 3.002,
+          "distribution": {
+            "2": 1680,
+            "3": 7906,
+            "4": 1698
+          }
+        },
+        "csat_not_resolved": {
+          "n": 4965,
+          "mean": 1.992,
+          "distribution": {
+            "1": 753,
+            "2": 3500,
+            "3": 712
+          }
+        }
+      },
+      {
+        "reason": "Producto",
+        "contacts": 127444,
+        "resolved": 114199,
+        "resolved_rate": 0.8961,
+        "csat": {
+          "n": 23515,
+          "mean": 2.896,
+          "distribution": {
+            "1": 347,
+            "2": 4857,
+            "3": 15204,
+            "4": 3107
+          }
+        },
+        "csat_resolved": {
+          "n": 21114,
+          "mean": 2.998,
+          "distribution": {
+            "2": 3154,
+            "3": 14853,
+            "4": 3107
+          }
+        },
+        "csat_not_resolved": {
+          "n": 2401,
+          "mean": 2.002,
+          "distribution": {
+            "1": 347,
+            "2": 1703,
+            "3": 351
+          }
+        }
+      },
+      {
+        "reason": "Transaccional",
+        "contacts": 203127,
+        "resolved": 185777,
+        "resolved_rate": 0.9146,
+        "csat": {
+          "n": 37968,
+          "mean": 2.913,
+          "distribution": {
+            "1": 512,
+            "2": 7392,
+            "3": 24961,
+            "4": 5103
+          }
+        },
+        "csat_resolved": {
+          "n": 34706,
+          "mean": 3.0,
+          "distribution": {
+            "2": 5116,
+            "3": 24487,
+            "4": 5103
+          }
+        },
+        "csat_not_resolved": {
+          "n": 3262,
+          "mean": 1.988,
+          "distribution": {
+            "1": 512,
+            "2": 2276,
+            "3": 474
+          }
+        }
+      }
+    ],
     "nps": {
       "answers": 53790,
       "max_score": 7,

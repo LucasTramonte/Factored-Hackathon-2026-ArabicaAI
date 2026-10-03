@@ -73,6 +73,17 @@ def test_currencies_stay_apart_and_fx_is_flagged(report):
     assert (k2['usd_convertible'], k2['complaints']) == (3, 4)
     assert k2['direct_usd_per_day'] == round(120 / 929, 2)
     assert 'source_amount_sum' not in k2
+    assert (k2['direct_usd_cases'], k2['fx_estimated_cases'], k2['fx_estimated_usd'], k2['no_amount'], k2['amount_without_currency']) == (2, 1, 2.5, 1, 0)
+
+
+def test_workload_detail_and_csat_by_reason_keep_their_populations(report):
+    """Mean duration uses observed durations only; each reason keeps its own CSAT n, split by resolution."""
+    s = report['summary']
+    assert (s['kpi3_workload']['mean_duration_seconds'], s['kpi3_workload']['duration_missing']) == (600.0, 0)
+    by_reason = {r['reason']: r for r in s['csat_by_reason']}
+    assert set(by_reason) == {'Queja', 'Producto'}
+    assert (by_reason['Queja']['csat']['n'], by_reason['Queja']['csat_resolved']['mean']) == (1, 4.0)
+    assert by_reason['Producto']['csat']['n'] == 0 and by_reason['Producto']['resolved_rate'] == 0.0
 
 
 def test_closed_case_satisfaction_counts_only_closings_in_the_window(report):
@@ -93,6 +104,7 @@ def test_small_cells_are_suppressed_and_no_identifier_is_published(report):
     assert all(r['too_few'] for r in report['summary']['segments'])
     html = render(report, {'database': 'bank.duckdb', 'quality_run': 'run/quality_results.json'})
     assert 'too few to compare' in html
+    assert 'class="rp-dot uc"' in html and 'class="scatter"' in html and 'fill uc' in html
     published = html + json.dumps(report)
     assert not [i for i in IDS if i in published]
 

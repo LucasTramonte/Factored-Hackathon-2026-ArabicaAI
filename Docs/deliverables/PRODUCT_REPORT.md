@@ -12,8 +12,8 @@ What the data says about unrecognized-charge disputes before our service: how ma
 | KPI | Value | Denominator and limit |
 |---|---|---|
 | Unrecognized-charge complaints | **11.16 a day** | 10,370 complaints; 18.28% of 56,736. The share is stable by year (18.2–18.4%) |
-| Recorded claims | **US$2,327 a day** in source USD; US$2,474 with FX estimates | Amounts convertible on 3,296 of 10,370 complaints (31.78%). Claims, not losses or savings. Each source currency is reported separately ([DF-023](DATA_QUALITY.md#df-023-amounts-share-one-usd-scale-and-claimed-currencies-ignore-the-customers-country)) |
-| Complaint-contact workload | **11.08 hours a day**, 106.70 contacts | All complaint contacts (`Queja`), not only unrecognized charges; duration observed on 86.02%. A cost needs a rate the data lacks |
+| Recorded claims | **US$2,327 a day** in source USD; US$2,474 with FX estimates | Amounts convertible on 3,296 of 10,370 complaints (31.78%): 835 recorded in USD (US$2,161,914.20) and 2,461 FX-estimated at the creation-day rate (US$135,989.84, flagged). Excluded: 6,919 with no amount and 155 with an amount but no currency. Claims, not losses or savings. Each source currency is reported separately ([DF-023](DATA_QUALITY.md#df-023-amounts-share-one-usd-scale-and-claimed-currencies-ignore-the-customers-country)) |
+| Complaint-contact workload | **11.08 hours a day**, 106.70 contacts | All complaint contacts (`Queja`), not only unrecognized charges. Mean duration 434.71 s over 85,261 observed durations (86.02%); 13,861 missing. A cost needs a rate the data lacks |
 | Resolution of complaint contacts | **43.65%**, against 76.61% for all contacts | 43,269 of 99,122, against 444,741 of 580,546 |
 
 ## 2. How disputes are handled today
@@ -33,7 +33,16 @@ What the data says about unrecognized-charge disputes before our service: how ma
 ## 3. Satisfaction, each with its own population
 
 - **Closed-case satisfaction for unrecognized charges:** 3.07 of 5. Only 371 of 10,370 cases (3.58%) were closed in the window with a score, so this is a selected subset.
-- **Contact-centre CSAT** (scale 1–4 observed): complaint contacts score 2.44, other contacts 2.83. **Within each resolution outcome they score the same:** 3.00 when resolved, 2.00 when not, for complaint contacts and for every other reason alike. In this data the complaint gap in satisfaction is a resolution gap.
+- **Contact-centre CSAT** (scale 1–4 observed): complaint contacts score 2.44, other contacts 2.83. **Within each resolution outcome every contact reason scores about the same:** about 3.0 when resolved and 2.0 when not. The reasons with a lower average are the ones resolved less often. That is a descriptive association, not evidence that resolution causes satisfaction ([#86 F3](../Plans/insights-report.md#4-findings)).
+
+  | Contact reason | Contacts | Resolved | CSAT answers | Mean CSAT | If resolved | If not resolved |
+  |---|---|---|---|---|---|---|
+  | Queja (complaints) | 99,122 | 43.65% | 18,514 | 2.44 | 3.00 | 2.00 |
+  | Retención | 17,396 | 59.89% | 3,237 | 2.61 | 3.01 | 2.00 |
+  | Comercial | 46,417 | 65.05% | 8,677 | 2.65 | 2.99 | 2.02 |
+  | Técnico | 87,040 | 69.95% | 16,249 | 2.69 | 3.00 | 1.99 |
+  | Producto | 127,444 | 89.61% | 23,515 | 2.90 | 3.00 | 2.00 |
+  | Transaccional | 203,127 | 91.46% | 37,968 | 2.91 | 3.00 | 1.99 |
 - **NPS:** 74.49% of 53,790 answers are detractors (0–6) and none is a promoter: answers stop at 7. So we report the distribution, not the formal score, which would say nothing about loyalty.
 - **No survey CSAT exists for unrecognized-charge complainants.** Surveys link to contact-centre interactions, not complaints.
 
