@@ -10,7 +10,7 @@ import { formatSourceTime } from '../../shared/format/source-time.util';
 import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
-import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind } from '../../shared/models/intake.model';
+import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind, Role } from '../../shared/models/intake.model';
 import { AgentService } from './agent.service';
 
 const KIND_KEYS: Record<IntakeKind, keyof Strings> = { complete: 'kindComplete', technical: 'kindTechnical', incomplete: 'kindIncomplete' };
@@ -40,6 +40,8 @@ export class AgentPage {
   readonly busy = signal(false);
   readonly error = signal('');
   readonly loaded = signal(false);
+  /** Session roles from the last sign-in; a refresh keeps them, an expired session (401) clears them. */
+  readonly roles = signal<Role[]>([]);
   readonly intakes = signal<AgentIntake[]>([]);
   readonly intakesHasMore = signal(false);
   readonly detail = signal<AgentIntakeDetail | null>(null);
@@ -111,7 +113,7 @@ export class AgentPage {
 
   /** Local one-click agent session (development builds), then the queue. */
   load(): Promise<void> {
-    return this.enter(() => this.service.signIn());
+    return this.enter(async () => this.roles.set((await this.service.signIn()).roles));
   }
 
   /** Reload the queue with the current session. */
@@ -141,7 +143,7 @@ export class AgentPage {
     return this.enter(async () => {
       const token = await this.cognito.submitCode(this.email.trim(), this.code.trim());
       spent = true;
-      await this.service.signIn(token);
+      this.roles.set((await this.service.signIn(token)).roles);
     }, e => {
       if (spent) this.anotherEmail();
       this.error.set(this.signInError(e, spent ? 'errOther' : 'errCode'));
@@ -237,6 +239,7 @@ export class AgentPage {
     const status = e instanceof ApiError ? e.status : -1;
     if (status === 401) {
       this.reset();
+      this.roles.set([]);
       // The focused row or detail is gone; keep keyboard users on the way back in.
       afterNextRender(() => this.focusSignIn(), { injector: this.injector });
     }

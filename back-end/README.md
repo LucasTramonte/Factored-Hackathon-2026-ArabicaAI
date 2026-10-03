@@ -62,7 +62,7 @@ npx wrangler dev --local
 
 ## API routes
 
-There is no team password. Customers sign in with an email one-time code (`POST /auth/session`, group `customer`) and agents with the same code (`POST /demo/agent-session`, group `agent`, else 403). The `/`, `/index.html` and `/agent` documents are public, each customer route answers 401 without a valid customer session, and each agent route answers 401 without a valid agent session. A known path with another method returns 405 and an `Allow` header. An unknown path under `/demo/`, `/agent/`, `/transactions/`, `/cases/` or `/intake` returns a JSON 404 and is never served as the app. Bodies are capped at 16 KB (413). Every API path (customer, agent, `/auth/*`, `/demo/*` and unknown API paths) allows 60 requests a minute per IP through the Workers Rate Limiting binding `API_LIMIT`, then answers 429 with `Retry-After: 60`; the count is per Cloudflare location and approximate, and it is keyed by IP, so users behind a shared NAT share the budget. After sign-in, identity comes only from the session cookie, never from a request body. Every JSON body matches `front-end/contracts/intake-api.schema.json`.
+There is no team password. Customers sign in with an email one-time code (`POST /auth/session`, group `customer` or `admin`) and agents with the same code (`POST /demo/agent-session`, group `agent` or `admin`, else 403; see [Access](#access)). The `/`, `/index.html` and `/agent` documents are public, each customer route answers 401 without a valid customer session, and each agent route answers 401 without a valid agent session. A known path with another method returns 405 and an `Allow` header. An unknown path under `/demo/`, `/agent/`, `/transactions/`, `/cases/` or `/intake` returns a JSON 404 and is never served as the app. Bodies are capped at 16 KB (413). Every API path (customer, agent, `/auth/*`, `/demo/*` and unknown API paths) allows 60 requests a minute per IP through the Workers Rate Limiting binding `API_LIMIT`, then answers 429 with `Retry-After: 60`; the count is per Cloudflare location and approximate, and it is keyed by IP, so users behind a shared NAT share the budget. After sign-in, identity comes only from the session cookie, never from a request body. Every JSON body matches `front-end/contracts/intake-api.schema.json`.
 
 | Method and path | Session | Purpose | Main statuses |
 |---|---|---|---|
@@ -74,11 +74,11 @@ There is no team password. Customers sign in with an email one-time code (`POST 
 | `POST /intake/start` | customer | Start an explicit guided ES/PT unrecognized-charge report (10–2,000 code points, no U+0000, UUID key). No case reference is returned. A same-key replay returns the original, immutable start receipt (`state: selection_required`) even after the episode was abandoned or handed off, so it does not describe the current state | 201, 200 (same key and content), 401, 409 (same key, other content), 422, 503 (retry the same key) |
 | `POST /intake/confirm` | customer | Confirm one owned transaction; returns the protocol only after the case and handoff are read back | 201, 200 (same key and content replays the receipt), 401 (expired or revoked, including in the reservation itself; renew as the same customer and retry the same key), 404 (episode or transaction not owned; foreign and missing look identical), 409 ("Episode already submitted with different content or key" once a handoff exists; "Episode is no longer open" after abandonment, when there is no reservation), 422, 503 (acceptance unknown; retry the same key) |
 | `POST /intake/handoff` | customer | Ask for human review without a confirmed transaction (`kind: incomplete`); same receipt rules. Optional `details` (what the customer remembers; same text rules as the statement) is appended to the stored statement once, with a newline, and is part of the replay content | same as confirm, without the transaction 404; 422 when statement and details exceed 2,000 code points together |
-| `POST /auth/session` | none | Customer sign-in from `Authorization: Bearer <Cognito ID token>` in group `customer` | 200, 401, 403 (not enrolled), 422 (no token), 503 (JWKS unreachable) |
+| `POST /auth/session` | none | Customer sign-in from `Authorization: Bearer <Cognito ID token>` in group `customer` or `admin`, with a loaded customer id | 200, 401, 403 (not enrolled), 422 (no token), 503 (JWKS unreachable) |
 | `POST /auth/logout` | none | Revokes the presented customer session | 204 |
 | `GET /reports` | customer | The customer's own acknowledged reports, newest first, 20 a page with `has_more`: reference, kind, status, next step and the confirmed charge id (null without one) | 200, 401, 422 (any query parameter) |
 | `POST /reports/update` | customer | Queue one status email for an own report, at most one per report per five minutes | 202, 401, 404 (foreign and missing look identical), 409 (no email on file), 422, 429 |
-| `POST /demo/agent-session` | none | Agent login from `Authorization: Bearer <Cognito ID token>` in group `agent` (`mode: email_otp`); any body is ignored. With `DEMO_PICKER=1` and no `Authorization`, a one-click local session (`mode: simulated_login`) | 200, 401, 403 (not in group `agent`), 422 (no token), 503 (JWKS unreachable) |
+| `POST /demo/agent-session` | none | Agent login from `Authorization: Bearer <Cognito ID token>` in group `agent` or `admin` (`mode: email_otp`); any body is ignored. With `DEMO_PICKER=1` and no `Authorization`, a one-click local session (`mode: simulated_login`) | 200, 401, 403 (not in group `agent` or `admin`), 422 (no token), 503 (JWKS unreachable) |
 | `GET /agent/cases` | agent | Legacy read-only case list, 50 per page | 200, 401 |
 | `GET /agent/intakes` | agent | Newest 50 acknowledged intake handoffs (complete, incomplete, technical) with `has_more`; pending reservations are excluded | 200, 401 |
 | `GET /agent/intake-detail?protocol=<uuid>` | agent | Statement, verified evidence (or `null`), server actions, open questions and recorded service history (100 events, `history_has_more`) | 200, 401, 404, 422 (anything but exactly one valid `protocol`) |
@@ -87,6 +87,25 @@ There is no team password. Customers sign in with an email one-time code (`POST 
 The only agent write is the review status; nothing refunds, blocks a card or decides fraud. A customer session never opens an agent route and an agent session never opens a customer route.
 
 `GET /agent/intakes` is the authoritative queue for guided reports. The legacy `GET /agent/cases` is unchanged and the client no longer calls it: it lists every confirmed case row, including a guided complete case whose reservation is still `handoff_pending` after a lost read-back. In that case the customer got 503 and no reference, and a same-owner retry with the same key completes it. Until then the episode counts as pending in the event export.
+
+## Access
+
+| Who | Cognito groups | Customer view | Agent view | Banner | Test |
+|---|---|---|---|---|---|
+| Customer | `customer` + a loaded `custom:customer_id` | yes | no (403) | no | `email-session.test.js`: "any other group is one 403 and writes nothing" |
+| Agent | `agent` | no (403) | yes | no | `email-session.test.js`: "a token without customer or admin, or without a loaded customer, is 403 with no cookie and no session write" |
+| Team and evaluators | `admin` + a loaded `custom:customer_id` | yes | yes | yes | `email-session.test.js`: "an admin with its own customer id is also a customer; roles carry only known groups"; "an admin token gets an agent session too" |
+| Anyone else | not enrolled | no code is sent (Cognito's generic answer; the client says it could not send) | same | — | `cognito.service.spec.ts`: "maps each Cognito error type to a status, never to AWS text" (401) |
+
+The sign-in never reveals whether an address exists (`--prevent-user-existence-errors`, `scripts/cognito/setup.sh`). The pool accepts only admin-created users.
+
+To enrol a team member or an evaluator (an admin also needs a loaded customer id for the customer view):
+
+```sh
+sh back-end/scripts/cognito/enroll.sh <email> <customer_id> admin
+```
+
+The six fictitious identities are `demo-ana`, `demo-bruno`, `demo-carla`, `demo-diego`, `demo-elena` and `demo-marco`. Report emails reach an address only after it is verified in SES while production access is pending ([ADR-007](../Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md#implementation-notes)).
 
 ## Operator scripts: idle closure and event export
 

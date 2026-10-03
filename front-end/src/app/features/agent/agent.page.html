@@ -7,6 +7,13 @@
     </div>
   </div>
 
+  @if (roles().includes('admin')) {
+    <aside class="role-banner" [attr.aria-label]="t().adminChip">
+      <span class="ar-chip">{{ t().adminChip }}</span><span>{{ t().adminOnAgent }}</span>
+      <a routerLink="/">{{ t().customerView }}</a>
+    </aside>
+  }
+
   <div style="display: flex; flex-direction: column; gap: 8px">
     <h1 class="ar-h1">{{ t().agentTitle }}</h1>
     <p class="ar-lead">{{ t().agentIntro }}</p>

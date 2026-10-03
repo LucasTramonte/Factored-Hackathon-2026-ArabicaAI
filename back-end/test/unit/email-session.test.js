@@ -31,7 +31,7 @@ test('a verified enrolled customer gets a session; identity comes from the claim
   const r = await call('Bearer ' + jwt, async (t, opts) => { seen = { t, opts }; return claims; }, store(),
     JSON.stringify({ customer_id: 'demo-carla' }));
   assert.equal(r.status, 200);
-  assert.deepEqual(r.body, { customer_id: 'demo-ana', mode: 'email_otp', context_card: null });
+  assert.deepEqual(r.body, { customer_id: 'demo-ana', mode: 'email_otp', context_card: null, roles: ['customer'] });
   assertContract('emailSession', r.body);
   assert.match(r.cookie, /^demo_session=[0-9a-f]{64};/);
   assert.deepEqual(r.calls, [['customerSource', 'demo-ana'], ['rotateSession', 'demo-ana', 'customer']]);
@@ -39,6 +39,24 @@ test('a verified enrolled customer gets a session; identity comes from the claim
   assert.equal(seen.opts.issuer, 'https://cognito-idp.us-east-2.amazonaws.com/us-east-2_x');
   assert.equal(seen.opts.clientId, 'client');
   assert.doesNotMatch(JSON.stringify(r.body), /ana@example|aaa\.bbb/);
+});
+
+test('an admin with its own customer id is also a customer; roles carry only known groups', async () => {
+  const r = await call('Bearer ' + jwt, async () => ({ ...claims, groups: ['admin', 'weird'] }));
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.roles, ['admin']);
+  assertContract('emailSession', r.body);
+  assert.match(r.cookie, /^demo_session=/);
+});
+
+test('a token without customer or admin, or without a loaded customer, is 403 with no cookie and no session write', async () => {
+  for (const [groups, source] of [[['agent'], 'fictitious'], [['auditor'], 'fictitious'], [['customer'], null], [['admin'], null]]) {
+    const r = await call('Bearer ' + jwt, async () => ({ ...claims, groups }), store(source));
+    assert.equal(r.status, 403, groups.join() + ' ' + source);
+    assert.deepEqual(r.body, { detail: 'This account is not enrolled in the demo' });
+    assert.equal(r.cookie, null);
+    assert.ok(!r.calls.some(c => c[0] === 'rotateSession'));
+  }
 });
 
 test('a missing, malformed or oversized token is 422 and is never verified', async () => {
@@ -110,14 +128,21 @@ describe('POST /demo/agent-session', () => {
   test('an agent-group token gets an agent session; the body is ignored', async () => {
     const r = await agent('Bearer ' + jwt, async () => ({ ...claims, groups: ['agent'], customerId: null }), env, '{"role":"x"}');
     assert.equal(r.status, 200);
-    assert.deepEqual(r.body, { role: 'agent', mode: 'email_otp' });
+    assert.deepEqual(r.body, { role: 'agent', mode: 'email_otp', roles: ['agent'] });
     assertContract('agentSession', r.body);
     assert.match(r.cookie, /^demo_agent_session=[0-9a-f]{64};/);
     assert.deepEqual(r.calls, [['rotateSession', null, 'agent']]);
   });
 
+  test('an admin token gets an agent session too', async () => {
+    const r = await agent('Bearer ' + jwt, async () => ({ ...claims, groups: ['admin'], customerId: null }));
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body, { role: 'agent', mode: 'email_otp', roles: ['admin'] });
+    assertContract('agentSession', r.body);
+  });
+
   test('any other group is one 403 and writes nothing', async () => {
-    for (const groups of [['customer'], [], ['admin', 'auditor'], ['Agent']]) {
+    for (const groups of [['customer'], [], ['auditor'], ['Agent']]) {
       const r = await agent('Bearer ' + jwt, async () => ({ ...claims, groups }));
       assert.equal(r.status, 403, groups.join());
       assert.deepEqual(r.body, { detail: 'This account is not an agent in the demo' });
@@ -142,7 +167,7 @@ describe('POST /demo/agent-session', () => {
     const never = async () => assert.fail('verified');
     const local = await agent(null, never, { ...env, DEMO_PICKER: '1' });
     assert.equal(local.status, 200);
-    assert.deepEqual(local.body, { role: 'agent', mode: 'simulated_login' });
+    assert.deepEqual(local.body, { role: 'agent', mode: 'simulated_login', roles: ['agent'] });
     assertContract('agentSession', local.body);
     for (const picker of [{}, { DEMO_PICKER: '0' }, { DEMO_PICKER: 1 }]) {
       assert.equal((await agent(null, never, { ...env, ...picker })).status, 422);

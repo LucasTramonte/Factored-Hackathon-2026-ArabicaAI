@@ -202,7 +202,7 @@ test('sessions: actors cannot swap, forged or expired tokens fail, login revokes
 
 test('login rejects identities outside the allowlist, including ones that exist in data', async () => {
   const c = client();
-  for (const customer_id of ['demo-carla', 'CLI-OTHER', '', null, 42, ['demo-ana'], "demo-ana' OR '1'='1"]) {
+  for (const customer_id of ['demo-zoe', 'CLI-OTHER', '', null, 42, ['demo-ana'], "demo-ana' OR '1'='1"]) {
     const res = await c.call('/demo/session', { customer_id });
     assert.equal(res.status, 422, String(customer_id));
     assertContract('error', res.body);

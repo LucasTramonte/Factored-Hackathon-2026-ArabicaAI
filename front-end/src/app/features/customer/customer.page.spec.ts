@@ -17,12 +17,12 @@ describe('CustomerPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed'], { client: signal(''), card: signal(null) });
+      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed'], { client: signal(''), card: signal(null), roles: signal([]) });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
-    service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null });
+    service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null, roles: ['customer'] });
     service.transactions.and.resolveTo({ items: [tx], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
-    service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', context_card: null });
+    service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', context_card: null, roles: ['customer'] });
     service.logout.and.resolveTo();
     service.reports.and.resolveTo({ items: [], has_more: false });
     service.displayed.and.resolveTo({});
@@ -181,7 +181,7 @@ describe('CustomerPage', () => {
         [cognito.submitCode, 429, t.errTooMany], [cognito.submitCode, 0, t.err503], [service.signInWithToken, 503, t.err503]];
       for (const [spy, status, text] of cases) {
         cognito.submitCode.and.resolveTo('id.token');
-        service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp' });
+        service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', roles: ['customer'] });
         spy.and.rejectWith(new ApiError(status));
         if (!p.codeSent()) await toCode(p);
         await p.verify();
@@ -215,7 +215,7 @@ describe('CustomerPage', () => {
       p.chatStatement = 'No reconozco este cargo.';
       await p.send();
       p.step.set('login');
-      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-2', mode: 'email_otp' });
+      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-2', mode: 'email_otp', roles: ['customer'] });
       service.logout.and.rejectWith(new ApiError(0));
       await toCode(p);
       await p.verify();
@@ -231,12 +231,12 @@ describe('CustomerPage', () => {
       await p.send();
       expect(p.identityLocked()).toBeTrue();
       p.step.set('login');
-      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-2', mode: 'email_otp' });
+      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-2', mode: 'email_otp', roles: ['customer'] });
       await toCode(p);
       await p.verify();
       expect([p.step(), p.client(), p.chatStep(), p.error()]).toEqual(['login', 'CLI-1', 'choose', p.t().errOtherCustomer]);
       expect(service.logout).toHaveBeenCalledTimes(1);
-      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp' });
+      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', roles: ['customer'] });
       await toCode(p);
       await p.verify();
       expect([p.step(), p.chatStep()]).toEqual(['home', 'choose']);
@@ -622,7 +622,7 @@ describe('CustomerPage', () => {
   describe('rendered home', () => {
     async function home(card: unknown = null) {
       TestBed.inject(LangService).set('es'); // other specs may leave English selected, which shows the report-language choice
-      service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: card as never });
+      service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: card as never, roles: ['customer'] });
       const fixture = TestBed.createComponent(CustomerPage);
       const p = fixture.componentInstance;
       await p.ngOnInit();
@@ -645,6 +645,29 @@ describe('CustomerPage', () => {
       const { el } = await home(null);
       expect(el.querySelector('h1')?.textContent).toContain('Ana (demo)');
       expect(el.querySelector('.products')).toBeNull();
+    });
+
+    it('shows an administrator, and only them, a banner linking the agent view; reset clears the roles', async () => {
+      TestBed.inject(LangService).set('es');
+      service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'email_otp', context_card: null, roles: ['admin'] });
+      const fixture = TestBed.createComponent(CustomerPage);
+      const p = fixture.componentInstance;
+      const el = fixture.nativeElement as HTMLElement;
+      p.identity = 'demo-ana';
+      await p.login();
+      fixture.detectChanges();
+      expect(service.roles()).toEqual(['admin']);
+      const banner = el.querySelector('aside.role-banner');
+      expect(banner?.textContent).toContain(p.t().adminChip);
+      expect(banner?.querySelector('a[href="/agent"]')).not.toBeNull();
+      p['reset']();
+      expect(service.roles()).toEqual([]);
+      service.signIn.and.resolveTo({ customer_id: 'demo-bruno', mode: 'email_otp', context_card: null, roles: ['customer'] });
+      p.identity = 'demo-bruno';
+      await p.login();
+      fixture.detectChanges();
+      expect(service.roles()).toEqual(['customer']);
+      expect(el.querySelector('.role-banner')).toBeNull();
     });
 
     it('while a request is pending the agent link is disabled, and the server reports and the home survive in-app navigation', async () => {

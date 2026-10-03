@@ -18,9 +18,9 @@ import { tokenHash } from '../../src/auth/session.js';
 // Ceilings per request: [queries, rows_read, rows_written, round_trips]. D1 Free allows 50 queries per invocation;
 // round trips drive latency (about 150 ms each when the Worker runs far from D1).
 const CEILING = {
-  // One query listing the dataset cohort. It reads every customers row: 10 in the fixture since the two charge-view
-  // customers (ceiling +2, the read margin), about 800 with the cohort loaded (ADR-004).
-  identities: [1, 12, 0, 1],
+  // One query listing the dataset cohort. It reads every customers row: 16 rows_read measured with the four evaluator
+  // identities; no margin. About 800 with the cohort loaded (ADR-004).
+  identities: [1, 16, 0, 1],
   // Every session start and logout also writes one auth_events row in its existing batch (migration 0012): one query,
   // 1 read and 2 writes (the row and auth_events_time), no round trip; logout's insert also checks the session (ADR-004).
   login: [6, 10, 6, 3],

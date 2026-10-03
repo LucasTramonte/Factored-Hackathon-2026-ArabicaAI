@@ -4,7 +4,7 @@ import { Title } from '@angular/platform-browser';
 import { ApiError } from '../../core/http/api.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { LangService } from '../../shared/i18n/lang.service';
-import { AgentIntake, AgentIntakeDetail } from '../../shared/models/intake.model';
+import { AgentIntake, AgentIntakeDetail, AgentSession } from '../../shared/models/intake.model';
 import { AgentPage } from './agent.page';
 import { AgentService } from './agent.service';
 
@@ -19,6 +19,8 @@ const detail = (protocol: string, over: Partial<AgentIntakeDetail> = {}): AgentI
   history_has_more: false, model_reading: { mode: 'off', model_version: null, llm_calls: 0 }, scope: 'synthetic_demo_only', ...over
 });
 
+const agentSession: AgentSession = { role: 'agent', mode: 'email_otp', roles: ['agent'] };
+
 describe('AgentPage', () => {
   let service: jasmine.SpyObj<AgentService>;
   let cognito: jasmine.SpyObj<CognitoService>;
@@ -29,7 +31,7 @@ describe('AgentPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'intakes', 'intakeDetail', 'setStatus']);
-    service.signIn.and.resolveTo();
+    service.signIn.and.resolveTo(agentSession);
     cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
     cognito.requestCode.and.resolveTo();
     cognito.submitCode.and.resolveTo('id.token');
@@ -62,7 +64,7 @@ describe('AgentPage', () => {
 
   it('loads the intake queue only after starting an agent session', async () => {
     const order: string[] = [];
-    service.signIn.and.callFake(async () => { order.push('session'); });
+    service.signIn.and.callFake(async () => { order.push('session'); return agentSession; });
     service.intakes.and.callFake(async () => { order.push('intakes'); return { items: [], has_more: false, scope: 'synthetic_demo_only' as const }; });
     await page.load();
     expect(order).toEqual(['session', 'intakes']);
@@ -133,7 +135,7 @@ describe('AgentPage', () => {
     signIn().click();
     await fixture.whenStable();
     expect(document.activeElement).toBe(signIn());
-    service.signIn.and.resolveTo();
+    service.signIn.and.resolveTo(agentSession);
     cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
     cognito.requestCode.and.resolveTo();
     cognito.submitCode.and.resolveTo('id.token');
@@ -141,6 +143,25 @@ describe('AgentPage', () => {
     await fixture.whenStable();
     expect(document.activeElement).toBe(el().querySelector('#intake-queue-title'));
     el().remove();
+  });
+
+  it('shows an administrator, and only them, a banner back to the customer view; it survives a refresh, not an expired session', async () => {
+    service.signIn.and.resolveTo({ role: 'agent', mode: 'email_otp', roles: ['admin'] });
+    await page.load();
+    fixture.detectChanges();
+    expect(el().querySelector('aside.role-banner a[href="/"]')!.textContent!.trim()).toBe(t().customerView);
+    expect(el().querySelector('.role-banner')!.textContent).toContain(t().adminChip);
+    await page.refresh();
+    fixture.detectChanges();
+    expect(el().querySelector('.role-banner')).not.toBeNull();
+    service.intakeDetail.and.rejectWith(new ApiError(401, 'raw'));
+    await page.open(P1, document.createElement('button'));
+    fixture.detectChanges();
+    expect(el().querySelector('.role-banner')).toBeNull();
+    service.signIn.and.resolveTo(agentSession);
+    await page.load();
+    fixture.detectChanges();
+    expect(el().querySelector('.role-banner')).toBeNull();
   });
 
   it('says in one line whether the model read the case, in every language', async () => {

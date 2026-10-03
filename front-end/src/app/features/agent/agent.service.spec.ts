@@ -20,6 +20,12 @@ describe('AgentService', () => {
     expect(api.request).toHaveBeenCalledWith('/demo/agent-session', {}, {});
   });
 
+  it('resolves to the session body the API returned', async () => {
+    const body = { role: 'agent', mode: 'email_otp', roles: ['admin'] };
+    api.request.and.resolveTo(body);
+    expect(await service.signIn('id.token')).toEqual(body as never);
+  });
+
   it('reads the intake queue with GET and keeps has_more', async () => {
     api.request.and.resolveTo({ items: [], has_more: true, scope: 'synthetic_demo_only' });
     expect((await service.intakes()).has_more).toBeTrue();

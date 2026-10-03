@@ -4,7 +4,8 @@
 # custom:customer_id and refuses if it differs; it adds the user to the given group and does not
 # remove earlier groups.
 # Usage: enroll.sh <email> <customer_id> [group]     group defaults to customer
-#        enroll.sh <email> - agent                    no customer id (agents, admins, auditors)
+#        enroll.sh <email> - agent                    no customer id (agents, auditors)
+# Admins: `enroll.sh <email> <customer_id> admin` (an admin also needs a customer id to use the customer view).
 set -euo pipefail
 
 email=${1:?email}; customer_id=${2:?customer_id or -}; group=${3:-customer}

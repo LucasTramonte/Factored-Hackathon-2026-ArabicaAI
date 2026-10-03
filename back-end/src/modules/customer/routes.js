@@ -5,7 +5,7 @@
 import identities from '../../config/identities.json' with { type: 'json' };
 import { fail, json, readJsonBody } from '../../http.js';
 import { endSession, requireSession, startSession } from '../../auth/session.js';
-import { bearerClaims, verifyIdToken } from '../../auth/cognito.js';
+import { bearerClaims, hasRole, rolesOf, verifyIdToken } from '../../auth/cognito.js';
 import { CUSTOMER_ID, validateCaseRequest } from './validation.js';
 import { UUID } from '../intake/validation.js';
 import { encrypt } from '../../notify/email.js';
@@ -61,7 +61,7 @@ function contextCard(row) {
   return { version: row.card_version, snapshot_at: row.snapshot_at, first_name, locale_hint, products };
 }
 
-/** POST /demo/session: start a simulated session for a committed identity or a loaded dataset customer. */
+/** POST /demo/session: start a simulated session for a committed identity or a loaded dataset customer (``roles: ['customer']``). */
 export async function startCustomerSession(request, env, store) {
   if (env.DEMO_PICKER !== '1') return fail(404, 'Not found');
   const body = await readJsonBody(request);
@@ -73,14 +73,15 @@ export async function startCustomerSession(request, env, store) {
   if (!COMMITTED.has(customerId) && source !== 'dataset') return fail(422, 'Select an allowed demo identity');
   if (!source) return fail(503, 'Demo identity is not loaded');
   const card = contextCard(await store.findContextCard(customerId));
-  return json({ customer_id: customerId, mode: 'simulated_login', context_card: card }, 200,
+  return json({ customer_id: customerId, mode: 'simulated_login', context_card: card, roles: ['customer'] }, 200,
     { 'Set-Cookie': await startSession(request, store, 'customer', customerId) });
 }
 
 const NOT_ENROLLED = 'This account is not enrolled in the demo';
 
 /**
- * POST /auth/session: a customer session from a verified Cognito ID token in ``Authorization: Bearer``.
+ * POST /auth/session: a customer session from a verified Cognito ID token in ``Authorization: Bearer``; an ``admin``
+ * token counts as both customer and agent, and ``roles`` lists the verified groups that are roles.
  * Identity comes only from the verified claims; any body is ignored. The token is never logged, echoed or
  * stored, and an unverified token never reaches the store. The email is stored only AES-GCM encrypted (for
  * notifications), and only when ``EMAIL_KEY`` is valid; without it sign-in proceeds and nothing is stored.
@@ -90,12 +91,12 @@ export async function startEmailSession(request, env, store, ctx, verify = verif
   if (signedIn.error) return signedIn.error;
   const { claims } = signedIn;
   const { customerId } = claims;
-  if (!claims.groups.includes('customer') || customerId === null || !await store.customerSource(customerId)) {
+  if (!hasRole(claims.groups, 'customer') || customerId === null || !await store.customerSource(customerId)) {
     return fail(403, NOT_ENROLLED);
   }
   const card = contextCard(await store.findContextCard(customerId));
   const emailEnc = await encrypt(claims.email, env).catch(() => null);
-  return json({ customer_id: customerId, mode: 'email_otp', context_card: card }, 200,
+  return json({ customer_id: customerId, mode: 'email_otp', context_card: card, roles: rolesOf(claims.groups) }, 200,
     { 'Set-Cookie': await startSession(request, store, 'customer', customerId, emailEnc) });
 }
 

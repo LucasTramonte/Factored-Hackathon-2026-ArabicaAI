@@ -2,16 +2,17 @@ import { Injectable, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/http/api.service';
 import { LangService } from '../../shared/i18n/lang.service';
 import { ContextCard, CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeReceipt, IntakeStart, IntakeStartBody,
-  ReportList, TransactionList } from '../../shared/models/intake.model';
+  ReportList, Role, TransactionList } from '../../shared/models/intake.model';
 
 /** Customer calls: email sign-in (simulated in local development), own charges and the guided intake. */
 @Injectable({ providedIn: 'root' })
 export class CustomerService {
   private readonly api = inject(ApiService);
   private readonly lang = inject(LangService);
-  /** Tab-scoped state that survives in-app navigation: the signed-in customer and their card. */
+  /** Tab-scoped state that survives in-app navigation: the signed-in customer, their card and session roles (the page writes them). */
   readonly client = signal('');
   readonly card = signal<ContextCard | null>(null);
+  readonly roles = signal<Role[]>([]);
 
   async identities(): Promise<Identity[]> {
     return (await this.api.request<{ items: Identity[] }>('/demo/identities')).items;

@@ -142,6 +142,10 @@ test('identity list joins the committed fictitious identities with dataset custo
   assert.deepEqual(body.items, [
     { customer_id: 'demo-ana', display_name: 'Ana (demo)', country: null },
     { customer_id: 'demo-bruno', display_name: 'Bruno (demo)', country: null },
+    { customer_id: 'demo-carla', display_name: 'Carla (demo)', country: null },
+    { customer_id: 'demo-diego', display_name: 'Diego (demo)', country: null },
+    { customer_id: 'demo-elena', display_name: 'Elena (demo)', country: null },
+    { customer_id: 'demo-marco', display_name: 'Marco (demo)', country: null },
     { customer_id: 'CLI-U53R5AZVLET0', display_name: 'Dataset customer (synthetic)', country: null },
     { customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' }]);
 });
