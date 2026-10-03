@@ -21,7 +21,7 @@ test('violations are reported', () => {
 test('the context card shape is part of the session contract', () => {
   const card = { version: 1, snapshot_at: '2026-09-29T00:00:00+00:00', first_name: 'Ana', locale_hint: 'es-AR',
     products: [{ product_type: 'Credit card', last4: '4444', currency: 'ARS' }] };
-  const session = context_card => ({ customer_id: 'demo-ana', mode: 'simulated_login', context_card });
+  const session = context_card => ({ customer_id: 'demo-ana', mode: 'simulated_login', context_card, roles: ['customer'] });
   assertContract('customerSession', session(card));
   assertContract('customerSession', session(null));
   assertContract('customerSession', session({ ...card, first_name: null, products: [{ product_type: 'Account', last4: null, currency: null }] }));

@@ -63,9 +63,11 @@
       "additionalProperties": false,
       "required": [
         "customer_id",
-        "mode"
+        "mode",
+        "roles"
       ],
       "properties": {
+        "roles": { "type": "array", "maxItems": 4, "items": { "type": "string", "pattern": "^(customer|agent|admin|auditor)$" } },
         "customer_id": {
           "type": "string",
           "minLength": 1
@@ -105,9 +107,11 @@
       "additionalProperties": false,
       "required": [
         "customer_id",
-        "mode"
+        "mode",
+        "roles"
       ],
       "properties": {
+        "roles": { "type": "array", "maxItems": 4, "items": { "type": "string", "pattern": "^(customer|agent|admin|auditor)$" } },
         "customer_id": {
           "type": "string",
           "minLength": 1
@@ -147,9 +151,11 @@
       "additionalProperties": false,
       "required": [
         "role",
-        "mode"
+        "mode",
+        "roles"
       ],
       "properties": {
+        "roles": { "type": "array", "maxItems": 4, "items": { "type": "string", "pattern": "^(customer|agent|admin|auditor)$" } },
         "role": {
           "const": "agent"
         },

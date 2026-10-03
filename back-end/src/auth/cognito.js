@@ -37,6 +37,12 @@ export async function verifyIdToken(token, { jwks, issuer, clientId }) {
   return { sub: payload.sub, email: payload.email, groups, customerId: typeof id === 'string' && CUSTOMER_ID.test(id) ? id : null };
 }
 
+const GRANTED = ['customer', 'agent', 'admin', 'auditor'];
+/** The verified groups that are roles, in a fixed order. ``admin`` is listed as itself; ``hasRole`` makes it imply the rest. */
+export const rolesOf = groups => GRANTED.filter(r => groups.includes(r));
+/** ``admin`` may do anything a customer, agent or auditor may (ADR-007, decision 8). */
+export const hasRole = (groups, role) => groups.includes(role) || groups.includes('admin');
+
 const BEARER = /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/;
 // The JWKS could not be fetched: jose's timeout, an unusable set, a non-200 or non-JSON answer (generic), or fetch itself.
 const JWKS_DOWN = new Set(['ERR_JWKS_TIMEOUT', 'ERR_JWKS_INVALID', 'ERR_JOSE_GENERIC']);
