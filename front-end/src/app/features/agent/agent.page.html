@@ -63,7 +63,7 @@
               <li>
                 <button #row type="button" class="intake-row" [attr.data-protocol]="item.protocol" [attr.aria-expanded]="openProtocol() === item.protocol" [attr.aria-controls]="openProtocol() === item.protocol && detail() ? 'intake-detail' : null" (click)="open(item.protocol, row)">
                   <span class="ar-chip" [class.ar-chip-ok]="item.kind === 'complete'" [class.ar-chip-err]="item.kind === 'technical'" [class.ar-chip-warn]="item.kind === 'incomplete'">{{ kindLabel(item.kind) }}</span>
-                  <span class="ar-chip reason-chip" [class.ar-chip-err]="item.reason === 'card_lost_or_stolen'">{{ t()[reasonLabel[item.reason]] }}</span>
+                  <span class="ar-chip reason-chip" [class.ar-chip-err]="item.reason === 'card_lost_or_stolen'">{{ reasonText(item.reason) }}</span>
                   <span class="ar-chip status-chip">{{ statusLabel(item.status) }}</span>
                   @if (item.urgency === 'high') { <span class="ar-chip ar-chip-err urgency-chip">{{ t().urgencyHigh }}</span> }
                   <span class="ar-mono">{{ item.reference_short ?? item.protocol }}</span>
@@ -98,7 +98,7 @@
             <div><dt>{{ t().toolStatus }}</dt><dd><code>{{ d.tool_status }}</code></dd></div>
             <div><dt>{{ t().destination }}</dt><dd><code>{{ d.destination }}</code></dd></div>
             <div><dt>{{ t().priority }}</dt><dd>{{ d.urgency === 'high' ? t().prioHigh : 'normal' }}</dd></div>
-            <div><dt>{{ t().reasonLabel }}</dt><dd>{{ t()[reasonLabel[d.reason]] }}</dd></div>
+            <div><dt>{{ t().reasonLabel }}</dt><dd>{{ reasonText(d.reason) }}</dd></div>
             <div><dt>{{ t().languageCode }}</dt><dd><code>{{ d.language }}</code></dd></div>
           </dl>
 

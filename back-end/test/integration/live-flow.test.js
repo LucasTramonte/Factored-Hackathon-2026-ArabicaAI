@@ -49,13 +49,14 @@ test('pages are public; customers are isolated; replay and handoff work', async 
   assert.equal((await ana.call('/cases', { ...request, customer_statement: 'A changed statement.' })).status, 409);
 
   const agent = client();
-  assert.equal((await agent.call('/agent/cases')).status, 401);
+  assert.equal((await agent.call('/agent/intakes')).status, 401);
   const agentLogin = await agent.call('/demo/agent-session', {});
   assert.equal(agentLogin.status, 200);
   assertContract('agentSession', agentLogin.body);
-  const cases = await agent.call('/agent/cases');
-  assertContract('agentCaseList', cases.body);
-  assert.ok(cases.body.items.some(x => x.protocol === first.body.protocol && x.customer_confirmed === true));
+  // Agents read only the approved queue of acknowledged guided handoffs (issue #69); a legacy case is not in it.
+  const queue = await agent.call('/agent/intakes');
+  assertContract('agentIntakeList', queue.body);
+  assert.ok(!queue.body.items.some(x => x.protocol === first.body.protocol));
 });
 
 test('dataset sample keeps the source wall time and original amount', async () => {

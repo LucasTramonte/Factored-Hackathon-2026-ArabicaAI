@@ -42,12 +42,14 @@ export function appliedFromWranglerJson(text) {
 
 /**
  * Throws when ``vars`` would ship a local-only variable: ``COGNITO_TEST_JWKS`` lets anyone holding its private key sign in,
- * and ``DEMO_PICKER`` lets anyone become any customer or agent without signing in. Secrets are not checked here.
+ * and ``DEMO_PICKER`` lets anyone become any customer or agent without signing in. ``SES_FROM`` is a person's address,
+ * so it is a secret, never a committed var (issue #70). Secrets are not checked here.
  */
 export function assertNoLocalVars(config) {
   for (const name of ['COGNITO_TEST_JWKS', 'DEMO_PICKER']) {
     if (config.vars && name in config.vars) throw new Error(`wrangler.jsonc vars contain ${name} (local only); remove it before deploying`);
   }
+  if (config.vars && 'SES_FROM' in config.vars) throw new Error('wrangler.jsonc vars contain SES_FROM; set it with `wrangler secret put SES_FROM` instead');
 }
 
 async function main() {

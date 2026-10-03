@@ -44,24 +44,28 @@ test('a charge above the stated threshold gets a high receipt with the block lin
   assert.notEqual(after.body.items[0].protocol, high.body.protocol, 'a closed high report leaves the head of the queue');
 });
 
-test('a lost or stolen card is high on a confirmed charge below every threshold, normal on an incomplete handoff', async () => {
+test('a lost or stolen card is high on a confirmed charge below every threshold and on an incomplete handoff', async () => {
   const ana = client({ authorization: 'Bearer ' + await idToken('demo-ana') });
   assert.equal((await ana.call('/auth/session', {})).status, 200);
   const high = await confirm(ana, 'demo-tx-004', 'card_lost_or_stolen'); // BRL 47.30, below the BRL policy amount and Ana's p95
   assert.equal(high.status, 201); assertContract('intakeReceipt', high.body);
   assert.equal(high.body.urgency, 'high'); assert.equal(high.body.block_card_line, policy.demo_block_line);
-  const incomplete = await ana.call('/intake/handoff', { episode_id: await start(ana, 'card_lost_or_stolen'), kind: 'incomplete', idempotency_key: crypto.randomUUID() });
-  assert.equal(incomplete.status, 201); assert.equal(incomplete.body.urgency, 'normal'); assert.ok(!('block_card_line' in incomplete.body));
+  // The "?" entry: a lost card on a charge that isn't in the list still gets the call-your-bank line (ADR-010, decision 3).
+  const lost = await ana.call('/intake/handoff', { episode_id: await start(ana, 'card_lost_or_stolen'), kind: 'incomplete', idempotency_key: crypto.randomUUID() });
+  assert.equal(lost.status, 201); assertContract('intakeReceipt', lost.body);
+  assert.equal(lost.body.urgency, 'high'); assert.equal(lost.body.block_card_line, policy.demo_block_line);
+  const other = await ana.call('/intake/handoff', { episode_id: await start(ana, 'duplicate'), kind: 'incomplete', idempotency_key: crypto.randomUUID() });
+  assert.equal(other.status, 201); assert.equal(other.body.urgency, 'normal'); assert.ok(!('block_card_line' in other.body));
 
   const agent = client(); assert.equal((await agent.call('/demo/agent-session', {})).status, 200);
   const queue = await agent.call('/agent/intakes'); assertContract('agentIntakeList', queue.body);
-  assert.equal(queue.body.items[0].protocol, high.body.protocol);
-  assert.equal(queue.body.items[0].reason, 'card_lost_or_stolen');
+  assert.deepEqual(queue.body.items.slice(0, 2).map(x => x.protocol).sort(), [high.body.protocol, lost.body.protocol].sort(), 'both lost-card reports head the queue');
+  assert.ok(queue.body.items.slice(0, 2).every(x => x.reason === 'card_lost_or_stolen' && x.urgency === 'high'));
 
   const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
   await withIntakeStore({ config: resolve(process.cwd(), 'wrangler.jsonc') }, async store => {
     const rows = await store.findEmails('demo-ana', high.body.reference_short);
     assert.equal(rows.length, 1); assert.equal(rows[0].template, 'received');
   });
-  await closeReport(high.body.protocol);
+  await closeReport(high.body.protocol); await closeReport(lost.body.protocol);
 });

@@ -173,3 +173,16 @@ test('a reserved but unacknowledged handoff cannot be moved and gets no history'
   assert.equal(res.status, 404);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM handoff_status_history').get().n, 0);
 });
+
+test('a report from before the customer could choose a reason reads reason null, never 0016\'s default (migration 0017)', async t => {
+  const { db, finish, get } = await setup(t);
+  const chosen = await finish('incomplete'), old = await finish('incomplete');
+  // An episode stored before 0016/0017 has the column defaults: reason 'not_mine', reason_source 'not_recorded'.
+  db.prepare("UPDATE intake_episodes SET reason_source='not_recorded' WHERE episode_id=?").run(old.episode_id);
+  const list = await (await get('/agent/intakes')).json(); assertContract('agentIntakeList', list);
+  const byEpisode = Object.fromEntries(list.items.map(i => [i.episode_id, i.reason]));
+  assert.equal(byEpisode[chosen.episode_id], 'not_mine'); assert.equal(byEpisode[old.episode_id], null);
+  const detail = await (await get('/agent/intake-detail?protocol=' + old.receipt.protocol)).json();
+  assertContract('agentIntakeDetail', detail); assert.equal(detail.reason, null);
+  assert.equal(db.prepare('SELECT reason FROM intake_episodes WHERE episode_id=?').get(old.episode_id).reason, 'not_mine', 'the stored value is kept; only its reading changes');
+});

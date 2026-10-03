@@ -32,7 +32,8 @@ const CEILING = {
   logout: [2, 3, 3, 1],
   create: [4, 12, 6, 4],
   agentLogin: [3, 6, 6, 1],
-  agentList: [2, 250, 0, 2],
+  // GET /audit/events (issue #69): no session read; one batch of two reads by primary key/rowid, at most limit + 1 rows each.
+  audit: [2, 102, 0, 1],
   // The CHECK on intake_episodes.reason (migration 0016, ADR-010) adds one counted read to each statement that writes an
   // episode row, as 0004's CHECKs did: start 8 -> 9 and replay 6 -> 7 rows read, measured with and without it (ADR-004).
   intakeStart: [6, 9, 11, 2],
@@ -117,7 +118,8 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
   measured.agentLogin = within('agentLogin', (await agent.call('/demo/agent-session', {})).metrics);
   measured.agentEmailLogin = within('agentLogin', (await client({ authorization: 'Bearer ' + await idToken('agent@test', { groups: ['agent'] }) })
     .call('/demo/agent-session', {})).metrics);
-  measured.agentList = within('agentList', (await agent.call('/agent/cases')).metrics);
+  const audit = await client({ authorization: 'Bearer ' + await idToken('auditor@test', { groups: ['auditor'] }) }).call('/audit/events');
+  assert.equal(audit.status, 200); measured.audit = within('audit', audit.metrics);
   const episode = sum(measured, ['login', 'list', 'create']);
   console.log('D1_BUDGET ' + JSON.stringify({ per_request: measured, customer_episode: episode }));
 });

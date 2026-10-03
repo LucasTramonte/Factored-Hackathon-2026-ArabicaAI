@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Creates or finds the SES sender identity and the Worker's send-only IAM user.
 # Idempotent. Never creates an access key: a person does that (Docs/Plans/intake-demo.md).
-# Usage: back-end/scripts/ses/setup.sh   (AWS_PROFILE defaults to arabica)
+# Usage: SES_FROM_EMAIL=<sender address> back-end/scripts/ses/setup.sh   (AWS_PROFILE defaults to arabica)
+# The address is never committed (issue #70); the Worker reads it from the SES_FROM secret.
 set -euo pipefail
 
-FROM=rzuniga@aptsny.co
+FROM=${SES_FROM_EMAIL:?set SES_FROM_EMAIL to the sender address}
 USER_NAME=arabicaai-worker-ses
 REGION=us-east-2
 P=(--profile "${AWS_PROFILE:-arabica}" --output text)
