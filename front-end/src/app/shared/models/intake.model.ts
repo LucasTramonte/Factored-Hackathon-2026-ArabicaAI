@@ -160,6 +160,8 @@ export interface AgentSession {
 export type IntakeLang = 'es' | 'pt' | 'en';
 
 export interface IntakeStartBody {
+  /** Only "Not resolved": public protocol of the customer's closed acknowledged report; server resolves the link. */
+  previous_protocol?: string;
   customer_statement: string;
   idempotency_key: string;
   language: IntakeLang;

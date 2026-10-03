@@ -13,7 +13,8 @@ import URGENCY from '../../config/urgency.json' with { type: 'json' };
  * POST /intake/start: start or replay an explicit guided report; never return a case protocol. With the switch on,
  * a new start also makes one shadow extraction call (at most 10 s) and records only its usage; the response is
  * the guided one whatever the call returns. ``ctx`` is the Worker context, so the shadow call runs in waitUntil after
- * the response; ``approved`` is a test seam: the router never passes it.
+ * the response; ``approved`` is a test seam: the router never passes it. Optional previous_protocol links a new
+ * episode to this customer's acknowledged closed report; ownership and closed state are rechecked in the write.
  */
 export async function startIntake(request, env, store, ctx, approved = APPROVED_EXTRACTOR) {
   const current = await requireSession(request, store, 'customer');
@@ -26,11 +27,14 @@ export async function startIntake(request, env, store, ctx, approved = APPROVED_
   let result;
   try {
     result = await store.startIntake({ ...checked.value, customerId: current.customer_id,
-      now: Date.now(), expiresAt: current.expires_at, ...(extractor && { producer: extractor.modelVersion }) });
+      now: Date.now(), expiresAt: current.expires_at, ...(extractor && { producer: extractor.modelVersion }),
+      ...(checked.value.previousProtocol && { sessionHash: await tokenHash(readCookies(request).demo_session) }) });
   } catch {
     return fail(503, 'Start not confirmed; retry with the same idempotency key');
   }
   if (result.conflict) return fail(409, 'Key already used with different content');
+  if (result.previousError) return fail(result.previousError, result.previousError === 404 ? 'Previous report not found'
+    : result.previousError === 409 ? 'Previous report is not closed' : 'Start a demo session first');
   const { episode, replayed } = result;
   if (!episode) return fail(503, 'Start not confirmed; retry with the same idempotency key');
   if (extractor && !replayed) await inShadow(ctx, async () => {

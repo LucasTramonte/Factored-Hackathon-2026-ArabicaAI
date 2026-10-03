@@ -154,32 +154,49 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      * ``reason`` (ADR-010) is required and part of the payload hash, so a replay with another reason conflicts.
      * ``producer`` (the extractor switch, on) labels the events and pre-records one call with unknown usage, so a
      * crash during the call is never counted as free; absent, the row and event are the guided ones.
+     * Optional previousProtocol is hashed only when supplied, preserving old retries. Its one closed acknowledged
+     * same-owner source and live session are checked in the insert; the durable FK never comes from customer text.
      */
-    startIntake: async ({ customerId, language, statement, key, reason, now, expiresAt, producer }) => {
+    startIntake: async ({ customerId, language, statement, key, reason, now, expiresAt, producer, previousProtocol, sessionHash }) => {
       const episodeId = crypto.randomUUID();
       const sessionRef = crypto.randomUUID();
-      const payloadHash = await tokenHash(JSON.stringify([language, statement, reason]));
+      const payloadHash = await tokenHash(JSON.stringify([language, statement, reason, ...(previousProtocol ? [previousProtocol] : [])]));
       const response = JSON.stringify({ episode_id: episodeId, state: 'selection_required', language, mode: 'guided' });
       const event = JSON.stringify({ event: 'intake_started', version: '2', case_id: episodeId,
         ts: new Date(now).toISOString(), seq: 0, session_ref: sessionRef, language, model_version: producer ?? 'guided-0.1' });
       const usage = JSON.stringify(producer ? { tool_calls: 1, model_version: producer, llm_calls: 1, known_input_tokens: 0,
         known_output_tokens: 0, usage_unavailable_calls: 1 } : { tool_calls: 1 });
+      // One source through unique public keys, joined 1:1 to its owning episode; no customer-history scan.
+      const source = "FROM intake_handoffs h JOIN intake_episodes p ON p.episode_id=h.episode_id WHERE p.customer_id=? AND p.state=h.kind||'_handoff' "
+        + 'AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))';
+      const sourceParams = [customerId, previousProtocol, previousProtocol];
+      const authority = previousProtocol ? " AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=? AND expires_at>?)" : '';
+      const authorityParams = previousProtocol ? [sessionHash, customerId, now] : [];
       const results = await batch([
         ['INSERT INTO intake_episodes(episode_id,customer_id,session_ref,language,mode,state,customer_statement,'
-          + 'start_key,payload_hash,created_at,updated_at,expires_at,usage_json,reason,reason_source) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) '
+          + 'start_key,payload_hash,created_at,updated_at,expires_at,usage_json,reason,reason_source'
+          + (previousProtocol ? ',previous_handoff_id) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,h.handoff_id ' + source
+            + " AND h.status='closed' AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=p.customer_id AND expires_at>?) "
+            : ') VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ')
           + 'ON CONFLICT(customer_id,start_key) DO NOTHING',
-          episodeId, customerId, sessionRef, language, 'guided', 'selection_required', statement, key, payloadHash, now, now, expiresAt, usage, reason, 'customer'],
+          episodeId, customerId, sessionRef, language, 'guided', 'selection_required', statement, key, payloadHash, now, now, expiresAt, usage, reason, 'customer',
+          ...(previousProtocol ? [...sourceParams, sessionHash, now] : [])],
         ['INSERT INTO intake_turns(episode_id,turn_key,payload_hash,response_json) '
           + 'SELECT episode_id,?,?,? FROM intake_episodes WHERE episode_id=?', key, payloadHash, response, episodeId],
         ['INSERT INTO intake_events(episode_id,seq,event_json) '
           + 'SELECT episode_id,0,? FROM intake_episodes WHERE episode_id=?', event, episodeId],
         ['UPDATE intake_episodes SET updated_at=?,expires_at=? WHERE customer_id=? AND start_key=? '
-          + "AND payload_hash=? AND state='selection_required'", now, expiresAt, customerId, key, payloadHash],
+          + "AND payload_hash=? AND state='selection_required'" + authority, now, expiresAt, customerId, key, payloadHash, ...authorityParams],
         ['SELECT e.*,t.response_json FROM intake_episodes e JOIN intake_turns t '
-          + 'ON t.episode_id=e.episode_id AND t.turn_key=e.start_key WHERE e.customer_id=? AND e.start_key=?', customerId, key]
+          + 'ON t.episode_id=e.episode_id AND t.turn_key=e.start_key WHERE e.customer_id=? AND e.start_key=?' + authority, customerId, key, ...authorityParams],
+        ...(previousProtocol ? [['SELECT h.status ' + source, ...sourceParams]] : [])
       ]);
-      const episode = results.at(-1).results[0] ?? null;
+      const episode = results[4].results[0] ?? null;
       if (episode && episode.payload_hash !== payloadHash) return { conflict: true };
+      if (!episode && previousProtocol) {
+        const previous = results[5].results[0];
+        return { previousError: !previous ? 404 : previous.status !== 'closed' ? 409 : 401 };
+      }
       return { episode, replayed: episode?.episode_id !== episodeId };
     },
     /** Replace the pre-recorded unknown call with the adapter's measured usage while the episode is still open. */

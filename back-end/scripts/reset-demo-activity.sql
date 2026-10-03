@@ -4,6 +4,8 @@
 -- context cards and sample provenance stay until the seed version is replaced.
 -- Local use: npx wrangler d1 execute arabica-intake-demo --local --file scripts/reset-demo-activity.sql
 -- Remote use is the ADR-004 retention step (after a final event export); it is not run by tests or CI.
+-- Clear the optional episode -> previous handoff links first (0020), breaking the handoff -> episode FK cycle.
+UPDATE intake_episodes SET previous_handoff_id=NULL WHERE previous_handoff_id IS NOT NULL;
 DELETE FROM report_feedback;
 DELETE FROM handoff_status_history;
 DELETE FROM intake_events;
