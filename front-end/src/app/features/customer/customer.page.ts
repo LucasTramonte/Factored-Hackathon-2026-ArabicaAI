@@ -400,7 +400,7 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /**
    * A reason chip: fills the statement with its one-line sentence in the report language, unless the customer has typed
-   * their own words. ``other`` fills nothing and moves focus to the field; a lost or stolen card says at once to call the bank.
+   * their own words. ``other`` fills nothing; focus never moves (WCAG 3.2.2). A lost or stolen card says at once to call the bank.
    */
   pickReason(r: Reason): void {
     this.reason.set(r);
@@ -408,7 +408,6 @@ export class CustomerPage implements OnInit, OnDestroy {
     if (this.chatStatement.trim() === '' || this.chatStatement.trim() === this.prefill) {
       this.prefill = r === 'other' ? '' : this.lang.stringsFor(this.reportLang())[REASON_FILL[r]];
       this.chatStatement = this.prefill;
-      if (r === 'other') afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('#chat-statement')?.focus(), { injector: this.injector });
     }
     if (r === 'card_lost_or_stolen' && !this.log().some(l => 'key' in l && l.key === 'chatLostCard')) this.log.update(l => [...l, { from: 'bot', key: 'chatLostCard' }]);
   }
