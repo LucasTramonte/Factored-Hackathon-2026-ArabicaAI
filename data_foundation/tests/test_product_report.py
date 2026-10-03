@@ -1,12 +1,14 @@
 """Window, currency, suppression and identifier regressions for the product report."""
 import json
+import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import duckdb
 import pytest
 
 from data_foundation.scripts import run_product_report
-from data_foundation.src.product_report import build, render
+from data_foundation.src.product_report import _scores, build, render, suppress_small_cells, write_report
 
 IDS = ('CUST-1', 'CUST-2', 'CUST-3', 'CMP-1', 'CMP-2', 'CMP-3', 'CMP-4', 'CMP-5', 'CMP-6', 'INT-1', 'INT-2', 'INT-3', 'SRV-1', 'SRV-2', 'SRV-3')
 
@@ -76,6 +78,12 @@ def test_currencies_stay_apart_and_fx_is_flagged(report):
     assert (k2['direct_usd_cases'], k2['fx_estimated_cases'], k2['fx_estimated_usd'], k2['no_amount'], k2['amount_without_currency']) == (2, 1, 2.5, 1, 0)
 
 
+def test_scores_leave_out_surveys_without_a_score():
+    """A NULL main_score neither breaks sorting nor enters the count or the mean."""
+    result = _scores([{"score": 4, "surveys": 2}, {"score": None, "surveys": 5}, {"score": 2, "surveys": 2}])
+    assert result == {"n": 4, "mean": 3.0, "distribution": {"2": 2, "4": 2}}
+
+
 def test_workload_detail_and_csat_by_reason_keep_their_populations(report):
     """Mean duration uses observed durations only; each reason keeps its own CSAT n, split by resolution."""
     s = report['summary']
@@ -109,6 +117,49 @@ def test_small_cells_are_suppressed_and_no_identifier_is_published(report):
     assert not [i for i in IDS if i in published]
 
 
+def test_small_cells_publish_no_numerator_a_hidden_value_could_be_rebuilt_from(report):
+    """Every fixture segment is under 30: counts stay, rates and sums are null in the raw rows and the summary."""
+    for rows in (report['queries']['PR-08']['rows'], report['summary']['segments']):
+        for r in rows:
+            assert r['complaints'] < 30
+            assert [r[k] for k in ('unresolved', 'escalated', 'sla_known', 'sla_breached', 'closed_score_sum')] == [None] * 5
+    for rows in (report['queries']['PR-09']['rows'], report['summary']['segment_csat']):
+        assert all((r['score_sum'], r['top_score'], r['resolved']) == (None, None, None) for r in rows)
+    assert all(r['unresolved_share'] is None and r['closed_mean'] is None for r in report['summary']['segments'])
+
+
+def test_a_large_segment_still_hides_a_small_closed_case_mean():
+    """A segment with enough complaints keeps its rates, but under 30 scored closings loses only the score sum."""
+    results = {"PR-08": {"rows": [{"complaints": 539, "unresolved": 399, "escalated": 20, "sla_known": 539, "sla_breached": 82,
+                                   "closed_scored": 21, "closed_score_sum": 58.0}]},
+               "PR-09": {"rows": [{"surveys": 928, "score_sum": 2237, "top_score": 63, "resolved": 389}]}}
+    row = suppress_small_cells(results)["PR-08"]["rows"][0]
+    assert (row["unresolved"], row["closed_scored"], row["closed_score_sum"]) == (399, 21, None)
+    assert results["PR-09"]["rows"][0]["score_sum"] == 2237
+
+
+def test_committed_outputs_carry_no_real_identifier():
+    """The published JSON, HTML and manifest hold no ID shaped like the dataset's keys or agent codes.
+
+    Shapes come from Silver: an uppercase prefix, a hyphen and at least 8 letters or digits (CLI-, PRD-, AGT-, ...),
+    and employee codes E99999. Bare document and product numbers are not scanned: they look like aggregate totals.
+    """
+    published = Path(__file__).resolve().parents[1] / 'reports'
+    pattern = re.compile(r'\b(?:CLI|SUC|CMP|PRD|AGT|INT|TRS|SND|EVT|SES|SRV|TRX)-[A-Z0-9]{8,}\b|\bE\d{5}\b')
+    for name in ('product-report.json', 'product-report.html', 'product-manifest.json'):
+        assert not pattern.findall((published / name).read_text(encoding='utf-8')), name
+
+
+def test_published_baseline_page_matches_its_committed_aggregates(tmp_path):
+    """The committed HTML must be what the current code renders from the committed JSON, so a stale STYLE fails."""
+    published = Path(__file__).resolve().parents[1] / 'reports'
+    report = json.loads((published / 'product-report.json').read_text(encoding='utf-8'))
+    manifest = json.loads((published / 'product-manifest.json').read_text(encoding='utf-8'))
+    write_report(report, manifest, tmp_path)
+    for name in ('product-report.json', 'product-manifest.json', 'product-report.html'):
+        assert (tmp_path / name).read_bytes() == (published / name).read_bytes(), name
+
+
 def test_runner_refuses_existing_output_and_publishes_without_paths(tmp_path):
     """A run is immutable, spill is cleaned, and the shared manifest names no local path."""
     db = tmp_path / 'bank.duckdb'
@@ -128,5 +179,7 @@ def test_runner_refuses_existing_output_and_publishes_without_paths(tmp_path):
         run_product_report.main(options)
     manifest = json.loads((published / 'product-manifest.json').read_text(encoding='utf-8'))
     assert (manifest['database'], manifest['quality_run'], manifest['quality_checks']) == ('bank.duckdb', 'run-17/quality_results.json', 3)
+    assert manifest['silver_counts'] == {'dim_customers': 3, 'dim_fx_rates': 1, 'fact_call_center_interactions': 3,
+                                         'fact_complaints': 6, 'fact_satisfaction_surveys': 3}
     shared = ''.join((published / name).read_text(encoding='utf-8') for name in ('product-report.json', 'product-report.html', 'product-manifest.json'))
     assert str(tmp_path) not in shared and str(tmp_path).replace('\\', '/') not in shared
