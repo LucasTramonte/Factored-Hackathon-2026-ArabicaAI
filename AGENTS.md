@@ -33,12 +33,13 @@
 - S3 input is read-only. Keep credentials out of source, logs, image layers and commits. Generated DuckDB, Parquet, quality runs and temporary files stay ignored. Reviewed aggregate reports are committed only after reconciliation.
 - Public functions and classes need concise docstrings explaining purpose and important invariants. Keep commits scoped and state the tests run.
 - Never rewrite shared history: no force-push, no amending or rebasing a branch someone has reviewed. Leave unrelated working-tree changes untouched. PR titles are Conventional Commits, and tags and releases follow [`CONTRIBUTING.md`](CONTRIBUTING.md); an agent never tags, publishes a release or deploys without a person's go-ahead.
-- **Every PR, before it is opened, gets a label, an assignee and a reviewer.** No PR is opened without all three:
+- **Every PR, before it is opened, gets a label, an assignee, a reviewer and a milestone.** No PR is opened without all four:
   - **label:** one type label matching the branch prefix (`feat` → `enhancement`, `fix` → `bug`, `docs` → `documentation`, `eval` → `evaluation`, `data` → `data`, `chore` → `chore`; a `claude/` or `codex/` branch takes the label of its title's type), plus `accessibility` when it applies;
   - **assignee:** the person who owns the PR, normally its author;
-  - **reviewer:** at least one other teammate, chosen for the area (Manoella approves extractor behaviour and frozen labels).
+  - **reviewer:** at least one other teammate, chosen for the area (Manoella approves extractor behaviour and frozen labels);
+  - **milestone:** the next open version; `CONTRIBUTING.md` ("Versioning" and "When to release") says which.
 
-  Pass them when opening, for example `gh pr create --label documentation --assignee @me --reviewer Robertzu43`; `CONTRIBUTING.md` lists the labels.
+  Pass them when opening, for example `gh pr create --label documentation --assignee @me --reviewer Robertzu43 --milestone v0.3.0`; `CONTRIBUTING.md` lists the labels. After a merge, check the release cadence with [`.github/skills/release/SKILL.md`](.github/skills/release/SKILL.md) and tell a person when a release is due.
 
 ## Intake service rules
 
