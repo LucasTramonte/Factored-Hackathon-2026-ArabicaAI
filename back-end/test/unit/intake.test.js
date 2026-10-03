@@ -10,7 +10,7 @@ import { assertContract } from '../support/contract.js';
 
 const env = { ASSETS: { fetch: () => new Response('asset') } };
 const token = 'a'.repeat(64);
-const body = { language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
+const body = { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
   customer_statement: 'No reconozco este cargo.', idempotency_key: '0f8fad5b-d9cb-469f-a165-70867728950e' };
 
 function request(payload = body, { path = '/intake/start', method = 'POST', cookie = `demo_session=${token}` } = {}) {

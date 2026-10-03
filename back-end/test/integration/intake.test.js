@@ -5,7 +5,7 @@ import { client, base, closeReport } from '../support/client.js';
 import { assertContract } from '../support/contract.js';
 import { scorerPython } from '../../scripts/scorer-python.mjs';
 
-const startBody = (language = 'es') => ({ language, mode: 'guided', report_type: 'unrecognized_charge',
+const startBody = (language = 'es') => ({ language, mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
   customer_statement: language === 'es' ? 'No reconozco este cargo.' : 'Não reconheço esta cobrança.',
   idempotency_key: crypto.randomUUID() });
 

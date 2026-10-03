@@ -7,7 +7,7 @@ import { assertContract } from '../support/contract.js';
 import policy from '../../src/config/urgency.json' with { type: 'json' };
 
 const start = async c => {
-  const r = await c.call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
+  const r = await c.call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
     customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() });
   assert.equal(r.status, 201); return r.body.episode_id;
 };

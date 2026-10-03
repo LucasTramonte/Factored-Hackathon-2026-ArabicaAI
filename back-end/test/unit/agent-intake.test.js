@@ -22,7 +22,7 @@ async function setup(t) {
   const store = createStore({ prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
     batch: async statements => { db.exec('BEGIN'); try { const results = statements.map(s => s.all()); db.exec('COMMIT'); return results; } catch(e) { db.exec('ROLLBACK'); throw e; } } });
   const customer = (path, body, selected = store) => route(request(path, { method:'POST', cookie:`demo_session=${customerToken}`, body }), env, selected);
-  const start = async () => (await (await customer('/intake/start', { language:'pt', mode:'guided', report_type:'unrecognized_charge', customer_statement:'Não reconheço esta cobrança.', idempotency_key:crypto.randomUUID() })).json()).episode_id;
+  const start = async () => (await (await customer('/intake/start', { language:'pt', mode:'guided', report_type:'unrecognized_charge',reason:'not_mine', customer_statement:'Não reconheço esta cobrança.', idempotency_key:crypto.randomUUID() })).json()).episode_id;
   const finish = async (kind = 'complete', selected = store) => {
     const episode_id = await start();
     const body = kind === 'incomplete' ? { episode_id, kind, idempotency_key:crypto.randomUUID() }

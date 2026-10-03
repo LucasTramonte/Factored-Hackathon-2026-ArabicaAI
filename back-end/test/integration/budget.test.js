@@ -120,7 +120,7 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
   console.log('D1_BUDGET ' + JSON.stringify({ per_request: measured, customer_episode: episode }));
 });
 
-const startBody = () => ({ language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
+const startBody = () => ({ language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
   customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() });
 
 test('guided endpoints and complete and incomplete customer episodes preserve measured D1 budgets', async () => {

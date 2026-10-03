@@ -20,7 +20,7 @@ async function setup(t) {
   db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(token), 'customer', 'ana', Date.now() + 3600000);
   const store = createStore({ prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
     batch: async statements => { db.exec('BEGIN'); try { const results = statements.map(s => s.all()); db.exec('COMMIT'); return results; } catch(e) { db.exec('ROLLBACK'); throw e; } } });
-  const start = async () => { const res = await route(post('/intake/start', { language:'es',mode:'guided',report_type:'unrecognized_charge',customer_statement:'No reconozco este cargo.',idempotency_key:crypto.randomUUID() }),env,store); assert.equal(res.status,201); return (await res.json()).episode_id; };
+  const start = async () => { const res = await route(post('/intake/start', { language:'es',mode:'guided',report_type:'unrecognized_charge',reason:'not_mine',customer_statement:'No reconozco este cargo.',idempotency_key:crypto.randomUUID() }),env,store); assert.equal(res.status,201); return (await res.json()).episode_id; };
   return { db, store, start };
 }
 const confirm = episode_id => ({episode_id,transaction_id:'tx-ana',customer_confirmed:true,idempotency_key:crypto.randomUUID()});

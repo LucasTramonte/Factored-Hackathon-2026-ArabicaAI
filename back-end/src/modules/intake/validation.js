@@ -2,7 +2,9 @@
 /** RFC 4122 UUID (versions 1-8), the shape of every client key, episode id and protocol. Input is case-insensitive;
  * callers store and compare the lowercase form, so a case-changed retry replays instead of forking. */
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const KEYS = 'customer_statement,idempotency_key,language,mode,report_type';
+const KEYS = 'customer_statement,idempotency_key,language,mode,reason,report_type';
+/** Why the customer doesn't recognise the charge (ADR-010); the migration's CHECK mirrors this list. */
+export const REASONS = ['not_mine', 'duplicate', 'wrong_amount', 'cancelled_or_not_received', 'subscription', 'card_lost_or_stolen', 'other'];
 const invalid = detail => ({ error: { status: 422, detail } });
 
 /** Require exactly the guided report fields and 10–2000 well-formed Unicode code points, excluding U+0000 (SQLite length stops there). */

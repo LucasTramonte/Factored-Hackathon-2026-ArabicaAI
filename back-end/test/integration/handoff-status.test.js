@@ -9,7 +9,7 @@ const config = () => resolve(process.cwd(), 'wrangler.jsonc');
 async function signedInReport() {
   const ana = client({ authorization: 'Bearer ' + await idToken('demo-ana') });
   assert.equal((await ana.call('/auth/session', {})).status, 200);
-  const episode = (await ana.call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
+  const episode = (await ana.call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
     customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() })).body.episode_id;
   const receipt = await ana.call('/intake/handoff', { episode_id: episode, kind: 'incomplete', idempotency_key: crypto.randomUUID() });
   assert.equal(receipt.status, 201);

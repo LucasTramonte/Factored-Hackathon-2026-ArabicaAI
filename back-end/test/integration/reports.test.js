@@ -8,7 +8,7 @@ import { tokenHash } from '../../src/auth/session.js';
 
 async function customer(id = 'demo-ana') { const c = client(); assert.equal((await c.call('/demo/session', { customer_id: id })).status, 200); return c; }
 async function start(c) {
-  const r = await c.call('/intake/start', { language: 'pt', mode: 'guided', report_type: 'unrecognized_charge',
+  const r = await c.call('/intake/start', { language: 'pt', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
     customer_statement: 'Não reconheço esta cobrança.', idempotency_key: crypto.randomUUID() });
   assert.equal(r.status, 201); return r.body.episode_id;
 }

@@ -62,7 +62,7 @@ test('a failed read of the served purchases still accepts the report, with only 
   };
   assert.equal((await call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
   const confirm = async transaction_id => call('/intake/confirm', { transaction_id, customer_confirmed: true, idempotency_key: crypto.randomUUID(),
-    episode_id: (await call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
+    episode_id: (await call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
       customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() })).body.episode_id });
   const normal = await confirm('demo-tx-001');
   assert.equal(normal.status, 201); assert.equal(normal.body.kind, 'complete'); assert.equal(normal.body.urgency, 'normal');
