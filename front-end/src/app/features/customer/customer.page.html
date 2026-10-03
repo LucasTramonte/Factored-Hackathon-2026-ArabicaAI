@@ -202,14 +202,15 @@
                       <label class="ar-check" lang="en"><input type="radio" name="report-lang" value="en" [checked]="reportLang() === 'en'" (change)="chosenLang.set('en')" required> English</label>
                     </fieldset>
                   }
-                  <fieldset class="chat-reasons"><legend class="ar-field-label">{{ t().reasonLegend }}</legend>
+                  <fieldset class="chat-reasons" [attr.aria-describedby]="chatError() === t().chatReasonValidation ? 'chat-error' : null"><legend class="ar-field-label">{{ t().reasonLegend }}</legend>
                     @for (r of reasons; track r) {
                       <label class="ar-chip-choice"><input type="radio" name="reason" [value]="r" [checked]="reason() === r" (change)="pickReason(r)" required><span>{{ t()[reasonLabel[r]] }}</span></label>
                     }
                   </fieldset>
                   <label class="ar-field" for="chat-statement"><span class="ar-field-label">{{ t().describe }}</span></label>
                   <textarea class="ar-textarea" id="chat-statement" [(ngModel)]="chatStatement" name="chat-statement" rows="3" maxlength="2000" required
-                    [placeholder]="t().placeholder" [attr.aria-describedby]="chatError() ? 'chat-error' : null" [attr.aria-invalid]="chatError() ? true : null"></textarea>
+                    [placeholder]="t().placeholder" [attr.aria-describedby]="chatError() && chatError() !== t().chatReasonValidation ? 'chat-error' : null"
+                    [attr.aria-invalid]="chatError() && chatError() !== t().chatReasonValidation ? true : null"></textarea>
                 </fieldset>
                 <div class="report-actions chat-actions"><button type="button" class="ar-btn" (click)="send()" [disabled]="busy()">{{ frozen() ? t().retry : t().chatSend }}</button></div>
               }

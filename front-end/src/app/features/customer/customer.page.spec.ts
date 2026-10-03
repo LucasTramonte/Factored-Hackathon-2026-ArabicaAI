@@ -430,6 +430,18 @@ describe('CustomerPage', () => {
         expect(service.startIntake).not.toHaveBeenCalled();
       });
 
+      it('the missing-reason error describes the chips, not the statement', async () => {
+        const { fixture, p } = await chat();
+        p.chatStatement = 'No reconozco este cargo.';
+        await p.send();
+        const area = await textarea(fixture);
+        expect(p.chatError()).toBe(lang.t().chatReasonValidation);
+        expect(area.hasAttribute('aria-invalid')).toBeFalse();
+        expect(area.hasAttribute('aria-describedby')).toBeFalse();
+        expect(fixture.nativeElement.querySelector('fieldset.chat-reasons').getAttribute('aria-describedby')).toBe('chat-error');
+        expect(fixture.nativeElement.querySelector('#chat-error')).not.toBeNull();
+      });
+
       it('sends the checked reason with the start', async () => {
         page.pickReason('subscription');
         service.startIntake.and.resolveTo(started);

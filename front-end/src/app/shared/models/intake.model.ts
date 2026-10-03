@@ -1,7 +1,7 @@
 /** API shapes, kept in step with front-end/contracts/intake-api.schema.json. */
 import type { Strings } from '../i18n/lang.service'; // type-only: lang.service does not import this file, so no cycle
 
-/** Why the customer doesn't recognise the charge (ADR-010); ``not_mine`` is offered first. */
+/** Why the customer doesn't recognize the charge (ADR-010); ``not_mine`` is offered first. */
 export const REASONS = ['not_mine', 'duplicate', 'wrong_amount', 'cancelled_or_not_received', 'subscription', 'card_lost_or_stolen', 'other'] as const;
 export type Reason = typeof REASONS[number];
 /** Reason → short label key; shared by the customer chips and the agent view. */
