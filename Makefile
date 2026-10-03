@@ -133,14 +133,18 @@ intake-sample-slice:
 	--quality-report "$(INTAKE_DATA_DIR)/quality_runs/$(INTAKE_QUALITY_RUN)/quality_results.json" \
 	--business-date $(INTAKE_DATE) --seed-out "$(INTAKE_SEED)" --manifest-out "$(INTAKE_DATA_DIR)/intake_slice_manifest.json"
 
-COHORT_DB ?= data/full_local/latam_bank.duckdb
-COHORT_QUALITY ?= data/full_local/quality_runs/pr23-check/quality_results.json
+# The cohort reads only Gold, so this target builds Gold first from the Silver file and its quality run
+# (empty COHORT_QUALITY: the latest run for COHORT_DB, chosen by timestamp), then selects from it.
+COHORT_DB ?= $(DUCKDB_PATH)
+COHORT_GOLD ?= $(GOLD_PATH)
+COHORT_QUALITY ?=
 COHORT_AS_OF ?= 2026-06-17
 COHORT_OUT ?= data/gold_cohort/$(COHORT_AS_OF)
 
 intake-cohort-slice:
-	$(PYTHON) -m data_pipelines.gold.run_cohort build --db "$(COHORT_DB)" --quality-report "$(COHORT_QUALITY)" \
-	--as-of $(COHORT_AS_OF) --out "$(COHORT_OUT)"
+	$(PYTHON) -m data_pipelines.gold.run_gold --silver-db "$(COHORT_DB)" --gold-db "$(COHORT_GOLD)" \
+	$(if $(COHORT_QUALITY),--quality-report "$(COHORT_QUALITY)")
+	$(PYTHON) -m data_pipelines.gold.run_cohort build --gold-db "$(COHORT_GOLD)" --as-of $(COHORT_AS_OF) --out "$(COHORT_OUT)"
 
 # Local only. The remote load is a reviewed, manual step: run_cohort load --target remote, one part per UTC day.
 intake-cohort-seed-local:
