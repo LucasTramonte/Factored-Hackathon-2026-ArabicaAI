@@ -17,7 +17,7 @@ async function setup(t) {
   const dir = new URL('../../migrations/', import.meta.url);
   for (const file of readdirSync(dir).sort()) db.exec(readFileSync(new URL(file, dir), 'utf8'));
   db.exec("INSERT INTO customers(customer_id,display_name) VALUES('ana','Ana'),('bruno','Bruno'); INSERT INTO transactions VALUES('tx-ana','ana',NULL,'2026-06-17 12:00:00','Shop','10.00','ARS'),('tx-bruno','bruno',NULL,'2026-06-17 12:00:00','Other','20.00','ARS')");
-  db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(token), 'customer', 'ana', Date.now() + 3600000);
+  db.prepare('INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(await tokenHash(token), 'customer', 'ana', Date.now() + 3600000);
   const store = createStore({ prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
     batch: async statements => { db.exec('BEGIN'); try { const results = statements.map(s => s.all()); db.exec('COMMIT'); return results; } catch(e) { db.exec('ROLLBACK'); throw e; } } });
   const start = async () => { const res = await route(post('/intake/start', { language:'es',mode:'guided',report_type:'unrecognized_charge',reason:'not_mine',customer_statement:'No reconozco este cargo.',idempotency_key:crypto.randomUUID() }),env,store); assert.equal(res.status,201); return (await res.json()).episode_id; };
@@ -116,7 +116,7 @@ test('failed pre-insert persistence keeps owned episode attempt usage and elapse
 test('late session revocation or expiry preserves pending reservation until same-owner renewal',async t=>{
   const {db,store,start}=await setup(t);
   for(const pending of [false,true])for(const expiry of [false,true]){
-    db.prepare('INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)').run(await tokenHash(token),'customer','ana',Date.now()+3600000);
+    db.prepare('INSERT OR REPLACE INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(await tokenHash(token),'customer','ana',Date.now()+3600000);
     const episode=await start();const body=confirm(episode);
     if(pending)assert.equal((await route(post('/intake/confirm',body),env,{...store,readIntakeReceipt:async()=>{throw new Error('readback down');}})).status,503);
     const revoked={...store,readIntakeReceipt:async(...args)=>{const receipt=await store.readIntakeReceipt(...args);db.exec(expiry?'UPDATE sessions SET expires_at=1':'DELETE FROM sessions');return receipt;}};
@@ -124,7 +124,7 @@ test('late session revocation or expiry preserves pending reservation until same
     assert.equal((await store.findIntake('ana',episode)).state,'handoff_pending');
     assert.deepEqual(events(db).filter(e=>e.case_id===episode).map(e=>e.event),['intake_started']);
     const reserved=db.prepare('SELECT handoff_id FROM intake_handoffs WHERE episode_id=?').get(episode).handoff_id;
-    db.prepare('INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)').run(await tokenHash(token),'customer','ana',Date.now()+3600000);
+    db.prepare('INSERT OR REPLACE INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(await tokenHash(token),'customer','ana',Date.now()+3600000);
     const recovered=await route(post('/intake/confirm',body),env,store);assert.equal(recovered.status,200);const replayed=await recovered.json();assert.equal(replayed.replayed,true);
     assert.equal(db.prepare('SELECT handoff_id FROM intake_handoffs WHERE episode_id=?').get(episode).handoff_id,reserved);
     assert.equal(events(db).filter(e=>e.case_id===episode&&e.event==='intake_ended').length,1);
@@ -258,7 +258,7 @@ test('feedback delayed bodies and revocation immediately before the batch cannot
   const body = { protocol: receipt.protocol, easy: true };
   for (const mutation of ['DELETE FROM sessions', 'UPDATE sessions SET expires_at=1', "UPDATE sessions SET customer_id='bruno'", "UPDATE sessions SET actor='agent',customer_id=NULL"]) {
     for (const delayBody of [true, false]) {
-      db.prepare('INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)').run(hash, 'customer', 'ana', Date.now() + 3600000);
+      db.prepare('INSERT OR REPLACE INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(hash, 'customer', 'ana', Date.now() + 3600000);
       let changedStore;
       if (delayBody) {
         let authenticated;
@@ -279,7 +279,7 @@ test('feedback delayed bodies and revocation immediately before the batch cannot
       assert.equal(db.prepare('SELECT count(*) n FROM report_feedback').get().n, 0, 'no answer stored without live authority');
     }
   }
-  db.prepare('INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)').run(hash, 'customer', 'ana', Date.now() + 3600000);
+  db.prepare('INSERT OR REPLACE INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(hash, 'customer', 'ana', Date.now() + 3600000);
   assert.equal((await route(post('/reports/feedback', body), env, store)).status, 200, 'same report remains unanswered for renewal');
   const revokedReplay = { ...store, recordReportFeedback: (...args) => { db.exec('DELETE FROM sessions'); return store.recordReportFeedback(...args); } };
   assert.equal((await route(post('/reports/feedback', body), env, revokedReplay)).status, 401, 'existing answer is not exposed after revocation');

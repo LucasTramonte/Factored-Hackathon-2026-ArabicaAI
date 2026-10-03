@@ -42,7 +42,7 @@ async function setup(t) {
   const dir = new URL('../../migrations/', import.meta.url);
   for (const file of readdirSync(dir).sort()) db.exec(readFileSync(new URL(file, dir), 'utf8'));
   db.exec("INSERT INTO customers(customer_id,display_name) VALUES('ana','Ana'),('bruno','Bruno'); INSERT INTO transactions VALUES('tx-ana','ana',NULL,'2026-06-17 12:00:00','Shop','10.00','ARS'),('tx-bruno','bruno',NULL,'2026-06-17 12:00:00','Other','20.00','ARS')");
-  db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(token), 'customer', 'ana', Date.now() + 3600000);
+  db.prepare('INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(await tokenHash(token), 'customer', 'ana', Date.now() + 3600000);
   const d1 = { prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p.map(asD1)) }) }) }),
     batch: async statements => { db.exec('BEGIN'); try { const results = statements.map(s => s.all()); db.exec('COMMIT'); return results; } catch (e) { db.exec('ROLLBACK'); throw e; } } };
   // ``store.d1`` is the raw binding, for work that opens a store of its own (env.DB).
@@ -265,7 +265,7 @@ test('on: identity stays with the session; another customer cannot see or finish
   const { episode_id } = await res.json();
   assert.equal(db.prepare('SELECT customer_id FROM intake_episodes WHERE episode_id=?').get(episode_id).customer_id, 'ana');
   const other = 'b'.repeat(64);
-  db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(other), 'customer', 'bruno', Date.now() + 3600000);
+  db.prepare('INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(await tokenHash(other), 'customer', 'bruno', Date.now() + 3600000);
   const swap = await route(post('/intake/confirm', { episode_id, transaction_id: 'tx-bruno', customer_confirmed: true, idempotency_key: crypto.randomUUID() }, `demo_session=${other}`), env, store());
   assert.equal(swap.status, 404);
   assert.equal((await startIntake(post('/intake/start', startBody(), ''), env, store(), undefined, stubExtractor())).status, 401);
@@ -411,7 +411,7 @@ test('details shadow: a transport failure leaves the response unchanged and coun
 test('agent detail: model_reading shows whether the model read the case, as counts and version only', async t => {
   const { db, store } = await setup(t);
   const agent = 'c'.repeat(64);
-  db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(agent), 'agent', null, Date.now() + 3600000);
+  db.prepare('INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(await tokenHash(agent), 'agent', null, Date.now() + 3600000);
   const detail = async res => {
     const { protocol } = await res.json();
     const got = await route(new Request('https://demo.example/agent/intake-detail?protocol=' + protocol, { headers: { Cookie: `demo_agent_session=${agent}` } }), gate, store());

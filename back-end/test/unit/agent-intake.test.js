@@ -18,7 +18,7 @@ async function setup(t) {
   for (const file of readdirSync(dir).sort()) db.exec(readFileSync(new URL(file, dir), 'utf8'));
   db.exec("INSERT INTO customers(customer_id,display_name) VALUES('ana','Ana'),('bruno','Bruno'); INSERT INTO transactions VALUES('tx-ana','ana',NULL,'2026-06-17 12:00:00','Shop','10.00','ARS'),('tx-bruno','bruno',NULL,'2026-06-17 12:00:00','Other','20.00','ARS')");
   for (const [token, actor, owner] of [[customerToken,'customer','ana'],[agentToken,'agent',null]])
-    db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(token), actor, owner, Date.now() + 3600000);
+    db.prepare('INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(await tokenHash(token), actor, owner, Date.now() + 3600000);
   const store = createStore({ prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
     batch: async statements => { db.exec('BEGIN'); try { const results = statements.map(s => s.all()); db.exec('COMMIT'); return results; } catch(e) { db.exec('ROLLBACK'); throw e; } } });
   const customer = (path, body, selected = store) => route(request(path, { method:'POST', cookie:`demo_session=${customerToken}`, body }), env, selected);
@@ -195,7 +195,7 @@ test('detail summarises only the same customer\'s other reports and stamps the f
   const { db, finish, get } = await setup(t);
   // Bruno's report must never count in Ana's history (isolation), and the report itself is never in its own history.
   const brunoToken = 'c'.repeat(64);
-  db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(brunoToken), 'customer', 'bruno', Date.now() + 3600000);
+  db.prepare('INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(await tokenHash(brunoToken), 'customer', 'bruno', Date.now() + 3600000);
   const asBruno = (path, body) => route(request(path, { method: 'POST', cookie: `demo_session=${brunoToken}`, body }), env, createStore({
     prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
     batch: async st => { db.exec('BEGIN'); try { const r = st.map(s => s.all()); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } } }));

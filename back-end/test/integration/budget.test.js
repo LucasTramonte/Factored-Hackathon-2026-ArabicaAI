@@ -34,6 +34,11 @@ const CEILING = {
   agentLogin: [3, 6, 6, 1],
   // GET /audit/events (issue #69): no session read; one batch of two reads by primary key/rowid, at most limit + 1 rows each.
   audit: [2, 102, 0, 1],
+  // GET /admin/customers (ADR-007, decision 10): the session read, then the identities query above (every customers row:
+  // 16 measured here, about 800 with the cohort loaded). POST /admin/act-as: session, customerSource and context card
+  // reads, then rotateSession's batch with one admin_actions insert (row and index). Measured, no margin (ADR-004).
+  adminCustomers: [2, 17, 0, 2],
+  adminActAs: [8, 5, 8, 4],
   // The CHECK on intake_episodes.reason (migration 0016, ADR-010) adds one counted read to each statement that writes an
   // episode row, as 0004's CHECKs did: start 8 -> 9 and replay 6 -> 7 rows read, measured with and without it (ADR-004).
   // Migration 0018's index intake_episodes_owner_recent adds one write to the episode insert (11 -> 12).
@@ -132,6 +137,12 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
     .call('/demo/agent-session', {})).metrics);
   const audit = await client({ authorization: 'Bearer ' + await idToken('auditor@test', { groups: ['auditor'] }) }).call('/audit/events');
   assert.equal(audit.status, 200); measured.audit = within('audit', audit.metrics);
+  const admin = client({ authorization: 'Bearer ' + await idToken('demo-diego', { groups: ['admin'] }) });
+  assert.equal((await admin.call('/auth/session', {})).status, 200);
+  const customers = await admin.call('/admin/customers');
+  assert.equal(customers.status, 200); measured.adminCustomers = within('adminCustomers', customers.metrics);
+  const actAs = await admin.call('/admin/act-as', { customer_id: 'demo-ana' });
+  assert.equal(actAs.status, 200); measured.adminActAs = within('adminActAs', actAs.metrics);
   const episode = sum(measured, ['login', 'list', 'create']);
   console.log('D1_BUDGET ' + JSON.stringify({ per_request: measured, customer_episode: episode }));
 });

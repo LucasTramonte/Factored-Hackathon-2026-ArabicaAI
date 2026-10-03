@@ -25,7 +25,7 @@ Roberto, 29 September 2026. Proposed for Lucas (backend) and Manoella (tools). I
 | `language` | string | `es`, `pt` or `en` (English since [ADR-008](../ADRs/ADR-008-english-report-language.md)), the conversation language chosen at start |
 | `model_version` | string | rule or model identifier, e.g. `checklist-0.1`, `claude-fable-5-1@prompt-v3` |
 
-Authentication audit rows (`session_started`, `logged_out`, `session_expired`, `session_rejected`) live in `auth_events` (migration 0012) and are not intake events.
+Authentication audit rows (`session_started`, `logged_out`, `session_expired`, `session_rejected`) live in `auth_events` (migration 0012) and are not intake events. An admin's act-as (ADR-007, decision 10) writes one `admin_actions` row (migration 0021) with session references and the request id only.
 
 ## Events
 

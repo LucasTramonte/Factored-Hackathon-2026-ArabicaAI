@@ -22,6 +22,11 @@ const NOT_CONFIRMED = 'Acceptance not confirmed; retry with the same idempotency
  */
 export async function listIdentities(request, env, store) {
   if (env.DEMO_PICKER !== '1') return fail(404, 'Not found');
+  return identityList(store);
+}
+
+/** The committed identities, then the dataset cohort loaded in D1 (a D1 row never overrides a committed one); 503 if D1 fails. */
+export async function identityList(store) {
   let cohort;
   try { cohort = await store.listDatasetIdentities(COHORT_LIMIT); } catch { return fail(503, 'Demo identities are unavailable'); }
   const items = identities.customers.map(({ customer_id, display_name }) => ({ customer_id, display_name, country: null }));
@@ -30,6 +35,21 @@ export async function listIdentities(request, env, store) {
   }
   return json({ items });
 }
+
+/**
+ * Whether ``customerId`` may be served a session: a committed identity that is loaded, or a dataset customer in D1.
+ * Returns ``null`` when allowed, else the error response (422 not allowed, 503 a committed identity not loaded).
+ */
+export async function refuseIdentity(store, customerId) {
+  if (typeof customerId !== 'string' || !CUSTOMER_ID.test(customerId)) return fail(422, 'Select an allowed demo identity');
+  const source = await store.customerSource(customerId);
+  if (!COMMITTED.has(customerId) && source !== 'dataset') return fail(422, 'Select an allowed demo identity');
+  if (!source) return fail(503, 'Demo identity is not loaded');
+  return null;
+}
+
+/** The served context card for ``customerId``, or ``null`` when missing or malformed. */
+export const cardOf = async (store, customerId) => contextCard(await store.findContextCard(customerId));
 
 const LOCALE = /^(es|pt)(-[A-Za-z0-9]+)*$/;
 const LAST4 = /^[0-9]{4}$/;
@@ -67,11 +87,9 @@ export async function startCustomerSession(request, env, store) {
   const body = await readJsonBody(request);
   if (body.error) return body.error;
   const customerId = body.value?.customer_id;
-  if (typeof customerId !== 'string' || !CUSTOMER_ID.test(customerId)) return fail(422, 'Select an allowed demo identity');
   // A committed identity must be loaded; any other id is allowed only as a dataset customer in D1.
-  const source = await store.customerSource(customerId);
-  if (!COMMITTED.has(customerId) && source !== 'dataset') return fail(422, 'Select an allowed demo identity');
-  if (!source) return fail(503, 'Demo identity is not loaded');
+  const refused = await refuseIdentity(store, customerId);
+  if (refused) return refused;
   const card = contextCard(await store.findContextCard(customerId));
   return json({ customer_id: customerId, mode: 'simulated_login', context_card: card, roles: ['customer'] }, 200,
     { 'Set-Cookie': await startSession(request, store, 'customer', customerId) });
@@ -96,8 +114,9 @@ export async function startEmailSession(request, env, store, ctx, verify = verif
   }
   const card = contextCard(await store.findContextCard(customerId));
   const emailEnc = await encrypt(claims.email, env).catch(() => null);
+  // An admin's session is marked, so it may later list customers and act as one (ADR-007, decision 10).
   return json({ customer_id: customerId, mode: 'email_otp', context_card: card, roles: rolesOf(claims.groups) }, 200,
-    { 'Set-Cookie': await startSession(request, store, 'customer', customerId, emailEnc) });
+    { 'Set-Cookie': await startSession(request, store, 'customer', customerId, emailEnc, { admin: claims.groups.includes('admin') }) });
 }
 
 /** POST /auth/logout: revoke the presented customer session; always 204, so it reveals nothing. */

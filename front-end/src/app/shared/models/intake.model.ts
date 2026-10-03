@@ -145,7 +145,7 @@ export type Role = 'customer' | 'agent' | 'admin' | 'auditor';
 
 export interface CustomerSession {
   customer_id: string;
-  mode: 'simulated_login' | 'email_otp';
+  mode: 'simulated_login' | 'email_otp' | 'admin_act_as';
   context_card?: ContextCard | null;
   roles: Role[];
 }

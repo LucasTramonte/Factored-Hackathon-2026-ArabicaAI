@@ -43,14 +43,17 @@ export async function requireSession(request, store, actor) {
 /**
  * Create a session and return its Set-Cookie value. The presented token for this actor is revoked
  * and expired sessions are purged in the same atomic store call (one D1 round trip), which also stores
- * ``emailEnc`` (an encrypted address) when given.
+ * ``emailEnc`` (an encrypted address) when given. ``admin`` marks a session an admin opened; ``actAs`` (which
+ * needs a presented token) also records the admin action linking the two sessions by reference (ADR-007, decision 10).
  */
-export async function startSession(request, store, actor, customerId = null, emailEnc = null) {
+export async function startSession(request, store, actor, customerId = null, emailEnc = null, { admin = false, actAs = false } = {}) {
   const now = Date.now();
   const previous = readCookies(request)[COOKIE[actor]];
+  const oldHash = previous && TOKEN.test(previous) ? await tokenHash(previous) : null;
+  if (actAs && !oldHash) throw new Error('act-as needs the presented admin session');
   const token = newToken();
-  await store.rotateSession({ now, oldHash: previous && TOKEN.test(previous) ? await tokenHash(previous) : null,
-    newHash: await tokenHash(token), actor, customerId, expiresAt: now + SESSION_MS, emailEnc, requestId: requestId(request) });
+  await store.rotateSession({ now, oldHash, newHash: await tokenHash(token), actor, customerId, expiresAt: now + SESSION_MS, emailEnc,
+    requestId: requestId(request), admin, actAs });
   return cookieHeader(COOKIE[actor], token, request, SESSION_MS / 1000);
 }
 
