@@ -250,3 +250,125 @@ test('receipt feedback: one answer per own report, first answer stands, hostile 
   db.prepare("UPDATE intake_episodes SET customer_id='bruno'").run();
   const foreign=await send({protocol,easy:okBody.easy}); assert.equal(foreign.status,404);
 });
+
+test('feedback delayed bodies and revocation immediately before the batch cannot use captured authority', async t => {
+  const { db, store, start } = await setup(t);
+  const receipt = await (await route(post('/intake/handoff', { episode_id: await start(), kind: 'incomplete', idempotency_key: crypto.randomUUID() }), env, store)).json();
+  const hash = await tokenHash(token);
+  const body = { protocol: receipt.protocol, easy: true };
+  for (const mutation of ['DELETE FROM sessions', 'UPDATE sessions SET expires_at=1', "UPDATE sessions SET customer_id='bruno'", "UPDATE sessions SET actor='agent',customer_id=NULL"]) {
+    for (const delayBody of [true, false]) {
+      db.prepare('INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)').run(hash, 'customer', 'ana', Date.now() + 3600000);
+      let changedStore;
+      if (delayBody) {
+        let authenticated;
+        const ready = new Promise(done => { authenticated = done; });
+        let bodyStream;
+        const request = new Request('https://demo.example/reports/feedback', { method: 'POST', headers: { Cookie: `demo_session=${token}` }, duplex: 'half',
+          body: new ReadableStream({ start(controller) { bodyStream = controller; } }) });
+        changedStore = { ...store, findSession: async (...args) => { const current = await store.findSession(...args); authenticated(); return current; } };
+        const pending = route(request, env, changedStore);
+        await ready;
+        db.exec(mutation);
+        bodyStream.enqueue(new TextEncoder().encode(JSON.stringify(body))); bodyStream.close();
+        assert.equal((await pending).status, 401, mutation + ' while body delayed');
+      } else {
+        changedStore = { ...store, recordReportFeedback: (...args) => { db.exec(mutation); return store.recordReportFeedback(...args); } };
+        assert.equal((await route(post('/reports/feedback', body), env, changedStore)).status, 401, mutation + ' before insert');
+      }
+      assert.equal(db.prepare('SELECT count(*) n FROM report_feedback').get().n, 0, 'no answer stored without live authority');
+    }
+  }
+  db.prepare('INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)').run(hash, 'customer', 'ana', Date.now() + 3600000);
+  assert.equal((await route(post('/reports/feedback', body), env, store)).status, 200, 'same report remains unanswered for renewal');
+  const revokedReplay = { ...store, recordReportFeedback: (...args) => { db.exec('DELETE FROM sessions'); return store.recordReportFeedback(...args); } };
+  assert.equal((await route(post('/reports/feedback', body), env, revokedReplay)).status, 401, 'existing answer is not exposed after revocation');
+});
+
+test('receipt feedback summary preserves denominators, language and missingness at the acceptance cutoff', async t => {
+  const { db, store, start } = await setup(t);
+  const reports = [];
+  for (let i = 0; i < 6; i++) {
+    reports.push(await (await route(post('/intake/handoff', { episode_id: await start(), kind: 'incomplete', idempotency_key: crypto.randomUUID() }), env, store)).json());
+  }
+  const sinceMs = Date.parse('2026-10-03T00:00:00.000Z'), untilMs = sinceMs + 86400000;
+  for (const [i, r] of reports.entries()) {
+    db.prepare('UPDATE intake_episodes SET language=? WHERE episode_id=?').run(i < 3 ? 'es' : 'pt', r.episode_id);
+    db.prepare('UPDATE intake_handoffs SET accepted_at=? WHERE episode_id=?').run(new Date(i === 4 ? sinceMs - 1 : sinceMs + i).toISOString(), r.episode_id);
+  }
+  db.prepare("UPDATE intake_episodes SET state='handoff_pending' WHERE episode_id=?").run(reports[5].episode_id);
+  for (const [i, easy, at] of [[0, 1, sinceMs + 100], [1, 0, sinceMs + 101], [3, 1, untilMs]]) {
+    db.prepare('INSERT INTO report_feedback VALUES(?,?,?)').run(reports[i].protocol, easy, at);
+  }
+  assert.deepEqual((await store.reportFeedbackSummary({ sinceMs, untilMs })).map(r => ({ ...r })), [
+    { language: 'es', reports: 3, respondents: 2, unanswered: 1, thumbs_up: 1, thumbs_down: 1 },
+    { language: 'pt', reports: 1, respondents: 0, unanswered: 1, thumbs_up: 0, thumbs_down: 0 }
+  ]);
+  assert.deepEqual(await store.reportFeedbackSummary({ sinceMs: untilMs, untilMs: untilMs + 1 }), []);
+  for (const window of [{ sinceMs: -1, untilMs }, { sinceMs, untilMs: sinceMs }, { sinceMs, untilMs: Infinity }]) {
+    assert.throws(() => store.reportFeedbackSummary(window), /Invalid feedback window/);
+  }
+});
+
+test('expired pending confirmations release the charge and cannot acknowledge after a new report', async t => {
+  const { db, store, start } = await setup(t);
+  const episodeId = await start(); const body = confirm(episodeId);
+  const failedRead = { ...store, readIntakeReceipt: async () => { throw new Error('readback down'); } };
+  assert.equal((await route(post('/intake/confirm', body), env, failedRead)).status, 503);
+  const cutoff = Date.now() - 3600000;
+  db.prepare('UPDATE intake_handoffs SET accepted_at=? WHERE episode_id=?').run(new Date(cutoff).toISOString(), episodeId);
+  assert.equal(await store.openReportForTransaction('ana', 'tx-ana', cutoff + 3600000), null, 'the exact one-hour boundary is expired');
+  const episode = await store.findIntake('ana', episodeId);
+  const receipt = await store.readIntakeReceipt('ana', episodeId, { sessionHash: await tokenHash(token), now: Date.now() });
+  const replacement = await route(post('/intake/confirm', confirm(await start())), env, store);
+  assert.equal(replacement.status, 201, 'an expired pending reservation does not block a fresh report');
+  const before = db.prepare('SELECT total_changes() n').get().n;
+  assert.deepEqual(await store.finishIntakeHandoff({ customerId: 'ana', episode, receipt, sessionHash: await tokenHash(token),
+    now: Date.now(), operationDuration: 0, toolCalls: 0 }), { acknowledged: false, emailId: null }, 'the SQL batch refuses a stale acknowledgement');
+  assert.equal(db.prepare('SELECT total_changes() n').get().n, before, 'expired acknowledgement writes nothing');
+  const retry = await route(post('/intake/confirm', body), env, store);
+  assert.equal(retry.status, 409); assert.equal((await retry.json()).detail, 'Reservation expired; start a new report');
+  assert.equal((await store.findIntake('ana', episodeId)).state, 'handoff_pending', 'reservation retained for audit and denominator');
+  assert.deepEqual(events(db).filter(e => e.case_id === episodeId).map(e => e.event), ['intake_started']);
+  assert.equal(db.prepare("SELECT count(*) n FROM intake_episodes WHERE state='complete_handoff'").get().n, 1);
+});
+
+test('acknowledged reports never expire at the pending cutoff and their receipts still replay', async t => {
+  const { db, store, start } = await setup(t); const body = confirm(await start());
+  const first = await route(post('/intake/confirm', body), env, store); assert.equal(first.status, 201);
+  db.prepare('UPDATE intake_handoffs SET accepted_at=?').run(new Date(Date.now() - 7200000).toISOString());
+  assert.ok(await store.openReportForTransaction('ana', 'tx-ana'));
+  assert.equal((await route(post('/intake/confirm', confirm(await start())), env, store)).status, 409);
+  assert.equal((await route(post('/intake/confirm', body), env, store)).status, 200);
+});
+
+test('a delayed pre-expiry acknowledgement stays superseded after its replacement is reserved, accepted or closed', async t => {
+  const { db, store, start } = await setup(t);
+  const failedRead = { ...store, readIntakeReceipt: async () => { throw new Error('readback down'); } };
+  const firstEpisode = await start(); const firstBody = confirm(firstEpisode);
+  assert.equal((await route(post('/intake/confirm', firstBody), env, failedRead)).status, 503);
+  const accepted = Date.now() - 3600000 - 100;
+  db.prepare('UPDATE intake_handoffs SET accepted_at=? WHERE episode_id=?').run(new Date(accepted).toISOString(), firstEpisode);
+  // This request captured its clock before expiry, then its D1 batch was delayed behind the replacement.
+  const oldNow = accepted + 3600000 - 1, sessionHash = await tokenHash(token);
+  const episode = await store.findIntake('ana', firstEpisode);
+  const receipt = await store.readIntakeReceipt('ana', firstEpisode, { sessionHash, now: oldNow });
+  const replacementEpisode = await start(); const replacementBody = confirm(replacementEpisode);
+  assert.equal((await route(post('/intake/confirm', replacementBody), env, failedRead)).status, 503);
+  const refuseOld = async label => {
+    const before = db.prepare('SELECT total_changes() n').get().n;
+    assert.deepEqual(await store.finishIntakeHandoff({ customerId: 'ana', episode, receipt, sessionHash,
+      now: oldNow, operationDuration: 0, toolCalls: 0 }), { acknowledged: false, emailId: null }, label);
+    assert.equal(db.prepare('SELECT total_changes() n').get().n, before, 'refused delayed acknowledgement writes nothing');
+    assert.equal((await store.findIntake('ana', firstEpisode)).state, 'handoff_pending');
+    assert.deepEqual(events(db).filter(e => e.case_id === firstEpisode).map(e => e.event), ['intake_started']);
+  };
+  await refuseOld('a newer pending reservation supersedes the old one');
+  const replacement = await route(post('/intake/confirm', replacementBody), env, store);
+  assert.equal(replacement.status, 200); const nextReceipt = await replacement.json();
+  await refuseOld('a newer accepted report supersedes the old one');
+  await closeReport(store, nextReceipt.protocol);
+  await refuseOld('closing the replacement never resurrects the superseded reservation');
+  assert.equal((await route(post('/intake/confirm', replacementBody), env, store)).status, 200, 'the acknowledged replacement still replays');
+  assert.equal((await route(post('/intake/confirm', firstBody), env, store)).status, 409, 'the old customer retry explains expiration');
+});

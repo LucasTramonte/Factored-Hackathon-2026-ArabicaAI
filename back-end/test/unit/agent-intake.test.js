@@ -220,3 +220,59 @@ test('detail summarises only the same customer\'s other reports and stamps the f
   assert.equal(again.first_opened_at, body.first_opened_at, 'a later read keeps the first open time');
   assert.equal(db.prepare('SELECT count(*) n FROM intake_handoffs WHERE first_opened_at IS NOT NULL').get().n, 2, 'only opened reports are stamped');
 });
+
+test('a full customer episode window stays partial when starts and pending reservations hide older reports', async t => {
+  const { db, start, finish, store, get } = await setup(t);
+  const reports = [];
+  const created = Date.UTC(2026, 9, 3, 12);
+  for (let i = 0; i < 30; i++) {
+    const report = await finish('incomplete'); reports.push(report);
+    db.prepare('UPDATE intake_episodes SET created_at=? WHERE episode_id=?').run(created + i, report.episode_id);
+    db.prepare('UPDATE intake_handoffs SET accepted_at=? WHERE episode_id=?').run(new Date(created + i).toISOString(), report.episode_id);
+  }
+  const read = async protocol => {
+    const body = await (await get('/agent/intake-detail?protocol=' + protocol)).json();
+    assertContract('agentIntakeDetail', body); return body;
+  };
+  const old = await read(reports[0].receipt.protocol);
+  assert.equal(old.customer_history.reports, 20, 'opening an old report still caps its other reports at 20');
+  assert.equal(old.customer_history.has_more, true);
+
+  for (let i = 0; i < 5; i++) {
+    const episode_id = i < 2
+      ? (await finish('incomplete', { ...store, readIntakeReceipt: async () => { throw new Error('lost readback'); } })).episode_id
+      : await start();
+    db.prepare('UPDATE intake_episodes SET created_at=? WHERE episode_id=?').run(created + 30 + i, episode_id);
+    if (i === 2 || i === 3) db.prepare("UPDATE intake_episodes SET state='abandoned' WHERE episode_id=?").run(episode_id);
+  }
+  db.prepare("UPDATE intake_handoffs SET status='closed',urgency='high' WHERE episode_id=?").run(reports[28].episode_id);
+  const mixed = await read(reports[29].receipt.protocol);
+  assert.deepEqual(mixed.customer_history, { reports: 15, open: 14, high_urgency: 1, last_status: 'closed',
+    last_accepted_at: new Date(created + 28).toISOString(), has_more: true }, 'only acknowledged other reports count; the full raw window warns of omissions');
+
+  for (let i = 0; i < 21; i++) {
+    const episode_id = await start();
+    db.prepare("UPDATE intake_episodes SET state='abandoned',created_at=? WHERE episode_id=?").run(created + 40 + i, episode_id);
+  }
+  const obscured = await read(reports[29].receipt.protocol);
+  assert.deepEqual(obscured.customer_history, { reports: 0, open: 0, high_urgency: 0, last_status: null, last_accepted_at: null, has_more: true },
+    'zero visible reports in a saturated window never means this is the first report');
+  assert.equal(obscured.first_opened_at, mixed.first_opened_at);
+});
+
+test('simultaneous first opens write one epoch-ms stamp and SQL pickup preserves milliseconds', async t => {
+  const { db, store, finish } = await setup(t);
+  const { receipt } = await finish('incomplete');
+  const accepted = '2026-10-03T12:00:00.123Z', now = Date.parse(accepted) + 4567;
+  db.prepare('UPDATE intake_handoffs SET accepted_at=? WHERE handoff_id=?').run(accepted, receipt.protocol);
+  const changes = () => db.prepare('SELECT total_changes() AS n').get().n;
+  const before = changes();
+  const [first, concurrent] = await Promise.all([store.findIntakeHandoff(receipt.protocol, now), store.findIntakeHandoff(receipt.protocol, now + 100)]);
+  assert.equal(first.first_opened_at, now); assert.equal(concurrent.first_opened_at, now);
+  assert.equal(changes(), before + 1, 'concurrent opens stamp only once');
+  const pickup = db.prepare('SELECT typeof(first_opened_at) AS unit,first_opened_at - '
+    + 'CAST(ROUND((julianday(accepted_at)-2440587.5)*86400000) AS INTEGER) AS pickup_ms FROM intake_handoffs WHERE handoff_id=?').get(receipt.protocol);
+  assert.equal(pickup.unit, 'integer'); assert.equal(pickup.pickup_ms, 4567);
+  assert.equal((await store.findIntakeHandoff(receipt.protocol, now + 1000)).first_opened_at, now);
+  assert.equal(changes(), before + 1, 'later reads write nothing');
+});

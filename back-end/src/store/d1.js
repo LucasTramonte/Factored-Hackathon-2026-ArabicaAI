@@ -6,7 +6,7 @@
  * queries, rows read, rows written and round trips for the current request; the budget tests use it.
  * A batch is one round trip and one atomic transaction.
  */
-import { tokenHash } from '../auth/session.js';
+import { SESSION_MS, tokenHash } from '../auth/session.js';
 
 /** Export cursors are server-minted episode ids: lowercase RFC 4122 UUIDs, so text order matches the keyset. */
 const EPISODE_CURSOR = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -45,10 +45,11 @@ const REASON = "CASE WHEN e.reason_source='customer' THEN e.reason END AS reason
 
 /**
  * A confirmed case's report that no person has closed yet, counting a reservation still ``handoff_pending`` (its
- * acknowledgement was lost and a same-key retry will finish it), so a second report can't slip in meanwhile.
+ * acknowledgement was lost and a same-key retry can finish it for one session lifetime). Expired reservations
+ * no longer block the charge and cannot later be acknowledged; acknowledged reports never expire here.
  */
 const OPEN_REPORT = 'SELECT 1 FROM cases c JOIN intake_handoffs oh ON oh.complete_case_id=c.case_id JOIN intake_episodes oe ON oe.episode_id=oh.episode_id';
-const STILL_OPEN = "oh.status<>'closed' AND oe.state IN ('handoff_pending','complete_handoff')";
+const STILL_OPEN = "oh.status<>'closed' AND (oe.state='complete_handoff' OR (oe.state='handoff_pending' AND oh.accepted_at>?))";
 
 /** The agent detail summarises at most this many of the customer's other, newest reports. */
 const HISTORY_REPORTS = 20;
@@ -88,7 +89,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         // One open report per charge, checked inside the batch: D1 runs batches one at a time, so of two confirmations
         // racing on the same charge only the first inserts a case; the second reserves nothing and is answered 409.
         + ' AND NOT EXISTS(' + OPEN_REPORT + ' WHERE c.customer_id=e.customer_id AND c.transaction_id=t.transaction_id AND ' + STILL_OPEN + ')',
-        caseId, 'intake:' + episodeId, completeCase?.transaction_id ?? '', ...params
+        caseId, 'intake:' + episodeId, completeCase?.transaction_id ?? '', ...params, new Date(now - SESSION_MS).toISOString()
       ]] : []),
       ['INSERT INTO intake_handoffs(handoff_id,episode_id,complete_case_id,turn_key,payload_hash,kind,tool_status,'
         + 'evidence_json,actions_json,questions_json,destination,priority,accepted_at,usage_json,reference_short,urgency) '
@@ -224,11 +225,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       + 'WHERE customer_id=? AND transaction_id=?', customerId, transactionId),
     /**
      * Whether this customer has a complete report on the charge that no person has closed yet, acknowledged or still
-     * pending. The confirm batch repeats this check atomically (``reserveIntakeHandoff``); this read answers fast. Reads only
+     * pending within one session lifetime. The confirm batch repeats this check atomically (``reserveIntakeHandoff``); this read answers fast. Reads only
      * that charge's cases (index ``cases_customer_transaction``, migration 0011), never the customer's whole history.
      */
-    openReportForTransaction: (customerId, transactionId) => first(
-      OPEN_REPORT + ' WHERE c.customer_id=? AND c.transaction_id=? AND ' + STILL_OPEN + ' LIMIT 1', customerId, transactionId),
+    openReportForTransaction: (customerId, transactionId, now = Date.now()) => first(
+      OPEN_REPORT + ' WHERE c.customer_id=? AND c.transaction_id=? AND ' + STILL_OPEN + ' LIMIT 1', customerId, transactionId, new Date(now - SESSION_MS).toISOString()),
     /** Read a reservation only through its owning episode. */
     findOwnedIntakeHandoff: (customerId, episodeId) => first(
       'SELECT h.* FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.episode_id=?', customerId, episodeId),
@@ -273,6 +274,17 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       const reference = receipt.complete_case_id ?? receipt.handoff_id;
       const emailId = crypto.randomUUID();
       const complete = receipt.kind === 'complete';
+      // Check both age and persisted charge ownership in every pending write: an acknowledgement captured before
+      // expiry can arrive after its replacement. A newer reservation permanently supersedes this pending one,
+      // even after a person closes the replacement. Already acknowledged receipts still replay without writes.
+      const cutoff = new Date(now - SESSION_MS).toISOString();
+      // A stored completed episode only replays: SQL pending predicates prevent every write, so it needs no charge scan.
+      const checkPendingCharge = complete && episode.state !== 'complete_handoff';
+      const pendingAuthority = authority + (checkPendingCharge ? ' AND ?>? AND NOT EXISTS(' + OPEN_REPORT
+        + ' WHERE c.customer_id=? AND c.transaction_id=(SELECT transaction_id FROM cases WHERE case_id=? AND customer_id=?) '
+        + 'AND oh.handoff_id<>? AND (oh.accepted_at>? OR ' + STILL_OPEN + '))' : '');
+      const pendingParams = [...authorityParams, ...(checkPendingCharge ? [receipt.accepted_at, cutoff,
+        customerId, receipt.complete_case_id, customerId, receipt.handoff_id, receipt.accepted_at, cutoff] : [])];
       const extras = [
         ...(complete ? [{ event:'transaction_confirmed',transaction_ref:receipt.handoff_id }] : []),
         { event:'handoff_created',kind:receipt.kind,case_ref:reference,tool_status:receipt.tool_status },
@@ -286,15 +298,15 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       const results = await batch([
         ["UPDATE intake_handoffs SET usage_json=json_set(usage_json,'$.tool_calls',json_extract(usage_json,'$.tool_calls')+?,"
           + "'$.operation_duration_ms',json_extract(usage_json,'$.operation_duration_ms')+?) WHERE handoff_id=? "
-          + "AND EXISTS(SELECT 1 FROM intake_episodes WHERE episode_id=? AND customer_id=? AND state='handoff_pending')" + authority,
-          toolCalls,operationDuration,receipt.handoff_id,episode.episode_id,customerId,...authorityParams],
+          + "AND EXISTS(SELECT 1 FROM intake_episodes WHERE episode_id=? AND customer_id=? AND state='handoff_pending')" + pendingAuthority,
+          toolCalls,operationDuration,receipt.handoff_id,episode.episode_id,customerId,...pendingParams],
         ...extras.map((extra,index) => [
           'INSERT INTO intake_events(episode_id,seq,event_json) SELECT e.episode_id,?,'
           + (extra.event === 'intake_ended' ? "json_set(?,'$.tool_calls',(SELECT json_extract(usage_json,'$.tool_calls') FROM intake_handoffs WHERE episode_id=e.episode_id))" : '?')
           + ' FROM intake_episodes e '
           + "WHERE e.customer_id=? AND e.episode_id=? AND e.state='handoff_pending' "
           + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=e.episode_id) '
-          + authority + ' ON CONFLICT(episode_id,seq) DO NOTHING', receipt.next_seq+index,JSON.stringify({...base,seq:receipt.next_seq+index,...extra}),customerId,episode.episode_id,receipt.handoff_id,...authorityParams
+          + pendingAuthority + ' ON CONFLICT(episode_id,seq) DO NOTHING', receipt.next_seq+index,JSON.stringify({...base,seq:receipt.next_seq+index,...extra}),customerId,episode.episode_id,receipt.handoff_id,...pendingParams
         ]),
         // Before the state change, so only the acknowledgement that moves the episode out of handoff_pending queues it.
         ["INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) "
@@ -302,11 +314,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + "WHERE e.customer_id=? AND e.episode_id=? AND e.state='handoff_pending' "
           + 'AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=e.episode_id) '
           // A language the templates lack skips the email instead of failing the outbox CHECK and rolling back the handoff.
-          + "AND e.language IN ('es','pt','en') AND EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id)" + authority + ' RETURNING message_id',
-          emailId,now,receipt.reference_short ?? reference,customerId,episode.episode_id,receipt.handoff_id,...authorityParams],
+          + "AND e.language IN ('es','pt','en') AND EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id)" + pendingAuthority + ' RETURNING message_id',
+          emailId,now,receipt.reference_short ?? reference,customerId,episode.episode_id,receipt.handoff_id,...pendingParams],
         ['UPDATE intake_episodes SET state=?,updated_at=? WHERE customer_id=? AND episode_id=? '
-          + "AND state='handoff_pending' AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=intake_episodes.episode_id)" + authority,
-          complete ? 'complete_handoff' : receipt.kind === 'technical' ? 'technical_handoff' : 'incomplete_handoff',now,customerId,episode.episode_id,receipt.handoff_id,...authorityParams],
+          + "AND state='handoff_pending' AND EXISTS(SELECT 1 FROM intake_handoffs WHERE handoff_id=? AND episode_id=intake_episodes.episode_id)" + pendingAuthority,
+          complete ? 'complete_handoff' : receipt.kind === 'technical' ? 'technical_handoff' : 'incomplete_handoff',now,customerId,episode.episode_id,receipt.handoff_id,...pendingParams],
         ['SELECT 1 AS acknowledged FROM intake_episodes e JOIN intake_handoffs h USING(episode_id) '
           + "WHERE e.customer_id=? AND e.episode_id=? AND h.handoff_id=? AND e.state IN ('complete_handoff','technical_handoff','incomplete_handoff')" + authority,
           customerId,episode.episode_id,receipt.handoff_id,...authorityParams]
@@ -428,18 +440,34 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       + "WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
       + 'ORDER BY h.accepted_at DESC,protocol LIMIT ?', customerId, limit),
     /**
-     * Record this customer's one receipt answer for an own acknowledged report (migration 0019), then read what is
-     * stored, in one batch: the first answer stands, so a concurrent or repeated answer inserts nothing. Returns
-     * ``{ easy, created_at }``, or null when the report is missing or another customer's (they look the same).
+     * Record the first answer for an own acknowledged report, then read it back in one atomic batch. Both statements
+     * recheck the same customer's live session, so delayed bodies or revocation cannot use captured authority.
+     * Returns ``{ easy, created_at }``, or null for lost authority, a missing report or a foreign report.
      */
-    recordReportFeedback: async (customerId, protocol, easy, now) => {
+    recordReportFeedback: async (customerId, protocol, easy, now, sessionHash) => {
       const mine = "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
-        + 'AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))';
+        + 'AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?)) '
+        + "AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=e.customer_id AND expires_at>?)";
+      const params = [customerId, protocol, protocol, sessionHash, now];
       const [, stored] = await batch([
         ['INSERT INTO report_feedback(handoff_id,easy,created_at) SELECT h.handoff_id,?,? ' + mine + ' ON CONFLICT(handoff_id) DO NOTHING',
-          easy ? 1 : 0, now, customerId, protocol, protocol],
-        ['SELECT f.easy,f.created_at FROM report_feedback f WHERE f.handoff_id=(SELECT h.handoff_id ' + mine + ')', customerId, protocol, protocol]]);
+          easy ? 1 : 0, now, ...params],
+        ['SELECT f.easy,f.created_at FROM report_feedback f WHERE f.handoff_id=(SELECT h.handoff_id ' + mine + ')', ...params]]);
       return stored.results[0] ?? null;
+    },
+    /**
+     * Aggregate receipt feedback by report language over an acknowledged-report acceptance window [sinceMs, untilMs).
+     * One-to-one handoff/episode/feedback joins preserve report counts; answers after the cutoff remain unknown. SQL
+     * performs the grouping and returns at most three rows, without customer identifiers or statements.
+     */
+    reportFeedbackSummary: ({ sinceMs, untilMs }) => {
+      if (!Number.isSafeInteger(sinceMs) || sinceMs < 0 || !Number.isSafeInteger(untilMs) || untilMs <= sinceMs) throw new Error('Invalid feedback window');
+      return all('SELECT e.language,COUNT(*) AS reports,COUNT(f.handoff_id) AS respondents,'
+        + 'COUNT(*)-COUNT(f.handoff_id) AS unanswered,COALESCE(SUM(f.easy=1),0) AS thumbs_up,COALESCE(SUM(f.easy=0),0) AS thumbs_down '
+        + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+        + 'LEFT JOIN report_feedback f ON f.handoff_id=h.handoff_id AND f.created_at<? '
+        + "WHERE e.state=h.kind||'_handoff' AND h.accepted_at>=? AND h.accepted_at<? GROUP BY e.language ORDER BY e.language",
+        untilMs, new Date(sinceMs).toISOString(), new Date(untilMs).toISOString());
     },
     /**
      * One acknowledged report of this customer (same predicate as ``listCustomerHandoffs``) with its episode language
@@ -453,7 +481,8 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /**
      * One acknowledged handoff by public ``protocol``, in one round trip: the first read stamps ``first_opened_at``
      * (migration 0018; later reads keep it), then the detail row, then a summary of the same customer's *other*
-     * acknowledged reports among their newest episodes (at most ``HISTORY_REPORTS``; ``has_more`` when that many),
+     * acknowledged reports among their newest 21 episodes (at most ``HISTORY_REPORTS``; ``has_more`` when the episode
+     * window or report bound fills, even when pending/abandoned starts use slots),
      * which names no customer. Optional complete evidence
      * is one-to-one and owner-scoped; missing evidence never drops a handoff. ``model_version`` and ``llm_calls`` come
      * from the episode's usage (set only by shadow extraction), never the model's output.
@@ -472,19 +501,21 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + 'LEFT JOIN transactions t ON t.transaction_id=c.transaction_id AND t.customer_id=e.customer_id '
           + "WHERE e.state=h.kind||'_handoff' AND " + match, protocol, protocol],
         // The customer's newest 21 episodes (index intake_episodes_owner_recent), so the read stays bounded however long
-        // their history is; at most 20 other acknowledged reports come back, newest first.
+        // their history is. Keep empty/pending/current slots as null rows internally, so a full window is still
+        // marked partial even when it contains fewer than 20 other acknowledged reports. No identifier leaves SQL.
         ['WITH me AS (SELECT e.customer_id,h.handoff_id FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE ' + match + ') '
           + 'SELECT h.status,h.urgency,h.accepted_at FROM (SELECT episode_id,state FROM intake_episodes '
           + 'WHERE customer_id=(SELECT customer_id FROM me) ORDER BY created_at DESC LIMIT 21) e '
-          + "JOIN intake_handoffs h ON h.episode_id=e.episode_id AND e.state=h.kind||'_handoff' "
-          + 'WHERE h.handoff_id<>(SELECT handoff_id FROM me) ORDER BY h.accepted_at DESC LIMIT ' + HISTORY_REPORTS,
+          + "LEFT JOIN intake_handoffs h ON h.episode_id=e.episode_id AND e.state=h.kind||'_handoff' "
+          + 'AND h.handoff_id<>(SELECT handoff_id FROM me) ORDER BY h.accepted_at DESC,h.handoff_id',
           protocol, protocol]]);
       const row = detail.results[0];
       if (!row) return null;
-      const others = history.results;
+      const others = history.results.filter(o => o.status !== null).slice(0, HISTORY_REPORTS);
       return { ...row, customer_history: { reports: others.length, open: others.filter(o => o.status !== 'closed').length,
         high_urgency: others.filter(o => o.urgency === 'high').length, last_status: others[0]?.status ?? null,
-        last_accepted_at: others[0]?.accepted_at ?? null, has_more: others.length === HISTORY_REPORTS } };
+        last_accepted_at: others[0]?.accepted_at ?? null,
+        has_more: history.results.length === HISTORY_REPORTS + 1 || others.length === HISTORY_REPORTS } };
     },
     /**
      * Move one acknowledged handoff (public ``protocol``) from ``from`` to ``to`` in one atomic batch: a history row,
