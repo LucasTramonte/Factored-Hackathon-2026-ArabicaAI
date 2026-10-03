@@ -73,6 +73,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** True while the identity list is on its way, so the sign-in screen never looks stuck. */
   readonly identitiesLoading = signal(false);
   readonly chatOpen = signal(false);
+  /** The chat was opened from the "?" entry: no charge is preselected and "I can't find it" is the primary action. */
+  readonly general = signal(false);
   readonly chosenLang = signal<IntakeLang | null>(null);
   /** The customer's choice, else the interface language: every interface language is a report language (ADR-008). */
   readonly reportLang = computed<IntakeLang>(() => this.chosenLang() ?? this.lang.lang());
@@ -149,6 +151,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   });
   readonly displayName = computed(() => this.identities().find(i => i.customer_id === this.client())?.display_name ?? this.client());
   readonly initials = computed(() => initialsOf(this.displayName()) || 'AA');
+  /** The customer's first name for the guide's greeting. */
+  readonly firstName = computed(() => this.card()?.first_name || this.displayName());
 
   constructor() {
     // Move focus to the receipt, the choose step (it replaces the focused Send button), the details field (it replaces the
@@ -359,16 +363,17 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   /**
-   * Open the chat; from a charge row, that charge is preselected (the customer still confirms it). A row's Report on a
-   * finished chat (receipt or ended) starts a new report on that charge; nothing changes while a request is frozen.
+   * Open the chat; from a charge row, that charge is preselected (the customer still confirms it); from the "?" entry
+   * (``general``) none is. Either on a finished chat (receipt or ended) starts a new report; nothing changes while a request is frozen.
    */
-  openChat(transactionId?: string): void {
+  openChat(transactionId?: string, general = false): void {
     this.opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
-    const restart = !!transactionId && !this.busy() && !this.frozen() && (this.chatStep() === 'receipt' || this.chatStep() === 'ended');
+    const restart = (!!transactionId || general) && !this.busy() && !this.frozen() && (this.chatStep() === 'receipt' || this.chatStep() === 'ended');
+    this.general.set(general); // before clearChat(), which picks the greeting from it
     if (restart) {
       this.clearChat();
       this.chatPanel()?.nativeElement.focus(); // the panel stays open, so the heading would not take focus on its own
-    }
+    } else if (general && this.chatStep() === 'describe' && this.log().length === 1) this.log.set([{ from: 'bot', key: 'chatHelloGeneral' }]);
     this.chatOpen.set(true);
     if (transactionId && !this.frozen() && this.chatStep() !== 'receipt' && this.chatStep() !== 'ended') {
       this.choice = transactionId;
@@ -500,7 +505,12 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.chatDetails = '';
     this.choice = '';
     this.chatConfirmed = false;
-    this.log.set([{ from: 'bot', key: 'chatHello' }]);
+    this.log.set([{ from: 'bot', key: this.general() ? 'chatHelloGeneral' : 'chatHello' }]);
+  }
+
+  /** Guide lines are i18n keys; the greeting carries the customer's first name. */
+  lineText(line: ChatLine): string {
+    return 'key' in line ? this.t()[line.key].replace('{name}', this.firstName()) : line.text;
   }
 
   ask(question: keyof typeof FAQ): void {
@@ -572,6 +582,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.reports.set(null);
     this.reportsFailed.set(false);
     this.chosenLang.set(null);
+    this.general.set(false);
     this.clearChat();
   }
 
