@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-labelledby="t d"><title id="t">Proactive alert rule: temporal split</title>
+<desc id="d">Monthly fraud count (grey bars) and charges flagged by fraud_score above 30 (dark bars), June 2023 to December 2025, with the train (to Dec 2024), validation (H1 2025) and test (H2 2025) periods shaded. Every flagged charge is fraud in every month.</desc>
+<rect width="960" height="420" fill="#ffffff"/>
+<style>text{font-family:Arial,sans-serif;fill:#1d2b3a}.s{font-size:12px}.h{font-size:16px;font-weight:700}</style>
+<rect x="60.0" y="50" width="539.4" height="300" fill="#e8eef7"/>
+<text class="s" x="329.7" y="66" text-anchor="middle">train</text>
+<rect x="599.4" y="50" width="170.3" height="300" fill="#fdf1dc"/>
+<text class="s" x="684.5" y="66" text-anchor="middle">validation</text>
+<rect x="769.7" y="50" width="170.3" height="300" fill="#e6f4ea"/>
+<text class="s" x="854.8" y="66" text-anchor="middle">test</text>
+<line x1="60" x2="940" y1="350.0" y2="350.0" stroke="#d0d7de" stroke-width="1"/><text class="s" x="54" y="354.0" text-anchor="end">0</text>
+<line x1="60" x2="940" y1="256.8" y2="256.8" stroke="#d0d7de" stroke-width="1"/><text class="s" x="54" y="260.8" text-anchor="end">50</text>
+<line x1="60" x2="940" y1="163.7" y2="163.7" stroke="#d0d7de" stroke-width="1"/><text class="s" x="54" y="167.7" text-anchor="end">100</text>
+<line x1="60" x2="940" y1="70.5" y2="70.5" stroke="#d0d7de" stroke-width="1"/><text class="s" x="54" y="74.5" text-anchor="end">150</text>
+<rect x="63.4" y="249.4" width="21.6" height="100.6" fill="#9aa5b1"/>
+<rect x="68.5" y="299.7" width="11.4" height="50.3" fill="#1f4e79"/>
+
+<rect x="91.8" y="92.9" width="21.6" height="257.1" fill="#9aa5b1"/>
+<rect x="96.9" y="187.9" width="11.4" height="162.1" fill="#1f4e79"/>
+<text class="s" x="102.6" y="368" text-anchor="middle">Jul 23</text>
+<rect x="120.2" y="94.7" width="21.6" height="255.3" fill="#9aa5b1"/>
+<rect x="125.3" y="228.9" width="11.4" height="121.1" fill="#1f4e79"/>
+<rect x="148.6" y="169.3" width="21.6" height="180.7" fill="#9aa5b1"/>
+<rect x="153.7" y="269.9" width="11.4" height="80.1" fill="#1f4e79"/>
+<rect x="177.0" y="89.1" width="21.6" height="260.9" fill="#9aa5b1"/>
+<rect x="182.1" y="197.2" width="11.4" height="152.8" fill="#1f4e79"/>
+<rect x="205.3" y="117.1" width="21.6" height="232.9" fill="#9aa5b1"/>
+<rect x="210.5" y="227.0" width="11.4" height="123.0" fill="#1f4e79"/>
+<rect x="233.7" y="120.8" width="21.6" height="229.2" fill="#9aa5b1"/>
+<rect x="238.8" y="208.4" width="11.4" height="141.6" fill="#1f4e79"/>
+<rect x="262.1" y="124.5" width="21.6" height="225.5" fill="#9aa5b1"/>
+<rect x="267.2" y="210.2" width="11.4" height="139.8" fill="#1f4e79"/>
+<text class="s" x="272.9" y="368" text-anchor="middle">Jan 24</text>
+<rect x="290.5" y="130.1" width="21.6" height="219.9" fill="#9aa5b1"/>
+<rect x="295.6" y="247.5" width="11.4" height="102.5" fill="#1f4e79"/>
+<rect x="318.9" y="98.4" width="21.6" height="251.6" fill="#9aa5b1"/>
+<rect x="324.0" y="210.2" width="11.4" height="139.8" fill="#1f4e79"/>
+<rect x="347.3" y="117.1" width="21.6" height="232.9" fill="#9aa5b1"/>
+<rect x="352.4" y="221.4" width="11.4" height="128.6" fill="#1f4e79"/>
+<rect x="375.7" y="104.0" width="21.6" height="246.0" fill="#9aa5b1"/>
+<rect x="380.8" y="221.4" width="11.4" height="128.6" fill="#1f4e79"/>
+<rect x="404.1" y="145.0" width="21.6" height="205.0" fill="#9aa5b1"/>
+<rect x="409.2" y="232.6" width="11.4" height="117.4" fill="#1f4e79"/>
+<rect x="432.4" y="135.7" width="21.6" height="214.3" fill="#9aa5b1"/>
+<rect x="437.5" y="223.3" width="11.4" height="126.7" fill="#1f4e79"/>
+<text class="s" x="443.2" y="368" text-anchor="middle">Jul 24</text>
+<rect x="460.8" y="109.6" width="21.6" height="240.4" fill="#9aa5b1"/>
+<rect x="465.9" y="217.7" width="11.4" height="132.3" fill="#1f4e79"/>
+<rect x="489.2" y="105.9" width="21.6" height="244.1" fill="#9aa5b1"/>
+<rect x="494.3" y="234.5" width="11.4" height="115.5" fill="#1f4e79"/>
+<rect x="517.6" y="94.7" width="21.6" height="255.3" fill="#9aa5b1"/>
+<rect x="522.7" y="195.3" width="11.4" height="154.7" fill="#1f4e79"/>
+<rect x="546.0" y="122.7" width="21.6" height="227.3" fill="#9aa5b1"/>
+<rect x="551.1" y="219.6" width="11.4" height="130.4" fill="#1f4e79"/>
+<rect x="574.4" y="150.6" width="21.6" height="199.4" fill="#9aa5b1"/>
+<rect x="579.5" y="240.1" width="11.4" height="109.9" fill="#1f4e79"/>
+<rect x="602.8" y="122.7" width="21.6" height="227.3" fill="#9aa5b1"/>
+<rect x="607.9" y="223.3" width="11.4" height="126.7" fill="#1f4e79"/>
+<text class="s" x="613.5" y="368" text-anchor="middle">Jan 25</text>
+<rect x="631.1" y="145.0" width="21.6" height="205.0" fill="#9aa5b1"/>
+<rect x="636.3" y="230.7" width="11.4" height="119.3" fill="#1f4e79"/>
+<rect x="659.5" y="141.3" width="21.6" height="208.7" fill="#9aa5b1"/>
+<rect x="664.6" y="245.7" width="11.4" height="104.3" fill="#1f4e79"/>
+<rect x="687.9" y="158.1" width="21.6" height="191.9" fill="#9aa5b1"/>
+<rect x="693.0" y="256.8" width="11.4" height="93.2" fill="#1f4e79"/>
+<rect x="716.3" y="105.9" width="21.6" height="244.1" fill="#9aa5b1"/>
+<rect x="721.4" y="215.8" width="11.4" height="134.2" fill="#1f4e79"/>
+<rect x="744.7" y="89.1" width="21.6" height="260.9" fill="#9aa5b1"/>
+<rect x="749.8" y="208.4" width="11.4" height="141.6" fill="#1f4e79"/>
+<rect x="773.1" y="107.8" width="21.6" height="242.2" fill="#9aa5b1"/>
+<rect x="778.2" y="228.9" width="11.4" height="121.1" fill="#1f4e79"/>
+<text class="s" x="783.9" y="368" text-anchor="middle">Jul 25</text>
+<rect x="801.5" y="128.3" width="21.6" height="221.7" fill="#9aa5b1"/>
+<rect x="806.6" y="240.1" width="11.4" height="109.9" fill="#1f4e79"/>
+<rect x="829.9" y="150.6" width="21.6" height="199.4" fill="#9aa5b1"/>
+<rect x="835.0" y="243.8" width="11.4" height="106.2" fill="#1f4e79"/>
+<rect x="858.2" y="117.1" width="21.6" height="232.9" fill="#9aa5b1"/>
+<rect x="863.4" y="215.8" width="11.4" height="134.2" fill="#1f4e79"/>
+<rect x="886.6" y="158.1" width="21.6" height="191.9" fill="#9aa5b1"/>
+<rect x="891.7" y="238.2" width="11.4" height="111.8" fill="#1f4e79"/>
+<rect x="915.0" y="135.7" width="21.6" height="214.3" fill="#9aa5b1"/>
+<rect x="920.1" y="234.5" width="11.4" height="115.5" fill="#1f4e79"/>
+<text class="h" x="60" y="28">Charges flagged by the bank score (&gt; 30) vs all fraud, per month</text>
+<rect x="60" y="390" width="12" height="12" fill="#9aa5b1"/><text class="s" x="78" y="400">all fraud (is_fraud)</text>
+<rect x="230" y="390" width="12" height="12" fill="#1f4e79"/><text class="s" x="248" y="400">flagged: fraud_score &gt; 30 (precision 1.000 in every period; recall 0.54–0.55)</text>
+</svg>
