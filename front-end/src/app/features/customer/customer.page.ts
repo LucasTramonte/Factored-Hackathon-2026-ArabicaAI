@@ -158,12 +158,14 @@ export class CustomerPage implements OnInit, OnDestroy {
     if (step === 'home') return 'disc disc--home';
     return this.booted() ? 'disc disc--top' : 'disc disc--boot';
   });
-  readonly displayName = computed(() => this.identities().find(i => i.customer_id === this.client())?.display_name ?? this.client());
+  /** A known identity for the signed-in customer: the admin list first (act-as), then the local demo list. */
+  private readonly known = computed(() => [...this.actAsIdentities(), ...this.identities()].find(i => i.customer_id === this.client()));
+  readonly displayName = computed(() => this.known()?.display_name ?? this.client());
   readonly initials = computed(() => initialsOf(this.displayName()) || 'AA');
   /** The customer's first name for the guide's greeting. */
   /** The customer's first name for the guide's greeting, or '' when none is known (never the customer id or a "(demo)" label). */
   readonly firstName = computed(() => this.card()?.first_name
-    || (this.identities().find(i => i.customer_id === this.client())?.display_name ?? '').replace(/\s*\(demo\)$/, ''));
+    || (this.known()?.display_name ?? '').replace(/\s*\(demo\)$/, ''));
 
   constructor() {
     // Move focus to the receipt, the choose step (it replaces the focused Send button), the details field (it replaces the
@@ -272,6 +274,34 @@ export class CustomerPage implements OnInit, OnDestroy {
     try {
       this.agent.roles.set((await this.agent.signIn(token)).roles);
     } catch { /* unavailable: the agent view asks for its own code */ }
+  }
+
+  /** The customer an admin picked to act as (ADR-007, decision 10). */
+  actAsChoice = '';
+  /** The customers an admin may act as, from the server; empty until loaded, and never the local demo list. */
+  readonly actAsIdentities = signal<Identity[]>([]);
+  /** The admin list is loading; its own flag, so a local demo list still loading never blocks it. */
+  readonly actAsLoading = signal(false);
+
+  /** The admin's "view as another customer" panel: the list loads the first time it opens (it is about 800 customers). */
+  async toggleActAs(open: boolean): Promise<void> {
+    if (!open || this.actAsIdentities().length || this.actAsLoading()) return;
+    this.actAsLoading.set(true);
+    this.error.set('');
+    try {
+      this.actAsIdentities.set(await this.service.adminCustomers());
+    } catch (e) {
+      this.fail(e);
+    } finally {
+      this.actAsLoading.set(false);
+    }
+  }
+
+  /** Act as the picked customer, then their home, through the same path as a sign-in. Refused while a report is open. */
+  actAs(): Promise<void> {
+    const customerId = this.actAsChoice;
+    if (!customerId || this.identityLocked() || !this.actAsIdentities().length) return Promise.resolve();
+    return this.enter(() => this.service.actAs(customerId), e => this.fail(e));
   }
 
   /** "Use another email". */

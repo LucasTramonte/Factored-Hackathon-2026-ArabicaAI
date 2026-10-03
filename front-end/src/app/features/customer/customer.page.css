@@ -35,3 +35,8 @@
 
 /* The receipt's one feedback question: wraps on narrow screens, never a horizontal scroll. */
 .receipt-feedback { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
+
+/* Admins only (ADR-007, decision 10): the act-as panel takes the banner's full width under its text. */
+.act-as { flex-basis: 100%; }
+.act-as summary { cursor: pointer; font-weight: 600; }
+.act-as[open] summary { margin-bottom: 12px; }

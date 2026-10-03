@@ -823,6 +823,94 @@ describe('CustomerPage', () => {
       expect(el.querySelector('.products')).toBeNull();
     });
 
+    it('lets an administrator, and only them, act as another customer through the panel: open, wait for the list, pick, switch', async () => {
+      const ids: Identity[] = [{ customer_id: 'demo-ana', display_name: 'Ana (demo)', country: null },
+        { customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' }];
+      let release!: (ids: Identity[]) => void;
+      const admin = jasmine.createSpy('adminCustomers').and.returnValue(new Promise<Identity[]>(r => release = r));
+      const actAs = jasmine.createSpy('actAs').and.resolveTo({ customer_id: 'CLI-COHORT-1', mode: 'admin_act_as', context_card: null, roles: ['admin'] });
+      Object.assign(service, { adminCustomers: admin, actAs });
+      const fixture = TestBed.createComponent(CustomerPage);
+      const p = fixture.componentInstance;
+      const el = fixture.nativeElement as HTMLElement;
+      document.body.appendChild(el);
+      const settle = async () => { await new Promise(r => setTimeout(r)); await fixture.whenStable(); fixture.detectChanges(); };
+      service.signIn.and.resolveTo({ customer_id: 'demo-bruno', mode: 'email_otp', context_card: null, roles: ['customer'] });
+      p.identity = 'demo-bruno';
+      await p.login();
+      fixture.detectChanges();
+      expect(el.querySelector('details.act-as')).toBeNull();
+      service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'email_otp', context_card: null, roles: ['admin'] });
+      p.identity = 'demo-ana';
+      await p.login();
+      fixture.detectChanges();
+      const summary = el.querySelector<HTMLElement>('aside.role-banner details.act-as summary')!;
+      expect(summary.textContent!.trim()).toBe(p.t().actAsTitle);
+      summary.click();
+      await settle();
+      expect(admin).toHaveBeenCalledTimes(1);
+      const fieldset = () => el.querySelector<HTMLFieldSetElement>('details.act-as fieldset.picker')!;
+      const button = () => el.querySelector<HTMLButtonElement>('#act-as')!;
+      expect([fieldset().disabled, button().disabled]).toEqual([true, true]);
+      expect(el.querySelectorAll('details.act-as input[type=radio]').length).toBe(0, 'never the local demo choices while loading');
+      release(ids);
+      await settle();
+      expect(fieldset().disabled).toBeFalse();
+      el.querySelector<HTMLInputElement>('details.act-as input[type=radio][value="CLI-COHORT-1"]')!.click();
+      fixture.detectChanges();
+      expect(button().disabled).toBeFalse();
+      button().click();
+      await settle();
+      expect(actAs).toHaveBeenCalledOnceWith('CLI-COHORT-1');
+      expect([p.client(), p.step(), p.displayName()]).toEqual(['CLI-COHORT-1', 'home', 'Zoë O.']);
+      expect(el.querySelector('aside.role-banner')).not.toBeNull();
+      actAs.calls.reset();
+      p.frozen.set({} as never);
+      fixture.detectChanges();
+      expect(el.querySelector('#act-as-locked')).not.toBeNull();
+      expect(button().disabled).toBeTrue();
+      p.frozen.set(null);
+      actAs.and.rejectWith(new ApiError(403));
+      p.actAsChoice = 'demo-ana';
+      await p.actAs();
+      expect(p.client()).toBe('CLI-COHORT-1');
+      expect(p.error()).not.toBe('');
+      el.remove();
+    });
+
+    it('a failed admin list keeps the panel disabled; a retry that succeeds clears the old error', async () => {
+      const ids: Identity[] = [{ customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' }];
+      const admin = jasmine.createSpy('adminCustomers').and.rejectWith(new ApiError(503));
+      Object.assign(service, { adminCustomers: admin });
+      const p = TestBed.createComponent(CustomerPage).componentInstance;
+      await p.toggleActAs(true);
+      expect([p.actAsIdentities(), p.error() !== '']).toEqual([[], true]);
+      admin.and.resolveTo(ids);
+      await p.toggleActAs(true);
+      expect([p.actAsIdentities(), p.error()]).toEqual([ids, '']);
+    });
+
+    it('loads the admin list even while the local demo list is still loading, and keeps the two lists apart', async () => {
+      let release!: (ids: Identity[]) => void;
+      service.identities.and.returnValue(new Promise<Identity[]>(r => release = r));
+      const adminIds: Identity[] = [{ customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' }];
+      const admin = jasmine.createSpy('adminCustomers').and.resolveTo(adminIds);
+      Object.assign(service, { adminCustomers: admin });
+      const fixture = TestBed.createComponent(CustomerPage);
+      const p = fixture.componentInstance;
+      const init = p.ngOnInit();
+      expect(p.identitiesLoading()).toBeTrue();
+      await p.toggleActAs(true);
+      expect(admin).toHaveBeenCalledTimes(1);
+      expect(p.actAsIdentities()).toEqual(adminIds);
+      const local = [{ customer_id: 'demo-ana', display_name: 'Ana (demo)', country: null }];
+      release(local);
+      await init;
+      expect([p.actAsIdentities(), p.identities()]).toEqual([adminIds, local]);
+      expect([p.actAsLoading(), p.identitiesLoading()]).toEqual([false, false]);
+      fixture.destroy();
+    });
+
     it('shows an administrator, and only them, a banner linking the agent view; reset clears the roles', async () => {
       TestBed.inject(LangService).set('es');
       service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'email_otp', context_card: null, roles: ['admin'] });
