@@ -8,8 +8,8 @@ import { assertContract } from '../support/contract.js';
 import { base, client, closeReport, idToken } from '../support/client.js';
 
 const API = { '/demo/identities': 'GET', '/demo/session': 'POST', '/auth/logout': 'POST', '/transactions': 'GET', '/transactions/displayed': 'POST', '/cases': 'POST', '/intake/start': 'POST',
-  '/intake/confirm': 'POST', '/intake/handoff': 'POST', '/demo/agent-session': 'POST', '/agent/cases': 'GET', '/agent/intakes': 'GET',
-  '/agent/intake-detail': 'GET', '/agent/intake-status': 'POST', '/reports': 'GET', '/reports/update': 'POST' };
+  '/intake/confirm': 'POST', '/intake/handoff': 'POST', '/demo/agent-session': 'POST', '/agent/intakes': 'GET',
+  '/agent/intake-detail': 'GET', '/agent/intake-status': 'POST', '/reports': 'GET', '/reports/update': 'POST', '/reports/feedback': 'POST' };
 const wrong = 'Basic ' + Buffer.from('local-reviewer:wrong').toString('base64');
 const uuid = () => crypto.randomUUID();
 
@@ -97,7 +97,7 @@ test('wrong methods get 405 and unknown API paths get JSON 404', async () => {
     assert.equal(res.status, 405, `${method} ${path}`);
     assert.equal(res.headers.get('Allow'), allowed);
   }
-  for (const path of ['/cases/', '/cases/x', '/agent/', '/agent/cases/extra', '/demo/other', '/transactions/1', '/intake', '/intake/',
+  for (const path of ['/cases/', '/cases/x', '/agent/', '/agent/cases', '/agent/cases/extra', '/audit/', '/audit/events/x', '/demo/other', '/transactions/1', '/intake', '/intake/',
     '/intake/confirm/extra', '/agent/intakes/extra', '/agent/intake-detail/x', '/reports/', '/reports/x']) {
     const res = await fetch(base + path);
     assert.equal(res.status, 404, path);
@@ -129,7 +129,7 @@ test('email sign-in: only a correctly signed token for a loaded customer starts 
   assert.deepEqual(own.body, (await (await loggedIn('demo-ana')).call('/transactions')).body, 'same rows as Ana');
   const asAgent = client();
   asAgent.cookie = `demo_agent_session=${ana.cookie.split('=')[1]}`;
-  assert.equal((await asAgent.call('/agent/cases')).status, 401, 'customer token used as agent');
+  assert.equal((await asAgent.call('/agent/intakes')).status, 401, 'customer token used as agent');
   gated.cookie = ana.cookie.replace('demo_session', 'demo_agent_session');
   assert.equal((await gated.call('/agent/intakes')).status, 401);
 
@@ -175,7 +175,7 @@ test('sessions: actors cannot swap, forged or expired tokens fail, login revokes
   const token = ana.cookie.split('=')[1];
   const asAgent = client();
   asAgent.cookie = `demo_agent_session=${token}`;
-  assert.equal((await asAgent.call('/agent/cases')).status, 401, 'customer token used as agent');
+  assert.equal((await asAgent.call('/agent/intakes')).status, 401, 'customer token used as agent');
 
   const agent = client();
   await agent.call('/demo/agent-session', {});
@@ -253,10 +253,17 @@ test('hostile input is stored as data or rejected, never executed', async () => 
   const res = await ana.call('/cases', { transaction_id: 'demo-tx-002', customer_statement: statement,
     customer_confirmed: true, idempotency_key: uuid() });
   assert.equal(res.status, 201);
+  // The same text through the guided report reaches an agent as data.
+  const started = await ana.call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'other',
+    customer_statement: statement, idempotency_key: uuid() });
+  assert.equal(started.status, 201);
+  const handoff = await ana.call('/intake/handoff', { episode_id: started.body.episode_id, kind: 'incomplete', idempotency_key: uuid() });
+  assert.equal(handoff.status, 201);
   const agent = client();
   await agent.call('/demo/agent-session', {});
-  const listed = await agent.call('/agent/cases');
-  assert.ok(listed.body.items.some(x => x.customer_statement === statement));
+  const detail = await agent.call('/agent/intake-detail?protocol=' + handoff.body.protocol);
+  assert.equal(detail.body.customer_statement, statement);
+  await closeReport(handoff.body.protocol);
   assert.equal((await ana.call('/transactions')).status, 200, 'sessions table still exists');
 
   const huge = await ana.call('/cases', JSON.stringify({ transaction_id: 'demo-tx-002', customer_statement: 'x'.repeat(20_000),

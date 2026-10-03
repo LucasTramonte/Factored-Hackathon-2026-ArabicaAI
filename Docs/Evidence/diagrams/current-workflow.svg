@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1040" viewBox="0 0 1440 1040" role="img" aria-labelledby="title description">
+  <title id="title">ArabicaAI: recorded deployment and offline evaluation</title>
+  <desc id="description">The recorded v0.2.0 deployment serves an Angular browser through Cloudflare Worker and D1 with Cognito email authentication and SES sandbox notification delivery. A read-only S3 batch goes through Bronze, Silver, quality and Gold to a reviewed D1 seed. Offline learned evaluation uses Bedrock and deterministic policy; its approved development revision and frozen run remain pending. App changes in PRs 87 through 90 are unmerged. The Lambda and Postgres AWS target has never been deployed.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="#41556b"/></marker>
+    <style>
+      text { font-family: Arial, sans-serif; fill: #193247; }
+      .title { font-size: 30px; font-weight: 700; }
+      .heading { font-size: 22px; font-weight: 700; }
+      .body { font-size: 19px; }
+      .note { font-size: 17px; fill: #465d71; }
+      .node { fill: #fff; stroke: #438383; stroke-width: 2; rx: 12; }
+      .batch { fill: #fff; stroke: #73859b; stroke-width: 2; rx: 12; }
+      .pending { fill: #fff; stroke: #a87b29; stroke-width: 2; stroke-dasharray: 7 5; rx: 12; }
+      .edge { fill: none; stroke: #41556b; stroke-width: 2; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect width="1440" height="1040" fill="#f6f8fb"/>
+  <text x="40" y="49" class="title">ArabicaAI · recorded deployment + offline evaluation</text>
+  <text x="40" y="79" class="note">Status: 2026-10-03 · solid: recorded v0.2.0 / existing batch · dashed: evaluation awaiting approval</text>
+
+  <rect x="30" y="105" width="1380" height="360" rx="18" fill="#eaf4f2"/>
+  <text x="55" y="139" class="heading">Online · Cloudflare Worker + D1 · v0.2.0</text>
+  <text x="55" y="164" class="note">Recorded release: Worker f76c7f7b · main-64ae03a · D1 migrations 0001–0017 · extractor OFF</text>
+  <rect x="55" y="280" width="270" height="100" class="node"/>
+  <text x="75" y="312" class="heading">Angular browser</text>
+  <text x="75" y="341" class="body">Customer · agent · admin</text>
+  <text x="75" y="366" class="body">Auditor · ES / PT / EN</text>
+  <rect x="465" y="184" width="350" height="76" class="node"/>
+  <text x="485" y="216" class="heading">Amazon Cognito</text>
+  <text x="485" y="243" class="body">Email code → verified ID token</text>
+  <path d="M190 280 V222 H465" class="edge"/>
+  <text x="222" y="212" class="note">Sign-in</text>
+  <rect x="465" y="305" width="350" height="115" class="node"/>
+  <text x="485" y="337" class="heading">Cloudflare Worker</text>
+  <text x="485" y="366" class="body">Session · role + ownership checks</text>
+  <text x="485" y="392" class="body">Intake · reports · human review</text>
+  <path d="M640 260 V305" class="edge"/>
+  <text x="659" y="289" class="note">Verify token</text>
+  <path d="M325 344 H465" class="edge"/>
+  <text x="336" y="333" class="note">HTTPS API</text>
+  <rect x="1080" y="305" width="290" height="115" class="node"/>
+  <text x="1100" y="337" class="heading">D1 · SQLite</text>
+  <text x="1100" y="366" class="body">Cases · sessions · events</text>
+  <text x="1100" y="392" class="body">Reviewed serving slice</text>
+  <path d="M815 363 H1080" class="edge"/>
+  <text x="850" y="350" class="note">store/d1.js · all SQL</text>
+  <rect x="1080" y="184" width="290" height="76" class="node"/>
+  <text x="1100" y="216" class="heading">Amazon SES · sandbox</text>
+  <text x="1100" y="243" class="body">Verified recipients only</text>
+  <path d="M815 328 H966 V222 H1080" class="edge"/>
+  <text x="850" y="282" class="note">Email after response</text>
+  <text x="55" y="445" class="note">Case reference only after read-back · identity from session · no refund, card block or fraud verdict</text>
+
+  <rect x="30" y="485" width="1380" height="205" rx="18" fill="#eaf0f7"/>
+  <text x="55" y="522" class="heading">Offline data · Python + DuckDB · bounded serving slice</text>
+  <rect x="55" y="556" width="180" height="85" class="batch"/>
+  <text x="75" y="589" class="heading">Authorized S3</text><text x="75" y="617" class="body">Read-only source</text>
+  <rect x="282" y="556" width="155" height="85" class="batch"/>
+  <text x="302" y="589" class="heading">Bronze</text><text x="302" y="617" class="body">Raw Parquet</text>
+  <rect x="484" y="556" width="155" height="85" class="batch"/>
+  <text x="504" y="589" class="heading">Silver</text><text x="504" y="617" class="body">Typed tables</text>
+  <rect x="686" y="556" width="175" height="85" class="batch"/>
+  <text x="706" y="589" class="heading">Quality gate</text><text x="706" y="617" class="body">Errors block</text>
+  <rect x="908" y="556" width="170" height="85" class="batch"/>
+  <text x="928" y="589" class="heading">Gold slice</text><text x="928" y="617" class="body">Provenance</text>
+  <rect x="1125" y="556" width="245" height="85" class="batch"/>
+  <text x="1145" y="589" class="heading">Reviewed D1 seed</text><text x="1145" y="617" class="body">Authorized manual load</text>
+  <path d="M235 598 H282" class="edge"/><path d="M437 598 H484" class="edge"/><path d="M639 598 H686" class="edge"/><path d="M861 598 H908" class="edge"/><path d="M1078 598 H1125" class="edge"/>
+  <path d="M1245 556 V420" class="edge"/>
+  <text x="55" y="672" class="note">Worker never reads S3, DuckDB or Silver · source currency and timezone-free timestamps retained</text>
+
+  <rect x="30" y="710" width="1380" height="230" rx="18" fill="#fff3d9"/>
+  <text x="55" y="748" class="heading">Offline learned evaluation · Bedrock transport built · frozen comparison NOT RUN</text>
+  <rect x="55" y="787" width="350" height="100" class="pending"/>
+  <text x="75" y="819" class="heading">Authored ES / PT workload</text>
+  <text x="75" y="848" class="body">Development revision pending</text>
+  <text x="75" y="874" class="body">Frozen: needs approval + human tag</text>
+  <rect x="527" y="787" width="340" height="100" class="pending"/>
+  <text x="547" y="819" class="heading">Amazon Bedrock</text>
+  <text x="547" y="848" class="body">gpt-oss-20b · facts only</text>
+  <text x="547" y="874" class="body">Synthetic messages · no tools</text>
+  <rect x="990" y="787" width="380" height="100" class="pending"/>
+  <text x="1010" y="819" class="heading">Deterministic policy + scorer</text>
+  <text x="1010" y="848" class="body">Same cases: checklist vs model</text>
+  <text x="1010" y="874" class="body">Counts · safety · latency · tokens</text>
+  <path d="M405 837 H527" class="edge"/><text x="433" y="825" class="note">Message</text>
+  <path d="M867 837 H990" class="edge"/><text x="889" y="825" class="note">Facts</text>
+  <text x="55" y="917" class="note">No online Bedrock call · Manoella approval → isolated builder → development triggers → registration → human tag</text>
+
+  <text x="40" y="980" class="body">Built, unmerged: app review changes #87–#90. They are not part of the recorded release above.</text>
+  <text x="40" y="1012" class="body">AWS Lambda + Postgres production target: design and cost estimate only; never deployed.</text>
+</svg>

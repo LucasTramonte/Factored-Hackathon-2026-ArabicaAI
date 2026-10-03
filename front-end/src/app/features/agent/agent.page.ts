@@ -10,7 +10,7 @@ import { formatSourceTime } from '../../shared/format/source-time.util';
 import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
-import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind, REASON_LABEL, Role } from '../../shared/models/intake.model';
+import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind, REASON_LABEL, Reason, Role } from '../../shared/models/intake.model';
 import { AgentService } from './agent.service';
 
 const KIND_KEYS: Record<IntakeKind, keyof Strings> = { complete: 'kindComplete', technical: 'kindTechnical', incomplete: 'kindIncomplete' };
@@ -49,7 +49,6 @@ export class AgentPage {
   readonly openProtocol = signal<string | null>(null);
   private detailRequest = 0;
   readonly sourceTime = formatSourceTime;
-  readonly reasonLabel = REASON_LABEL;
   private readonly detailHeading = viewChild<ElementRef<HTMLElement>>('detailHeading');
   private readonly signInButton = viewChild<ElementRef<HTMLButtonElement>>('signIn');
   private readonly statusText = viewChild<ElementRef<HTMLElement>>('statusText');
@@ -74,6 +73,21 @@ export class AgentPage {
   /** One line: whether a model read the case in shadow (count and version only; it decides nothing). */
   modelLine({ model_reading: m }: AgentIntakeDetail): string {
     return m.mode === 'shadow' ? this.t().modelShadow.replace('{n}', String(m.llm_calls)).replace('{calls}', m.llm_calls === 1 ? this.t().callOne : this.t().callMany).replace('{v}', m.model_version ?? '') : this.t().modelOff;
+  }
+
+  /** The customer's reason, or "not recorded" for reports from before the choice existed (never a default). */
+  reasonText(reason: Reason | null): string {
+    return this.t()[reason ? REASON_LABEL[reason] : 'reasonNotRecorded'];
+  }
+
+  /** One line on the customer's other reports, so an agent sees a repeat or urgent customer first; names no one. */
+  historyText({ customer_history: h }: AgentIntakeDetail): string {
+    const t = this.t();
+    if (!h.reports) return h.has_more ? t.historyPartial : t.historyNone;
+    return t.historyLine.replace('{n}', h.has_more ? h.reports + '+' : String(h.reports))
+      .replace('{reports}', h.reports === 1 && !h.has_more ? t.historyReportOne : t.historyReportMany)
+      .replace('{open}', String(h.open)).replace('{openLabel}', h.open === 1 ? t.historyOpenOne : t.historyOpenMany).replace('{high}', String(h.high_urgency))
+      .replace('{status}', h.last_status ? this.statusLabel(h.last_status) : '—');
   }
 
   statusLabel(status: HandoffStatus): string {

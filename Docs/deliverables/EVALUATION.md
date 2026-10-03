@@ -10,9 +10,9 @@ This document is the evaluation deliverable, like [`DATA_QUALITY.md`](DATA_QUALI
 - how we keep test data from leaking into the systems;
 - every option we considered, used or rejected, and why.
 
-**Status (2026-09-30):**
+**Status (2026-10-03):**
 - **Ready:** the baselines are scored, the frozen test set is built, verified and committed by hash, and the harness and statistics are in place.
-- **Not run yet:** the frozen comparison, which runs once per system version after the extractor is pre-registered. No result for the learned component on the frozen set exists yet.
+- **Not run yet:** the frozen comparison, which runs once per system version after the extractor is pre-registered. No result for the learned component on the frozen set exists yet. Bedrock is the proposed evaluation host (same model, ADR-006 amendment 6). It still needs Manoella's approval, the isolated builder's development-only reasoning revision and trigger report, a checked pre-registration and a human-created tag. A person supplies a valid region-bound key and checks quotas before the authorized batch ([extractor runbook](../../intake_agent/extractor/README.md)).
 
 ## 1. What is compared
 
@@ -20,7 +20,7 @@ This document is the evaluation deliverable, like [`DATA_QUALITY.md`](DATA_QUALI
 |---|---|
 | Always-handoff reference | Sends every case to a person. It is the floor any useful system must beat |
 | Checklist baseline (`evals/intake/baseline.py`) | Hand-written rules. They read amounts, dates, currencies and merchants with fixed patterns |
-| Extractor v1 ([ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md)) | A pretrained model (gpt-oss-20b on Workers AI) that **only turns the message into facts**. The same written policy as the checklist then decides the action from those facts, the session and the customer's own purchases |
+| Extractor v1 ([ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md)) | A pretrained gpt-oss-20b model that **only turns the message into facts**. Amendment 6 proposes Amazon Bedrock (`openai.gpt-oss-20b-1:0`) for offline evaluation; historical development used Workers AI. The same written policy as the checklist decides the action from those facts, the session and the customer's own purchases. The online extractor stays off; its future host is a separate decision |
 
 So the comparison measures one thing: **how well each system reads the message.** Identity, ownership, confirmation and permissions stay deterministic in both, outside anything a model writes.
 
@@ -117,7 +117,7 @@ Leakage can happen in two ways here. Statistics from the test period can shape d
   - the p95 of that pooled sample, with the equal-tailed 95% interval reported as `latency_p95_interval_ms`;
   - **pass only if the interval's upper bound is at most 3,000 ms.** Otherwise the latency trigger fires, and the response is a lower reasoning level, not a larger model.
 - **Repeated runs:** 3 repetitions of the model, scored by per-case majority, with run-to-run variability reported.
-- **Breakdowns:** by scenario family (the skill tested) and by language. A pooled rate is labelled "authored coverage mix, not prevalence".
+- **Breakdowns:** by scenario family (the skill tested) and by language, with authored segment metadata reported separately where present. A pooled rate is labelled "authored coverage mix, not prevalence".
 
 **The honest limit is size.** We simulated the exact McNemar test (`stats.mcnemar_exact`, α = 0.05, 4,000 draws per row) with 60 paired cases. Each row assumes the share of cases only the model gets right (b) and the share only the checklist gets right (c). Other assumptions give other figures, so the table shows the order of magnitude, not a promise:
 
@@ -146,7 +146,7 @@ So the frozen set can only show a **large** improvement. That may be enough, bec
 | A model as judge to score answers | Rejected | Our outputs are facts and actions that can be checked exactly. A model judge adds inconsistency, cost and known biases (position, verbosity, preferring its own family) without adding information |
 | **A model as an independent checker of the test answers** | **Used** | Claude re-derived the answers from the messages, of a different family from the drafting session, and a human audit bounds how often it could be wrong |
 | Hand-written cases from spec, gold by rules (outline, then paraphrase) | **Used** for the frozen set | The label is exact by construction, and people only review where the checker disagrees, plus a random audit |
-| A larger synthetic tier (code samples situations, another model writes the messages, automatic and human checks) | **Proposed, pending a decision** | It would give the statistical power the 60 cases lack: about 90% to detect an 8-point gain with 200 cases. It would be reported separately and never as real-customer accuracy. It needs a paid Workers AI plan, because the free allocation served fewer than about 280 calls in one day, and a choice of generator model |
+| A larger synthetic tier (code samples situations, another model writes the messages, automatic and human checks) | **Proposed, pending a decision** | It would give the statistical power the 60 cases lack: about 90% to detect an 8-point gain with 200 cases. It would be reported separately and never as real-customer accuracy. The original Workers AI budget was insufficient; a generator, paid inference budget and approved protocol remain undecided |
 | Public benchmarks (MASSIVE for Spanish/Portuguese slots, BANKING77 for banking intents) | Rejected | MASSIVE is virtual-assistant speech in European Spanish and Portuguese, and BANKING77 is English intent classification. Neither tests reading a LATAM dispute message |
 | Prediction-powered inference (few labels plus many model predictions) | Rejected | Labels aren't our bottleneck. Realistic messages are |
 | Clustered errors, power analysis and invariance reporting | **Adopted**, to be registered before the frozen run | They make the small sample's limits explicit instead of hidden |
@@ -166,6 +166,44 @@ So the frozen set can only show a **large** improvement. That may be enough, bec
 
 The Portuguese results show the system handles Portuguese, not that there is Portuguese demand. Offline results, simulations and projections are labelled separately, as the brief asks.
 
+### Historical development language comparison
+
+The saved Workers AI development run executed **2026-10-01T03:27:53.338606+00:00** was regrouped on 2026-10-03 without calling a system, rescoring predictions or changing labels. [Aggregate evidence](../Evidence/evaluation/development-cuts-2026-10-01.json) records the exact result and corpus SHA-256 hashes; the current corpus matches the run. Population: 18 authored development cases, nine Spanish and nine Portuguese, representing nine translated situation pairs. Each system contributes one primary outcome per case: reference execution or model majority over ten repetitions. There are no customer joins or exclusions.
+
+| Session language | Cases per system | Checklist correct (95% Wilson) | Extractor majority correct (95% Wilson) | Always handoff correct (95% Wilson) | Recorded unsafe per system |
+|---|---|---|---|---|---|
+| Spanish | 9 | 8/9 (56.5–98.0%) | 9/9 (70.1–100%) | 2/9 (6.3–54.7%) | 0/9 |
+| Portuguese | 9 | 8/9 (56.5–98.0%) | 9/9 (70.1–100%) | 2/9 (6.3–54.7%) | 0/9 |
+| All | 18 | 16/18 (67.2–96.9%) | 18/18 (82.4–100%) | 4/18 (9.0–45.2%) | 0/18 |
+
+These descriptive intervals do not account for correlated translation pairs; neither language ranks above the other. All **18/18 development cases lack authored segment metadata**, retained as the explicit null-segment population for every system. No named segment performance can be inferred. This historical tuned-development result is not a Bedrock or frozen result. The separate pooled 180-execution model latency remains p95 3,581.5 ms, interval 3,416.3–4,201.3 ms, failing the 3,000 ms development gate; per-case majority medians do not decide it.
+
+Reproduce the aggregate from the retained local result:
+
+```bash
+.venv/bin/python -m evals.intake.report_cuts \
+  data_foundation/runs/latency-2026-10-01/results.json evals/intake/cases.json
+```
+
+### Language and segment reporting
+
+The runner already reports `all`, `es` and `pt` by trusted session language, with counts and Wilson intervals. The episode scorer reports `all`, `es`, `pt` and `en`. Unsupported message languages stay in their session-language group. Every table states its population and denominator; zero denominators yield no rate. Five live episodes, including one Spanish episode, cannot support language rankings or a comparative latency claim.
+
+The supplied customer's `segment` is a current snapshot retained in Silver and analytical Gold. It is absent from served D1 customers and live intake events, so **live/source-customer segment evaluation is not assessed**. The frozen exporter can carry a synthetic fixture's authored `segment` on each case. Those labels describe authored coverage, not real customer segments; they do not satisfy a claim about segment performance in the supplied population. Frozen customers are fictitious and must never be mapped to source customers to manufacture metadata.
+
+After the approved one-time run, the custodian can produce supplemental aggregates without another model call:
+
+```bash
+.venv/bin/python -m evals.intake.report_cuts data/frozen-run/results.json \
+  /private/path/to/the-scored-corpus.json \
+  --exposed /private/path/to/the-authorized-exposed-ids.json > data/frozen-run/cuts.json
+.venv/bin/python -m evals.intake.frozen_report data/frozen-run/results.json \
+  --system extractor-v1 --exposed /private/path/to/the-authorized-exposed-ids.json \
+  > data/frozen-run/unexposed-comparison.json
+```
+
+The report refuses unless the metadata corpus's SHA-256 equals the runner's recorded corpus hash. It groups primary per-case outcomes (one reference row or model majority row per case) by session language, scenario family and authored segment; missing segment remains a `null` group with its denominator. With the authorized exposed-id list, it reports both all-60 and unexposed-52 populations plus each system's rate difference (`unexposed − all`); the second command supplies the exact paired McNemar comparison. Groups below five cases are marked sparse and support descriptive counts and intervals only, never rankings or a pass/fail decision. An omitted empty group has no cases and no inferred rate. The pooled execution rows, rather than these majority-row medians, decide the latency gate. The report contains aggregates and source hashes, with no messages, customer identifiers or case identifiers. The custodian checks the expected 60/52 counts before publication; none of the 60 is presented as a wholly blind corpus.
+
 ## 8. Normal resolution path (provisional, ADR-009 Proposed)
 
 The recent-charges view shows a signed-in customer their own recent charges, read-only ([ADR-009](../ADRs/ADR-009-recent-charges-resolution.md)). It is scored by [`evals/inquiry/score.py`](../../evals/inquiry/score.py) on its own stream and never mixed with the intake episodes above.
@@ -183,10 +221,12 @@ The recent-charges view shows a signed-in customer their own recent charges, rea
 
 10 of 12 reflects the authored mix, not service performance: two of the 12 were written to fail (expired session, tool failure), so 10 is the maximum by design. The expired session is refused before anything is served, and when recording the view fails the rows are still shown but there is no view to acknowledge. **Cost per success** is $0.00: the ADR-004 cost per attempted case on Workers Free ($0) × 11 attempts ÷ 10 successes. On Workers Paid it would depend on real monthly volume, which these cases do not measure.
 
-This shows that, in authored cases, the service served the customer's own charges and the client displayed them. It does not show that a bank resolved anything or that a customer was satisfied. The figures are provisional while ADR-009 is Proposed. To reproduce, from the repository root (the empty `public/` stands in for the compiled client, so `live-flow.test.js`, which needs the real pages, fails in this run):
+This shows that, in authored cases, the service served the customer's own charges and the client displayed them. It does not show that a bank resolved anything or that a customer was satisfied. The figures are provisional while ADR-009 is Proposed. To reproduce, install dependencies with `make intake-setup`, then from the repository root build the real client assets and run the local-D1 suite:
 
 ```bash
-rm -f data/charge-views/authored.jsonl && mkdir -p back-end/public && (cd back-end && INQUIRY_OUT=data/charge-views/authored.jsonl node test/run-local.mjs); rmdir back-end/public
+make intake-ui-build
+rm -f data/charge-views/authored.jsonl
+INQUIRY_OUT=data/charge-views/authored.jsonl npm --prefix back-end run test:integration
 .venv/bin/python -m evals.inquiry.score data/charge-views/authored.jsonl
 ```
 
@@ -217,6 +257,23 @@ node scripts/export-intake-events.mjs --remote --max-pages 100 --output ../data/
 ```
 
 The summary in `live.out.json` holds every figure above. The files stay in ignored `data/`.
+
+## 10. Report-request latency: evidence still incomplete
+
+The report endpoint's p95 target is **below 2,000 ms**, separately from the offline model's 3,000 ms development gate. Episode span in section 9 includes reading and typing and cannot test that target.
+
+The available 2026-10-01 Worker tail export contains only **one** timed `POST /intake/confirm` request: HTTP 201, wall time 1,268 ms, Worker `f8e3a6ec-de71-4b32-b589-c1c3929c2d6b`. It also has one `POST /intake/start` at 368 ms. The 2026-09-29 dashboard export has one legacy `/cases` request at 605 ms. These are older-version, sparse observations, not current-release p95 evidence. Their export sampling and completeness have not been established. **The current report p95 target is not demonstrated.**
+
+To summarize an authorized local export without exposing request identifiers, headers, URLs or customer fields:
+
+```bash
+.venv/bin/python scripts/summarize_worker_latency.py \
+  data/observability/tail-2026-10-01.jsonl --route /intake/confirm
+```
+
+[`summarize_worker_latency.py`](../../scripts/summarize_worker_latency.py) reads dashboard arrays or JSONL/pretty-printed tail records, coalesces dashboard records by request ID internally, preserving any observed failure and the largest known duration/status and reports only route/version aggregates. Each group includes total and timed requests, missing durations, failed requests and status counts, p50/p95 wall time and its 95% order-statistic interval. Optional `--since` (inclusive) and `--until` (exclusive) bound the UTC event-time window. The singleton's p95 interval and threshold assertion are undefined. Missing durations and non-successes remain visible rather than being dropped from the population description.
+
+A claim about the recorded or later deployment requires a new authorized export of that version with declared capture coverage, enough timed report requests for tail uncertainty, the exact event-time window, and counts of failures and missing durations. The analyzer is evidence from the supplied export only; it cannot establish completeness or replace that capture. No new live measurement was made in this review.
 
 ## Where to look
 

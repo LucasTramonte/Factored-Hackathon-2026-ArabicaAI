@@ -31,9 +31,10 @@
     } @else {
       <form class="sign-in" ngNativeValidate (ngSubmit)="verify()">
         <p class="ar-small" id="agent-code-sent">{{ t().codeSentTo }} <b>{{ email.trim() }}</b></p>
+        <p class="ar-small" id="agent-code-help">{{ t().codeHelp }}</p>
         <label class="ar-field" for="agent-code"><span class="ar-field-label">{{ t().codeLabel }}</span></label>
         <input class="ar-input" id="agent-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" pattern="[0-9]*"
-          name="code" required [(ngModel)]="code" aria-describedby="agent-code-sent">
+          name="code" required [(ngModel)]="code" aria-describedby="agent-code-sent agent-code-help">
         <div class="login-actions">
           <button type="submit" class="ar-btn" [disabled]="busy()">{{ t().verify }}</button>
           <button type="button" class="link-btn" (click)="requestCode()" [disabled]="busy()">{{ t().newCode }}</button>
@@ -63,7 +64,7 @@
               <li>
                 <button #row type="button" class="intake-row" [attr.data-protocol]="item.protocol" [attr.aria-expanded]="openProtocol() === item.protocol" [attr.aria-controls]="openProtocol() === item.protocol && detail() ? 'intake-detail' : null" (click)="open(item.protocol, row)">
                   <span class="ar-chip" [class.ar-chip-ok]="item.kind === 'complete'" [class.ar-chip-err]="item.kind === 'technical'" [class.ar-chip-warn]="item.kind === 'incomplete'">{{ kindLabel(item.kind) }}</span>
-                  <span class="ar-chip reason-chip" [class.ar-chip-err]="item.reason === 'card_lost_or_stolen'">{{ t()[reasonLabel[item.reason]] }}</span>
+                  <span class="ar-chip reason-chip" [class.ar-chip-err]="item.reason === 'card_lost_or_stolen'">{{ reasonText(item.reason) }}</span>
                   <span class="ar-chip status-chip">{{ statusLabel(item.status) }}</span>
                   @if (item.urgency === 'high') { <span class="ar-chip ar-chip-err urgency-chip">{{ t().urgencyHigh }}</span> }
                   <span class="ar-mono">{{ item.reference_short ?? item.protocol }}</span>
@@ -98,7 +99,8 @@
             <div><dt>{{ t().toolStatus }}</dt><dd><code>{{ d.tool_status }}</code></dd></div>
             <div><dt>{{ t().destination }}</dt><dd><code>{{ d.destination }}</code></dd></div>
             <div><dt>{{ t().priority }}</dt><dd>{{ d.urgency === 'high' ? t().prioHigh : 'normal' }}</dd></div>
-            <div><dt>{{ t().reasonLabel }}</dt><dd>{{ t()[reasonLabel[d.reason]] }}</dd></div>
+            <div><dt>{{ t().reasonLabel }}</dt><dd>{{ reasonText(d.reason) }}</dd></div>
+            <div><dt>{{ t().customerHistory }}</dt><dd>{{ historyText(d) }}</dd></div>
             <div><dt>{{ t().languageCode }}</dt><dd><code>{{ d.language }}</code></dd></div>
           </dl>
 

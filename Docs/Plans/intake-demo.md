@@ -77,9 +77,12 @@ The Worker `factored-hackathon-2026-arabicaai` runs at https://factored-hackatho
 - Loading the Gold slice into production is a reviewed, manual step (`back-end/README.md`, "Deployment").
 - On 2026-10-01, PR #54 merged migration 0008 without applying it to remote D1, so every Workers Build from `main` after 20:55 UTC stopped at the deploy guard and the live version stayed `17450a30`.
 - On 2026-10-02, the migration was applied by hand at 02:35 UTC and a manual `npm run deploy` at 02:40 UTC published `3412aff1` from `main` `093e0e7`; remote D1 holds migrations 0001-0008.
+- On 2026-10-02 and 2026-10-03 the same happened with migrations 0014, 0015 and 0016 (five failed builds). Since PR #84, deploys run from GitHub Actions after CI passes, and `npm run deploy` applies pending additive migrations itself, so a merge no longer waits for a person.
 - Build settings and the post-deploy checklist are in [back-end/README.md](../../back-end/README.md).
 
 ### Customer sign-in (Cognito)
+
+The full procedure (roles, enrolment, removal, tests, troubleshooting, evaluator access) is the [auth runbook](auth-runbook.md); this section keeps the deploy-time notes.
 
 Customers sign in with an email one-time code from the Amazon Cognito user pool `arabicaai-demo` (`us-east-2`, Essentials tier, account `arabica`). Email is the username, self sign-up is off, and each customer user carries the immutable attribute `custom:customer_id`, which the Worker maps to a customer loaded in D1. The pool id and the public app client id (`arabicaai-web`, no secret) are plain `vars` in `back-end/wrangler.jsonc`. Cognito requires `PASSWORD` in the pool's allowed first factors, so it is listed, but no user is ever given a known password, and the client requests and accepts only `EMAIL_OTP`. An admin-created user starts in `FORCE_CHANGE_PASSWORD`; on 2026-10-01 that status did not block the `EMAIL_OTP` challenge (no `admin-set-user-password` workaround was needed), and the first email-code sign-in confirmed the user, which is now `CONFIRMED`. Groups: `customer`, `agent`, `admin`, `auditor`.
 
@@ -105,17 +108,17 @@ Both use `--profile ${AWS_PROFILE:-arabica}` and can be rerun. Judges' and teamm
 
 ### Notification email (SES)
 
-The Worker will send notification emails through Amazon SES v2 (`us-east-2`, account `arabica`) from `rzuniga@aptsny.co`; the team has no verified domain, so the sender is a single verified email identity. `SES_REGION` and `SES_FROM` are plain `vars` in `back-end/wrangler.jsonc`. The IAM user `arabicaai-worker-ses` has one inline policy, `ses-send-only`, allowing only `ses:SendEmail` on `arn:aws:ses:us-east-2:849110176017:identity/rzuniga@aptsny.co`, and no managed policies.
+The Worker will send notification emails through Amazon SES v2 (`us-east-2`, account `arabica`) from a teammate's address; the team has no verified domain, so the sender is a single verified email identity. `SES_REGION` is a plain var in `back-end/wrangler.jsonc`; `SES_FROM` (`ArabicaAI demo <address>`) is a Worker secret, because no personal address is committed (issue #70), and the deploy guard refuses it in `vars`. The IAM user `arabicaai-worker-ses` has one inline policy, `ses-send-only`, allowing only `ses:SendEmail` on that one sender identity, and no managed policies.
 
 The account is in the SES sandbox (200 emails a day, 1 a second), and SES delivers only to verified addresses. On 2026-10-02 a production-access request was filed (`put-account-details`, mail type `TRANSACTIONAL`, under 50 emails a day, recipients limited to Cognito-enrolled users, bounces and complaints stop sends to that address). It was denied the same day: `ProductionAccessEnabled` is `false` and the review status is `DENIED`. The account stays in the sandbox, so each recipient's address must be created as an SES email identity and its owner must click AWS's verification email. Re-filing with more detail from the SES console is optional. Check it with `aws sesv2 get-account --profile arabica --region us-east-2 --query '[ProductionAccessEnabled,Details.ReviewDetails.Status]'`.
 
 ```bash
-back-end/scripts/ses/setup.sh   # creates or finds the sender identity and the send-only user; prints verification status and the user ARN
+SES_FROM_EMAIL=<sender address> back-end/scripts/ses/setup.sh   # creates or finds the sender identity and the send-only user; prints verification status and the user ARN
 ```
 
 Human steps (the access key never passes through an agent or the repository):
 
-1. Open the AWS verification email sent to `rzuniga@aptsny.co` and click its link; `setup.sh` then prints `verified=True`.
+1. Open the AWS verification email sent to the sender address and click its link; `setup.sh` then prints `verified=True`. Set the sender once: `cd back-end && npx wrangler secret put SES_FROM` (value `ArabicaAI demo <address>`).
 2. Create the access key and set the three Worker secrets:
 
    ```bash
@@ -130,7 +133,7 @@ Human steps (the access key never passes through an agent or the repository):
 
 - Customer identity is a Cognito email code mapped to one demo customer; it is not bank authentication. Agents sign in with their own email code in the `agent` group; there is no shared team password.
 - Sessions last one hour and are stored in D1.
-- A retry with the same key and content returns the same reference, and different content gets 409. A charge with a report still received or in review can't be reported again under a new key (409) until a person closes it; two confirmations in the same instant can still open two.
+- A retry with the same key and content returns the same reference, and different content gets 409. A charge with a report still received or in review can't be reported again under a new key (409) until a person closes it, even when two confirmations arrive in the same instant.
 - If the browser tab is closed with a request pending, the pending state is lost, but no duplicate is created.
 - No historical complaint is linked to a transaction, so none is joined here by `customer_id` alone.
 

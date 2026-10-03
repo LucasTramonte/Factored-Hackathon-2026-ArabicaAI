@@ -49,13 +49,16 @@ def read(path: Path) -> dict:
 
 
 def fill(path: Path, system: str, prompt: Path, model: str, params: dict, repo: Path = Path("."),
-         target: str | None = None, implementation: Path | None = None) -> dict:
-    """Write (or replace) the block: prompt and implementation hashes, target and current commit. The tag comes next."""
+         target: str | None = None, implementation: Path | None = None,
+         dependencies: list[Path] | None = None) -> dict:
+    """Record prompt, implementation and optional shared-code hashes at the current commit; tag later."""
     data = {"system": system, "tag": system, "commit": _git(repo, "rev-parse", "HEAD"),
             "prompt_file": str(prompt), "prompt_sha256": sha256_bytes((repo / prompt).read_bytes()),
             "target": target, "implementation_file": str(implementation) if implementation else None,
             "implementation_sha256": sha256_bytes((repo / implementation).read_bytes()) if implementation else None,
             "model": model, "params": params, "registered_utc": datetime.now(timezone.utc).isoformat()}
+    if dependencies:
+        data["dependency_sha256"] = {str(file): sha256_bytes((repo / file).read_bytes()) for file in dependencies}
     block = "```json prereg\n" + json.dumps(data, indent=2, sort_keys=True) + "\n```"
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     text = BLOCK.sub(lambda _: block, text) if BLOCK.search(text) else text.rstrip() + "\n\n" + block + "\n"
@@ -83,9 +86,16 @@ def check(path: Path, repo: Path = Path("."), target: str | None = None) -> dict
     if target is not None:
         if data.get("target") != target:
             raise ValueError(f"{target} is not the registered target ({data.get('target')})")
-        impl = data.get("implementation_file")
-        if not impl or sha256_bytes((repo / impl).read_bytes()) != data.get("implementation_sha256"):
-            raise ValueError("implementation changed since registration (or none was registered)")
+    impl = data.get("implementation_file")
+    if (target is not None and not impl) or (impl and (
+            not (repo / impl).is_file() or sha256_bytes((repo / impl).read_bytes()) != data.get("implementation_sha256"))):
+        raise ValueError("implementation changed since registration (or none was registered)")
+    dependencies = data.get("dependency_sha256", {})
+    if not isinstance(dependencies, dict):
+        raise ValueError("invalid implementation dependency hashes")
+    for file, digest in dependencies.items():
+        if not (repo / file).is_file() or sha256_bytes((repo / file).read_bytes()) != digest:
+            raise ValueError("implementation dependency changed since registration")
     current = sha256_bytes((repo / data["prompt_file"]).read_bytes())
     if current != data["prompt_sha256"]:
         raise ValueError("prompt file changed since registration")
@@ -97,8 +107,11 @@ def check(path: Path, repo: Path = Path("."), target: str | None = None) -> dict
         raise ValueError(f"tag {data['tag']} points to {tagged[:7]}, not the registered {data['commit'][:7]}")
     if not _same_at_commit(repo, data["commit"], data["prompt_file"], data["prompt_sha256"]):
         raise ValueError("prompt at the registered commit differs from the recorded hash")
-    if target is not None and not _same_at_commit(repo, data["commit"], data["implementation_file"], data["implementation_sha256"]):
+    if impl and not _same_at_commit(repo, data["commit"], impl, data["implementation_sha256"]):
         raise ValueError("implementation at the registered commit differs from the recorded hash")
+    for file, digest in dependencies.items():
+        if not _same_at_commit(repo, data["commit"], file, digest):
+            raise ValueError("implementation dependency at the registered commit differs from the recorded hash")
     return data
 
 
@@ -112,6 +125,7 @@ def main() -> None:
     f.add_argument("--model", required=True)
     f.add_argument("--target", required=True, help="module:callable the runner will score")
     f.add_argument("--implementation", type=Path, required=True, help="the file that defines the target")
+    f.add_argument("--dependency", type=Path, action="append", default=[], help="shared code also frozen by hash; repeat as needed")
     f.add_argument("--param", action="append", default=[], help="key=value, e.g. temperature=0")
     c = sub.add_parser("check")
     c.add_argument("--file", type=Path, required=True)
@@ -119,7 +133,7 @@ def main() -> None:
     if args.cmd == "fill":
         params = dict(kv.split("=", 1) for kv in args.param)
         print(json.dumps(fill(args.file, args.system, args.prompt, args.model, params,
-                              target=args.target, implementation=args.implementation), indent=2))
+                              target=args.target, implementation=args.implementation, dependencies=args.dependency), indent=2))
         print(f"Now commit, then: git tag {args.system} && git push origin {args.system}")
     else:
         print(json.dumps(check(args.file), indent=2))

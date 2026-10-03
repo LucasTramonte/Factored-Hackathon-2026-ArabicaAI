@@ -8,6 +8,7 @@ cohort, to select from an inconsistent or stale Gold, and to break the write bud
 from __future__ import annotations
 
 import json
+import shutil
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -219,6 +220,19 @@ def test_gold_tables_from_different_quality_runs_are_refused(tmp_path):
     db = standard(tmp_path)
     build_gold(tmp_path, tables=("card_purchases",), quality_at="2099-01-01T00:00:00+00:00")
     with pytest.raises(ValueError, match="different quality runs"):
+        build(tmp_path, db)
+
+
+def test_gold_tables_from_different_silver_files_are_refused(tmp_path):
+    db = standard(tmp_path)
+    at = "2099-01-01T00:00:00+00:00"
+    build_gold(tmp_path, quality_at=at)  # every table from one quality run and one Silver file
+    other = tmp_path / "other_silver.duckdb"
+    shutil.copy(silver_path(tmp_path), other)
+    quality = {"generated_at_utc": at, "watermarks": [{"table": "transactions", "last_loaded_date": str(AS_OF)}]}
+    with gb.connect(gold_path(tmp_path), other) as con:  # same run, another Silver file
+        gb.build(con, ("card_purchases",), other, quality)
+    with pytest.raises(ValueError, match="different Silver files"):
         build(tmp_path, db)
 
 

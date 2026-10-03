@@ -17,7 +17,7 @@ describe('CustomerPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed'], { client: signal(''), card: signal(null), roles: signal([]) });
+      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed', 'sendFeedback'], { client: signal(''), card: signal(null), roles: signal([]) });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null, roles: ['customer'] });
@@ -158,6 +158,13 @@ describe('CustomerPage', () => {
       expect(el.querySelector('#code-sent')?.textContent).toContain('ana@example.com');
       const code = el.querySelector<HTMLInputElement>('#login-code')!;
       expect([code.inputMode, code.autocomplete, code.maxLength, code.pattern]).toEqual(['numeric', 'one-time-code', 8, '[0-9]*']);
+      const help = el.querySelector('#code-sent + p#code-help');
+      expect(help?.textContent?.trim()).toBe(p.t().codeHelp);
+      expect(code.getAttribute('aria-describedby')).toBe('code-sent code-help');
+      p.error.set(p.t().errCode);
+      fixture.detectChanges();
+      expect(code.getAttribute('aria-describedby')).toBe('code-sent code-help login-error');
+      p.error.set('');
       p.code = '12345678';
       await p.verify();
       expect(cognito.submitCode).toHaveBeenCalledWith('ana@example.com', '12345678');
@@ -457,6 +464,22 @@ describe('CustomerPage', () => {
         page.pickReason('card_lost_or_stolen');
         expect(page.log().filter(l => 'key' in l && l.key === 'chatLostCard').length).toBe(1);
         expect(page.log().at(-1)).toEqual({ from: 'bot', key: 'chatLostCard' });
+      });
+
+      it('another reason takes the call-your-bank line back', () => {
+        page.pickReason('card_lost_or_stolen');
+        page.pickReason('duplicate');
+        expect(page.log().some(l => 'key' in l && l.key === 'chatLostCard')).toBeFalse();
+      });
+
+      it('a sentence a chip wrote follows a new report language; the customer\'s own words never change', () => {
+        page.pickReason('duplicate');
+        page.setReportLang('pt');
+        expect(page.chatStatement).toBe(lang.stringsFor('pt').reasonFillDuplicate);
+        page.chatStatement = 'Comprei em outra loja.';
+        page.setReportLang('en');
+        expect(page.chatStatement).toBe('Comprei em outra loja.');
+        expect(page.reportLang()).toBe('en');
       });
 
       it('a new report clears the reason and the prefill', () => {
@@ -883,6 +906,196 @@ describe('CustomerPage', () => {
       expect(el.querySelector('.your-reports')!.textContent).not.toMatch(/resuelt|resolvid|resolved/i);
     });
 
+    describe('not resolved', () => {
+      const closed = (over: Partial<Report> = {}): Report => ({ ...report('complete', 'AR-CCCC-DDDD'), status: 'closed', next_step: 'closed_by_person', ...over });
+      const again = (el: HTMLElement) => [...el.querySelectorAll<HTMLButtonElement>('.your-reports li .report-again-btn')];
+
+      it('only a closed report offers it, labelled with its reference', async () => {
+        service.reports.and.resolveTo({ items: [closed(), report('complete', 'AR-EEEE-FFFF', '2026-10-01T12:00:00Z', '11111111-2222-4333-8444-555555555555')], has_more: false });
+        const { el, p } = await home();
+        expect(again(el).length).toBe(1);
+        expect(again(el)[0].getAttribute('aria-label')).toBe(p.t().reportAgain + ': AR-CCCC-DDDD');
+      });
+
+      it('starts a new report on the same charge, citing the earlier reference; a chip never overwrites it', async () => {
+        service.reports.and.resolveTo({ items: [closed({ transaction_id: 'demo-tx-001' })], has_more: false });
+        const { el, p, fixture } = await home();
+        again(el)[0].click(); fixture.detectChanges();
+        expect(p.chatOpen()).toBeTrue(); expect(p.general()).toBeFalse(); expect(p.choice).toBe('demo-tx-001');
+        expect(p.chatStatement).toContain('AR-CCCC-DDDD');
+        p.pickReason('duplicate');
+        expect(p.chatStatement).toContain('AR-CCCC-DDDD');
+      });
+
+      it('during another open guided report it starts fresh: no old episode, statement or selected charge is kept', async () => {
+        service.reports.and.resolveTo({ items: [closed({ transaction_id: 'demo-tx-001' })], has_more: false });
+        const { p } = await home();
+        // Another report already at the choose step: an episode exists, with its own statement and a different charge picked.
+        p.openChat('demo-tx-002');
+        p.episode.set({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', mode: 'guided' } as never);
+        p.chatStatement = 'Otra cosa que estaba escribiendo.'; p.choice = 'demo-tx-002';
+        expect(p.chatStep()).toBe('choose');
+        p.reportAgain(closed({ transaction_id: 'demo-tx-001' }));
+        expect(p.episode()).toBeNull(); expect(p.chatStep()).toBe('describe');
+        expect(p.choice).toBe('demo-tx-001');
+        expect(p.chatStatement).toContain('AR-CCCC-DDDD'); expect(p.chatStatement).not.toContain('Otra cosa');
+      });
+
+      it('without a listed charge it opens the "?" entry, and never runs while a request is frozen', async () => {
+        service.reports.and.resolveTo({ items: [closed({ kind: 'incomplete' })], has_more: false });
+        const { p } = await home();
+        p.reportAgain(closed({ kind: 'incomplete' }));
+        expect(p.general()).toBeTrue(); expect(p.chatStatement).toContain('AR-CCCC-DDDD');
+        p.closeChat(); p.newReport();
+        p.frozen.set({ path: 'start', body: {} as never });
+        p.reportAgain(closed({ reference_short: 'AR-ZZZZ-ZZZZ' }));
+        expect(p.chatStatement).not.toContain('AR-ZZZZ-ZZZZ');
+      });
+    });
+
+    describe('receipt feedback', () => {
+      const PROTOCOL = '99999999-8888-4777-8666-555555555555';
+      const STORED_AT = '2026-10-03T12:00:00.123Z';
+      type Answer = Awaited<ReturnType<CustomerService['sendFeedback']>>;
+      function delayed() {
+        let resolve!: (answer: Answer) => void;
+        let reject!: (error: ApiError) => void;
+        const promise = new Promise<Answer>((yes, no) => { resolve = yes; reject = no; });
+        return { promise, resolve, reject };
+      }
+      const withReceipt = async () => {
+        const ctx = await home();
+        ctx.p.openChat('demo-tx-001');
+        ctx.p.intakeReceipt.set({ episode_id: 'E', protocol: PROTOCOL, kind: 'complete', accepted_at: 'x', replayed: false, urgency: 'normal',
+          actions_taken: [], unresolved_questions: [], reference_short: 'AR-AAAA-BBBB', next_step_code: 'await_human_review' });
+        ctx.fixture.detectChanges();
+        await ctx.fixture.whenStable();
+        return ctx;
+      };
+      const buttons = (el: HTMLElement) => [...el.querySelectorAll<HTMLButtonElement>('.receipt-feedback button')];
+
+      it('asks one localized question with labelled thumbs and an initially empty persistent live region', async () => {
+        const { el, p, fixture } = await withReceipt();
+        for (const code of ['es', 'pt', 'en'] as const) {
+          p.lang.set(code); fixture.detectChanges();
+          expect(el.querySelector('.receipt-feedback')!.getAttribute('aria-label')).toBe(p.t().feedbackQuestion);
+          expect(buttons(el).map(b => b.getAttribute('aria-label'))).toEqual([p.t().feedbackYes, p.t().feedbackNo]);
+        }
+        const status = el.querySelector('.feedback-thanks')!;
+        expect(status.getAttribute('role')).toBe('status');
+        expect(status.textContent).toBe('');
+        service.sendFeedback.and.resolveTo({ protocol: PROTOCOL, easy: false, recorded_at: STORED_AT });
+        await p.sendFeedback(false); fixture.detectChanges();
+        expect(el.querySelector('.feedback-thanks')).toBe(status);
+        expect(status.textContent).toBe(p.t().feedbackThanks);
+      });
+
+      it('sends the answer for this receipt and then thanks the customer', async () => {
+        const { el, p, fixture } = await withReceipt();
+        service.sendFeedback.and.resolveTo({ protocol: PROTOCOL, easy: false, recorded_at: STORED_AT });
+        buttons(el)[1].click(); await fixture.whenStable(); fixture.detectChanges();
+        expect(service.sendFeedback).toHaveBeenCalledOnceWith(PROTOCOL, false);
+        expect(p.feedback()).toBeFalse(); expect(p.feedbackRecorded()).toBeTrue();
+        expect(el.querySelector('.receipt-feedback')!.textContent).toContain(p.t().feedbackThanks);
+        expect(buttons(el).length).toBe(0);
+      });
+
+      it('409 thanks without inventing the stored choice, blocks repeats, and a new report resets every feedback flag', async () => {
+        const { p, fixture, el } = await withReceipt();
+        service.sendFeedback.and.rejectWith(new ApiError(409, 'Feedback already recorded for this report'));
+        await p.sendFeedback(true); fixture.detectChanges();
+        expect(p.feedback()).toBeNull(); expect(p.feedbackRecorded()).toBeTrue();
+        expect(el.querySelector('.feedback-thanks')!.textContent).toBe(p.t().feedbackThanks);
+        expect(buttons(el).length).toBe(0);
+        await p.sendFeedback(false); expect(service.sendFeedback).toHaveBeenCalledTimes(1);
+        p.newReport();
+        expect([p.feedback(), p.feedbackRecorded(), p.feedbackSending(), p.feedbackFailed()]).toEqual([null, false, false, false]);
+      });
+
+      it('a failed save leaves both buttons available and allows a retry', async () => {
+        const { p, fixture, el } = await withReceipt();
+        service.sendFeedback.and.rejectWith(new ApiError(503, 'x'));
+        await p.sendFeedback(true); fixture.detectChanges();
+        expect([p.feedback(), p.feedbackRecorded(), p.feedbackSending(), p.feedbackFailed()]).toEqual([null, false, false, true]);
+        expect(buttons(el).length).toBe(2);
+        expect(el.querySelector('.receipt-feedback [role=alert]')!.textContent).toBe(p.t().feedbackFailed);
+        service.sendFeedback.and.resolveTo({ protocol: PROTOCOL, easy: true, recorded_at: STORED_AT });
+        await p.sendFeedback(true);
+        expect(p.feedbackRecorded()).toBeTrue(); expect(p.feedbackFailed()).toBeFalse();
+      });
+
+      it('rapid opposite clicks send once and unavailable thumbs keep keyboard focus while pending', async () => {
+        const { p, fixture, el } = await withReceipt();
+        const wait = delayed(); service.sendFeedback.and.returnValue(wait.promise);
+        const thumbs = buttons(el);
+        thumbs[0].focus(); thumbs[0].click(); thumbs[1].click();
+        fixture.detectChanges();
+        expect(service.sendFeedback).toHaveBeenCalledOnceWith(PROTOCOL, true);
+        expect(thumbs.map(b => b.getAttribute('aria-disabled'))).toEqual(['true', 'true']);
+        expect(p.feedbackSending()).toBeTrue();
+        expect(document.activeElement).toBe(thumbs[0]);
+        wait.resolve({ protocol: PROTOCOL, easy: true, recorded_at: STORED_AT });
+        await fixture.whenStable(); fixture.detectChanges();
+        await p.sendFeedback(false); expect(service.sendFeedback).toHaveBeenCalledTimes(1);
+      });
+
+      for (const outcome of ['success', '409', 'error'] as const) {
+        it(`ignores stale ${outcome} from receipt A, including its pending reset, while receipt B awaits its own answer`, async () => {
+          const { p, fixture } = await withReceipt();
+          const old = delayed(); service.sendFeedback.and.returnValue(old.promise);
+          const first = p.sendFeedback(true);
+          const nextReceipt = { ...p.intakeReceipt()!, protocol: '11111111-2222-4333-8444-555555555555' };
+          p.newReport();
+          expect(p.feedbackSending()).toBeFalse();
+          p.intakeReceipt.set(nextReceipt); fixture.detectChanges();
+          const next = delayed(); service.sendFeedback.and.returnValue(next.promise);
+          const second = p.sendFeedback(false);
+          if (outcome === 'success') old.resolve({ protocol: PROTOCOL, easy: true, recorded_at: STORED_AT });
+          else old.reject(new ApiError(outcome === '409' ? 409 : 503));
+          await first;
+          expect([p.feedback(), p.feedbackRecorded(), p.feedbackSending(), p.feedbackFailed()]).toEqual([null, false, true, false]);
+          next.resolve({ protocol: nextReceipt.protocol, easy: false, recorded_at: STORED_AT });
+          await second;
+          expect([p.feedback(), p.feedbackRecorded(), p.feedbackSending(), p.feedbackFailed()]).toEqual([false, true, false, false]);
+        });
+      }
+
+      for (const conflict of [false, true]) {
+        it(`moves keyboard focus from the removed thumb to thanks after ${conflict ? '409' : 'success'}`, async () => {
+          const { fixture, el } = await withReceipt();
+          if (conflict) service.sendFeedback.and.rejectWith(new ApiError(409));
+          else service.sendFeedback.and.resolveTo({ protocol: PROTOCOL, easy: true, recorded_at: STORED_AT });
+          buttons(el)[0].focus(); buttons(el)[0].click();
+          await fixture.whenStable(); fixture.detectChanges();
+          expect(document.activeElement).toBe(el.querySelector('.feedback-thanks'));
+        });
+
+        it(`keeps a customer's chosen focus when they move away before ${conflict ? '409' : 'success'}`, async () => {
+          const { p, fixture, el } = await withReceipt();
+          const wait = delayed(); service.sendFeedback.and.returnValue(wait.promise);
+          buttons(el)[0].focus(); buttons(el)[0].click(); fixture.detectChanges();
+          const faq = el.querySelector<HTMLButtonElement>('.chat-faq button')!;
+          faq.focus();
+          if (conflict) wait.reject(new ApiError(409));
+          else wait.resolve({ protocol: PROTOCOL, easy: true, recorded_at: STORED_AT });
+          await fixture.whenStable(); fixture.detectChanges();
+          expect(p.feedbackRecorded()).toBeTrue(); expect(document.activeElement).toBe(faq);
+        });
+      }
+
+      it('finishing feedback after the customer closes the panel keeps focus on the page', async () => {
+        const { p, fixture, el } = await withReceipt();
+        const wait = delayed(); service.sendFeedback.and.returnValue(wait.promise);
+        buttons(el)[0].focus(); buttons(el)[0].click(); fixture.detectChanges();
+        p.closeChat(); fixture.detectChanges(); await fixture.whenStable();
+        const heading = el.querySelector('.step h1');
+        expect(document.activeElement).toBe(heading);
+        wait.resolve({ protocol: PROTOCOL, easy: true, recorded_at: STORED_AT });
+        await fixture.whenStable(); fixture.detectChanges();
+        expect(document.activeElement).toBe(heading);
+      });
+    });
+
     it('reloads the reports after a receipt', async () => {
       const { fixture, p, el } = await home();
       expect(el.querySelector('.your-reports')).toBeNull();
@@ -914,9 +1127,9 @@ describe('CustomerPage', () => {
       await fixture.whenStable();
       buttons[0].focus(); buttons[0].click(); fixture.detectChanges();
       expect(service.requestUpdate).toHaveBeenCalledWith('99999999-8888-4777-8666-555555555555');
-      expect(buttons[0].disabled).toBeTrue();
+      expect(buttons[0].getAttribute('aria-disabled')).toBe('true');
       finish(); await fixture.whenStable(); fixture.detectChanges();
-      expect(buttons[0].disabled).toBeFalse();
+      expect(buttons[0].getAttribute('aria-disabled')).toBe('false');
       expect(document.activeElement).toBe(buttons[0]);
       const status = (row = 0) => el.querySelectorAll('.your-reports [role="status"]')[row]?.textContent?.trim();
       expect(status()).toBe(p.t().updateSent);
@@ -936,11 +1149,11 @@ describe('CustomerPage', () => {
       service.requestUpdate.and.returnValue(new Promise(done => { finish = () => done({ queued: true }); }));
       const first = p.requestUpdate('99999999-8888-4777-8666-555555555555'); fixture.detectChanges();
       const buttons = [...el.querySelectorAll<HTMLButtonElement>('.your-reports li .update-btn')];
-      expect(buttons.map(b => b.disabled)).toEqual([true, true]);
+      expect(buttons.map(b => b.getAttribute('aria-disabled'))).toEqual(['true', 'true']);
       await p.requestUpdate('11111111-2222-4333-8444-555555555555');
       expect(service.requestUpdate).toHaveBeenCalledTimes(1);
       finish(); await first; fixture.detectChanges();
-      expect(buttons.map(b => b.disabled)).toEqual([false, false]);
+      expect(buttons.map(b => b.getAttribute('aria-disabled'))).toEqual(['false', 'false']);
     });
 
     it('says when more reports exist than are listed', async () => {
@@ -1186,7 +1399,17 @@ describe('CustomerPage', () => {
         fixture.detectChanges();
         expect(p.chatStep()).toBe('describe');
         expect(p.choice).toBe('');
-        expect(el.querySelector('.chat-log li')!.textContent).toContain(greeting(p, 'Ana (demo)'));
+        expect(el.querySelector('.chat-log li')!.textContent).toContain(greeting(p, 'Ana'));
+      });
+
+      it('without any known name the greeting has no name, never the customer id', async () => {
+        const { fixture, p, el } = await home();
+        p.client.set('CLI-UNKNOWN');
+        fab(el).click();
+        fixture.detectChanges();
+        const text = el.querySelector('.chat-log li')!.textContent!;
+        expect(text).toContain(p.t().chatHelloGeneralNoName);
+        expect(text).not.toContain('CLI-UNKNOWN');
       });
 
       it('a charge row after a general chat greets as usual and keeps the usual button order', async () => {

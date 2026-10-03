@@ -285,100 +285,41 @@
         }
       }
     },
-    "agentCase": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "protocol",
-        "customer_id",
-        "display_name",
-        "transaction_id",
-        "merchant_name",
-        "occurred_at",
-        "source_occurred_at",
-        "amount",
-        "currency",
-        "customer_statement",
-        "customer_confirmed",
-        "status",
-        "accepted_at"
-      ],
+    "auditEvents": {
+      "type": "object", "additionalProperties": false,
+      "required": ["auth_events", "auth_events_has_more", "status_changes", "status_changes_has_more", "scope"],
       "properties": {
-        "protocol": {
-          "type": "string",
-          "minLength": 1
-        },
-        "customer_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "display_name": {
-          "type": "string"
-        },
-        "transaction_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "merchant_name": {
-          "type": "string"
-        },
-        "occurred_at": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "source_occurred_at": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "amount": {
-          "type": "string"
-        },
-        "currency": {
-          "type": "string"
-        },
-        "customer_statement": {
-          "type": "string",
-          "minLength": 10,
-          "maxLength": 2000
-        },
-        "customer_confirmed": {
-          "const": true
-        },
-        "status": {
-          "const": "accepted"
-        },
-        "accepted_at": {
-          "type": "string",
-          "minLength": 1
-        }
+        "auth_events": { "type": "array", "maxItems": 100, "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["id", "ts", "actor", "event", "session_ref", "request_id"],
+          "properties": {
+            "id": { "type": "integer" },
+            "ts": { "type": "integer" },
+            "actor": { "type": "string", "pattern": "^(customer|agent)$" },
+            "event": { "type": "string", "pattern": "^(session_started|session_rejected|session_expired|logged_out)$" },
+            "session_ref": { "type": "string", "pattern": "^[0-9a-f]{12}$" },
+            "request_id": { "type": "string", "minLength": 1 } } } },
+        "auth_events_has_more": { "type": "boolean" },
+        "status_changes": { "type": "array", "maxItems": 100, "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["handoff_id", "status", "changed_at", "agent_session_ref"],
+          "properties": {
+            "handoff_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+            "status": { "type": "string", "pattern": "^(in_review|closed)$" },
+            "changed_at": { "type": "integer" },
+            "agent_session_ref": { "type": "string", "pattern": "^[0-9a-f]{12}$" } } } },
+        "status_changes_has_more": { "type": "boolean" },
+        "scope": { "const": "references_only" }
       }
     },
-    "agentCaseList": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "items",
-        "has_more",
-        "scope"
-      ],
+    "reportFeedback": {
+      "type": "object", "additionalProperties": false,
+      "required": ["protocol", "easy", "recorded_at"],
+      "description": "The customer's one receipt answer: was it easy to report this charge? Not CSAT; never an event field.",
       "properties": {
-        "items": {
-          "type": "array",
-          "maxItems": 50,
-          "items": {
-            "$ref": "#/$defs/agentCase"
-          }
-        },
-        "has_more": {
-          "type": "boolean"
-        },
-        "scope": {
-          "const": "synthetic_demo_only"
-        }
+        "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+        "easy": {"type": "boolean"},
+        "recorded_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"}
       }
     },
     "identityList": {
@@ -428,7 +369,7 @@
         "destination": {"type": "string", "minLength": 1},
         "priority": {"type": "string", "minLength": 1},
         "urgency": {"type": "string", "pattern": "^(normal|high)$"},
-        "reason": {"type": "string", "pattern": "^(not_mine|duplicate|wrong_amount|cancelled_or_not_received|subscription|card_lost_or_stolen|other)$"},
+        "reason": {"type": ["string", "null"], "pattern": "^(not_mine|duplicate|wrong_amount|cancelled_or_not_received|subscription|card_lost_or_stolen|other)$"},
         "accepted_at": {"type": "string", "minLength": 1}
       }
     },
@@ -493,7 +434,7 @@
     },
     "agentIntakeDetail": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at", "reason", "language", "customer_statement", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "model_reading", "scope"],
+      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at", "first_opened_at", "reason", "language", "customer_statement", "customer_history", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "model_reading", "scope"],
       "properties": {
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
@@ -504,7 +445,7 @@
         "destination": {"type": "string", "minLength": 1},
         "priority": {"type": "string", "minLength": 1},
         "urgency": {"type": "string", "pattern": "^(normal|high)$"},
-        "reason": {"type": "string", "pattern": "^(not_mine|duplicate|wrong_amount|cancelled_or_not_received|subscription|card_lost_or_stolen|other)$"},
+        "reason": {"type": ["string", "null"], "pattern": "^(not_mine|duplicate|wrong_amount|cancelled_or_not_received|subscription|card_lost_or_stolen|other)$"},
         "accepted_at": {"type": "string", "minLength": 1},
         "language": {"type": "string", "pattern": "^(es|pt|en)$"},
         "customer_statement": {"type": "string", "minLength": 10, "maxLength": 2000},
@@ -513,6 +454,8 @@
         "unresolved_questions": {"type": "array", "items": {"type": "string", "minLength": 1}},
         "history": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/intakeServiceTransition"}},
         "history_has_more": {"type": "boolean"},
+        "first_opened_at": {"type": "string", "minLength": 1, "description": "UTC ISO timestamp of the first agent open, stored as epoch-ms INTEGER in D1. API pickup ms = Date.parse(first_opened_at) - Date.parse(accepted_at). In SQL subtract CAST(ROUND((julianday(accepted_at)-2440587.5)*86400000) AS INTEGER) from the stored first_opened_at."},
+        "customer_history": {"type": "object", "additionalProperties": false, "required": ["reports", "open", "high_urgency", "last_status", "last_accepted_at", "has_more"], "description": "The same customer's other acknowledged reports in their newest 21 episodes, at most 20 reports and no identifiers. Counts and latest status/time cover this bounded window only. has_more means the raw episode window or report bound is full, so older acknowledged reports may be missing even with reports=0.", "properties": {"has_more": {"type": "boolean"}, "reports": {"type": "integer"}, "open": {"type": "integer"}, "high_urgency": {"type": "integer"}, "last_status": {"type": ["string", "null"], "pattern": "^(received|in_review|closed)$"}, "last_accepted_at": {"type": ["string", "null"], "minLength": 1}}},
         "model_reading": {"type": "object", "additionalProperties": false, "required": ["mode", "model_version", "llm_calls"], "description": "Whether a model read the case in shadow: version and call count only, never its output; it decides nothing.", "properties": {"mode": {"type": "string", "pattern": "^(off|shadow)$"}, "model_version": {"type": ["string", "null"], "minLength": 1}, "llm_calls": {"type": "integer"}}},
         "scope": {"const": "synthetic_demo_only"}
       }

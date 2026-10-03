@@ -1,5 +1,5 @@
 /** Guided reports use authenticated ownership and durable start receipts; the extractor switch (off by default) only records a shadow call. */
-import { requireSession, tokenHash } from '../../auth/session.js';
+import { SESSION_MS, requireSession, tokenHash } from '../../auth/session.js';
 import { fail, json, readJsonBody, readCookies } from '../../http.js';
 import { UUID, validateStartRequest, validateHandoffRequest } from './validation.js';
 import { APPROVED_EXTRACTOR, UNKNOWN, extractShadow, readyExtractor } from './ai-transport.js';
@@ -13,7 +13,8 @@ import URGENCY from '../../config/urgency.json' with { type: 'json' };
  * POST /intake/start: start or replay an explicit guided report; never return a case protocol. With the switch on,
  * a new start also makes one shadow extraction call (at most 10 s) and records only its usage; the response is
  * the guided one whatever the call returns. ``ctx`` is the Worker context, so the shadow call runs in waitUntil after
- * the response; ``approved`` is a test seam: the router never passes it.
+ * the response; ``approved`` is a test seam: the router never passes it. Optional previous_protocol links a new
+ * episode to this customer's acknowledged closed report; ownership and closed state are rechecked in the write.
  */
 export async function startIntake(request, env, store, ctx, approved = APPROVED_EXTRACTOR) {
   const current = await requireSession(request, store, 'customer');
@@ -26,11 +27,19 @@ export async function startIntake(request, env, store, ctx, approved = APPROVED_
   let result;
   try {
     result = await store.startIntake({ ...checked.value, customerId: current.customer_id,
-      now: Date.now(), expiresAt: current.expires_at, ...(extractor && { producer: extractor.modelVersion }) });
+      now: Date.now(), expiresAt: current.expires_at, ...(extractor && { producer: extractor.modelVersion }),
+      ...(checked.value.previousProtocol && { sessionHash: await tokenHash(readCookies(request).demo_session) }) });
   } catch {
     return fail(503, 'Start not confirmed; retry with the same idempotency key');
   }
   if (result.conflict) return fail(409, 'Key already used with different content');
+  if (result.previousError) {
+    // A failed insert must not reveal the source's existence or status after authority was lost during the request.
+    const live = await requireSession(request, store, 'customer');
+    if (!live || live.customer_id !== current.customer_id) return fail(401, 'Start a demo session first');
+    return fail(result.previousError, result.previousError === 404 ? 'Previous report not found'
+      : result.previousError === 409 ? 'Previous report is not closed' : 'Start a demo session first');
+  }
   const { episode, replayed } = result;
   if (!episode) return fail(503, 'Start not confirmed; retry with the same idempotency key');
   if (extractor && !replayed) await inShadow(ctx, async () => {
@@ -81,6 +90,8 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
   const payloadHash = await tokenHash(JSON.stringify([complete ? 'complete' : 'incomplete', transactionId, ...(details ? [details] : [])]));
   const prior = await store.findOwnedIntakeHandoff(customerId, episodeId);
   if (prior && (prior.turn_key !== turnKey || prior.payload_hash !== payloadHash)) return fail(409, 'Episode already submitted with different content or key');
+  if (prior?.kind === 'complete' && episode.state === 'handoff_pending' && Date.parse(prior.accepted_at) + SESSION_MS <= Date.now())
+    return fail(409, 'Reservation expired; start a new report');
   if (!prior && episode.state !== 'selection_required') return fail(409, 'Episode is no longer open');
   // The statement column holds 10–2000 code points; the appended details must fit (one newline between).
   if (!prior && details && [...episode.customer_statement].length + 1 + [...details].length > 2000) return fail(422, 'Statement and details exceed 2000 characters together');
@@ -93,14 +104,15 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
     catch { kind = 'technical'; }
     if (kind === 'complete' && !evidence) return fail(404, 'Transaction not found for this session');
     // Only a new confirmation is checked: a replay has a prior reservation and returns its receipt above this branch.
-    // ponytail: check-then-write, so two confirms within the same instant can still open two reports; the agent queue shows both.
+    // A fast refusal; the reservation batch repeats this check atomically, so two confirms in the same instant still open one report.
     if (kind === 'complete' && await store.openReportForTransaction(customerId, transactionId)) return fail(409, 'This charge already has an open report');
-    // Stated policy, not a fitted threshold (DF-024): a reason in ``high_reasons`` (ADR-010) is high whatever the amount;
-    // otherwise the relative rule uses the p95 of the customer's most recent 21 served purchases (newest first), without
-    // the chosen one. A failed read leaves only the fixed amount; the report is still accepted.
-    if (kind === 'complete') urgency = URGENCY.high_reasons.includes(episode.reason) ? 'high' : urgencyOf(evidence, (await store.listTransactions(customerId, 21).catch(() => []))
-      .filter(t => t.transaction_id !== transactionId), URGENCY);
   }
+  // Stated policy, not a fitted threshold (DF-024): a reason in ``high_reasons`` (ADR-010) is high on every kind, so a
+  // lost card reported without a listed charge still heads the queue; otherwise only a confirmed charge is ranked, by the
+  // p95 of the customer's most recent 21 served purchases (newest first), without the chosen one. A failed read leaves
+  // only the fixed amount; the report is still accepted.
+  if (!prior) urgency = URGENCY.high_reasons.includes(episode.reason) ? 'high' : kind !== 'complete' ? 'normal'
+    : urgencyOf(evidence, (await store.listTransactions(customerId, 21).catch(() => [])).filter(t => t.transaction_id !== transactionId), URGENCY);
   const live = await requireSession(request, store, 'customer');
   if (!live || live.customer_id !== customerId) return fail(401, 'Start a demo session first');
   const sessionHash = await tokenHash(readCookies(request).demo_session);
@@ -114,13 +126,15 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
       questions: kind === 'complete' ? [] : ['matching_transaction', 'customer_confirmation'],
       usage: { tool_calls: 0, operation_duration_ms: 0 }, now: Date.now() });
     if (result.conflict) return fail(409, 'Episode already submitted with different content or key');
-    if (!result.handoff) return await unreserved(request, store, { customerId, episodeId, toolCalls, started });
+    if (!result.handoff) return await unreserved(request, store, { customerId, episodeId, toolCalls, started, transactionId: kind === 'complete' ? transactionId : null });
     toolCalls++;
     const receipt = await store.readIntakeReceipt(customerId, episodeId, { sessionHash, now: Date.now() });
     if (!receipt) throw new Error('Receipt not read back');
     toolCalls++;
     const { acknowledged, emailId } = await store.finishIntakeHandoff({ customerId, episode, receipt, sessionHash, now: Date.now(), operationDuration: Math.floor(performance.now() - started), toolCalls });
     if (!acknowledged) {
+      if (receipt.kind === 'complete' && Date.parse(receipt.accepted_at) + SESSION_MS <= Date.now())
+        return fail(409, 'Reservation expired; start a new report');
       await store.recordIntakeAttempt({ customerId, episodeId, toolCalls, operationDuration: Math.floor(performance.now() - started) });
       return fail(401, 'Session expired; renew the same customer session and retry with the same idempotency key');
     }
@@ -152,19 +166,48 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
 }
 
 /**
- * The reservation's SQL checks refused to reserve (session expired in SQL, a sweep closed the episode, or the owned
- * transaction vanished). Record the attempt's usage while the episode is open, then answer from a fresh read:
- * no live same-owner session -> 401; episode closed without a reservation -> 409; otherwise acceptance stays unknown.
+ * The reservation's SQL checks refused to reserve (session expired in SQL, a sweep closed the episode, the owned
+ * transaction vanished, or another report on the charge won a race). Record the attempt's usage while the episode is
+ * open, then answer from a fresh read: no live same-owner session -> 401; an open report on the confirmed charge -> 409;
+ * episode closed without a reservation -> 409; otherwise acceptance stays unknown.
  */
-async function unreserved(request, store, { customerId, episodeId, toolCalls, started }) {
+async function unreserved(request, store, { customerId, episodeId, toolCalls, started, transactionId = null }) {
   try { await store.recordIntakeAttempt({ customerId, episodeId, toolCalls, operationDuration: Math.floor(performance.now() - started) }); } catch { /* best effort */ }
   try {
     const live = await requireSession(request, store, 'customer');
     if (!live || live.customer_id !== customerId) return fail(401, 'Session expired; renew the same customer session and retry with the same idempotency key');
+    if (transactionId && await store.openReportForTransaction(customerId, transactionId)) return fail(409, 'This charge already has an open report');
     const [episode, reservation] = [await store.findIntake(customerId, episodeId), await store.findOwnedIntakeHandoff(customerId, episodeId)];
     if (episode && episode.state !== 'selection_required' && !reservation) return fail(409, 'Episode is no longer open');
   } catch { /* Storage may be unavailable; never promise a receipt. */ }
   return fail(503, 'Acceptance not confirmed; retry with the same idempotency key');
+}
+
+/**
+ * POST /reports/feedback ``{ protocol, easy }``: the customer's answer, on the receipt, to "was it easy to report this
+ * charge?" for an own acknowledged report. The first answer stands: the same answer again is 200, a different one 409.
+ * A missing or another customer's report is the same 404. It is stored on the report, never in events or logs.
+ */
+export async function recordFeedback(request, env, store) {
+  const current = await requireSession(request, store, 'customer');
+  if (!current) return fail(401, 'Start a demo session first');
+  const body = await readJsonBody(request);
+  if (body.error) return body.error;
+  const value = body.value;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).sort().join() !== 'easy,protocol'
+    || typeof value.protocol !== 'string' || !UUID.test(value.protocol) || typeof value.easy !== 'boolean') {
+    return fail(422, 'Provide exactly a protocol and a boolean easy');
+  }
+  const protocol = value.protocol.toLowerCase();
+  const sessionHash = await tokenHash(readCookies(request).demo_session);
+  const stored = await store.recordReportFeedback(current.customer_id, protocol, value.easy, Date.now(), sessionHash);
+  if (!stored) {
+    const live = await requireSession(request, store, 'customer');
+    if (!live || live.customer_id !== current.customer_id) return fail(401, 'Start a demo session first');
+    return fail(404, 'Report not found');
+  }
+  if (Boolean(stored.easy) !== value.easy) return fail(409, 'Feedback already recorded for this report');
+  return json({ protocol, easy: value.easy, recorded_at: new Date(stored.created_at).toISOString() });
 }
 
 const REPORTS_PAGE = 20;

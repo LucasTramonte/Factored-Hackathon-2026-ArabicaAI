@@ -100,7 +100,7 @@ test('the documented demo-activity reset respects intake foreign keys and keeps 
   db.exec('ROLLBACK');
   const seed = ['customers', 'transactions', 'context_cards', 'sample_provenance'].map(t => rows(db, t));
   db.exec(readFileSync(new URL('../../scripts/reset-demo-activity.sql', import.meta.url), 'utf8'));
-  for (const table of [...TABLES, 'sessions', 'charge_views']) assert.equal(rows(db, table), 0, table);
+  for (const table of [...TABLES, 'sessions', 'charge_views', 'report_feedback', 'handoff_status_history']) assert.equal(rows(db, table), 0, table);
   assert.deepEqual(['customers', 'transactions', 'context_cards', 'sample_provenance'].map(t => rows(db, t)), seed);
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
   db.close();
@@ -109,8 +109,8 @@ test('the documented demo-activity reset respects intake foreign keys and keeps 
 test('migration 0014 admits English and keeps every episode, foreign key and index of intake_episodes', async () => {
   const MIGRATION = '0014_english_reports.sql';
   const { db, store, call } = setup(MIGRATION);
-  // Today's start writes the reason (0016, ADR-010): add it to fill the old table, drop it to restore the pre-0014 shape.
-  const reason = readFileSync(new URL('../../migrations/0016_report_reason.sql', import.meta.url), 'utf8');
+  // Today's start writes the reason and its source (0016, 0017, ADR-010): add them to fill the old table, drop them to restore the pre-0014 shape.
+  const reason = ['0016_report_reason.sql', '0017_reason_source.sql'].map(f => readFileSync(new URL('../../migrations/' + f, import.meta.url), 'utf8')).join('\n');
   db.exec(reason);
   assert.equal((await call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
   for (const [language, statement, complete] of [['es', 'No reconozco este cargo.', true], ['pt', 'Não reconheço esta cobrança.', false], ['es', 'No reconozco este otro cargo.', null]]) {
@@ -123,7 +123,7 @@ test('migration 0014 admits English and keeps every episode, foreign key and ind
     assert.equal(done.status, 201);
     if (complete) await close(store, done.body.protocol);
   }
-  db.exec('ALTER TABLE intake_episodes DROP COLUMN reason');
+  db.exec('ALTER TABLE intake_episodes DROP COLUMN reason_source'); db.exec('ALTER TABLE intake_episodes DROP COLUMN reason');
   assert.throws(() => db.exec("UPDATE intake_episodes SET language='en'"), /CHECK/, 'before 0014 English is refused');
   const indexes = () => db.prepare('PRAGMA index_list(intake_episodes)').all()
     .map(({ name, unique, origin, partial }) => ({ name, unique, origin, partial })).sort((a, b) => a.name.localeCompare(b.name));

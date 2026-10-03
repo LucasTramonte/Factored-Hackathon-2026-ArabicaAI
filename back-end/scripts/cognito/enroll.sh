@@ -9,7 +9,7 @@
 set -euo pipefail
 
 email=${1:?email}; customer_id=${2:?customer_id or -}; group=${3:-customer}
-REGION=us-east-2
+REGION=${AWS_REGION:-us-east-2}
 AWS=(aws cognito-idp --profile "${AWS_PROFILE:-arabica}" --region "$REGION" --output text)
 pool_id=$("${AWS[@]}" list-user-pools --max-results 60 --query "UserPools[?Name=='arabicaai-demo'].Id | [0]")
 [ -n "$pool_id" ] && [ "$pool_id" != "None" ] || { echo "pool not found; run setup.sh" >&2; exit 1; }

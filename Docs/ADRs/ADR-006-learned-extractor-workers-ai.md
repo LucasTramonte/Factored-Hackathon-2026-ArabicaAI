@@ -23,7 +23,7 @@ The question is which model, doing what, and how we avoid spending more than the
    - So the comparison with the checklist measures how well each system *reads the message*. Both sides follow the same policy.
 2. **Start with the smallest capable model in the runtime we already have:** Workers AI `@cf/openai/gpt-oss-20b`.
    - It runs inside the Cloudflare account that already serves the Worker, through the same binding. There is no new provider, no new credential in the Worker, and the data doesn't leave Cloudflare.
-   - It fits the free allocation. ADR-004's envelope, at 12k input and 2k output tokens, gives $0.0030 an episode and 36 free episodes a day, and extraction prompts are much shorter than that. The real tokens and cost are measured in the pre-registered run.
+   - It fits the free allocation. ADR-004's envelope, at 12k input and 2k output tokens, gives $0.0030 an episode and 36 free episodes a day, and extraction prompts are much shorter than that. The real tokens and cost are measured in the pre-registered run. (This was the Workers AI rationale; amendment 6 moves the evaluation to Bedrock, billed per token.)
 3. **Move to a bigger model only on evidence, in a fixed order.** The rungs are:
    1. `gpt-oss-20b`;
    2. a larger Workers AI model (for example `llama-3.3-70b`, $0.0080 an episode in ADR-004);
@@ -53,7 +53,7 @@ The question is which model, doing what, and how we avoid spending more than the
 
 ## Pre-freeze amendments (2026-09-30)
 
-These were written before any frozen scoring. Amendments 1 and 2 change how a result is measured and what follows from it, not the result itself. Amendments 3 and 4 change labels and policy, so they need Manoella's approval as the unexposed reviewer (decision 5), given in the PR that carries them.
+These were written before any frozen scoring. Amendments 1, 2 and 6 change how a result is measured and what follows from it, not the result itself. Amendments 3 and 4 change labels and policy, so they need Manoella's approval as the unexposed reviewer (decision 5), given in the PR that carries them.
 
 1. **Latency is measured on enough calls to decide.** Forty-eight calls can't estimate a p95: a two-sided distribution-free 95% interval needs 72 values (a one-sided 95% upper bound needs 59), and at a true p95 of exactly 3 s the old trigger fires 43% of the time. The rule, fixed before the measurement it applies to:
    - **Sample:** at least 150 model-calling executions on the development split (10 repetitions of the 16 model-calling cases), each counted at its wall time, timeouts included at their full duration.
@@ -62,20 +62,27 @@ These were written before any frozen scoring. Amendments 1 and 2 change how a re
    - The iteration-4 figure (3.25 s over 48 calls) stays reported as measured.
    - **Attempt 1 (2026-09-30) is invalid:** the free daily allocation ran out after 83 of 160 calls (`HTTP 429`), so the rule wasn't applied. The 83 returned calls, as a descriptive sample, had a p50 of 3.4 s and a p95 of 5.5 s (interval 4.8–6.6 s), and 82 of 83 were correct with 0 unsafe. The deciding attempt runs right after a UTC reset. Details are in `DEV_LOG.md`.
    - **Attempt 2 (2026-10-01) decides it: the trigger fires.** 180 executions, no refusals or timeouts: p50 2.33 s, p95 3.58 s, and a 95% interval of 3.42–4.20 s. The upper bound is above 3,000 ms, so under amendment 2 the next version keeps the model and lowers its `reasoning` level, built by the isolated builder. Quality on development: 180 of 180 correct, 0 unsafe. Details are in `DEV_LOG.md`.
-   - **Budget for the frozen run:** the free allocation served fewer than about 280 calls in one UTC day, and the frozen run needs about 180. It starts right after a reset, or runs on Workers Paid.
+   - **Historical Workers AI budget (superseded by amendment 6):** the free allocation served fewer than about 280 calls in one UTC day, and the frozen run needs about 180. The original plan was to start after a reset or use Workers Paid; the current evaluation uses Bedrock's token billing and account quotas.
 2. **A latency-only failure doesn't climb the model ladder.** A larger model is slower, so it can't fix latency. If only the latency trigger fires, the next version keeps the model and lowers the documented `reasoning` level, which Workers AI now lists for gpt-oss-20b (low/medium/high). The isolated builder makes that change and re-runs it on development, because it changes behaviour (decision 5). The ladder in decision 3 still applies to quality failures.
 3. **Development labels follow the written policy.** The two `missing_currency` cases were relabelled to confirm `EVAL-A1`, because `POLICY.md` needs no currency when the other facts fit one purchase. On development the checklist moves from 18/18 to 16/18, and the always-handoff reference stays at 4/18. The details are in `intake_agent/extractor/DEV_LOG.md`.
 4. **Countries are compared as ISO codes.** The source stores foreign purchase countries in English (DF-019), so the policy now maps Spanish, Portuguese and English names to ISO 3166-1 codes on both sides. An unknown country on either side never fits. Recomputing every committed frozen answer with it, after checking `draft.json` against its committed hash, changes none of them. That check runs only where `draft.json` exists (CI skips it), and it barely exercises the new map: one frozen situation states a country, already in the stored spelling, and none states abroad. The new unit tests cover the mapping itself. Development cases have no purchase country, so an unexposed author adds some before pre-registration.
 5. **Exposed frozen cases are reported separately.** Content of 8 of the 60 frozen cases (2 with message fragments) was in git and reachable from the extractor v1 build's worktree through history. Every frozen result is therefore reported on all 60 cases and on the 52 without them, and the difference is shown. Future blind builds use the history-free snapshot from `make_clean_checkout.py`. Details are in [`EVALUATION.md`](../deliverables/EVALUATION.md), section 4.
+6. **Evaluation runs on Amazon Bedrock (2026-10-03).** The development re-check and the frozen run call the same weights, OpenAI `gpt-oss-20b` (`openai.gpt-oss-20b-1:0`, `us-east-2`), through Bedrock's OpenAI-compatible Chat Completions endpoint (`intake_agent/extractor/bedrock.py`). They use the same prompt, body, parsing, deadline and retry as `workers_ai.py`; only the transport differs, so this is a host change, not a step on the model ladder.
+   - **Why:** Workers AI Free served fewer than about 280 calls in a UTC day. The development re-check and the frozen run need about 180 each, the team can't move to Workers Paid, and one retry would push the frozen run by a day. Bedrock bills per token without the Workers AI free-allocation reset, but has [account and model quotas](https://docs.aws.amazon.com/bedrock/latest/userguide/quotas.html), which a person checks before running.
+   - **What stays the same:** the online Worker is unchanged, and the extractor stays off online. If a later evaluation justifies turning it on, the online host is a separate decision. The latency trigger is measured on the host that runs the evaluation.
+   - **Data:** only the evaluation's team-authored, synthetic messages are sent; no customer record or identifier.
+   - **Credentials:** a Bedrock API key in `AWS_BEARER_TOKEN_BEDROCK`, set by a person on their machine; never committed or logged.
+   - **Who changes what:** the transport is non-behavioural, so an exposed author (decision 5) may write it. The reasoning level of amendment 2 is behavioural, and the isolated builder still sets it, in `workers_ai.build_body`, which the Bedrock transport reuses.
+   - **Approval:** the host owner (Lucas) approved Bedrock on 2026-10-03. Manoella, as the unexposed reviewer, approves this amendment in the PR that carries it.
 
 ## Consequences
 
-- **+** It satisfies the brief's learned-component requirement with the least new infrastructure. It's the same runtime, the same account, at $0 within the free allocation.
+- **+** The original Workers AI choice reused the service account and free allocation. Amendment 6 uses Bedrock for offline evaluation, with AWS credentials and token billing; the online Worker stays deterministic and the frozen comparison remains pending.
 - **+** The boundary between AI and deterministic logic is explicit and easy to test. A wrong extraction can make the service ask again or route wrongly, but it can't disclose another customer's data or take an action. Permissions are enforced outside model output, as the brief requires.
 - **+** Moving to a bigger model is a measured decision with triggers written before the test. It isn't a guess, and it isn't tuned on the test.
 - **−** A 20B model may miss regional slang or implicit dates that a larger model would catch. We accept that for v1, and the ladder shows how we'd respond.
 - **−** gpt-oss comes from the same model family as the Codex session that drafted the frozen messages. Shared phrasing habits could flatter it. That's recorded as a limitation, and gold comes from the rules, not from a model.
-- **−** The free allocation covers the evaluation and a demo, not production traffic (ADR-004). Beyond it, cost grows linearly per episode.
+- **−** Workers AI's free allocation constrained the historical development runs (ADR-004). Current Bedrock evaluation cost depends on measured tokens and the dated price source; unknown usage stays visible. Neither host's development costs establish production cost.
 - **−** Extraction quality in Portuguese is measured on synthetic cases only (DF-001).
 
 ## Alternatives considered
@@ -89,5 +96,5 @@ These were written before any frozen scoring. Amendments 1 and 2 change how a re
 ## Implementation notes
 
 - Evaluation: `python -m evals.intake.run --cases <frozen corpus>` for the checklist. The extractor gets a runner entry in its own PR. Its batch follows the pre-registration template: 3 unchanged repetitions if the model is stochastic, scored by per-case majority, with Wilson intervals and McNemar against the checklist (`evals/intake/stats.py`).
-- Prices are ADR-004's, checked on 2026-09-29 against the [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/) page. The pre-registered run records the actual tokens and neurons.
+- Historical Workers AI prices are ADR-004's, checked on 2026-09-29 against the [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/) page. The Bedrock pre-registration records its own price source and date, actual input/output tokens and unknown-usage calls; neurons describe Workers AI only.
 - 2026-10-02: with the switch on, the shadow call also reads the details an incomplete (not-found) handoff carries, after the response, with the same deadline and fail-safe; only its usage is added to the episode. The agent detail shows `model_reading` (mode, version and call count only, never the model's output).

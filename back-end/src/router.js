@@ -5,8 +5,9 @@
 import { fail, json } from './http.js';
 import { GRANTED } from './auth/cognito.js';
 import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession } from './modules/customer/routes.js';
-import { startIntake, confirmIntake, handoffIntake, listReports, requestUpdate } from './modules/intake/routes.js';
-import { listAgentCases, listAgentIntakes, getAgentIntakeDetail, startAgentSession, transitionIntake } from './modules/agent/routes.js';
+import { startIntake, confirmIntake, handoffIntake, listReports, recordFeedback, requestUpdate } from './modules/intake/routes.js';
+import { listAgentIntakes, getAgentIntakeDetail, startAgentSession, transitionIntake } from './modules/agent/routes.js';
+import { listAuditEvents } from './modules/audit/routes.js';
 
 export const API_ROUTES = {
   '/demo/identities': { GET: listIdentities },
@@ -21,15 +22,17 @@ export const API_ROUTES = {
   '/intake/handoff': { POST: handoffIntake },
   '/reports': { GET: listReports },
   '/reports/update': { POST: requestUpdate },
+  '/reports/feedback': { POST: recordFeedback },
   '/demo/agent-session': { POST: startAgentSession },
-  '/agent/cases': { GET: listAgentCases },
   '/agent/intakes': { GET: listAgentIntakes },
   '/agent/intake-detail': { GET: getAgentIntakeDetail },
-  '/agent/intake-status': { POST: transitionIntake }
+  '/agent/intake-status': { POST: transitionIntake },
+  '/audit/events': { GET: listAuditEvents }
 };
 /** Who may call what. ``public`` needs no session; ``customer`` and ``agent`` need that actor's live session, which each
- *  handler reads itself. ``admin`` and ``auditor`` exist as roles (Lucas's RBAC) and own no route until a feature needs
- *  one. Declarative: adding a route without a role fails at module load. */
+ *  handler reads itself; ``auditor`` needs a verified Cognito token on every call (no session). ``admin`` owns no route:
+ *  ``hasRole`` lets it start a customer or agent session and read the audit (ADR-007, decision 8). Agents see only the
+ *  approved queue of acknowledged handoffs. Declarative: adding a route without a role fails at module load. */
 export const ROLES = ['public', ...GRANTED];
 export const ROUTE_ROLES = {
   '/demo/identities': 'public',
@@ -44,16 +47,17 @@ export const ROUTE_ROLES = {
   '/intake/handoff': 'customer',
   '/reports': 'customer',
   '/reports/update': 'customer',
+  '/reports/feedback': 'customer',
   '/demo/agent-session': 'public',
-  '/agent/cases': 'agent',
   '/agent/intakes': 'agent',
   '/agent/intake-detail': 'agent',
-  '/agent/intake-status': 'agent'
+  '/agent/intake-status': 'agent',
+  '/audit/events': 'auditor'
 };
 for (const path of Object.keys(API_ROUTES)) if (!ROLES.includes(ROUTE_ROLES[path])) throw new Error(`Route ${path} has no role`);
-export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/transactions/', '/cases/', '/intake/', '/reports/'];
+export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/audit/', '/transactions/', '/cases/', '/intake/', '/reports/'];
 /** Bare API namespace paths that have no handler but must still answer JSON 404. */
-export const API_NAMESPACES = new Set(['/intake', '/auth']);
+export const API_NAMESPACES = new Set(['/intake', '/auth', '/audit']);
 /** HTML documents the Worker sees first; all are public. Hashed bundles skip the Worker. */
 export const DOCUMENT_PATHS = new Set(['/', '/index.html', '/agent']);
 

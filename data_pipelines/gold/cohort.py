@@ -171,7 +171,8 @@ def check_gold(con: duckdb.DuckDBPyConnection, as_of: date) -> dict:
 
     ``gold.table_builds`` says which build each table comes from (a ``--tables`` run rebuilds only
     some); ``gold.builds`` records that build's quality run and watermarks. Tables from different
-    quality runs could mix customers and purchases of different snapshots, so they are refused.
+    quality runs, or from different Silver files of one run, could mix customers and purchases of different
+    snapshots, so they are refused.
     """
     try:
         rows = con.execute("""
@@ -188,6 +189,8 @@ def check_gold(con: duckdb.DuckDBPyConnection, as_of: date) -> dict:
     runs = {r[2] for r in rows}
     if len(runs) != 1:
         raise ValueError("The Gold tables come from different quality runs; rebuild them together")
+    if len({r[5] for r in rows}) != 1:
+        raise ValueError("The Gold tables come from different Silver files; rebuild them together")
     for name in GOLD_TABLES:  # a fixed order, so the same Gold always gives the same message
         watermarks = built[name][4]
         loaded = json.loads(watermarks or "{}").get("transactions")

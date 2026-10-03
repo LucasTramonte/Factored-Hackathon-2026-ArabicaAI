@@ -50,9 +50,10 @@
             } @else {
               <form class="login-email" ngNativeValidate (ngSubmit)="verify()">
                 <p class="ar-small" id="code-sent">{{ t().codeSentTo }} <b>{{ email.trim() }}</b></p>
+                <p class="ar-small" id="code-help">{{ t().codeHelp }}</p>
                 <label class="ar-field" for="login-code"><span class="ar-field-label">{{ t().codeLabel }}</span></label>
                 <input class="ar-input" id="login-code" #codeField inputmode="numeric" autocomplete="one-time-code" maxlength="8" pattern="[0-9]*"
-                  name="code" required [(ngModel)]="code" [attr.aria-describedby]="error() ? 'code-sent login-error' : 'code-sent'">
+                  name="code" required [(ngModel)]="code" [attr.aria-describedby]="error() ? 'code-sent code-help login-error' : 'code-sent code-help'">
                 <div class="login-actions">
                   <button type="submit" class="ar-btn" [disabled]="busy()">{{ t().verify }}</button>
                   <button type="button" class="link-btn" (click)="requestCode()" [disabled]="busy()">{{ t().newCode }}</button>
@@ -166,8 +167,12 @@
                       @if (r.kind === 'incomplete') { <span class="ar-chip ar-chip-warn report-kind">{{ t().kindIncomplete }}</span> }
                       @else if (r.kind === 'technical') { <span class="ar-chip ar-chip-err report-kind">{{ t().kindTechnical }}</span> }
                       <span class="ar-caption">@switch (r.status) { @case ('in_review') { {{ t().statusInReview }} } @case ('closed') { {{ t().statusClosed }} } @default { {{ t().nextStepReview }} } } · {{ r.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span></span>
-                    <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm update-btn" (click)="requestUpdate(r.protocol)" [disabled]="updating() !== null"
+                    <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm update-btn" (click)="requestUpdate(r.protocol)" [attr.aria-disabled]="updating() !== null"
                       [attr.aria-label]="t().updateMe + ': ' + (r.reference_short ?? r.protocol)">{{ t().updateMe }}</button>
+                    @if (r.status === 'closed') {
+                      <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm report-again-btn" (click)="reportAgain(r)" [disabled]="!!frozen()"
+                        [attr.aria-label]="t().reportAgain + ': ' + (r.reference_short ?? r.protocol)">{{ t().reportAgain }}</button>
+                    }
                     <span class="ar-caption" role="status">@if (updateNote()?.protocol === r.protocol) { {{ updateNote()!.text }} }</span></li>
                 }</ul>
                 @if (reports()!.has_more) { <span class="ar-caption">{{ t().moreReports }}</span> }
@@ -198,9 +203,9 @@
                 <fieldset class="chat-form" [disabled]="busy() || !!frozen()">
                   @if (askLang()) {
                     <fieldset class="chat-lang"><legend class="ar-field-label">{{ t().chatLangPrompt }}</legend>
-                      <label class="ar-check" lang="es"><input type="radio" name="report-lang" value="es" [checked]="reportLang() === 'es'" (change)="chosenLang.set('es')" required> Español</label>
-                      <label class="ar-check" lang="pt"><input type="radio" name="report-lang" value="pt" [checked]="reportLang() === 'pt'" (change)="chosenLang.set('pt')" required> Português</label>
-                      <label class="ar-check" lang="en"><input type="radio" name="report-lang" value="en" [checked]="reportLang() === 'en'" (change)="chosenLang.set('en')" required> English</label>
+                      <label class="ar-check" lang="es"><input type="radio" name="report-lang" value="es" [checked]="reportLang() === 'es'" (change)="setReportLang('es')" required> Español</label>
+                      <label class="ar-check" lang="pt"><input type="radio" name="report-lang" value="pt" [checked]="reportLang() === 'pt'" (change)="setReportLang('pt')" required> Português</label>
+                      <label class="ar-check" lang="en"><input type="radio" name="report-lang" value="en" [checked]="reportLang() === 'en'" (change)="setReportLang('en')" required> English</label>
                     </fieldset>
                   }
                   <fieldset class="chat-reasons" [attr.aria-describedby]="chatError() === t().chatReasonValidation ? 'chat-error' : null"><legend class="ar-field-label">{{ t().reasonLegend }}</legend>
@@ -252,6 +257,15 @@
                       <ul class="open-questions">@for (q of r.unresolved_questions; track $index) { <li>{{ check(q) }}</li> }</ul>
                     }
                     @if (r.replayed) { <p class="ar-small">{{ t().replayed }}</p> }
+                    <div class="receipt-feedback" role="group" [attr.aria-label]="t().feedbackQuestion">
+                      @if (!feedbackRecorded()) {
+                        <span>{{ t().feedbackQuestion }}</span>
+                        <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm" (click)="sendFeedback(true)" [attr.aria-disabled]="feedbackSending()" [attr.aria-label]="t().feedbackYes">👍 {{ t().feedbackYesShort }}</button>
+                        <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm" (click)="sendFeedback(false)" [attr.aria-disabled]="feedbackSending()" [attr.aria-label]="t().feedbackNo">👎 {{ t().feedbackNoShort }}</button>
+                        @if (feedbackFailed()) { <span class="ar-small" role="alert">{{ t().feedbackFailed }}</span> }
+                      }
+                      <span class="feedback-thanks" role="status" tabindex="-1">{{ feedbackRecorded() ? t().feedbackThanks : '' }}</span>
+                    </div>
                   </div>
                 }
                 <div class="report-actions chat-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="newReport()">{{ t().chatNew }}</button></div>

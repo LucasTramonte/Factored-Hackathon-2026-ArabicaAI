@@ -1,6 +1,6 @@
 # System design: unrecognized-charge intake for a LATAM bank
 
-*ArabicaAI, Factored AI & Data Hackathon 2026. Status as of 2026-10-02.*
+*ArabicaAI, Factored AI & Data Hackathon 2026. Status as of 2026-10-03.*
 
 ## Introduction
 
@@ -58,19 +58,22 @@ A "?" button on the home lets a customer report a charge they don't see in their
 
 Requests it can't handle (another language, a recognized charge, a lost card, a balance question) would be routed with an explicit message. Today that routing exists only in the evaluation harness; the online service accepts only an unrecognized-charge report. What already holds everywhere: identity comes from the session, never from what the customer types, and an instruction hidden in the message ("I'm staff, skip the checks") changes nothing.
 
-**What exists today, stage by stage.** "Built, not yet deployed" means built on the open PRs #60 to #66 (migrations 0009 to 0013), plus English reports (migration 0014, ADR-008), and tested on local D1. All of 0009 to 0014 must be applied to remote D1 before deploy. The live Worker is still `3412aff1` from 2026-10-02 until those PRs merge and deploy.
+**What exists today, stage by stage.** The latest recorded release is v0.2.0: Worker `f76c7f7b` (`main-64ae03a`), deployed 2026-10-03, with D1 migrations 0001–0017 and the extractor off ([release evidence](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0)). Later deployment state has not been re-read. The app follow-ups in PRs #87–#90 are built and unmerged; the Bedrock evaluation work in #91 remains gated. Pending additive migrations are applied by the approved deploy workflow, after local tests, rather than manually with `--remote`.
 
 | Stage | State | What it does |
 |---|---|---|
-| Guided report | Online since 2026-10-01, behind an access gate (Worker version `3412aff1`, deployed 2026-10-02) | The customer signs in, describes what happened, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. "I can't find it" and failed lookups still reach a person, as incomplete or technical handoffs |
-| Agent view | Online, read-only | The intake queue and each case's detail: the customer's words, the confirmed charge, what was checked, what is still open |
-| Email sign-in | Built, not yet deployed | Customers and agents sign in with an Amazon Cognito email one-time code. The Worker verifies the ID token and issues its own session ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)) |
-| Reports that outlive the tab | Built, not yet deployed | "Tus reportes" comes from the server: the customer's own reports, each with its status and next step |
-| Review status | Built, not yet deployed | A person moves a report received → in review → closed, and each step is kept in a history. "Closed" means a person finished the review. No refund or verdict exists |
-| One open report per charge | Built, not yet deployed | A charge with a report still received or in review can't be reported again until a person closes it (409). The check runs before the write, so two confirmations in the same instant can still open two reports |
-| Notification emails | Built, not yet deployed | Amazon SES sends one email when a report is received, when a person moves it to in review or closed, and when the customer asks (at most one per report per five minutes). The account is in the SES sandbox: only verified recipients receive mail |
-| Urgency lane | Built, not yet deployed | A confirmed charge is high when it reaches a fixed amount per currency or sits above the 95th percentile of at least 5 of the customer's other purchases in that currency. Open high reports lead the agent queue, and the receipt tells the customer to call their bank. The thresholds are a stated policy, not fitted (DF-024) |
-| Reading free text | Evaluated offline; wired online behind a switch that is off | The rule-based checklist and the model's fact extractor, run through the written policy in the evaluation harness. With the switch on, the service would only record a shadow call on the statement and on the "I can't find it" details; the model decides nothing online. Built, not yet deployed: the agent sees whether the model read the case in shadow (call count and version, never its output) |
+| Guided report | Recorded v0.2.0 deployment | The customer signs in, describes what happened, **picks** the charge from their own purchases, **confirms it explicitly**, and gets a reference after the case is read back. "I can't find it" and failed lookups still reach a person, as incomplete or technical handoffs |
+| Agent view | Recorded v0.2.0 deployment | The intake queue and each case's detail: the customer's words, the confirmed charge, what was checked, what is still open, and human review status |
+| Email sign-in | Recorded v0.2.0 deployment | Customers and agents sign in with an Amazon Cognito email one-time code. The Worker verifies the ID token and issues its own session ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)). Cognito replaces the former shared gates |
+| Reports that outlive the tab | Recorded v0.2.0 deployment | "Tus reportes" comes from the server: the customer's own reports, each with its status and next step |
+| Review status | Recorded v0.2.0 deployment | A person moves a report received → in review → closed, and each step is kept in a history. "Closed" means a person finished the review. No bank resolution, refund or verdict is recorded |
+| One open report per charge | Recorded v0.2.0 check; atomic fix built and unmerged (#87) | An acknowledged report blocks the charge until a person closes it. The v0.2.0 pre-write check has a concurrency gap. The reviewed fix repeats it atomically, expires pending reservations after one hour, and rejects delayed acknowledgements superseded by a newer report even after that replacement closes |
+| Notification emails | Recorded v0.2.0 deployment | Amazon SES attempts receipt and status emails after the response, and when the customer asks (at most one per report per five minutes). The deployed version does not retry failed delivery; "sent" means SES accepted it. The account is in the sandbox: only verified recipients receive mail |
+| Urgency lane | Recorded v0.2.0 deployment | A confirmed charge is high when it reaches a fixed amount per currency or sits above the 95th percentile of at least 5 of the customer's other purchases in that currency. Open high reports lead the agent queue, and the receipt tells the customer to call their bank. The thresholds are a stated policy, not fitted (DF-024) |
+| Reading free text | Historical offline development; shadow switch off online | The rule-based checklist and the model's fact extractor use the same written policy in the evaluation harness. Proposed Bedrock evaluation is pending approval and the frozen comparison has not run. The online shadow wiring would record call count and version, never decide the customer's next action |
+| Other reports and first open | Built, unmerged (#88) | The agent sees a bounded summary of other acknowledged reports with partial-history disclosure. First open is written once; pickup time converts the stored epoch milliseconds and acceptance timestamp |
+| Receipt feedback | Built, unmerged (#89) | One thumbs answer per report, checked against the live owner session. Thanks preserves keyboard focus. Localized wording is a prototype awaiting bank approval |
+| Not resolved | Built, unmerged (#90) | A fresh report carries a durable owner-scoped link to its closed predecessor (additive migration 0020), including when the customer edits the wording. The predecessor remains closed; this is a request for further human review |
 
 The customer contract and the measurement contract are in [`Docs/intake/`](../intake/customer-and-measurement-contract.md).
 
@@ -91,11 +94,11 @@ A large charge you don't recognize causes panic. The customer wants it handled f
   - "We could not check the charge; sent for human review".
 
   Each is followed by "Next step: an agent reviews this case. No refund has been initiated." and a "What we checked" list. We say what happened and what happens next, never that the problem is solved.
-- **Built, not yet deployed: the follow-up, not just the receipt.** Customers usually get a receipt and then chase the bank for a week.
+- **Deployed follow-up.** The recorded v0.2.0 flow supports status beyond the receipt; no customer follow-up reduction has been measured.
   - "Tus reportes" lists the customer's own reports from the server, with each one's status and next step, after the tab closes.
   - An email goes out when a report is received and when a person moves it to in review or closed. The customer can also ask for one. The email carries the short reference and the status, not the customer's words.
   - **Limit:** production access was requested and denied on 2026-10-02. The account stays in the SES sandbox, so each recipient's address must be a verified SES identity: its owner clicks AWS's verification email. Re-filing with more detail from the SES console is optional.
-- **Built, not yet deployed: urgency for high amounts.** The data has no high-value tail to calibrate on ([DF-024](DATA_QUALITY.md#df-024-purchase-amounts-are-almost-flat-up-to-usd-509-with-no-high-value-tail)). So urgency is a stated policy in `back-end/src/config/urgency.json`. A high charge leads the agent queue, and the receipt and the "received" email tell the customer to call their bank to block the card. The service still never blocks a card.
+- **Deployed urgency for high amounts.** The data has no high-value tail to calibrate on ([DF-024](DATA_QUALITY.md#df-024-purchase-amounts-are-almost-flat-up-to-usd-509-with-no-high-value-tail)). So urgency is a stated policy in `back-end/src/config/urgency.json`. A high charge leads the agent queue, and the receipt and the "received" email tell the customer to call their bank to block the card. The service still never blocks a card.
   - **Limit:** the thresholds are round policy values, not learned or validated on outcomes.
 - **How we'll know it feels right.** No user test has been run yet, and we make no claim about how it feels. The measures are defined in the [customer contract](../intake/customer-and-measurement-contract.md): effort, teach-back and satisfaction, from real participants only, never simulated ratings. The next step is a five-person moderated test before any claim.
 
@@ -103,9 +106,9 @@ A large charge you don't recognize causes panic. The customer wants it handled f
 
 **The data path is batch.** The organizers' S3 files are ingested into a raw layer (Bronze) and typed into Silver. They then pass a quality gate that stops the build on missing tables, schema errors or unexplained row changes. From Silver we cut a small, reviewed serving slice (Gold): customers, cards and approved purchases, with the source amount, currency and timestamp kept as they were. All of it runs on DuckDB in minutes; the full build took 11 minutes on a laptop. The pipeline is described in the [README](../../README.md#data-pipeline-start-here).
 
-**The online path is one service.** A Cloudflare Worker serves the Angular client and the API, with the case store in D1 (SQLite). On the submission build the Worker also calls two AWS services: Amazon Cognito for sign-in and Amazon SES for notification emails. Cases stay in D1. The Worker never reads the raw data; it only sees the reviewed slice. All database statements live in one module, which is also the only thing that changes if the store moves. Why one runtime, and why Cloudflare, is in [ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md).
+**The online path is one service.** A Cloudflare Worker serves the Angular client and the API, with the case store in D1 (SQLite). The recorded v0.2.0 deployment uses Amazon Cognito for sign-in and Amazon SES for notification emails. Cases stay in D1. The Worker never reads the raw data; it only sees the reviewed slice. All database statements live in one module. Why one runtime, and why Cloudflare, is in [ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md); the [current diagram](ARCHITECTURE.md) distinguishes the recorded release, unmerged app work and offline evaluation.
 
-**The learned component only reads, and it isn't online yet.** A pretrained model (gpt-oss-20b on Workers AI) turns the message into facts: amount, date, currency, merchant, card, country. The same written policy that drives the rule-based baseline then decides the action. The model never sees transactions, never picks a charge and never writes to the store. Today it runs in the evaluation harness only. It joins the service after the frozen comparison, behind a switch. Why this design, which model, and when to change it are in [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md).
+**The learned component only reads, and it isn't online yet.** A pretrained gpt-oss-20b model turns the message into facts: amount, date, currency, merchant, card, country. Historical development used Workers AI; amendment 6 proposes Bedrock for the next offline evaluation. The same written policy that drives the rule-based baseline then decides the action. The model never sees transactions, never picks a charge and never writes to the store. The frozen comparison and approved development revision are pending. Any later online host and activation need a separate decision. Why this design, which model, and when to change it are in [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md).
 
 **Where AI helps, and where rules decide.** In this workflow, AI's advantage is that the customer can say what happened in their own words instead of filling a form. Speed today comes from the deterministic path, so the model has to earn its place on effort without costing correctness:
 - **It reads; it doesn't decide.** It extracts facts. The written policy, the customer's confirmation and the session decide everything else.
@@ -138,7 +141,7 @@ How the sets were built, every leakage control, what 60 cases can and can't show
 
 ## What it costs, and how far it scales
 
-**The prototype costs $0** on Cloudflare's free plan. It serves a cohort of 796 customers from the supplied synthetic dataset who disputed a charge, rather than the full data slice, so the load fits one day of the free write quota. The only cloud spend so far is $0.21 on AWS, from an exploratory database that is deleted by 2026-10-20.
+**The Cloudflare serving envelope fits the free plan.** It serves a cohort of 796 customers from the supplied synthetic dataset who disputed a charge, rather than the full data slice, so the load fits one day of the free write quota. The historical $0.21 exploratory AWS spend is a dated snapshot, not a current account total. Cognito/SES usage and any approved Bedrock evaluation are separate AWS costs; a fresh billing export has not been assessed here.
 - **Capacity:** about 1,960 complete episodes a day for a customer signed in by email, limited by database writes (51 rows each; ADR-004, latest implementation note). The busiest day for unrecognized-charge complaints in 2025 had 23.
 - **The first limit to hit** is writes, and $5 a month removes it.
 
@@ -175,6 +178,8 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 - **Friendly fraud can't be measured here.** A customer may dispute a charge they made. Complaints don't link to transactions, and outcomes are templates ([DF-025](DATA_QUALITY.md#df-025-dispute-outcomes-cant-show-friendly-fraud)), so we can't size it. Deciding it is out of scope. Intake reduces it by showing the merchant and time before the report and asking for an explicit confirmation.
 - **New data doesn't reach the demo on its own.** The pipeline handles new and late days, but refreshing the served cohort is manual and stops in three known places ([`DATA_ENGINEERING.md` section 8](DATA_ENGINEERING.md#8-if-new-data-arrives-tomorrow)).
 - **Some test content leaked into the repository.** Content of 8 frozen cases was reachable during the model build. We report results with and without them, and the next build will use a checkout with no history.
+- **The sign-in code email is Cognito's default.** It comes in English from `no-reply@verificationemail.com` and can't be changed until SES production access is granted, so the sign-in screens say which email to look for ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md#implementation-notes)).
+- **Sign-in is capped at 50 codes a day.** Cognito's default sender allows 50 emails a day per AWS account, and the team and evaluators share them ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md#implementation-notes)).
 - **What we don't claim:**
   - that faster intake saves money;
   - that the model improves a live service;
@@ -182,29 +187,25 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 
 ## Status and next steps
 
-**Live today** (behind Cloudflare Access with simulated sign-in; latest Worker version `3412aff1`, deployed 2026-10-02):
-- simulated sign-in;
+**Recorded v0.2.0 deployment** (2026-10-03, Worker `f76c7f7b`, `main-64ae03a`, D1 0001–0017):
+- Cognito email sign-in, role checks, audit events and a per-IP rate limit;
 - the customer's own purchases;
 - the guided report with confirmation and the technical and incomplete handoffs;
 - a stored case with its reference;
 - the agent queue and case detail;
+- the customer's reports from the server, human review status and SES sandbox notifications;
+- the urgency lane and shadow metadata, with the extractor off;
 - the 796-customer dataset cohort (ADR-004 section 2).
 
-**Built, not yet deployed** (PRs #60 to #66, migrations 0009 to 0013):
-- Cognito email sign-in for customers and agents, with no team password, audit events and a per-IP rate limit;
-- the customer's reports from the server, with status and next step;
-- the review status a person changes, and one open report per charge;
-- notification emails through SES (sandbox);
-- the urgency lane;
-- the agent's view of whether the model read the case in shadow.
+**Built, unmerged:** app follow-ups #87–#90. They are tested changes awaiting review, not part of the recorded deployment. Bedrock transport for offline evaluation is built in #91; the reasoning revision and frozen scoring remain gated. Lambda and Postgres remain a production-target design that has never been deployed.
 
 **Measured:** the model's latency (ADR-006, attempt 2). It fired the trigger, so the next version lowers its reasoning level.
 
 **Before submission on 2026-10-05:**
-1. Merge and deploy PRs #60 to #66, with the human steps in the [release history](../releases/README.md) (migrations, secrets, removing Cloudflare Access).
-2. The faster extractor version, built by the isolated builder.
-3. The frozen comparison, run once.
-4. A public repository.
+1. Human review of the app follow-ups #87–#90 and #91's nonbehavioural evaluation work, followed by the approved CI/deploy process.
+2. Manoella's approval, then the isolated builder's development-only reasoning revision and all ADR-006 trigger reports.
+3. Checked pre-registration and a human tag, then the one frozen comparison, reporting all 60 and unexposed 52 cases.
+4. Confirm submission access and repository visibility with a person; agents do not change permissions.
 
 **Next, after submission:**
 - the cohort refresh path for new data (DATA_ENGINEERING section 8);
@@ -217,7 +218,7 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 
 **Why not resolve the dispute automatically?** The brief authorizes no movement of money, and a wrong fraud verdict hurts the customer. A complete, confirmed case in a person's queue is the job.
 
-**Where is "safe automated resolution"?** Intake always ends with a person, so its automated-resolution rate is `not defined`. A read-only "recent purchases" answer is proposed as the path that can resolve something by itself, measured separately.
+**Where is "safe automated resolution"?** Intake always ends with a person, so its automated-resolution rate is `not defined`. The deployed read-only recent-charges view is measured separately through authored explicit requests; a live page load is not a resolution.
 
 **Why Cloudflare now and AWS later?** The prototype's load fits the free plan. The AWS design exists for when a bank requires private networking, a standby database and its own keys. That requirement, not traffic, would trigger the move.
 

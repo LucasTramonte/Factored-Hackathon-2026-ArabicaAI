@@ -39,12 +39,13 @@ Add a scope when it helps, for example `feat(intake): …`, `fix(front-end): …
 ## Pull requests
 
 - **Keep a PR small and about one thing.** A PR that mixes a refactor, a feature and a data change is hard to review and hard to revert.
-- **Before opening a PR, set its label, assignee and reviewer.** All three are required ([`AGENTS.md`](AGENTS.md)):
+- **Before opening a PR, set its label, assignee, reviewer and milestone.** All four are required ([`AGENTS.md`](AGENTS.md)):
   - **label,** by branch prefix: `feat` → `enhancement`, `fix` → `bug`, `docs` → `documentation`, `eval` → `evaluation`, `data` → `data`, `chore` → `chore`, plus `accessibility` when it applies. A branch without one of these prefixes (`claude/…`, `codex/…`) takes the label of what the PR actually does, read from its Conventional title type (`feat` → `enhancement`, and so on);
   - **assignee:** the PR's owner, normally its author;
-  - **reviewer:** at least one other teammate.
+  - **reviewer:** at least one other teammate;
+  - **milestone:** the next open version (`gh api repos/:owner/:repo/milestones -q '.[].title'`). If none is open, create the next one by the [cadence rules](#when-to-release).
 
-  For example: `gh pr create --label documentation --assignee @me --reviewer Robertzu43 --fill`.
+  For example: `gh pr create --label documentation --assignee @me --reviewer Robertzu43 --milestone v0.3.0 --fill`.
 - **Fill in the [PR template](.github/pull_request_template.md):**
   - what changed and why;
   - the evidence (ADR, finding, evaluation run, issue or review comment);
@@ -52,7 +53,7 @@ Add a scope when it helps, for example `feat(intake): …`, `fix(front-end): …
   - the risk and the rollback;
   - any D1 or data impact.
 - **Any API change comes with the adversarial tests** listed in [`AGENTS.md`](AGENTS.md).
-- **A PR that adds a file under `back-end/migrations/` applies it before it merges.** After the local tests pass, run `npx wrangler d1 migrations apply arabica-intake-demo --remote`, and say so in the PR body. Otherwise the Workers Build stops at the deploy guard.
+- **Migrations are additive, and the deploy applies them.** A file under `back-end/migrations/` passes the local tests and the additive check in CI (`test/unit/predeploy.test.js`); after the merge, the deploy workflow (`.github/workflows/deploy.yml`, only after CI is green) applies it to remote D1 before the new Worker goes live. Nobody runs `--remote` for it. A migration that must drop, rename or rebuild is split into additive steps, or a person applies it on purpose before the merge and says so in the PR.
 - **Before merging:** CI is green, one human has approved, and every review conversation is resolved.
 - **Squash merge by default.** Use a merge commit only for a deliberate integration PR whose commits must stay separate on `main`, and say so in the PR.
 - **Stacked PRs stay mergeable on their own.** After each squash merge, [`stack-cascade.yml`](.github/workflows/stack-cascade.yml) retargets the PR stacked on the merged one to `main` and merges `main` forward through the stack ([`scripts/stack-cascade.sh`](scripts/stack-cascade.sh)). It never rebases or force-pushes, and it comments on the PR when a person must resolve a real conflict.
@@ -67,13 +68,28 @@ Most of our code and documents are drafted with an AI assistant. Here is how tha
 
 ## Versioning
 
-We use [Semantic Versioning](https://semver.org/), with each version tied to a product milestone:
+We use [Semantic Versioning](https://semver.org/), with each version tied to a GitHub milestone of the same name. The bump comes from the Conventional titles of the PRs merged since the last tag (squash merge makes each title a commit on `main`):
 
-- **`v0.MINOR.0`** is a milestone a judge or user could test: a new capability, a new data cut, or an evaluation result that changes what the service does.
-- **`v0.MINOR.PATCH`** is a fix to a released milestone.
-- **`v1.0.0`** is the final hackathon submission.
+| Merged since the last tag | Next version | Example |
+|---|---|---|
+| at least one `feat` (something a user, agent or judge can now do) | `v0.MINOR+1.0` | `v0.2.0` → `v0.3.0` |
+| only `fix`, `docs`, `chore`, `eval`, `data`, `refactor`, `test` | `v0.MINOR.PATCH+1` | `v0.2.0` → `v0.2.1` |
+| a breaking change (`feat!`, or `BREAKING CHANGE` in the body) | `v0.MINOR+1.0` while on 0.x | |
 
-Version numbers are never assigned retroactively to old commits. The first tag is an intentional baseline.
+- **`v1.0.0`** is the final hackathon submission; after it, a breaking change bumps the major.
+- Version numbers are never assigned retroactively to old commits. `v0.1.0` is an intentional baseline.
+
+### When to release
+
+The aim is neither many tiny releases nor a long unreleased pile. Cut a release when **all** of these hold:
+
+1. **There is something to release:** at least one user-visible `feat` (a minor), or a `fix` for something live (a patch).
+2. **It is on `main`, green and deployed**, with every migration it ships applied to remote D1.
+3. **The cadence allows it:** at most one release a day. Patches made the same day go out together, except a fix for a live defect, which ships at once.
+
+And cut it **no later than three working days after the first unreleased `feat` merged**, even if more is planned. Close the milestone with the release, and open the next one at once, so every new PR has a milestone to point at.
+
+The [release skill](.github/skills/release/SKILL.md) runs these checks and drafts the notes; a person gives the go-ahead to tag and publish.
 
 ## Releasing
 
@@ -87,7 +103,8 @@ A release is cut from `main`, on a green squash commit, by a person.
 2. **When deploying, label the Worker version with the release:** `npm --prefix back-end run deploy -- --tag v0.X.Y --message "v0.X.Y <short sha>"`. Without a label, `wrangler deployments list` can't say which commit is live.
 3. **Tag the commit:** `git tag -a v0.X.Y <sha> -m "v0.X.Y: <milestone name>"`, then `git push origin v0.X.Y`.
 4. **Publish the release:** `gh release create v0.X.Y --verify-tag --title "v0.X.Y: <milestone name>" --notes-file <notes.md>`.
-5. **Add a row to the [release history](Docs/releases/README.md)** in a small `docs(release): …` PR.
+5. **Add a row to the [release history](Docs/releases/README.md)** in a small `docs(release): …` PR, or in the PR that prepares the release.
+6. **Close the milestone** and open the next one.
 
 **Release notes structure:**
 
@@ -106,7 +123,7 @@ Write what was merged, not what was hoped for. `gh pr list --state merged --sear
 
 | Tool | What it solves | Why not now |
 |---|---|---|
-| Release Please, semantic-release | Versions and changelogs generated from commit types | Only about a quarter of our recent commits are Conventional, and only a handful of releases are left before submission. Writing the notes by hand costs minutes and stays accurate |
+| Release Please, semantic-release | Versions and changelogs generated from commit types | PR titles are now Conventional, so the bump is mechanical, and the [release skill](.github/skills/release/SKILL.md) computes it. The notes still need judgement (evidence, limitations, deployed state) that a generator can't write, and only a few releases remain before submission. Revisit after `v1.0.0` |
 | commitlint, commit hooks | Enforcing the commit format | Adds friction to every AI-assisted commit. A Conventional PR title plus squash merge gives the same `main` history |
 | CHANGELOG.md | A committed change list | It would repeat the GitHub Releases. The [release history](Docs/releases/README.md) adds what Releases can't: the ADRs, evidence and deployed state per version |
 | CODEOWNERS | Routing reviews by path | Three people review everything; routing adds nothing |
