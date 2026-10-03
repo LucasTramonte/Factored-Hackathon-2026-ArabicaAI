@@ -112,3 +112,16 @@ On development the latency trigger fired: over the 160 model-calling executions,
    Decide latency on the 160 model-calling executions (as attempt 2 did); report the runner's pooled 180 as supplemental.
 4. Report against every ADR-006 trigger: ≥16/18 correct, 0 unsafe, ≥95% schema-valid, p95 interval upper bound ≤3,000 ms, ≤10% instability. If a trigger fails, stop and report; don't change the prompt or try another level without the orchestrator.
 5. If all pass, copy `TEMPLATE.md` to `extractor-v1.md` and fill in every field (add `reasoning=low` to the parameters). This replaces step 2 of "Pre-register" above: don't run `prereg fill` and don't tag. `fill` records the commit it runs on, so it runs in the team's branch.
+
+---
+
+## Revision 2026-10-03: the host is Amazon Bedrock (ADR-006 amendment 6)
+
+Everything in the 2026-10-02 revision stands, with these changes:
+
+1. **Where the reasoning level comes from:** read AWS's current documentation for Bedrock's OpenAI-compatible Chat Completions API for `openai.gpt-oss-20b-1:0`. Record in `DEV_LOG.md` the URL, the date, the exact request field for the reasoning level and its documented default. Don't guess; if the API doesn't document one, stop and report.
+2. **Where it goes:** set it in `workers_ai.build_body`, which `bedrock.py` reuses. Assert it in `test_workers_ai.py` and `test_bedrock.py`.
+3. **The run:** use the Bedrock transport. There is no UTC-reset constraint.
+   `python -m evals.intake.run --split development --repetitions 10 --system extractor-v1=intake_agent.extractor.bedrock:extract --output data_foundation/runs/latency-v1-low-bedrock/results.json`
+4. **Pre-registration:** record the model as `openai.gpt-oss-20b-1:0`, the target as `intake_agent.extractor.bedrock:extract`, and both implementation files.
+

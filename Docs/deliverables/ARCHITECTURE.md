@@ -1,4 +1,10 @@
-# Data pipeline architecture
+# Data and service architecture
+
+**Recorded deployment (2026-10-03):** v0.2.0, Worker `f76c7f7b` (`main-64ae03a`), D1 migrations 0001–0017, extractor off ([release evidence](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0)). A later deployment has not been re-read. App changes in #87–#90 are built and unmerged; the offline Bedrock evaluation in #91 remains gated.
+
+![Recorded service, offline data path and gated Bedrock evaluation](../Evidence/diagrams/current-workflow.png)
+
+The editable diagram is [`current-workflow.svg`](../Evidence/diagrams/current-workflow.svg). The older Excalidraw/PNG records the former Access and Basic gates and is historical. This diagram labels deployed, built and pending work separately.
 
 ## Flow
 
@@ -8,7 +14,8 @@ authorized S3 CSV objects (read only)
   -> ignored data/bronze Parquet + bronze.* in data/latam_bank.duckdb
   -> data_pipelines/silver: typed, deduplicated silver.dim_* and silver.fact_*
   -> data_pipelines/quality: raw/typed reconciliation and relationship warnings
-  -> future Marketing/Product analyses after the deferred evidence gate
+  -> analytical Gold + reviewed intake serving slice
+  -> reviewed D1 seed (online service) and reconciled aggregate reports
 ```
 
 Bronze is the sole production extraction path. It records `_source_file`, `_ingested_at` and `_source_table`; a watermark tracks the latest process partition. Full refresh writes a staged Parquet snapshot before replacing old local partitions, so corrected or removed partitions do not survive by accident. Missing source data is a failed ingestion. Silver rebuilds from local Bronze, parses text booleans and dates, canonicalizes known country spellings, keeps source vs FX-estimated USD amounts distinct and defensively deduplicates by primary key. Bronze primary-key duplicates still block quality readiness by design, so this dedup is defense-in-depth for runs that are not ready.
@@ -44,4 +51,14 @@ browser -> Cloudflare Worker (router, per-IP limit, session from the verified to
   -> Amazon SES: notification emails, sent after the response
 ```
 
-The Worker and D1 remain the single runtime ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito and SES are built, not yet deployed (PRs #60 to #66). The live Worker `3412aff1` still sits behind Cloudflare Access and a Basic gate; both are removed once the change deploys ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)).
+The Worker and D1 remain the single runtime ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito email sign-in and SES notification delivery are in the recorded v0.2.0 deployment ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)); the shared Access and Basic gates belong to the earlier checkpoint. The Worker enforces role and customer ownership outside model output, stores sessions and cases in D1, and returns a reference only after read-back. SES sandbox restrictions remain. Agent review status records a human workflow step, not a bank resolution.
+
+## Offline learned evaluation
+
+The rule-based checklist and learned extractor are evaluated on the same authored ES/PT workload, under the same deterministic policy. Amendment 6 of [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md) proposes Bedrock `openai.gpt-oss-20b-1:0` in `us-east-2` as the evaluation host; historical development used Workers AI. `bedrock.py` reuses the committed prompt, body and parsing in `workers_ai.py`. Only synthetic messages, session language/time and a closed vocabulary reach the model. Customer identifiers, transactions and action authority do not.
+
+The online extractor remains off. The frozen run has not occurred: Manoella's approval, the isolated builder's development-only reasoning update, the development trigger report, pre-registration of both implementation files and a human tag are prerequisites. Offline accuracy, live handoff counts and read-only inquiry results stay separate ([EVALUATION](EVALUATION.md)).
+
+## AWS production target
+
+The [Lambda and RDS PostgreSQL target](../Costs/aws-target/) is a priced design with templates, never deployed. Its private networking, standby database and Bedrock endpoint are production-target assumptions. Current AWS use is Cognito/SES alongside the Cloudflare service and a separately gated Bedrock evaluation; it does not make the online service a Lambda/Postgres deployment.
