@@ -11,6 +11,7 @@ import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, Intake
   REASONS, REASON_LABEL, Reason, Report, ReportList, Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
+import { AgentService } from '../agent/agent.service';
 import { demoPicker } from '../../core/auth/cognito.config';
 
 /**
@@ -48,6 +49,7 @@ const REASON_FILL = { not_mine: 'reasonFillNotMine', duplicate: 'reasonFillDupli
 export class CustomerPage implements OnInit, OnDestroy {
   private readonly service = inject(CustomerService);
   private readonly cognito = inject(CognitoService);
+  private readonly agent = inject(AgentService);
   /** Local demo identities under the email form; development builds only. */
   readonly demoPicker = demoPicker;
   /** The email one-time code was sent: the code field replaces the email field. */
@@ -251,11 +253,25 @@ export class CustomerPage implements OnInit, OnDestroy {
     return this.enter(async () => {
       const token = await this.cognito.submitCode(this.email.trim(), this.code.trim());
       spent = true;
-      return this.service.signInWithToken(token);
+      const s = await this.service.signInWithToken(token);
+      // Not when enter() is about to refuse this sign-in (a report is open for another customer): nothing may outlive it.
+      const refused = this.identityLocked() && s.customer_id !== this.client();
+      if (s.roles.includes('admin') && !this.agent.roles().length && !refused) await this.openAgentView(token);
+      return s;
     }, e => {
       if (spent) this.backToEmail();
       this.error.set(this.signInError(e, spent ? 'errOther' : 'errCode'));
     });
+  }
+
+  /**
+   * An admin's one code opens the agent view too (ADR-007, decision 8): a separate agent session from the same token,
+   * which is then dropped. A failure leaves the agent view to its own sign-in.
+   */
+  private async openAgentView(token: string): Promise<void> {
+    try {
+      this.agent.roles.set((await this.agent.signIn(token)).roles);
+    } catch { /* unavailable: the agent view asks for its own code */ }
   }
 
   /** "Use another email". */

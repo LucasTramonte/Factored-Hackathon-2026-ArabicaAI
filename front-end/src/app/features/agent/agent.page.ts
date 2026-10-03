@@ -10,8 +10,9 @@ import { formatSourceTime } from '../../shared/format/source-time.util';
 import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
-import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind, REASON_LABEL, Reason, Role } from '../../shared/models/intake.model';
+import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind, REASON_LABEL, Reason } from '../../shared/models/intake.model';
 import { AgentService } from './agent.service';
+import { CustomerService } from '../customer/customer.service';
 
 const KIND_KEYS: Record<IntakeKind, keyof Strings> = { complete: 'kindComplete', technical: 'kindTechnical', incomplete: 'kindIncomplete' };
 
@@ -29,6 +30,7 @@ export class AgentPage {
   private readonly service = inject(AgentService);
   private readonly injector = inject(Injector);
   private readonly cognito = inject(CognitoService);
+  private readonly customer = inject(CustomerService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   /** The local one-click agent session; development builds only. */
   readonly demoPicker = demoPicker;
@@ -40,8 +42,8 @@ export class AgentPage {
   readonly busy = signal(false);
   readonly error = signal('');
   readonly loaded = signal(false);
-  /** Session roles from the last sign-in; a refresh keeps them, an expired session (401) clears them. */
-  readonly roles = signal<Role[]>([]);
+  /** Session roles from the last sign-in (tab-scoped, in the service); a refresh keeps them, an expired session (401) clears them. */
+  readonly roles = this.service.roles;
   readonly intakes = signal<AgentIntake[]>([]);
   readonly intakesHasMore = signal(false);
   readonly detail = signal<AgentIntakeDetail | null>(null);
@@ -59,6 +61,8 @@ export class AgentPage {
     // The route title is static, so the tab title follows the interface language here.
     const title = inject(Title);
     effect(() => title.setTitle(`ArabicaAI · ${this.t().agentTitle}`));
+    // An agent session is already open in this tab (an admin signed in on the customer view, or came back here): load the queue.
+    if (this.roles().length) void this.refresh();
   }
 
   /** A server check or open-question code in the interface language; the raw code stays visible beside it. */
@@ -158,11 +162,26 @@ export class AgentPage {
     return this.enter(async () => {
       const token = await this.cognito.submitCode(this.email.trim(), this.code.trim());
       spent = true;
-      this.roles.set((await this.service.signIn(token)).roles);
+      const roles = (await this.service.signIn(token)).roles;
+      this.roles.set(roles);
+      if (roles.includes('admin') && !this.customer.client()) await this.openCustomerView(token);
     }, e => {
       if (spent) this.anotherEmail();
       this.error.set(this.signInError(e, spent ? 'errOther' : 'errCode'));
     });
+  }
+
+  /**
+   * An admin's one code opens the customer view too (ADR-007, decision 8): a separate customer session from the same
+   * token, which is then dropped. A failure leaves the customer view to its own sign-in.
+   */
+  private async openCustomerView(token: string): Promise<void> {
+    try {
+      const s = await this.customer.signInWithToken(token);
+      this.customer.card.set(s.context_card ?? null);
+      this.customer.client.set(s.customer_id);
+      this.customer.roles.set(s.roles);
+    } catch { /* not enrolled as a customer, or unavailable: the customer view asks for its own code */ }
   }
 
   /** Back to the email field; the pending challenge is forgotten. */

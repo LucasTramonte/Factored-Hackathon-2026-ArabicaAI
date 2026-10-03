@@ -6,7 +6,8 @@ import { CustomerPage, initialsOf } from './customer.page';
 import { LangService, errorText } from '../../shared/i18n/lang.service';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
-import { Identity, IntakeReceipt, IntakeStart, Report, Transaction } from '../../shared/models/intake.model';
+import { AgentService } from '../agent/agent.service';
+import { Identity, IntakeReceipt, IntakeStart, Report, Role, Transaction } from '../../shared/models/intake.model';
 
 describe('CustomerPage', () => {
   let service: jasmine.SpyObj<CustomerService>;
@@ -173,6 +174,34 @@ describe('CustomerPage', () => {
       expect(p.step()).toBe('home');
     });
 
+    it("opens the agent view with an admin's one code, never for a customer, and a failed agent exchange still signs in", async () => {
+      const agent = TestBed.inject(AgentService);
+      const agentSignIn = spyOn(agent, 'signIn').and.resolveTo({ role: 'agent', mode: 'email_otp', roles: ['admin'] });
+      const signInAs = async (roles: Role[]) => {
+        service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', context_card: null, roles });
+        const { p } = await open(false);
+        await toCode(p);
+        p.code = '12345678';
+        await p.verify();
+        return p;
+      };
+      await signInAs(['customer']);
+      expect(agentSignIn).not.toHaveBeenCalled();
+      expect(agent.roles()).toEqual([]);
+      const p = await signInAs(['admin']);
+      expect(agentSignIn).toHaveBeenCalledOnceWith('id.token');
+      expect(agent.roles()).toEqual(['admin']);
+      expect(p.step()).toBe('home');
+      agent.roles.set([]);
+      agentSignIn.calls.reset();
+      agentSignIn.and.rejectWith(new ApiError(503));
+      const again = await signInAs(['admin']);
+      expect(agentSignIn).toHaveBeenCalledTimes(1);
+      expect(agent.roles()).toEqual([]);
+      expect(again.step()).toBe('home');
+      expect(again.error()).toBe('');
+    });
+
     it('maps each failure to its own text and keeps the right step', async () => {
       const { p } = await open(false);
       const t = p.t();
@@ -228,6 +257,31 @@ describe('CustomerPage', () => {
       await toCode(p);
       await p.verify();
       expect([p.step(), p.client(), p.frozen(), p.chatStep(), p.error()]).toEqual(['login', '', null, 'describe', p.t().err503]);
+    });
+
+    it("an admin renewal for another customer, refused while a report is open, opens no agent session; the same customer's does", async () => {
+      const agent = TestBed.inject(AgentService);
+      const agentSignIn = spyOn(agent, 'signIn').and.resolveTo({ role: 'agent', mode: 'email_otp', roles: ['admin'] });
+      const { p } = await open(false);
+      await toCode(p);
+      await p.verify();
+      service.startIntake.and.resolveTo({ episode_id: 'e', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
+      p.chatStatement = 'No reconozco este cargo.';
+      p.reason.set('not_mine');
+      await p.send();
+      expect(p.identityLocked()).toBeTrue();
+      p.step.set('login');
+      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-2', mode: 'email_otp', context_card: null, roles: ['admin'] });
+      await toCode(p);
+      await p.verify();
+      expect(p.error()).toBe(p.t().errOtherCustomer);
+      expect(agentSignIn).not.toHaveBeenCalled();
+      expect(agent.roles()).toEqual([]);
+      service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', context_card: null, roles: ['admin'] });
+      await toCode(p);
+      await p.verify();
+      expect(agentSignIn).toHaveBeenCalledOnceWith('id.token');
+      expect(p.step()).toBe('home');
     });
 
     it('refuses a renewal that signs in another customer and keeps the open report', async () => {

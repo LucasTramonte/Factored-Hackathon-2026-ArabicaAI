@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { Title } from '@angular/platform-browser';
@@ -7,6 +8,7 @@ import { LangService } from '../../shared/i18n/lang.service';
 import { AgentIntake, AgentIntakeDetail, AgentSession } from '../../shared/models/intake.model';
 import { AgentPage } from './agent.page';
 import { AgentService } from './agent.service';
+import { CustomerService } from '../customer/customer.service';
 
 const P1 = '11111111-1111-4111-8111-111111111111';
 const P2 = '22222222-2222-4222-8222-222222222222';
@@ -31,7 +33,7 @@ describe('AgentPage', () => {
   const el = () => fixture.nativeElement as HTMLElement;
 
   beforeEach(async () => {
-    service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'intakes', 'intakeDetail', 'setStatus']);
+    service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'intakes', 'intakeDetail', 'setStatus'], { roles: signal([]) });
     service.signIn.and.resolveTo(agentSession);
     cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
     cognito.requestCode.and.resolveTo();
@@ -165,6 +167,15 @@ describe('AgentPage', () => {
     expect(el().querySelector('.role-banner')).toBeNull();
   });
 
+  it('loads the queue on arrival when this tab already holds an agent session (an admin signed in on the customer view)', async () => {
+    service.roles.set(['admin']);
+    const arrived = TestBed.createComponent(AgentPage);
+    await arrived.whenStable();
+    expect(service.intakes).toHaveBeenCalled();
+    expect(arrived.componentInstance.loaded()).toBeTrue();
+    expect(service.signIn).not.toHaveBeenCalled();
+  });
+
   it('says in one line whether the model read the case, in every language', async () => {
     service.intakeDetail.and.resolveTo(detail(P1));
     await loadAndOpen();
@@ -281,6 +292,33 @@ describe('AgentPage', () => {
       production();
       expect(el().querySelector('#agent-one-click')).toBeNull();
       expect(el().querySelector('#agent-email')).not.toBeNull();
+    });
+
+    it("opens the customer view with an admin's one code unless a customer is already signed in, never for an agent", async () => {
+      const customer = TestBed.inject(CustomerService);
+      const customerSignIn = spyOn(customer, 'signInWithToken').and.resolveTo({ customer_id: 'demo-diego', mode: 'email_otp', context_card: null, roles: ['admin'] });
+      const signInAs = async (roles: AgentSession['roles']) => {
+        service.signIn.and.resolveTo({ role: 'agent', mode: 'email_otp', roles });
+        page.email = 'admin@example.com';
+        await page.requestCode();
+        page.code = '12345678';
+        await page.verify();
+      };
+      production();
+      await signInAs(['agent']);
+      expect(customerSignIn).not.toHaveBeenCalled();
+      await signInAs(['admin']);
+      expect(customerSignIn).toHaveBeenCalledOnceWith('id.token');
+      expect([customer.client(), customer.roles()]).toEqual(['demo-diego', ['admin']]);
+      expect(page.loaded()).toBeTrue();
+      customerSignIn.calls.reset();
+      await signInAs(['admin']);
+      expect(customerSignIn).not.toHaveBeenCalled();
+      customer.client.set('');
+      customerSignIn.and.rejectWith(new ApiError(403));
+      await signInAs(['admin']);
+      expect(customer.client()).toBe('');
+      expect([page.loaded(), page.error()]).toEqual([true, '']);
     });
 
     it('goes email → code → queue, sending the ID token to the agent session and focusing the queue', async () => {
