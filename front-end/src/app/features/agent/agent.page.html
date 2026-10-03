@@ -99,6 +99,7 @@
             <div><dt>{{ t().destination }}</dt><dd><code>{{ d.destination }}</code></dd></div>
             <div><dt>{{ t().priority }}</dt><dd>{{ d.urgency === 'high' ? t().prioHigh : 'normal' }}</dd></div>
             <div><dt>{{ t().reasonLabel }}</dt><dd>{{ reasonText(d.reason) }}</dd></div>
+            <div><dt>{{ t().customerHistory }}</dt><dd>{{ historyText(d) }}</dd></div>
             <div><dt>{{ t().languageCode }}</dt><dd><code>{{ d.language }}</code></dd></div>
           </dl>
 

@@ -67,7 +67,7 @@ const es = {
     openQuestions: 'Preguntas abiertas', history: 'Historial',
     modelOff: 'Lectura del modelo: apagada.', modelShadow: 'Lectura del modelo: en sombra, {n} {calls}, versión {v}. El modelo no decide nada.', callOne: 'llamada', callMany: 'llamadas',
     toolStatus: 'Estado de la consulta', destination: 'Destino', priority: 'Prioridad', prioHigh: 'alta', urgencyHigh: 'Prioridad alta', close: 'Cerrar',
-    statement: 'Relato del cliente', reasonLabel: 'Motivo', languageCode: 'Idioma del reporte',
+    statement: 'Relato del cliente', reasonLabel: 'Motivo', languageCode: 'Idioma del reporte', customerHistory: 'Historial del cliente', historyNone: 'Primer reporte de este cliente.', historyLine: '{n} reportes anteriores: {open} abiertos, {high} de prioridad alta. Último: {status}.',
     agentErr401: 'La sesión de agente expiró. Vuelve a entrar como agente.', agentErr404: 'No se encontró el reporte.',
     // Guided intake chat
     chatClose: 'Cerrar', chatYou: 'Tú', chatGuide: 'Guía',
@@ -175,7 +175,7 @@ const STRINGS: Record<Lang, Strings> = {
     openQuestions: 'Perguntas em aberto', history: 'Histórico',
     modelOff: 'Leitura do modelo: desligada.', modelShadow: 'Leitura do modelo: em sombra, {n} {calls}, versão {v}. O modelo não decide nada.', callOne: 'chamada', callMany: 'chamadas',
     toolStatus: 'Status da consulta', destination: 'Destino', priority: 'Prioridade', prioHigh: 'alta', urgencyHigh: 'Prioridade alta', close: 'Fechar',
-    statement: 'Relato do cliente', reasonLabel: 'Motivo', languageCode: 'Idioma do relato',
+    statement: 'Relato do cliente', reasonLabel: 'Motivo', languageCode: 'Idioma do relato', customerHistory: 'Histórico do cliente', historyNone: 'Primeiro relato deste cliente.', historyLine: '{n} relatos anteriores: {open} abertos, {high} de prioridade alta. Último: {status}.',
     agentErr401: 'A sessão de agente expirou. Entre novamente como agente.', agentErr404: 'Relato não encontrado.',
     // Guided intake chat
     chatClose: 'Fechar', chatYou: 'Você', chatGuide: 'Guia',
@@ -277,7 +277,7 @@ const STRINGS: Record<Lang, Strings> = {
     openQuestions: 'Open questions', history: 'History',
     modelOff: 'Model reading: off.', modelShadow: 'Model reading: in shadow, {n} {calls}, version {v}. The model decides nothing.', callOne: 'call', callMany: 'calls',
     toolStatus: 'Lookup status', destination: 'Destination', priority: 'Priority', prioHigh: 'high', urgencyHigh: 'High priority', close: 'Close',
-    statement: 'Customer statement', reasonLabel: 'Reason', languageCode: 'Report language',
+    statement: 'Customer statement', reasonLabel: 'Reason', languageCode: 'Report language', customerHistory: 'Customer history', historyNone: "This customer's first report.", historyLine: '{n} previous reports: {open} open, {high} high priority. Latest: {status}.',
     agentErr401: 'The agent session expired. Sign in as an agent again.', agentErr404: 'Report not found.',
     // Guided intake chat
     chatClose: 'Close', chatYou: 'You', chatGuide: 'Guide',

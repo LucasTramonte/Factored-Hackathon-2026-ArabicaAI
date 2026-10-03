@@ -36,7 +36,8 @@ const CEILING = {
   audit: [2, 102, 0, 1],
   // The CHECK on intake_episodes.reason (migration 0016, ADR-010) adds one counted read to each statement that writes an
   // episode row, as 0004's CHECKs did: start 8 -> 9 and replay 6 -> 7 rows read, measured with and without it (ADR-004).
-  intakeStart: [6, 9, 11, 2],
+  // Migration 0018's index intake_episodes_owner_recent adds one write to the episode insert (11 -> 12).
+  intakeStart: [6, 9, 12, 2],
   intakeStartReplay: [6, 7, 2, 2],
   // The first acknowledgement queues one "received" email for a customer with a notification target (Task 3.2):
   // one more statement in the acknowledgement batch, 3 writes (row, primary key, email_outbox_recent).
@@ -66,8 +67,10 @@ const CEILING = {
   // The confirm batch repeats the one-open-report check atomically (NOT EXISTS over cases_customer_transaction): +1 read.
   intakeConfirmHigh: [21, 78, 28, 10],
   agentTransitionHigh: [5, 26, 6, 2],
-  completeDetail: [3, 15, 0, 3],
-  incompleteDetail: [3, 10, 0, 3],
+  // The detail batch (migration 0018): stamp the first open (1 write, once), the row, and the customer's newest 21
+  // episodes (index intake_episodes_owner_recent) with at most 20 other reports, so reads are bounded by history size.
+  completeDetail: [5, 80, 1, 3],
+  incompleteDetail: [5, 80, 1, 3],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
   idleSweepPage: [2, 1210, 300, 1],
   idleSweepNoop: [2, 10, 0, 1],
@@ -81,7 +84,8 @@ const EXPORT_SLACK = 2;
 const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
 // Customer requests of one guided episode (login + list?lang= + displayed + start + terminal request), as the client
 // sends them from ADR-009 on; ADR-004 sizes capacity on these.
-const EPISODE_CEILING = { complete: [37, 97, 46, 20], incomplete: [31, 75, 37, 17] };
+// Migration 0018's episode index adds one write to each episode's start (complete 46 -> 47, incomplete 37 -> 38).
+const EPISODE_CEILING = { complete: [37, 97, 47, 20], incomplete: [31, 75, 38, 17] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);

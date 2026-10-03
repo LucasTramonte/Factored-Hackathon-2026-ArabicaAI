@@ -50,6 +50,9 @@ const REASON = "CASE WHEN e.reason_source='customer' THEN e.reason END AS reason
 const OPEN_REPORT = 'SELECT 1 FROM cases c JOIN intake_handoffs oh ON oh.complete_case_id=c.case_id JOIN intake_episodes oe ON oe.episode_id=oh.episode_id';
 const STILL_OPEN = "oh.status<>'closed' AND oe.state IN ('handoff_pending','complete_handoff')";
 
+/** The agent detail summarises at most this many of the customer's other, newest reports. */
+const HISTORY_REPORTS = 20;
+
 /** At most one ``update`` email per customer and reference in this window; ``enqueueEmail`` enforces it in SQL. */
 export const UPDATE_EVERY_MS = 300000;
 
@@ -417,19 +420,41 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       + "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
       + 'AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))', customerId, protocol, protocol),
     /**
-     * Optional complete evidence is one-to-one and owner-scoped; missing evidence never drops a handoff. ``model_version``
-     * and ``llm_calls`` come from the episode's usage (set only by shadow extraction), never the model's output.
-     * The episode's ``reason`` is returned with it, or null when the customer never chose one.
+     * One acknowledged handoff by public ``protocol``, in one round trip: the first read stamps ``first_opened_at``
+     * (migration 0018; later reads keep it), then the detail row, then a summary of the same customer's *other*
+     * acknowledged reports among their newest episodes (at most ``HISTORY_REPORTS``; ``has_more`` when that many),
+     * which names no customer. Optional complete evidence
+     * is one-to-one and owner-scoped; missing evidence never drops a handoff. ``model_version`` and ``llm_calls`` come
+     * from the episode's usage (set only by shadow extraction), never the model's output.
      */
-    findIntakeHandoff: protocol => first(
-      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
-      + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status,h.evidence_json,h.actions_json,h.questions_json,'
-      + 'e.customer_statement,e.language,' + REASON + ',t.transaction_id AS verified_transaction_id,'
-      + "json_extract(e.usage_json,'$.model_version') AS model_version,COALESCE(json_extract(e.usage_json,'$.llm_calls'),0) AS llm_calls "
-      + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
-      + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
-      + 'LEFT JOIN transactions t ON t.transaction_id=c.transaction_id AND t.customer_id=e.customer_id '
-      + "WHERE e.state=h.kind||'_handoff' AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))", protocol, protocol),
+    findIntakeHandoff: async (protocol, now = Date.now()) => {
+      const match = '(h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))';
+      const [, detail, history] = await batch([
+        ['UPDATE intake_handoffs AS h SET first_opened_at=? WHERE first_opened_at IS NULL AND ' + match
+          + " AND EXISTS(SELECT 1 FROM intake_episodes e WHERE e.episode_id=h.episode_id AND e.state=h.kind||'_handoff')", now, protocol, protocol],
+        ['SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
+          + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status,h.first_opened_at,h.evidence_json,h.actions_json,h.questions_json,'
+          + 'e.customer_statement,e.language,' + REASON + ',t.transaction_id AS verified_transaction_id,'
+          + "json_extract(e.usage_json,'$.model_version') AS model_version,COALESCE(json_extract(e.usage_json,'$.llm_calls'),0) AS llm_calls "
+          + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+          + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
+          + 'LEFT JOIN transactions t ON t.transaction_id=c.transaction_id AND t.customer_id=e.customer_id '
+          + "WHERE e.state=h.kind||'_handoff' AND " + match, protocol, protocol],
+        // The customer's newest 21 episodes (index intake_episodes_owner_recent), so the read stays bounded however long
+        // their history is; at most 20 other acknowledged reports come back, newest first.
+        ['WITH me AS (SELECT e.customer_id,h.handoff_id FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE ' + match + ') '
+          + 'SELECT h.status,h.urgency,h.accepted_at FROM (SELECT episode_id,state FROM intake_episodes '
+          + 'WHERE customer_id=(SELECT customer_id FROM me) ORDER BY created_at DESC LIMIT 21) e '
+          + "JOIN intake_handoffs h ON h.episode_id=e.episode_id AND e.state=h.kind||'_handoff' "
+          + 'WHERE h.handoff_id<>(SELECT handoff_id FROM me) ORDER BY h.accepted_at DESC LIMIT ' + HISTORY_REPORTS,
+          protocol, protocol]]);
+      const row = detail.results[0];
+      if (!row) return null;
+      const others = history.results;
+      return { ...row, customer_history: { reports: others.length, open: others.filter(o => o.status !== 'closed').length,
+        high_urgency: others.filter(o => o.urgency === 'high').length, last_status: others[0]?.status ?? null,
+        last_accepted_at: others[0]?.accepted_at ?? null, has_more: others.length === HISTORY_REPORTS } };
+    },
     /**
      * Move one acknowledged handoff (public ``protocol``) from ``from`` to ``to`` in one atomic batch: a history row,
      * the customer's ``to`` email (when they have a target) and the status change, each guarded by ``status=from``.

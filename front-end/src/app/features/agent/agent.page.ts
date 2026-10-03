@@ -80,6 +80,13 @@ export class AgentPage {
     return this.t()[reason ? REASON_LABEL[reason] : 'reasonNotRecorded'];
   }
 
+  /** One line on the customer's other reports, so an agent sees a repeat or urgent customer first; names no one. */
+  historyText({ customer_history: h }: AgentIntakeDetail): string {
+    if (!h.reports) return this.t().historyNone;
+    return this.t().historyLine.replace('{n}', h.has_more ? h.reports + '+' : String(h.reports)).replace('{open}', String(h.open)).replace('{high}', String(h.high_urgency))
+      .replace('{status}', h.last_status ? this.statusLabel(h.last_status) : '—');
+  }
+
   statusLabel(status: HandoffStatus): string {
     return this.t()[STATUS_CHIP[status]];
   }

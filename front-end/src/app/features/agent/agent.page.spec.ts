@@ -16,7 +16,8 @@ const detail = (protocol: string, over: Partial<AgentIntakeDetail> = {}): AgentI
   ...intake(protocol), language: 'es', customer_statement: 'No reconozco este cargo',
   verified_evidence: { transaction: { transaction_id: 'TX-9', merchant_name: 'Café', occurred_at: null, source_occurred_at: '2026-09-01 10:00:00', amount: '12.50', currency: 'MXN' } },
   actions_taken: ['owned_transaction_retrieved'], unresolved_questions: [], history: [{ seq: 1, event: 'intake_started', ts: '2026-09-30T11:59:00.000Z' }],
-  history_has_more: false, model_reading: { mode: 'off', model_version: null, llm_calls: 0 }, scope: 'synthetic_demo_only', ...over
+  history_has_more: false, model_reading: { mode: 'off', model_version: null, llm_calls: 0 }, scope: 'synthetic_demo_only',
+  first_opened_at: '2026-10-03T12:00:00.000Z', customer_history: { reports: 0, open: 0, high_urgency: 0, last_status: null, last_accepted_at: null, has_more: false }, ...over
 });
 
 const agentSession: AgentSession = { role: 'agent', mode: 'email_otp', roles: ['agent'] };
@@ -393,7 +394,24 @@ describe('AgentPage', () => {
       const rows = [...el().querySelectorAll('#intake-detail .detail-meta div')];
       const i = rows.findIndex(d => d.querySelector('dt')!.textContent === t().reasonLabel);
       expect(rows[i].querySelector('dd')!.textContent!.trim()).toBe(t().reasonDuplicate);
-      expect(rows[i + 1].querySelector('dt')!.textContent).toBe(t().languageCode);
+      expect(rows[i + 1].querySelector('dt')!.textContent).toBe(t().customerHistory);
+      expect(rows[i + 2].querySelector('dt')!.textContent).toBe(t().languageCode);
+    });
+
+    it('says when this is the customer\'s first report', async () => {
+      service.intakeDetail.and.resolveTo(detail(P1));
+      await loadAndOpen();
+      const row = [...el().querySelectorAll('#intake-detail .detail-meta div')].find(d => d.querySelector('dt')!.textContent === t().customerHistory)!;
+      expect(row.querySelector('dd')!.textContent!.trim()).toBe(t().historyNone);
+    });
+
+    it('summarises the customer\'s other reports with counts and the latest status', async () => {
+      service.intakeDetail.and.resolveTo(detail(P1, { customer_history: { reports: 3, open: 1, high_urgency: 2, last_status: 'in_review', last_accepted_at: '2026-09-29T10:00:00.000Z', has_more: false } }));
+      await loadAndOpen();
+      const row = [...el().querySelectorAll('#intake-detail .detail-meta div')].find(d => d.querySelector('dt')!.textContent === t().customerHistory)!;
+      const text = row.querySelector('dd')!.textContent!.trim();
+      expect(text).toContain('3'); expect(text).toContain('1'); expect(text).toContain('2');
+      expect(text).toContain(page.statusLabel('in_review'));
     });
 
     it('shows the status as text on every queue row', async () => {
