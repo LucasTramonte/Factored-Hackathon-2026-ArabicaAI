@@ -141,8 +141,8 @@ test('identity list joins the committed fictitious identities with dataset custo
   // Committed identities come first and win over a D1 row with the same id; D1 rows add the cohort.
   assert.deepEqual(body.items, [
     { customer_id: 'demo-ana', display_name: 'Ana (demo)', country: null },
-    { customer_id: 'demo-bruno', display_name: 'Bruno (demo)', country: null },
-    { customer_id: 'demo-carla', display_name: 'Carla (demo)', country: null },
+    { customer_id: 'demo-bruno', display_name: 'Lucas (demo)', country: null },
+    { customer_id: 'demo-carla', display_name: 'Manoella (demo)', country: null },
     { customer_id: 'demo-diego', display_name: 'Diego (demo)', country: null },
     { customer_id: 'demo-elena', display_name: 'Elena (demo)', country: null },
     { customer_id: 'demo-marco', display_name: 'Marco (demo)', country: null },

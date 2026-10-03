@@ -28,7 +28,7 @@ def test_seed_loads_reruns_and_rejects_drift():
     con.executescript(seed)
     con.executescript(seed)
     assert con.execute("SELECT customer_id, display_name FROM customers ORDER BY 1").fetchall() == [
-        ("demo-ana", "Ana (demo)"), ("demo-bruno", "Bruno (demo)"), ("demo-carla", "Carla (demo)"),
+        ("demo-ana", "Ana (demo)"), ("demo-bruno", "Lucas (demo)"), ("demo-carla", "Manoella (demo)"),
         ("demo-diego", "Diego (demo)"), ("demo-elena", "Elena (demo)"), ("demo-marco", "Marco (demo)")]
     assert con.execute("SELECT count(*) FROM transactions WHERE source_occurred_at IS NULL").fetchone() == (26,)
     con.execute("UPDATE transactions SET amount='1.00' WHERE transaction_id='demo-tx-001'")

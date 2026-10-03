@@ -1,8 +1,8 @@
--- Fictitious demo identities and charges; slice_version: b9e12385148edf82
+-- Fictitious demo identities and charges; slice_version: cd32cade9f610c92
 -- Contains no cases or sessions. Generated file: do not edit by hand.
 INSERT INTO customers(customer_id,display_name) VALUES ('demo-ana','Ana (demo)') ON CONFLICT(customer_id) DO UPDATE SET display_name=CASE WHEN customers.display_name=excluded.display_name THEN customers.display_name ELSE NULL END;
-INSERT INTO customers(customer_id,display_name) VALUES ('demo-bruno','Bruno (demo)') ON CONFLICT(customer_id) DO UPDATE SET display_name=CASE WHEN customers.display_name=excluded.display_name THEN customers.display_name ELSE NULL END;
-INSERT INTO customers(customer_id,display_name) VALUES ('demo-carla','Carla (demo)') ON CONFLICT(customer_id) DO UPDATE SET display_name=CASE WHEN customers.display_name=excluded.display_name THEN customers.display_name ELSE NULL END;
+INSERT INTO customers(customer_id,display_name) VALUES ('demo-bruno','Lucas (demo)') ON CONFLICT(customer_id) DO UPDATE SET display_name=CASE WHEN customers.display_name=excluded.display_name THEN customers.display_name ELSE NULL END;
+INSERT INTO customers(customer_id,display_name) VALUES ('demo-carla','Manoella (demo)') ON CONFLICT(customer_id) DO UPDATE SET display_name=CASE WHEN customers.display_name=excluded.display_name THEN customers.display_name ELSE NULL END;
 INSERT INTO customers(customer_id,display_name) VALUES ('demo-diego','Diego (demo)') ON CONFLICT(customer_id) DO UPDATE SET display_name=CASE WHEN customers.display_name=excluded.display_name THEN customers.display_name ELSE NULL END;
 INSERT INTO customers(customer_id,display_name) VALUES ('demo-elena','Elena (demo)') ON CONFLICT(customer_id) DO UPDATE SET display_name=CASE WHEN customers.display_name=excluded.display_name THEN customers.display_name ELSE NULL END;
 INSERT INTO customers(customer_id,display_name) VALUES ('demo-marco','Marco (demo)') ON CONFLICT(customer_id) DO UPDATE SET display_name=CASE WHEN customers.display_name=excluded.display_name THEN customers.display_name ELSE NULL END;
