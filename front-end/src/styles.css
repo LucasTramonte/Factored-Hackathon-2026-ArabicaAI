@@ -267,7 +267,7 @@ body { min-height: 100%; }
 .sidebar-top { display: flex; flex-direction: column; gap: 28px; } .sidebar-foot { display: flex; flex-direction: column; gap: 16px; }
 
 /* Administrator banner (customer and agent views): in normal flow, never over a control */
-.role-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px; border-radius: var(--radius-md); background: var(--surface-sunken); color: var(--ink-muted); font: 400 14px/20px var(--font-sans); }
+.role-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px; border-radius: var(--radius-md); background: var(--surface); border: var(--hairline) solid var(--line); color: var(--ink-muted); font: 400 14px/20px var(--font-sans); }
 .role-banner a { color: var(--link); font-weight: 500; }
 
 /* Agent view */
