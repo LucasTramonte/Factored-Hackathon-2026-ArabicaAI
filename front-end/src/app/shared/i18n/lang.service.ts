@@ -72,6 +72,7 @@ const es = {
     // Guided intake chat
     chatClose: 'Cerrar', chatYou: 'Tú', chatGuide: 'Guía',
     chatHello: 'Cuéntame qué pasó con el cargo que no reconoces. Después eliges el cargo y confirmas.',
+    chatHelloGeneral: '¿Cómo te ayudamos hoy, {name}? Si es un cargo que no ves en tu lista, cuéntanos el comercio, el monto y la fecha aproximada. Después revisas tus cargos y, si no está, una persona lo revisa contigo.', help: 'Ayuda',
     chatLangPrompt: 'Idioma del reporte', chatSend: 'Enviar',
     chatChoose: 'Elige el cargo entre tus cargos y confírmalo. Si no lo encuentras, pide revisión sin cargo.',
     chatChooseValidation: 'Elige uno de tus cargos y marca la confirmación.', chatConfirmCharge: 'Confirmar este cargo',
@@ -179,6 +180,7 @@ const STRINGS: Record<Lang, Strings> = {
     // Guided intake chat
     chatClose: 'Fechar', chatYou: 'Você', chatGuide: 'Guia',
     chatHello: 'Conte o que aconteceu com a cobrança que você não reconhece. Depois você escolhe a cobrança e confirma.',
+    chatHelloGeneral: 'Como podemos ajudar hoje, {name}? Se for uma cobrança que você não vê na sua lista, conte o estabelecimento, o valor e a data aproximada. Depois você revisa suas cobranças e, se não estiver lá, uma pessoa analisa com você.', help: 'Ajuda',
     chatLangPrompt: 'Idioma do relato', chatSend: 'Enviar',
     chatChoose: 'Escolha a cobrança entre as suas e confirme. Se não a encontrar, peça análise sem cobrança.',
     chatChooseValidation: 'Escolha uma das suas cobranças e marque a confirmação.', chatConfirmCharge: 'Confirmar esta cobrança',
@@ -280,6 +282,7 @@ const STRINGS: Record<Lang, Strings> = {
     // Guided intake chat
     chatClose: 'Close', chatYou: 'You', chatGuide: 'Guide',
     chatHello: 'Tell me what happened with the charge you do not recognize. Then you choose the charge and confirm.',
+    chatHelloGeneral: "How can we help you today, {name}? If it's a charge you don't see in your list, tell us the merchant, the amount and the approximate date. Then you check your charges and, if it isn't there, a person reviews it with you.", help: 'Help',
     chatLangPrompt: 'Report language', chatSend: 'Send',
     chatChoose: "Choose the charge from your charges and confirm it. If you can't find it, ask for review without a charge.",
     chatChooseValidation: 'Choose one of your charges and tick the confirmation.', chatConfirmCharge: 'Confirm this charge',

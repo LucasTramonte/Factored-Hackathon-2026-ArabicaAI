@@ -84,6 +84,8 @@ There is no team password. Customers sign in with an email one-time code (`POST 
 | `GET /agent/intake-detail?protocol=<uuid>` | agent | Statement, verified evidence (or `null`), server actions, open questions and recorded service history (100 events, `history_has_more`) | 200, 401, 404, 422 (anything but exactly one valid `protocol`) |
 | `POST /agent/intake-status` | agent | Move a report one step, received → in review → closed, with a history row and one email to the customer; a replay writes nothing | 200, 401, 404, 409 (any other step), 422 |
 
+The client's "?" help entry ([ADR-010](../Docs/ADRs/ADR-010-report-reasons-and-help-entry.md), decision 5) uses the same `POST /intake/start` → `POST /intake/handoff` path with no charge selected; there is no server change, and a charge that isn't in the list can only end as an incomplete handoff.
+
 The only agent write is the review status; nothing refunds, blocks a card or decides fraud. A customer session never opens an agent route and an agent session never opens a customer route.
 
 `GET /agent/intakes` is the authoritative queue for guided reports. The legacy `GET /agent/cases` is unchanged and the client no longer calls it: it lists every confirmed case row, including a guided complete case whose reservation is still `handoff_pending` after a lost read-back. In that case the customer got 503 and no reference, and a same-owner retry with the same key completes it. Until then the episode counts as pending in the event export.

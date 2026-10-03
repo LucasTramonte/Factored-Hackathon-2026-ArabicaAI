@@ -209,6 +209,20 @@ describe('CustomerPage focus', () => {
     fixture.nativeElement.remove();
   });
 
+  it('returns focus to the "?" help button that opened the panel', async () => {
+    const { fixture, page, el } = await home();
+    await fixture.whenStable();
+    const button = el.querySelector<HTMLButtonElement>('button.help-fab')!;
+    button.focus();
+    button.click();
+    await fixture.whenStable();
+    expect(page.chatOpen()).toBeTrue();
+    page.closeChat();
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(button);
+    fixture.nativeElement.remove();
+  });
+
   it('focuses the code field when it appears and the email field on "use another email"', async () => {
     const service = jasmine.createSpyObj('CustomerService', ['identities', 'transactions', 'reports'], { client: signal(''), card: signal(null), roles: signal([]) });
     service.reports.and.resolveTo({ items: [], has_more: false });

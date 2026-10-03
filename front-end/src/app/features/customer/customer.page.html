@@ -174,6 +174,7 @@
               </section>
             } @else if (reportsFailed()) { <p class="ar-caption">{{ t().reportsFailed }}</p> }
           </div>
+          <button type="button" class="help-fab" (click)="openChat(undefined, true)" [attr.aria-label]="t().help" [attr.aria-controls]="chatOpen() ? 'intake-chat' : null" [disabled]="!!frozen()">?</button>
         </main>
 
         @if (chatOpen()) {
@@ -188,7 +189,7 @@
             </div>
             <ol class="chat-log" role="log" aria-live="polite">
               @for (line of log(); track $index) {
-                <li [class]="'chat-' + line.from" [attr.id]="$last && line.from === 'bot' ? 'chat-prompt' : null"><span class="sr-only">{{ line.from === 'me' ? t().chatYou : t().chatGuide }}: </span>{{ 'key' in line ? t()[line.key] : line.text }}</li>
+                <li [class]="'chat-' + line.from" [attr.id]="$last && line.from === 'bot' ? 'chat-prompt' : null"><span class="sr-only">{{ line.from === 'me' ? t().chatYou : t().chatGuide }}: </span>{{ lineText(line) }}</li>
               }
             </ol>
             @if (chatError()) { <div class="ar-alert" role="alert" id="chat-error"><p>{{ chatError() }}</p></div> }
@@ -224,8 +225,8 @@
                   <label class="ar-check"><input type="checkbox" name="chat-confirmed" [(ngModel)]="chatConfirmed" [disabled]="!choice"> {{ t().confirm }}</label>
                 </fieldset>
                 <div class="report-actions chat-actions">
-                  <button type="button" class="ar-btn" (click)="frozen() ? run() : confirmCharge()" [disabled]="busy() || frozen()?.path === 'handoff'">{{ frozen()?.path === 'confirm' ? t().retry : t().chatConfirmCharge }}</button>
-                  <button type="button" class="ar-btn ar-btn-secondary" (click)="frozen() ? run() : cannotFind()" [disabled]="busy() || frozen()?.path === 'confirm'">{{ frozen()?.path === 'handoff' ? t().retry : t().chatCannotFind }}</button>
+                  <button type="button" class="ar-btn" [class.ar-btn-secondary]="general()" (click)="frozen() ? run() : confirmCharge()" [disabled]="busy() || frozen()?.path === 'handoff'">{{ frozen()?.path === 'confirm' ? t().retry : t().chatConfirmCharge }}</button>
+                  <button type="button" class="ar-btn" [class.ar-btn-secondary]="!general()" (click)="frozen() ? run() : cannotFind()" [disabled]="busy() || frozen()?.path === 'confirm'">{{ frozen()?.path === 'handoff' ? t().retry : t().chatCannotFind }}</button>
                 </div>
               }
               @case ('details') {
