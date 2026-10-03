@@ -293,8 +293,6 @@
             <div class="chat-faq" role="group" [attr.aria-label]="t().chatFaq">
               @for (q of faqs; track q) { <button type="button" class="link-btn" (click)="ask(q)">{{ t()[q] }}</button> }
             </div>
-            <!-- Always rendered, so the first answer is announced; it replaces the last one. -->
-            <p class="ar-small chat-faq-answer" role="status">@if (faq(); as q) { <strong>{{ t()[q] }}</strong> {{ t()[faqAnswer[q]] }} }</p>
           </section>
         }
       </div>
