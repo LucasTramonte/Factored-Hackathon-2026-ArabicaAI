@@ -175,6 +175,8 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 - **Friendly fraud can't be measured here.** A customer may dispute a charge they made. Complaints don't link to transactions, and outcomes are templates ([DF-025](DATA_QUALITY.md#df-025-dispute-outcomes-cant-show-friendly-fraud)), so we can't size it. Deciding it is out of scope. Intake reduces it by showing the merchant and time before the report and asking for an explicit confirmation.
 - **New data doesn't reach the demo on its own.** The pipeline handles new and late days, but refreshing the served cohort is manual and stops in three known places ([`DATA_ENGINEERING.md` section 8](DATA_ENGINEERING.md#8-if-new-data-arrives-tomorrow)).
 - **Some test content leaked into the repository.** Content of 8 frozen cases was reachable during the model build. We report results with and without them, and the next build will use a checkout with no history.
+- **The sign-in code email is Cognito's default.** It comes in English from `no-reply@verificationemail.com` and can't be changed until SES production access is granted, so the sign-in screens say which email to look for ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md#implementation-notes)).
+- **Sign-in is capped at 50 codes a day.** Cognito's default sender allows 50 emails a day per AWS account, and the team and evaluators share them ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md#implementation-notes)).
 - **What we don't claim:**
   - that faster intake saves money;
   - that the model improves a live service;
