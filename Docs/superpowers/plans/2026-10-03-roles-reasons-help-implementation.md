@@ -62,7 +62,7 @@ Verified on `main` 8db96ad and re-checked by a plan reviewer over three rounds. 
 - Point 4 is already true server-side: the pool is `AllowAdminCreateUserOnly=true` with `--prevent-user-existence-errors ENABLED` (`scripts/cognito/setup.sh:19,39`). An unknown email cannot request a code; Cognito answers a generic error that the client maps to 401 (`core/auth/cognito.service.ts:15`) and shows as "could not send the code" (`errSendCode`), never saying whether the address exists. A verified token without `customer` or without a loaded D1 customer gets 403 and no cookie.
 - Enrolment: `back-end/scripts/cognito/enroll.sh <email> <customer_id|-> [group]`, one group per call, groups are additive, `custom:customer_id` is immutable. Roberto → `demo-ana`; Lucas → `demo-bruno` (`lucastramonte3@gmail.com`). Manoella and the evaluators have no identity yet.
 - Fictitious identities: customers come from `back-end/src/config/identities.json` (`{customer_id, display_name, source}`), charges from `back-end/seeds/fictitious.json` (`{transaction_id, customer_id, occurred_at, merchant_name, amount, currency}`; today 6 rows `demo-tx-001`…`006`, all BRL, Ana 5 and Bruno 1). `.venv/bin/python -m data_pipelines.gold.fictitious_seed` renders `back-end/seeds/seed_fictitious.sql` (generated, never edited by hand). `data_pipelines/gold/test_fictitious_seed.py` fails when the committed SQL drifts from the generator, and asserts the exact customer list (~line 30) and the transaction count `(6,)` (~line 32).
-- `budget.test.js` pins `identities: [1, 12, 0, 1]` = queries, rows read, rows written, round trips; rows read equals the `customers` row count of the local fixture (10 today, so 12 is the ceiling).
+- `budget.test.js` pins `identities: [1, 12, 0, 1]` = queries, rows read, rows written, round trips; rows read equals the `customers` row count of the local fixture (8 today: 2 fictitious + 1 sample + 5 cohort, including `demo-hidden`; the ceiling was raised 10 → 12 when PR #75 added two cohort customers).
 - SES is in sandbox: report emails reach only verified addresses. Sign-in codes come from Cognito and reach any enrolled email.
 
 **The guided report**
@@ -91,7 +91,7 @@ Verified on `main` 8db96ad and re-checked by a plan reviewer over three rounds. 
 | S: report reasons | `feat/report-reasons` | `main` | `enhancement` | Manoella (product) |
 | H: the "?" help entry | `feat/help-entry` | `feat/report-reasons` | `enhancement` | Manoella |
 
-R and S share only `lang.service.ts` and `intake.model.ts` (additions at different places; the cascade merges them). Every PR: `--assignee @me`, label, reviewer, the test counts, and a closing **"Human steps before merge"**. Agents never tag, merge, deploy, run `--remote`, or change a real person's Cognito groups without the orchestrator's go.
+R and S share only `lang.service.ts` and `intake.model.ts` (additions at different places; the cascade merges them). Every PR: `--assignee @me`, label, reviewer, the test counts, and a closing **"Human steps before merge"**. Agents never tag, merge, deploy, run `--remote` or change anyone's Cognito groups; those are the human steps.
 
 ## 3. File map
 
@@ -123,7 +123,7 @@ R and S share only `lang.service.ts` and `intake.model.ts` (additions at differe
 Today there are two kinds of people in the demo and nothing in between:
 
 - An email in group `customer` with a loaded `custom:customer_id` can sign in at `/` and sees only its own charges. If that same person opens `/agent` and signs in, the Worker answers **403 `This account is not an agent in the demo`**.
-- An email in group `agent` can sign in at `/agent`. If it tries `/`, the Worker answers **403 `This account is not enrolled in the demo`**, because it has no customer id.
+- An email in group `agent` can sign in at `/agent`. If it tries `/`, the Worker answers **403 `This account is not enrolled in the demo`** (the group check fails first; it has no customer id either).
 - Roberto and Lucas are in **both** groups, so they can use both views, but nothing on screen says they are team or evaluators, and the groups `admin` and `auditor` exist in Cognito and in `ROLES` without doing anything. Giving an evaluator access today means two enrolment commands and a demo identity per evaluator, and there are only two fictitious identities (Ana, Bruno), both taken.
 - Nobody can get in without being enrolled (the pool only accepts admin-created users and hides whether an email exists), but no test or document says so, so an evaluator reading the repo cannot tell whether that is true.
 
@@ -329,7 +329,7 @@ signIn(idToken?: string): Promise<AgentSession> {
 
 **Files:** modify `back-end/src/config/identities.json`, `back-end/seeds/fictitious.json`, `data_pipelines/gold/test_fictitious_seed.py`, `back-end/test/integration/budget.test.js`; regenerate `back-end/seeds/seed_fictitious.sql`.
 
-- [ ] **Step 1: the drift test first.** In `test_fictitious_seed.py` change the expected customer list (~line 30) to the six identities in id order (`demo-ana`, `demo-bruno`, `demo-carla`, `demo-diego`, `demo-elena`, `demo-marco` with their display names) and the transaction count `(6,)` → `(26,)` (~line 32). Run `.venv/bin/python -m pytest data_pipelines/gold -q` → `2 failed, 189 passed, 1 skipped` (the drift test and the load test).
+- [ ] **Step 1: the drift test first.** In `test_fictitious_seed.py` change the expected customer list (~line 30) to the six identities in id order (`demo-ana`, `demo-bruno`, `demo-carla`, `demo-diego`, `demo-elena`, `demo-marco` with their display names) and the transaction count `(6,)` → `(26,)` (~line 32). Run `.venv/bin/python -m pytest data_pipelines/gold -q` → `1 failed, 190 passed, 1 skipped`: only the load test fails, because the drift test compares the committed SQL with the generator and both are still unchanged.
 - [ ] **Step 2: identities.** Add to `identities.json` `customers`, after Bruno: `demo-carla` "Carla (demo)", `demo-diego` "Diego (demo)", `demo-elena` "Elena (demo)", `demo-marco` "Marco (demo)", each `"source": "fictitious"`.
 - [ ] **Step 3: charges.** Add 20 rows to `fictitious.json` (`demo-tx-007`…`026`, BRL like the existing rows, dates 2026-09-22 to 2026-09-30, amounts as strings with two decimals). Each identity gets the same five shapes:
 
@@ -341,8 +341,8 @@ signIn(idToken?: string): Promise<AgentSession> {
 | one at or above the BRL fixed tier (2,500.00) | the urgency lane | `Viagens Demo` 2890.00, 2026-09-29T18:40:00+00:00 |
 
   Vary merchants and amounts per identity (Diego: `Padaria Demo` 18.50, `Posto Demo` 210.00 ×2, `Musica Demo` 19.90, `Moveis Demo` 3150.00; Elena: `Farmacia Demo` 63.20, `Taxi Demo` 42.00 ×2, `Nuvem Demo` 34.90, `Joalheria Demo` 2650.00; Marco: `Livraria Demo` 88.00, `Cafe Demo` 24.00 ×2, `Jornal Demo` 15.90, `Eletro Demo` 4120.00).
-- [ ] **Step 4: regenerate and test.** `.venv/bin/python -m data_pipelines.gold.fictitious_seed` → `Wrote back-end/seeds/seed_fictitious.sql`. `git diff --stat back-end/seeds/seed_fictitious.sql` shows additions only. `.venv/bin/python -m pytest data_pipelines/gold -q` → `191 passed, 1 skipped`.
-- [ ] **Step 5: the Worker suites.** `cd back-end && npm run test:unit` → 166 pass (with R.1 on the branch). `node test/run-local.mjs`: the budget test's `identities` ceiling `[1, 12, 0, 1]` fails because rows read is now 14 (10 fixture customers + 4); pin `[1, 16, 0, 1]` and say in the commit body that no code path changed. Re-run → 69/69 and 4/4.
+- [ ] **Step 4: regenerate and test.** `.venv/bin/python -m data_pipelines.gold.fictitious_seed` → `Wrote back-end/seeds/seed_fictitious.sql`. Before regenerating, pytest shows `1 failed` (now the drift test, since the generator changed and the committed SQL did not); after regenerating, `git diff --stat back-end/seeds/seed_fictitious.sql` shows additions only and `.venv/bin/python -m pytest data_pipelines/gold -q` → `191 passed, 1 skipped`.
+- [ ] **Step 5: the Worker suites.** `cd back-end && npm run test:unit` → 166 pass (with R.1 on the branch). `node test/run-local.mjs`: `identities` rows read grows by 4 (the new customers), from 8 to 12, which is exactly the current ceiling `[1, 12, 0, 1]`. If the ceiling fails, pin measured plus the same headroom (`[1, 16, 0, 1]`) and say in the commit body that no code path changed; otherwise leave it and state the measured value. Then 69/69 and 4/4.
 - [ ] **Step 6: commit** `data(seed): four fictitious evaluator identities with charges for every reason`.
 
 **Acceptance:** six fictitious identities; 26 charges; every new identity has the four shapes; the seed is idempotent (the load test runs it twice); the drift test passes; the only budget change is `identities` rows read. **Edge cases:** the dataset cohort identities are untouched; `DEMO_PICKER` lists the new identities locally.
@@ -489,8 +489,8 @@ if (kind === 'complete') urgency = URGENCY.high_reasons.includes(episode.reason)
 
   (`urgencyOf` stays pure; `URGENCY` is a static JSON import and no test stubs it.) Contract: `agentIntake` and `agentIntakeDetail` gain required `"reason": { "enum": ["not_mine","duplicate","wrong_amount","cancelled_or_not_received","subscription","card_lost_or_stolen","other"] }`.
 
-- [ ] **Step 4: green.** `npm run test:unit` → about `ℹ tests 171`, `fail 0`. `node test/run-local.mjs` → main about `pass 72` (the new integration tests), budget `4/4`. The start writes one more column in the same statement and the handoff reads a column it already loads, so no ceiling moves; if one does, pin the measured value and explain it in the commit.
-- [ ] **Step 5: two commits, so the feature diff stays readable.** First `test(intake): start bodies carry the reason` (the 17 files plus `validation.js`'s `KEYS` and `REASONS`), then `feat(intake): a report carries the reason the customer gives (migration 0016)` (everything else).
+- [ ] **Step 4: green.** `npm run test:unit` → about `ℹ tests 168` (`171` once R merges; this branch starts from `main`), `fail 0`. `node test/run-local.mjs` → main about `pass 72` (the new integration tests), budget `4/4`. The start writes one more column in the same statement and the handoff reads a column it already loads, so no ceiling moves; if one does, pin the measured value and explain it in the commit.
+- [ ] **Step 5: two commits, so the feature diff stays readable.** First `test(intake): start bodies carry the reason`: only the `reason: 'not_mine'` additions to the 17 start bodies, plus `KEYS` and `REASONS` in `validation.js`; three of those files (`integration/intake.test.js`, `urgency.test.js`, `agent-intake.test.js`) also gain new assertions in this task, so stage hunks with `git add -p`. This commit is green on its own (the key is accepted and every body carries it); say so in its body. Then `feat(intake): a report carries the reason the customer gives (migration 0016)` with everything else.
 
 **Acceptance:** the four responses in the Target (201; 409 on a different reason; 422 unknown; 422 missing); the agent list and detail carry `reason` and pass the contract; lost-card on a confirmed small charge → high with the block line; lost-card on an incomplete handoff → normal; `REASONS` and the CHECK cannot drift (test); no event carries `reason`. **Edge cases:** rows from before the migration read `not_mine` (DEFAULT); a replay with the same key and the same reason still returns 200 `replayed: true`; the shadow extractor path is untouched.
 
@@ -594,7 +594,7 @@ pickReason(r: Reason): void {
 
   Every prefill is over 10 code points, so the 10–2000 rule holds.
 
-- [ ] **Step 4: green.** `npx ng test --watch=false` → `TOTAL: 157 SUCCESS` (147 + 3 from R.2 if merged + 7). Keyboard: Tab reaches the group, arrows move between chips, Space selects. At 390 px the chips wrap with no horizontal scroll. `npm run build` compiles.
+- [ ] **Step 4: green.** `npx ng test --watch=false` → `TOTAL: 154 SUCCESS` (147 + 7; `157` once R.2 merges). Keyboard: Tab reaches the group, arrows move between chips, Space selects. At 390 px the chips wrap with no horizontal scroll. `npm run build` compiles.
 - [ ] **Step 5: commit** `feat(client): one-tap reason prefills the report`.
 
 **Acceptance:** the Target screen; tap → send works with no typing; a typed statement is never overwritten; no reason → inline error and no request; the body is exactly the six keys; the lost-card line appears once; `newReport()` resets. **Edge cases:** switching the report language after a chip re-fills only if the field still holds the prefill (re-run `pickReason` on language change: one line); the `other` chip with an empty field keeps the 10-character rule and focuses the field.
@@ -733,7 +733,7 @@ After each deploy, a person (or the orchestrator with `curl` where no token is n
 |---|---|---|
 | The new build is live | `curl -s -X POST $BASE/demo/agent-session` | `422 {"detail":"Provide the sign-in token"}` (unchanged), and after R: `curl -s -X POST $BASE/transactions/displayed` → `401` |
 | Admin sign-in (R) | sign in at `/` with an `admin` email | the greeting plus the grey banner "administración · evaluación"; `/agent` sign-in works and shows its banner |
-| Customer only (R) | sign in at `/agent` with a `customer`-only email | "Este correo no es de un agente de la demo" (the 403 mapping) |
+| Customer only (R) | sign in at `/agent` with a `customer`-only email | "Esta cuenta no es de un agente en la demo." (`agentErr403`, the 403 mapping) |
 | Unknown email (R, point 4) | type `nobody@example.com` at `/` | "No pudimos enviar un código a ese correo" (never "does not exist") |
 | Reason stored (S) | report a charge with "Me cobraron dos veces"; open `/agent` | the row shows `me cobraron dos veces`; the detail has "Motivo: Me cobraron dos veces" |
 | Lost card (S) | report a 29.90 charge with "Perdí la tarjeta…"; confirm | the guide line about calling the bank appears at once; the receipt says "Prioridad alta" with the demo number; the row heads the queue |
@@ -747,7 +747,7 @@ After each deploy, a person (or the orchestrator with `curl` where no token is n
 - The banner is tab-scoped state, like the sign-in; a reload drops both.
 - Evaluators' notification emails need an SES verification click or production access; sign-in codes do not.
 - `0016` must be applied to remote D1 before the S merge deploys, or the deploy guard blocks every build (as on 2026-10-01).
-- S.1 has a one-step intermediate state where every start body is 422; the two-commit split keeps the feature diff readable, not the intermediate state green.
+- S.1's red state (every start body 422) exists only between writing the tests and changing `KEYS`; both of its commits are green on their own.
 
 ## 6. Order
 
