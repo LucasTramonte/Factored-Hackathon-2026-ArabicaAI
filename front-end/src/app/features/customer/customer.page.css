@@ -10,7 +10,8 @@
 .chat-log li { max-width: 85%; padding: 8px 12px; border-radius: var(--radius-md); overflow-wrap: anywhere; font: 400 14px/20px var(--font-sans); }
 .chat-bot { align-self: flex-start; background: var(--surface-sunken); }
 .chat-me { align-self: flex-end; background: var(--accent-soft); }
-.chat-form, .chat-lang { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.chat-form, .chat-lang, .chat-reasons { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.chat-reasons { flex-direction: row; flex-wrap: wrap; gap: 8px; } /* reason chips wrap; never a horizontal scroll */
 /* The step's main actions stay visible while the panel scrolls (small screens, long charge lists). */
 .chat-actions { position: sticky; bottom: -20px; padding: 8px 0 20px; background: var(--surface-raised); } /* -20px covers the panel padding */
 .chat-faq { display: flex; flex-wrap: wrap; gap: 4px 16px; }

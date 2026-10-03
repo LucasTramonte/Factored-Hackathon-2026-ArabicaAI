@@ -31,7 +31,12 @@ const es = {
     tzMissing: 'zona horaria no indicada', dateMissing: 'fecha no disponible', utc: 'UTC',
     windowCaption: 'Tus compras más recientes en los datos de esta demostración, de la más reciente a la más antigua. No se muestran puntajes de riesgo.',
     empty: 'No se cargaron cargos.', emptyCaveat: 'Esto no establece que el cliente no tenga cargos.',
-    reportTitle: 'Reportar este cargo', describe: 'Describe lo que pasó', placeholder: 'No reconozco esta compra...',
+    reportTitle: 'Reportar este cargo', describe: 'Describe lo que pasó',
+    reasonLegend: '¿Por qué no lo reconoces?', reasonNotMine: 'No hice esta compra', reasonDuplicate: 'Me cobraron dos veces', reasonWrongAmount: 'El monto es distinto', reasonCancelled: 'Cancelé o no recibí', reasonSubscription: 'Una suscripción sigue cobrando', reasonLostCard: 'Perdí la tarjeta o me la robaron', reasonOther: 'Otro motivo',
+    reasonFillNotMine: 'No reconozco este cargo; no hice esta compra.', reasonFillDuplicate: 'Me cobraron dos veces la misma compra.', reasonFillWrongAmount: 'El monto cobrado es distinto al que pagué.',
+    reasonFillCancelled: 'Cancelé la compra o nunca recibí el producto o servicio.', reasonFillSubscription: 'Una suscripción que cancelé sigue cobrándome.', reasonFillLostCard: 'Perdí mi tarjeta o me la robaron y no reconozco este cargo.',
+    chatReasonValidation: 'Elige por qué no reconoces el cargo.', chatLostCard: 'Si tu tarjeta sigue activa, llama a tu banco para bloquearla: este servicio no bloquea tarjetas. El número llega con tu comprobante.',
+    placeholder: 'No reconozco esta compra...',
     confirm: 'No reconozco el cargo seleccionado y quiero enviar una solicitud de revisión.',
     submit: 'Confirmar y enviar', retry: 'Reintentar la misma solicitud', cancel: 'Cancelar',
     pending: 'La aceptación no está confirmada. Mantén esta pestaña abierta y reintenta; los datos de la solicitud no cambian.',
@@ -133,7 +138,12 @@ const STRINGS: Record<Lang, Strings> = {
     tzMissing: 'fuso horário não informado', dateMissing: 'data indisponível', utc: 'UTC',
     windowCaption: 'Suas compras mais recentes nos dados desta demonstração, da mais recente à mais antiga. Nenhuma pontuação de risco é mostrada.',
     empty: 'Nenhuma cobrança carregada.', emptyCaveat: 'Isso não estabelece que o cliente não tenha cobranças.',
-    reportTitle: 'Reportar esta cobrança', describe: 'Descreva o que aconteceu', placeholder: 'Não reconheço esta compra...',
+    reportTitle: 'Reportar esta cobrança', describe: 'Descreva o que aconteceu',
+    reasonLegend: 'Por que você não a reconhece?', reasonNotMine: 'Não fiz esta compra', reasonDuplicate: 'Cobraram duas vezes', reasonWrongAmount: 'O valor é diferente', reasonCancelled: 'Cancelei ou não recebi', reasonSubscription: 'Uma assinatura continua cobrando', reasonLostCard: 'Perdi o cartão ou foi roubado', reasonOther: 'Outro motivo',
+    reasonFillNotMine: 'Não reconheço esta cobrança; não fiz esta compra.', reasonFillDuplicate: 'Cobraram duas vezes a mesma compra.', reasonFillWrongAmount: 'O valor cobrado é diferente do que paguei.',
+    reasonFillCancelled: 'Cancelei a compra ou nunca recebi o produto ou serviço.', reasonFillSubscription: 'Uma assinatura que cancelei continua me cobrando.', reasonFillLostCard: 'Perdi meu cartão ou ele foi roubado e não reconheço esta cobrança.',
+    chatReasonValidation: 'Escolha por que você não reconhece a cobrança.', chatLostCard: 'Se o seu cartão continua ativo, ligue para o seu banco para bloqueá-lo: este serviço não bloqueia cartões. O número chega com o seu comprovante.',
+    placeholder: 'Não reconheço esta compra...',
     confirm: 'Não reconheço a cobrança selecionada e quero enviar um pedido de revisão.',
     submit: 'Confirmar e enviar', retry: 'Tentar o mesmo pedido novamente', cancel: 'Cancelar',
     pending: 'A aceitação não está confirmada. Mantenha esta aba aberta e tente novamente; os dados do pedido não mudam.',
@@ -229,7 +239,12 @@ const STRINGS: Record<Lang, Strings> = {
     tzMissing: 'source timezone not provided', dateMissing: 'date unavailable', utc: 'UTC',
     windowCaption: "Your most recent purchases in this demo's data, newest first. No risk scores are shown.",
     empty: 'No charges loaded.', emptyCaveat: 'This does not establish that the customer has no charges.',
-    reportTitle: 'Report this charge', describe: 'Describe what happened', placeholder: 'I do not recognize this purchase...',
+    reportTitle: 'Report this charge', describe: 'Describe what happened',
+    reasonLegend: "Why don't you recognise it?", reasonNotMine: "I didn't make this purchase", reasonDuplicate: 'Charged twice', reasonWrongAmount: 'Wrong amount', reasonCancelled: 'Cancelled or not received', reasonSubscription: 'A subscription keeps charging', reasonLostCard: 'Card lost or stolen', reasonOther: 'Something else',
+    reasonFillNotMine: "I don't recognise this charge; I didn't make this purchase.", reasonFillDuplicate: 'I was charged twice for the same purchase.', reasonFillWrongAmount: 'The amount charged is different from what I paid.',
+    reasonFillCancelled: 'I cancelled the purchase or never received the product or service.', reasonFillSubscription: 'A subscription I cancelled keeps charging me.', reasonFillLostCard: "My card was lost or stolen and I don't recognise this charge.",
+    chatReasonValidation: "Choose why you don't recognise the charge.", chatLostCard: 'If your card is still active, call your bank to block it: this service does not block cards. The number comes with your receipt.',
+    placeholder: 'I do not recognize this purchase...',
     confirm: 'I do not recognize the selected charge and want to submit a review request.',
     submit: 'Confirm and submit', retry: 'Retry the same request', cancel: 'Cancel',
     pending: 'Acceptance is not confirmed. Keep this tab open and retry; the request details are unchanged.',
@@ -306,6 +321,9 @@ export class LangService {
   readonly lang = signal<Lang>(LangService.initial());
   readonly t = computed<Strings>(() => STRINGS[this.lang()]);
   readonly all: Lang[] = ['es', 'pt', 'en'];
+
+  /** Another language's strings, for text written in the report language rather than the interface language. */
+  stringsFor(lang: Lang): Strings { return STRINGS[lang]; }
 
   constructor() {
     if (typeof document !== 'undefined') document.documentElement.lang = this.lang();

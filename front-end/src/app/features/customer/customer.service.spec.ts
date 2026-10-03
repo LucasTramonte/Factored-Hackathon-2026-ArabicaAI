@@ -9,7 +9,7 @@ describe('CustomerService guided intake', () => {
     api.request.and.resolveTo({});
     TestBed.configureTestingModule({ providers: [{ provide: ApiService, useValue: api }] });
     const service = TestBed.inject(CustomerService);
-    const start = { customer_statement: 'No reconozco este cargo.', idempotency_key: 'k', language: 'es', mode: 'guided', report_type: 'unrecognized_charge' } as const;
+    const start = { customer_statement: 'No reconozco este cargo.', idempotency_key: 'k', language: 'es', mode: 'guided', reason: 'not_mine', report_type: 'unrecognized_charge' } as const;
     const confirm = { customer_confirmed: true, episode_id: 'e', idempotency_key: 'k2', transaction_id: 't' } as const;
     const handoff = { episode_id: 'e', idempotency_key: 'k3', kind: 'incomplete' } as const;
     await service.startIntake(start);

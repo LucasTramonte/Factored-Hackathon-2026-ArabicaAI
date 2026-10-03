@@ -144,6 +144,11 @@ button, input, select, textarea { font: inherit; }
 .ar-textarea { min-height: 96px; resize: vertical; }
 .ar-input:disabled, .ar-select:disabled, .ar-textarea:disabled { background: var(--surface-sunken); opacity: var(--disabled); cursor: not-allowed; }
 .ar-check { display: flex; gap: 12px; align-items: flex-start; font: 400 16px/24px var(--font-sans); } .ar-check input { flex: none; width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--accent); }
+/* A radio drawn as a chip: the native input stays on top (transparent), so Tab, arrows and Space work as for any radio group. */
+.ar-chip-choice { position: relative; } .ar-chip-choice input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.ar-chip-choice span { display: inline-flex; padding: 6px 12px; border: var(--hairline) solid var(--line); border-radius: 999px; font: 500 14px/20px var(--font-sans); color: var(--ink); background: var(--surface); }
+.ar-chip-choice input:checked + span { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); }
+.ar-chip-choice input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* Identity row (login) and transaction row (intake) */
 .ar-row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--surface-raised); border: var(--hairline) solid var(--line); border-radius: var(--radius-md); cursor: pointer; }

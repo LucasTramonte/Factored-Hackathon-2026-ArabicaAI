@@ -213,6 +213,7 @@ describe('CustomerPage', () => {
       await p.verify();
       service.startIntake.and.resolveTo({ episode_id: 'e', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
       p.chatStatement = 'No reconozco este cargo.';
+      p.reason.set('not_mine');
       await p.send();
       p.step.set('login');
       service.signInWithToken.and.resolveTo({ customer_id: 'CLI-2', mode: 'email_otp', roles: ['customer'] });
@@ -228,6 +229,7 @@ describe('CustomerPage', () => {
       await p.verify();
       service.startIntake.and.resolveTo({ episode_id: 'e', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
       p.chatStatement = 'No reconozco este cargo.';
+      p.reason.set('not_mine');
       await p.send();
       expect(p.identityLocked()).toBeTrue();
       p.step.set('login');
@@ -251,6 +253,7 @@ describe('CustomerPage', () => {
       service.startIntake.and.returnValues(Promise.reject(new ApiError(401)),
         Promise.resolve({ episode_id: 'e', state: 'selection_required', language: 'es', mode: 'guided', replayed: false }));
       p.chatStatement = 'No reconozco este cargo.';
+      p.reason.set('not_mine');
       await p.send();
       const frozen = p.frozen();
       expect(frozen?.path).toBe('start');
@@ -316,6 +319,7 @@ describe('CustomerPage', () => {
     async function startEpisode() {
       service.startIntake.and.resolveTo(started);
       page.chatStatement = '  No reconozco este cargo.  ';
+      page.reason.set('not_mine');
       await page.send();
     }
     /** The "can't find it" path: the guide asks once what the customer remembers, and the answer goes with the handoff. */
@@ -328,8 +332,8 @@ describe('CustomerPage', () => {
     it('starts with exactly the guided fields and shows no reference before the receipt', async () => {
       await startEpisode();
       const body = service.startIntake.calls.mostRecent().args[0];
-      expect(Object.keys(body).sort()).toEqual(['customer_statement', 'idempotency_key', 'language', 'mode', 'report_type']);
-      expect(body).toEqual(jasmine.objectContaining({ customer_statement: 'No reconozco este cargo.', language: 'es', mode: 'guided', report_type: 'unrecognized_charge' }));
+      expect(Object.keys(body).sort()).toEqual(['customer_statement', 'idempotency_key', 'language', 'mode', 'reason', 'report_type']);
+      expect(body).toEqual(jasmine.objectContaining({ customer_statement: 'No reconozco este cargo.', language: 'es', mode: 'guided', reason: 'not_mine', report_type: 'unrecognized_charge' }));
       expect(body.idempotency_key).toMatch(/^[0-9a-f-]{36}$/);
       expect(page.chatStep()).toBe('choose');
       expect(page.intakeReceipt()).toBeNull();
@@ -341,6 +345,7 @@ describe('CustomerPage', () => {
       lang.set('en');
       expect(page.reportLang()).toBe('en');
       page.chatStatement = 'I do not recognize this charge.';
+      page.reason.set('not_mine');
       service.startIntake.and.resolveTo({ ...started, language: 'en' });
       await page.send();
       expect(service.startIntake.calls.mostRecent().args[0].language).toBe('en');
@@ -366,6 +371,7 @@ describe('CustomerPage', () => {
       radios[1].click();
       fixture.detectChanges();
       p.chatStatement = 'Não reconheço esta cobrança.';
+      p.reason.set('not_mine');
       service.startIntake.and.resolveTo({ ...started, language: 'pt' });
       await p.send();
       expect(service.startIntake.calls.mostRecent().args[0].language).toBe('pt');
@@ -378,8 +384,83 @@ describe('CustomerPage', () => {
       expect(fixture.nativeElement.querySelector('input[name="report-lang"]')).toBeNull();
     });
 
+    describe('reasons', () => {
+      const chips = (fixture: { nativeElement: HTMLElement }) =>
+        [...fixture.nativeElement.querySelectorAll<HTMLInputElement>('fieldset.chat-reasons input[name=reason]')];
+      async function textarea(fixture: Awaited<ReturnType<typeof chat>>['fixture']) {
+        fixture.detectChanges();
+        await fixture.whenStable();
+        return fixture.nativeElement.querySelector('#chat-statement') as HTMLTextAreaElement;
+      }
+
+      it('renders seven unchecked reasons under their legend, not_mine first', async () => {
+        const { fixture } = await chat();
+        const radios = chips(fixture);
+        expect(radios.length).toBe(7);
+        expect(radios[0].value).toBe('not_mine');
+        expect(radios.some(r => r.checked)).toBeFalse();
+        expect(fixture.nativeElement.querySelector('fieldset.chat-reasons legend').textContent.trim()).toBe(lang.t().reasonLegend);
+      });
+
+      it('fills the statement in the report language, not the interface language', async () => {
+        const { fixture, p } = await chat();
+        chips(fixture).find(r => r.value === 'duplicate')!.click();
+        expect((await textarea(fixture)).value).toBe(lang.stringsFor('es').reasonFillDuplicate);
+        expect(p.reason()).toBe('duplicate');
+        p.newReport();
+        p.chosenLang.set('pt');
+        fixture.detectChanges();
+        chips(fixture).find(r => r.value === 'duplicate')!.click();
+        expect((await textarea(fixture)).value).toBe(lang.stringsFor('pt').reasonFillDuplicate);
+        expect(lang.stringsFor('pt').reasonFillDuplicate).not.toBe(lang.stringsFor('es').reasonFillDuplicate);
+      });
+
+      it('never overwrites what the customer typed', async () => {
+        const { fixture, p } = await chat();
+        p.chatStatement = 'Compré en otra tienda ese día.';
+        chips(fixture).find(r => r.value === 'wrong_amount')!.click();
+        expect((await textarea(fixture)).value).toBe('Compré en otra tienda ese día.');
+        expect(p.reason()).toBe('wrong_amount');
+      });
+
+      it('refuses to send without a reason', async () => {
+        page.chatStatement = 'No reconozco este cargo.';
+        await page.send();
+        expect(page.chatError()).toBe(lang.t().chatReasonValidation);
+        expect(service.startIntake).not.toHaveBeenCalled();
+      });
+
+      it('sends the checked reason with the start', async () => {
+        page.pickReason('subscription');
+        service.startIntake.and.resolveTo(started);
+        await page.send();
+        const body = service.startIntake.calls.mostRecent().args[0];
+        expect(Object.keys(body).sort()).toEqual(['customer_statement', 'idempotency_key', 'language', 'mode', 'reason', 'report_type']);
+        expect(body.reason).toBe('subscription');
+        expect(body.customer_statement).toBe(lang.t().reasonFillSubscription);
+      });
+
+      it('a lost or stolen card says at once to call the bank, once', () => {
+        page.pickReason('card_lost_or_stolen');
+        page.pickReason('card_lost_or_stolen');
+        expect(page.log().filter(l => 'key' in l && l.key === 'chatLostCard').length).toBe(1);
+        expect(page.log().at(-1)).toEqual({ from: 'bot', key: 'chatLostCard' });
+      });
+
+      it('a new report clears the reason and the prefill', () => {
+        page.pickReason('duplicate');
+        page.newReport();
+        expect(page.reason()).toBeNull();
+        expect(page.chatStatement).toBe('');
+        page.chatStatement = lang.t().reasonFillDuplicate; // now the customer's own words
+        page.pickReason('not_mine');
+        expect(page.chatStatement).toBe(lang.t().reasonFillDuplicate);
+      });
+    });
+
     it('refuses a statement under 10 code points in every interface language', async () => {
       page.chatStatement = '😀😀😀😀😀';
+      page.reason.set('not_mine');
       for (const code of ['es', 'pt', 'en'] as const) {
         lang.set(code);
         await page.send();
@@ -391,9 +472,11 @@ describe('CustomerPage', () => {
     it('freezes the start and resends the same body after a 503, even if the text changes', async () => {
       service.startIntake.and.returnValues(Promise.reject(new ApiError(503, 'x')), Promise.resolve(started));
       page.chatStatement = 'No reconozco este cargo.';
+      page.reason.set('not_mine');
       await page.send();
       expect(page.identityLocked()).toBeTrue();
       page.chatStatement = 'Edited, must not be sent.';
+      page.reason.set('not_mine');
       await page.send();
       const [first, second] = service.startIntake.calls.allArgs().map(a => a[0]);
       expect(second).toEqual(first);
@@ -404,6 +487,7 @@ describe('CustomerPage', () => {
       service.startIntake.and.returnValues(Promise.reject(new ApiError(401, 'x')), Promise.resolve(started));
       page.identity = 'demo-bruno';
       page.chatStatement = 'No reconozco este cargo.';
+      page.reason.set('not_mine');
       await page.send();
       expect(service.signIn.calls.mostRecent().args[0]).toBe('demo-ana');
       const [first, second] = service.startIntake.calls.allArgs().map(a => a[0]);
@@ -416,6 +500,7 @@ describe('CustomerPage', () => {
     it('after a second 401 keeps the request frozen for a manual renew and retry', async () => {
       service.startIntake.and.rejectWith(new ApiError(401, 'x'));
       page.chatStatement = 'No reconozco este cargo.';
+      page.reason.set('not_mine');
       await page.send();
       expect(service.startIntake).toHaveBeenCalledTimes(2);
       expect(page.frozen()).not.toBeNull();
@@ -462,6 +547,7 @@ describe('CustomerPage', () => {
     it('the details field cannot outgrow the statement column, and with no room left the handoff goes without the question', async () => {
       service.startIntake.and.resolveTo(started);
       page.chatStatement = 'x'.repeat(1991);
+      page.reason.set('not_mine');
       await page.send();
       service.handoffIntake.and.resolveTo({ ...intakeReceipt, kind: 'incomplete' });
       expect(page.room).toBe(8);
@@ -511,6 +597,7 @@ describe('CustomerPage', () => {
     it('a 409 on start keeps the generic message and lets the customer send again with a new key', async () => {
       service.startIntake.and.rejectWith(new ApiError(409, 'x'));
       page.chatStatement = 'No reconozco este cargo.';
+      page.reason.set('not_mine');
       await page.send();
       expect(page.chatStep()).toBe('describe');
       expect(page.frozen()).toBeNull();
@@ -674,6 +761,7 @@ describe('CustomerPage', () => {
       const { fixture, p, el } = await home();
       service.startIntake.and.rejectWith(new ApiError(503, 'x'));
       p.chatStatement = 'No reconozco este cargo.';
+      p.reason.set('not_mine');
       await p.send();
       fixture.detectChanges();
       const link = () => el.querySelector<HTMLAnchorElement>('.ar-nav a[aria-label="' + p.t().agentView + '"]')!;
@@ -788,6 +876,7 @@ describe('CustomerPage', () => {
       expect(el.querySelector('.your-reports')).toBeNull();
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', mode: 'guided' } as never);
       p.chatStatement = 'No reconozco este cargo.';
+      p.reason.set('not_mine');
       await p.send();
       const before = service.reports.calls.count();
       service.reports.and.resolveTo({ items: [report('incomplete', 'AR-CCCC-DDDD')], has_more: false });
@@ -888,6 +977,7 @@ describe('CustomerPage', () => {
       expect(el.querySelector('#intake-chat')).not.toBeNull();
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
       p.chatStatement = 'No reconozco este cargo.';
+      p.reason.set('not_mine');
       await p.send();
       fixture.detectChanges();
       const panel = el.querySelector('#intake-chat')!;
@@ -909,6 +999,7 @@ describe('CustomerPage', () => {
       fixture.detectChanges();
       expect(p.choice).toBe('demo-tx-001');
       p.chatStatement = 'short';
+      p.reason.set('not_mine');
       await p.send();
       fixture.detectChanges();
       const area = el.querySelector<HTMLTextAreaElement>('#chat-statement')!;
@@ -919,6 +1010,7 @@ describe('CustomerPage', () => {
       service.confirmIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
         accepted_at: 'x', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'], unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review', urgency: 'normal' });
       p.chatStatement = 'No reconozco este cargo.';
+      p.reason.set('not_mine');
       await p.send();
       fixture.detectChanges();
       await fixture.whenStable();
@@ -949,6 +1041,7 @@ describe('CustomerPage', () => {
       service.handoffIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'incomplete',
         accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review', urgency: 'normal' });
       p.chatStatement = 'No reconozco este cargo.';
+      p.reason.set('not_mine');
       await p.send();
       p.cannotFind();
       fixture.detectChanges();

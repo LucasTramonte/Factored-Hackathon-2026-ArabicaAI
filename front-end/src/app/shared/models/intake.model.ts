@@ -1,4 +1,13 @@
 /** API shapes, kept in step with front-end/contracts/intake-api.schema.json. */
+import type { Strings } from '../i18n/lang.service'; // type-only: lang.service does not import this file, so no cycle
+
+/** Why the customer doesn't recognise the charge (ADR-010); ``not_mine`` is offered first. */
+export const REASONS = ['not_mine', 'duplicate', 'wrong_amount', 'cancelled_or_not_received', 'subscription', 'card_lost_or_stolen', 'other'] as const;
+export type Reason = typeof REASONS[number];
+/** Reason → short label key; shared by the customer chips and the agent view. */
+export const REASON_LABEL = { not_mine: 'reasonNotMine', duplicate: 'reasonDuplicate', wrong_amount: 'reasonWrongAmount', cancelled_or_not_received: 'reasonCancelled',
+  subscription: 'reasonSubscription', card_lost_or_stolen: 'reasonLostCard', other: 'reasonOther' } as const satisfies Record<Reason, keyof Strings>;
+
 export interface Identity {
   customer_id: string;
   display_name: string;
@@ -149,6 +158,7 @@ export interface IntakeStartBody {
   idempotency_key: string;
   language: IntakeLang;
   mode: 'guided';
+  reason: Reason;
   report_type: 'unrecognized_charge';
 }
 
