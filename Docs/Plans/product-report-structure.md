@@ -54,7 +54,7 @@ The evaluators asked for the problem explained "using KPIs and values", with lim
   - complaint-contact workload (11.08 observed hours a day, all complaint contacts). A cost per contact is only a scenario: it needs a supplied rate, which the data doesn't have.
 
   Reproduced on two Silver builds, including quality run `20261002T232200Z`.
-- **The resolution gap** (#86 F3): complaint contacts were resolved in 43.60% of cases (51,021 of 117,021) against 76.65% for all contacts (526,030 of 686,296). Reproduced on quality run `20261002T232200Z`.
+- **The resolution gap** (#86 F3): complaint contacts were resolved in 43.65% of cases (43,269 of 99,122) against 76.61% for all contacts (444,741 of 580,546), design window. #86's 43.60% and 76.65% are the *full period* figures (51,021 of 117,021; 526,030 of 686,296). Both reproduced on quality run `20261002T232200Z`.
 - **Then the tiles this plan adds:**
   - the share of unrecognized-charge complaints left unresolved;
   - their **SLA breach rate against other complaint types**;
@@ -114,7 +114,7 @@ Source: `fact_complaints`, design window.
 | Satisfaction | **Closed-case complaint satisfaction** only (F5: 371 cases, mean 3.07 out of 5, 3.6%, a selected subset) | No survey CSAT for this complaint type |
 | Outcome and priority | `resolution` (5 templates), `compensation_granted` (7.4% filled), `priority` | — |
 
-**Segmentation:** escalated or not (escalated cases get first response and status age only), segment, country, priority.
+**Segmentation:** escalated or not (escalated cases get status age only: in the design window none of the 514 has a first-response, resolution or closing date), segment, country, priority.
 
 **Contact-centre satisfaction**, kept separate and clearly labelled as complaint *contacts* (`Queja`, not unrecognized charges):
 - the resolution gap: 43.60% of complaint contacts resolved against 76.65% of all contacts (section 0);
@@ -125,7 +125,7 @@ Survey answers and comments are never charted as evidence of wait or quality (F1
 
 **Charts:**
 - unrecognized charges against each other type, one small-multiple panel per metric (unresolved share, SLA breach rate, p50/p90 resolution days);
-- ECDF curves of time to first response and time to close, non-escalated against escalated (first response only);
+- ECDF curves of time to first response and time to close, non-escalated only, with the escalated status age beside them;
 - CSAT, CES and NPS distributions by contact reason, each panel with its n.
 
 ### 5. Is handle time linked to the disputed amount? A priority order
