@@ -71,7 +71,7 @@ There is no team password. Customers sign in with an email one-time code (`POST 
 | `POST /demo/session` | none | Simulated customer login for a committed identity or a D1 dataset customer; malformed ids are rejected before any query | 200, 422, 503 (committed identity not loaded); 404 without `DEMO_PICKER=1` |
 | `GET /transactions` | customer | The customer's own charges, one page, with `has_more` | 200, 401 |
 | `POST /cases` | customer | Legacy one-step confirmed case | 201, 200 (replay), 401, 404, 409, 422, 503 |
-| `POST /intake/start` | customer | Start an explicit guided ES/PT unrecognized-charge report (10–2,000 code points, no U+0000, UUID key). No case reference is returned. A same-key replay returns the original, immutable start receipt (`state: selection_required`) even after the episode was abandoned or handed off, so it does not describe the current state | 201, 200 (same key and content), 401, 409 (same key, other content), 422, 503 (retry the same key) |
+| `POST /intake/start` | customer | Start an explicit guided ES/PT/EN unrecognized-charge report (10–2,000 code points, no U+0000, UUID key); optional `previous_protocol` links an own acknowledged closed report. No case reference is returned. A same-key replay returns the original, immutable start receipt (`state: selection_required`) even after the episode was abandoned or handed off, so it does not describe the current state | 201, 200 (same key and content), 401, 404 (previous report missing/foreign/unacknowledged), 409 (key conflict or previous report open), 422, 503 (retry the same key) |
 | `POST /intake/confirm` | customer | Confirm one owned transaction; returns the protocol only after the case and handoff are read back | 201, 200 (same key and content replays the receipt), 401 (expired or revoked, including in the reservation itself; renew as the same customer and retry the same key), 404 (episode or transaction not owned; foreign and missing look identical), 409 ("Episode already submitted with different content or key" once a handoff exists; "Episode is no longer open" after abandonment, when there is no reservation), 422, 503 (acceptance unknown; retry the same key) |
 | `POST /intake/handoff` | customer | Ask for human review without a confirmed transaction (`kind: incomplete`); same receipt rules. Optional `details` (what the customer remembers; same text rules as the statement) is appended to the stored statement once, with a newline, and is part of the replay content | same as confirm, without the transaction 404; 422 when statement and details exceed 2,000 code points together |
 | `POST /auth/session` | none | Customer sign-in from `Authorization: Bearer <Cognito ID token>` in group `customer` or `admin`, with a loaded customer id | 200, 401, 403 (not enrolled), 422 (no token), 503 (JWKS unreachable) |
@@ -86,6 +86,26 @@ There is no team password. Customers sign in with an email one-time code (`POST 
 | `GET /audit/events?limit=` | none; `Authorization: Bearer <Cognito ID token>` in group `auditor` or `admin` on every call | The newest sign-in events and review-status changes, `limit` (1–100, default 50) of each, with `has_more`; references only (no customer id, email, statement or token); writes nothing | 200, 401, 403 (not `auditor` or `admin`), 422 (no token, or a bad `limit`), 503 (JWKS unreachable) |
 
 The client's "?" help entry ([ADR-010](../Docs/ADRs/ADR-010-report-reasons-and-help-entry.md), decision 5) starts with the same `POST /intake/start` and no charge selected. If the customer then finds the charge in the list, it goes through `POST /intake/confirm` and its ownership check, as from a charge row; otherwise `POST /intake/handoff` ends it as an incomplete handoff that a person reviews. A lost or stolen card is `high` on every kind of handoff, so the receipt carries the call-your-bank line either way.
+
+A closed report offers "Not resolved" in the client. It starts a **new** report, never a reopened one, because closing records that a person finished the review, not a resolution. Any unfrozen draft is cleared first. The same charge is preselected when still listed; otherwise it uses the "?" entry. Normal customer clarification, confirmation, handoff read-back and one-open-report protection still apply.
+
+The optional `previous_protocol` on `POST /intake/start` is stored independently of the editable statement as `intake_episodes.previous_handoff_id` (additive migration 0020). The insertion resolves the public protocol through a 1:1 handoff/episode join and rechecks same-session ownership, acknowledged state, closed status and the live customer session atomically. A malformed protocol is 422, a missing/foreign/unacknowledged source 404, and an open source 409; none creates a new episode. A failed linked insert rechecks live same-customer authority before reporting source status; revocation, expiry or identity swaps uniformly return 401. The source stays closed. Repeating the same start key and link returns the same episode; changing/removing the link conflicts. Starts that omit it retain the original hash and response contract. No customer identifier or internal handoff id is accepted, and no link is inferred from free text.
+
+The relationship supports incomplete reports as well as confirmed charges. A reviewer's SQL can join the new episode directly to its previous handoff; the aggregate re-report metric counts acknowledged linked follow-ups divided by all acknowledged reports accepted in a specified UTC interval. The grain is one new handoff, `accepted_at` supplies event time, and pending reservations are excluded. This measures a customer asking for another review, not a confirmed failure or resolution:
+
+```sql
+SELECT COUNT(*) AS acknowledged_reports,
+       SUM(CASE WHEN pe.customer_id=e.customer_id THEN 1 ELSE 0 END) AS linked_followups
+FROM intake_handoffs h JOIN intake_episodes e ON e.episode_id=h.episode_id
+LEFT JOIN intake_handoffs previous ON previous.handoff_id=e.previous_handoff_id
+LEFT JOIN intake_episodes pe ON pe.episode_id=previous.episode_id
+WHERE e.state=h.kind||'_handoff' AND h.accepted_at>=:from_utc AND h.accepted_at<:to_utc;
+```
+
+Unlinked older reports are not retroactively inferred as follow-ups. `reset-demo-activity.sql` clears nullable previous links before handoffs, so the episode/handoff foreign-key cycle does not block the existing reset order.
+
+Native local D1 measured linked start `7 / 19 / 12 / 2`, linked replay `7 / 17 / 2 / 2` (queries / reads / writes / round trips), checked in `test/integration/report-again.test.js`. Unlinked-start ceilings remain unchanged. The additive deploy applies 0020 after local migration tests; no remote migration command is needed. Demo reset clears nullable links before deleting handoffs.
+
 
 Agent writes record the first detail open once and the review status; nothing refunds, blocks a card or decides fraud. A customer session never opens an agent route and an agent session never opens a customer route.
 

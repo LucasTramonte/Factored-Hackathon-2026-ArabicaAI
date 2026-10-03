@@ -87,6 +87,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** The last text a chip wrote, so a chip never overwrites what the customer typed. */
   private prefill = '';
   readonly episode = signal<IntakeStart | null>(null);
+  /** A follow-up's source protocol survives edits to the statement and travels only with its frozen start. */
+  readonly previousProtocol = signal<string | null>(null);
   readonly frozen = signal<Frozen | null>(null);
   readonly intakeReceipt = signal<IntakeReceipt | null>(null);
   /** The receipt's stored answer, or null when unanswered or the server only confirmed an existing answer (409). */
@@ -457,7 +459,7 @@ export class CustomerPage implements OnInit, OnDestroy {
         return;
       }
       this.frozen.set({ path: 'start', body: { customer_statement: statement, idempotency_key: crypto.randomUUID(), language,
-        mode: 'guided', reason, report_type: 'unrecognized_charge' } });
+        mode: 'guided', reason, report_type: 'unrecognized_charge', ...(this.previousProtocol() && { previous_protocol: this.previousProtocol()! }) } });
       this.log.update(l => [...l, { from: 'me', text: statement }]);
     }
     await this.run();
@@ -546,6 +548,24 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * "Not resolved" on a closed report starts a *new* report, never a reopened one: closing records that a person
+   * finished the review, not a resolution, and the one-open-report rule allows a new report once the first is closed.
+   * The guided chat opens on the same charge when it is in the list, otherwise as the "?" entry, with a statement that
+   * cites the earlier reference. The source protocol is kept separately and persisted by the server even if the
+   * customer edits that statement. An unfinished draft is reset before this new report begins.
+   */
+  reportAgain(r: Report): void {
+    if (this.busy() || this.frozen() || r.status !== 'closed') return;
+    this.clearChat();
+    const charge = r.transaction_id && this.chargeOf(r.transaction_id) ? r.transaction_id : undefined;
+    this.openChat(charge, !charge);
+    this.previousProtocol.set(r.protocol);
+    if (this.chatStep() === 'describe' && this.chatStatement.trim() === '') {
+      this.chatStatement = this.lang.stringsFor(this.reportLang()).reportAgainStatement.replace('{ref}', () => r.reference_short ?? r.protocol);
+    }
+  }
+
   /** Customer-initiated only: a fresh report with a new start key. The button that called it is removed, so focus goes to the chat heading. */
   newReport(): void {
     if (this.busy() || this.frozen()) return;
@@ -554,6 +574,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   private clearChat(): void {
+    this.previousProtocol.set(null);
     this.frozen.set(null);
     this.episode.set(null);
     this.intakeReceipt.set(null);

@@ -168,6 +168,10 @@
                       <span class="ar-caption">@switch (r.status) { @case ('in_review') { {{ t().statusInReview }} } @case ('closed') { {{ t().statusClosed }} } @default { {{ t().nextStepReview }} } } · {{ r.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</span></span>
                     <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm update-btn" (click)="requestUpdate(r.protocol)" [attr.aria-disabled]="updating() !== null"
                       [attr.aria-label]="t().updateMe + ': ' + (r.reference_short ?? r.protocol)">{{ t().updateMe }}</button>
+                    @if (r.status === 'closed') {
+                      <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm report-again-btn" (click)="reportAgain(r)" [disabled]="!!frozen()"
+                        [attr.aria-label]="t().reportAgain + ': ' + (r.reference_short ?? r.protocol)">{{ t().reportAgain }}</button>
+                    }
                     <span class="ar-caption" role="status">@if (updateNote()?.protocol === r.protocol) { {{ updateNote()!.text }} }</span></li>
                 }</ul>
                 @if (reports()!.has_more) { <span class="ar-caption">{{ t().moreReports }}</span> }

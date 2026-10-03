@@ -899,6 +899,53 @@ describe('CustomerPage', () => {
       expect(el.querySelector('.your-reports')!.textContent).not.toMatch(/resuelt|resolvid|resolved/i);
     });
 
+    describe('not resolved', () => {
+      const closed = (over: Partial<Report> = {}): Report => ({ ...report('complete', 'AR-CCCC-DDDD'), status: 'closed', next_step: 'closed_by_person', ...over });
+      const again = (el: HTMLElement) => [...el.querySelectorAll<HTMLButtonElement>('.your-reports li .report-again-btn')];
+
+      it('only a closed report offers it, labelled with its reference', async () => {
+        service.reports.and.resolveTo({ items: [closed(), report('complete', 'AR-EEEE-FFFF', '2026-10-01T12:00:00Z', '11111111-2222-4333-8444-555555555555')], has_more: false });
+        const { el, p } = await home();
+        expect(again(el).length).toBe(1);
+        expect(again(el)[0].getAttribute('aria-label')).toBe(p.t().reportAgain + ': AR-CCCC-DDDD');
+      });
+
+      it('starts a new report on the same charge, citing the earlier reference; a chip never overwrites it', async () => {
+        service.reports.and.resolveTo({ items: [closed({ transaction_id: 'demo-tx-001' })], has_more: false });
+        const { el, p, fixture } = await home();
+        again(el)[0].click(); fixture.detectChanges();
+        expect(p.chatOpen()).toBeTrue(); expect(p.general()).toBeFalse(); expect(p.choice).toBe('demo-tx-001');
+        expect(p.chatStatement).toContain('AR-CCCC-DDDD');
+        p.pickReason('duplicate');
+        expect(p.chatStatement).toContain('AR-CCCC-DDDD');
+      });
+
+      it('during another open guided report it starts fresh: no old episode, statement or selected charge is kept', async () => {
+        service.reports.and.resolveTo({ items: [closed({ transaction_id: 'demo-tx-001' })], has_more: false });
+        const { p } = await home();
+        // Another report already at the choose step: an episode exists, with its own statement and a different charge picked.
+        p.openChat('demo-tx-002');
+        p.episode.set({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', mode: 'guided' } as never);
+        p.chatStatement = 'Otra cosa que estaba escribiendo.'; p.choice = 'demo-tx-002';
+        expect(p.chatStep()).toBe('choose');
+        p.reportAgain(closed({ transaction_id: 'demo-tx-001' }));
+        expect(p.episode()).toBeNull(); expect(p.chatStep()).toBe('describe');
+        expect(p.choice).toBe('demo-tx-001');
+        expect(p.chatStatement).toContain('AR-CCCC-DDDD'); expect(p.chatStatement).not.toContain('Otra cosa');
+      });
+
+      it('without a listed charge it opens the "?" entry, and never runs while a request is frozen', async () => {
+        service.reports.and.resolveTo({ items: [closed({ kind: 'incomplete' })], has_more: false });
+        const { p } = await home();
+        p.reportAgain(closed({ kind: 'incomplete' }));
+        expect(p.general()).toBeTrue(); expect(p.chatStatement).toContain('AR-CCCC-DDDD');
+        p.closeChat(); p.newReport();
+        p.frozen.set({ path: 'start', body: {} as never });
+        p.reportAgain(closed({ reference_short: 'AR-ZZZZ-ZZZZ' }));
+        expect(p.chatStatement).not.toContain('AR-ZZZZ-ZZZZ');
+      });
+    });
+
     describe('receipt feedback', () => {
       const PROTOCOL = '99999999-8888-4777-8666-555555555555';
       const STORED_AT = '2026-10-03T12:00:00.123Z';
