@@ -135,6 +135,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
 
     /**
      * Atomically store a start, its immutable turn receipt and one opaque event; conflicting keys never update state.
+     * ``reason`` (ADR-010) is required and part of the payload hash, so a replay with another reason conflicts.
      * ``producer`` (the extractor switch, on) labels the events and pre-records one call with unknown usage, so a
      * crash during the call is never counted as free; absent, the row and event are the guided ones.
      */
@@ -371,6 +372,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /**
      * One handoff per episode; only acknowledged terminal rows enter this bounded queue. Open high-urgency reports come
      * first (partial index ``intake_handoffs_urgent``, migration 0013), then the rest newest first; one round trip.
+     * Each row carries the episode's ``reason``.
      */
     listIntakeHandoffs: async limit => {
       const lane = urgent => 'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
@@ -404,6 +406,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /**
      * Optional complete evidence is one-to-one and owner-scoped; missing evidence never drops a handoff. ``model_version``
      * and ``llm_calls`` come from the episode's usage (set only by shadow extraction), never the model's output.
+     * The episode's ``reason`` is returned with it.
      */
     findIntakeHandoff: protocol => first(
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
