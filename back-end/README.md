@@ -84,7 +84,7 @@ There is no team password. Customers sign in with an email one-time code (`POST 
 | `GET /agent/intake-detail?protocol=<uuid>` | agent | Statement, verified evidence (or `null`), server actions, open questions and recorded service history (100 events, `history_has_more`) | 200, 401, 404, 422 (anything but exactly one valid `protocol`) |
 | `POST /agent/intake-status` | agent | Move a report one step, received → in review → closed, with a history row and one email to the customer; a replay writes nothing | 200, 401, 404, 409 (any other step), 422 |
 
-The client's "?" help entry ([ADR-010](../Docs/ADRs/ADR-010-report-reasons-and-help-entry.md), decision 5) uses the same `POST /intake/start` → `POST /intake/handoff` path with no charge selected; nothing new is deployed, and a charge that isn't in the list can only end as an incomplete handoff.
+The client's "?" help entry ([ADR-010](../Docs/ADRs/ADR-010-report-reasons-and-help-entry.md), decision 5) uses the same `POST /intake/start` → `POST /intake/handoff` path with no charge selected; there is no server change, and a charge that isn't in the list can only end as an incomplete handoff.
 
 The only agent write is the review status; nothing refunds, blocks a card or decides fraud. A customer session never opens an agent route and an agent session never opens a customer route.
 

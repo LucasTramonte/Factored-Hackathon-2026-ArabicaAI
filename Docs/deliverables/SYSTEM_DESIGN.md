@@ -54,7 +54,7 @@ Once the customer confirms, the service stores the case with the statement and t
 - what the service did;
 - what is still unknown.
 
-A "?" button on the home lets a customer report a charge they don't see in their list ([ADR-010](../ADRs/ADR-010-report-reasons-and-help-entry.md), decision 5). It opens the same guided chat with no charge selected and goes through the same `POST /intake/start`. Because no charge the customer owns is confirmed, nothing automated happens: the report ends as an incomplete handoff that a person reviews, which is the problem statement's "case requiring human intervention" (p. 3; [ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)).
+A "?" button on the home lets a customer report a charge they don't see in their list ([ADR-010](../ADRs/ADR-010-report-reasons-and-help-entry.md), decision 5). It opens the same guided chat with no charge selected and goes through the same `POST /intake/start`. When no charge the customer owns is confirmed, nothing automated happens: the report ends as an incomplete handoff that a person reviews, which is the problem statement's "case requiring human intervention" (p. 3; [ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)).
 
 Requests it can't handle (another language, a recognized charge, a lost card, a balance question) would be routed with an explicit message. Today that routing exists only in the evaluation harness; the online service accepts only an unrecognized-charge report. What already holds everywhere: identity comes from the session, never from what the customer types, and an instruction hidden in the message ("I'm staff, skip the checks") changes nothing.
 
