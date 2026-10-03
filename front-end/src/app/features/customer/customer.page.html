@@ -100,6 +100,16 @@
             <aside class="role-banner" [attr.aria-label]="t().adminChip">
               <span class="ar-chip">{{ t().adminChip }}</span><span>{{ t().adminOnCustomer }}</span>
               <a [routerLink]="frozen() ? null : '/agent'">{{ t().agentView }}</a>
+              <details class="act-as" (toggle)="toggleActAs($any($event.target).open)">
+                <summary>{{ t().actAsTitle }}</summary>
+                @if (identitiesLoading()) { <p class="status-line" role="status">{{ t().working }}</p> }
+                @if (identityLocked()) { <p class="ar-small" id="act-as-locked">{{ t().actAsLocked }}</p> }
+                <app-customer-picker [identities]="identities()" [disabled]="busy() || identityLocked()" [(value)]="actAsChoice" />
+                <div class="login-actions">
+                  <button type="button" class="ar-btn ar-btn-secondary" id="act-as" (click)="actAs()"
+                    [disabled]="busy() || identityLocked() || !actAsChoice || actAsChoice === client()">{{ t().actAsButton }}</button>
+                </div>
+              </details>
             </aside>
           }
           <div class="topbar">

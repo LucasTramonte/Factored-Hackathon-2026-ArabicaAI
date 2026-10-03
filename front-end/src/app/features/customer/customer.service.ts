@@ -28,6 +28,16 @@ export class CustomerService {
     return this.api.request<CustomerSession>('/auth/session', {}, { Authorization: 'Bearer ' + idToken });
   }
 
+  /** Admins only (ADR-007, decision 10): every customer an admin may act as; the server checks the session's admin mark. */
+  async adminCustomers(): Promise<Identity[]> {
+    return (await this.api.request<{ items: Identity[] }>('/admin/customers')).items;
+  }
+
+  /** Admins only: replace the session with one for ``customerId``; the response is a customer session (``admin_act_as``). */
+  actAs(customerId: string): Promise<CustomerSession> {
+    return this.api.request<CustomerSession>('/admin/act-as', { customer_id: customerId });
+  }
+
   /** Revoke the browser's customer session cookie (always 204). */
   logout(): Promise<unknown> {
     return this.api.request('/auth/logout', {});

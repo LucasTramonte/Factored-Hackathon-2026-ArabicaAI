@@ -272,6 +272,32 @@ export class CustomerPage implements OnInit, OnDestroy {
     } catch { /* unavailable: the agent view asks for its own code */ }
   }
 
+  /** The customer an admin picked to act as (ADR-007, decision 10). */
+  actAsChoice = '';
+  /** The admin list replaced ``identities`` once; it is not fetched again in this page's life. */
+  private actAsLoaded = false;
+
+  /** The admin's "view as another customer" panel: the list loads the first time it opens (it is about 800 customers). */
+  async toggleActAs(open: boolean): Promise<void> {
+    if (!open || this.actAsLoaded || this.identitiesLoading()) return;
+    this.identitiesLoading.set(true);
+    try {
+      this.identities.set(await this.service.adminCustomers());
+      this.actAsLoaded = true;
+    } catch (e) {
+      this.fail(e);
+    } finally {
+      this.identitiesLoading.set(false);
+    }
+  }
+
+  /** Act as the picked customer, then their home, through the same path as a sign-in. Refused while a report is open. */
+  actAs(): Promise<void> {
+    const customerId = this.actAsChoice;
+    if (!customerId || this.identityLocked()) return Promise.resolve();
+    return this.enter(() => this.service.actAs(customerId), e => this.fail(e));
+  }
+
   /** "Use another email". */
   anotherEmail(): void {
     this.error.set('');

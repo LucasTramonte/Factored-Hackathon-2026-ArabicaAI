@@ -798,6 +798,53 @@ describe('CustomerPage', () => {
       expect(el.querySelector('.products')).toBeNull();
     });
 
+    it('lets an administrator, and only them, act as another customer: the list loads once, then the home is that customer', async () => {
+      const ids: Identity[] = [{ customer_id: 'demo-ana', display_name: 'Ana (demo)', country: null },
+        { customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' }];
+      const admin = jasmine.createSpy('adminCustomers').and.resolveTo(ids);
+      const actAs = jasmine.createSpy('actAs').and.resolveTo({ customer_id: 'CLI-COHORT-1', mode: 'admin_act_as', context_card: null, roles: ['admin'] });
+      Object.assign(service, { adminCustomers: admin, actAs });
+      const fixture = TestBed.createComponent(CustomerPage);
+      const p = fixture.componentInstance;
+      const el = fixture.nativeElement as HTMLElement;
+      service.signIn.and.resolveTo({ customer_id: 'demo-bruno', mode: 'email_otp', context_card: null, roles: ['customer'] });
+      p.identity = 'demo-bruno';
+      await p.login();
+      fixture.detectChanges();
+      expect(el.querySelector('details.act-as')).toBeNull();
+      service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'email_otp', context_card: null, roles: ['admin'] });
+      p.identity = 'demo-ana';
+      await p.login();
+      fixture.detectChanges();
+      expect(el.querySelector('aside.role-banner details.act-as summary')!.textContent!.trim()).toBe(p.t().actAsTitle);
+      await p.toggleActAs(true);
+      await p.toggleActAs(true);
+      expect(admin).toHaveBeenCalledTimes(1);
+      fixture.detectChanges();
+      const button = el.querySelector<HTMLButtonElement>('#act-as')!;
+      expect(button.disabled).toBeTrue();
+      p.actAsChoice = 'CLI-COHORT-1';
+      fixture.detectChanges();
+      expect(button.disabled).toBeFalse();
+      await p.actAs();
+      fixture.detectChanges();
+      expect(actAs).toHaveBeenCalledOnceWith('CLI-COHORT-1');
+      expect([p.client(), p.step(), p.displayName()]).toEqual(['CLI-COHORT-1', 'home', 'Zoë O.']);
+      expect(el.querySelector('aside.role-banner')).not.toBeNull();
+      actAs.calls.reset();
+      p.frozen.set({} as never);
+      fixture.detectChanges();
+      expect(el.querySelector('#act-as-locked')).not.toBeNull();
+      p.actAsChoice = 'demo-ana';
+      await p.actAs();
+      expect(actAs).not.toHaveBeenCalled();
+      p.frozen.set(null);
+      actAs.and.rejectWith(new ApiError(403));
+      await p.actAs();
+      expect(p.client()).toBe('CLI-COHORT-1');
+      expect(p.error()).not.toBe('');
+    });
+
     it('shows an administrator, and only them, a banner linking the agent view; reset clears the roles', async () => {
       TestBed.inject(LangService).set('es');
       service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'email_otp', context_card: null, roles: ['admin'] });
