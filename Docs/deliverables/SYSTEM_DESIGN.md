@@ -229,6 +229,7 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 
 | Topic | Document |
 |---|---|
+| Problem-sizing KPIs, today's handling, satisfaction and the segment cut | [`PRODUCT_REPORT.md`](PRODUCT_REPORT.md) |
 | Data findings and their queries | [`DATA_QUALITY.md`](DATA_QUALITY.md) |
 | Pipeline, contracts, lineage, update policy and stack | [`DATA_ENGINEERING.md`](DATA_ENGINEERING.md) |
 | Evaluation, test sets and leakage controls | [`EVALUATION.md`](EVALUATION.md) |
