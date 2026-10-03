@@ -1,5 +1,7 @@
 # Roles, report reasons and the help entry: implementation plan
 
+> **Archived 2026-10-03.** Executed in #79–#82; review follow-ups in the `fix/review-followups-v0.2.0` PR. Team email addresses were replaced by placeholders (issue #70).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Every agent works in **ponytail ultra** (AGENTS.md, "Agent orchestration"): reads `AGENTS.md` and every file it touches in full, uses what exists before writing, makes the smallest change that works, and asks the orchestrator instead of guessing. One coder per task, then a spec QA agent, then a quality QA agent (three rounds at most, then a person decides).
 
 **Goal:** six product asks, end to end:
@@ -60,7 +62,7 @@ Verified on `main` 8db96ad and re-checked by a plan reviewer over three rounds. 
 - Client state is **tab-scoped and in memory**. `CustomerService.client` and `card` are signals; the **page** sets them in `enter()` (`customer.page.ts` ~282, where the body is bound to `s`) and clears them in `reset()` (~534). `AgentService` keeps no state; `signIn` returns `void`; `agent.page.ts:refresh()` is `enter(async () => undefined)`, which calls `reset()` without signing in again; `fail()`'s 401 branch (~238-242) is where an expired agent session is dropped.
 - Spec spies: `customer.page.spec.ts` has one `createSpyObj<CustomerService>(…, { client: signal(''), card: signal(null) })`; `customer.page.focus.spec.ts` has **six** untyped ones (lines 11, 38, 63, 88, 186, 212); `agent.page.spec.ts:31` spies `AgentService` with `['signIn','intakes','intakeDetail','setStatus']`.
 - Point 4 is already true server-side: the pool is `AllowAdminCreateUserOnly=true` with `--prevent-user-existence-errors ENABLED` (`scripts/cognito/setup.sh:19,39`). An unknown email cannot request a code; Cognito answers a generic error that the client maps to 401 (`core/auth/cognito.service.ts:15`) and shows as "could not send the code" (`errSendCode`), never saying whether the address exists. A verified token without `customer` or without a loaded D1 customer gets 403 and no cookie.
-- Enrolment: `back-end/scripts/cognito/enroll.sh <email> <customer_id|-> [group]`, one group per call, groups are additive, `custom:customer_id` is immutable. Roberto → `demo-ana`; Lucas → `demo-bruno` (`lucastramonte3@gmail.com`). Manoella and the evaluators have no identity yet.
+- Enrolment: `back-end/scripts/cognito/enroll.sh <email> <customer_id|-> [group]`, one group per call, groups are additive, `custom:customer_id` is immutable. Roberto → `demo-ana`; Lucas → `demo-bruno` (`<lucas's email>`). Manoella and the evaluators have no identity yet.
 - Fictitious identities: customers come from `back-end/src/config/identities.json` (`{customer_id, display_name, source}`), charges from `back-end/seeds/fictitious.json` (`{transaction_id, customer_id, occurred_at, merchant_name, amount, currency}`; today 6 rows `demo-tx-001`…`006`, all BRL, Ana 5 and Bruno 1). `.venv/bin/python -m data_pipelines.gold.fictitious_seed` renders `back-end/seeds/seed_fictitious.sql` (generated, never edited by hand). `data_pipelines/gold/test_fictitious_seed.py` fails when the committed SQL drifts from the generator, and asserts the exact customer list (~line 30) and the transaction count `(6,)` (~line 32).
 - `budget.test.js` pins `identities: [1, 12, 0, 1]` = queries, rows read, rows written, round trips; rows read equals the `customers` row count of the local fixture (8 today: 2 fictitious + 1 sample + 5 cohort, including `demo-hidden`; the ceiling was raised 10 → 12 when PR #75 added two cohort customers).
 - SES is in sandbox: report emails reach only verified addresses. Sign-in codes come from Cognito and reach any enrolled email.
@@ -127,7 +129,7 @@ Today there are two kinds of people in the demo and nothing in between:
 - Roberto and Lucas are in **both** groups, so they can use both views, but nothing on screen says they are team or evaluators, and the groups `admin` and `auditor` exist in Cognito and in `ROLES` without doing anything. Giving an evaluator access today means two enrolment commands and a demo identity per evaluator, and there are only two fictitious identities (Ana, Bruno), both taken.
 - Nobody can get in without being enrolled (the pool only accepts admin-created users and hides whether an email exists), but no test or document says so, so an evaluator reading the repo cannot tell whether that is true.
 
-**Example today.** Lucas signs in at `/` with `lucastramonte3@gmail.com`; the page greets "Olá, Bruno" with Bruno's charges and nothing else. He opens `/agent`, signs in again, and sees the queue. From the screens, he looks like an ordinary customer and an ordinary agent.
+**Example today.** Lucas signs in at `/` with `<lucas's email>`; the page greets "Olá, Bruno" with Bruno's charges and nothing else. He opens `/agent`, signs in again, and sees the queue. From the screens, he looks like an ordinary customer and an ordinary agent.
 
 ### Target
 
@@ -277,7 +279,7 @@ signIn(idToken?: string): Promise<AgentSession> {
 }
 ```
 
-  `agent.page.ts`: `readonly roles = signal<Role[]>([]);` and in the two `enter()` callers the `start` callbacks become `async () => this.roles.set((await this.service.signIn(token?)).roles)`. Do **not** clear it in `reset()`: `refresh()` is `enter(async () => undefined)`, which calls `reset()` and never signs in again, so the banner would vanish on Refresh. Clear it in `fail()`'s 401 branch next to the existing `this.reset()`.
+  `agent.page.ts`: `readonly roles = signal<Role[]>([]);` and in the two `enter()` callers the `start` callbacks become `async () => this.roles.set((await this.service.signIn()).roles)` (local picker) and `async () => this.roles.set((await this.service.signIn(token)).roles)` (Cognito). Do **not** clear it in `reset()`: `refresh()` is `enter(async () => undefined)`, which calls `reset()` and never signs in again, so the banner would vanish on Refresh. Clear it in `fail()`'s 401 branch next to the existing `this.reset()`.
 
   `customer.page.html`, first child of `<main class="home-main">`:
 
@@ -373,8 +375,8 @@ signIn(idToken?: string): Promise<AgentSession> {
 2. Load the new identities into remote D1 **before** anyone is enrolled on them (an admin whose id is not loaded gets 403): `cd back-end && npx wrangler d1 execute arabica-intake-demo --remote --file seeds/seed_fictitious.sql`. Expected: 26 statements, no errors; the upserts are idempotent. Say so in the PR.
 3. Enrol after the merge is deployed (so the banner exists). `enroll.sh` adds a group and keeps the existing ones:
    ```sh
-   sh back-end/scripts/cognito/enroll.sh rzuniga@aptsny.co demo-ana admin
-   sh back-end/scripts/cognito/enroll.sh lucastramonte3@gmail.com demo-bruno admin
+   sh back-end/scripts/cognito/enroll.sh <roberto's email> demo-ana admin
+   sh back-end/scripts/cognito/enroll.sh <lucas's email> demo-bruno admin
    sh back-end/scripts/cognito/enroll.sh <manoella's email> demo-carla admin
    sh back-end/scripts/cognito/enroll.sh <evaluator 1> demo-diego admin    # then demo-elena, demo-marco
    ```
