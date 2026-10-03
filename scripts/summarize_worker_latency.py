@@ -52,12 +52,17 @@ def _timestamp(value):
 
 
 def summarize(rows, routes=None, since=None, until=None, target_ms=2000):
-    """Group customer report requests by route and Worker version, retaining failures/missingness."""
+    """Coalesce request records before windowing; retain failures and the slowest known timing.
+
+    Request-id contradictions use the earliest timestamp, highest status and unknown version;
+    conflicting routes are rejected rather than silently assigned to one route. Memory is
+    proportional to unique report requests, without retaining raw request data.
+    """
     from urllib.parse import urlsplit
     routes = set(routes or REPORT_METHODS)
     if routes - REPORT_METHODS.keys():
         raise ValueError("unsupported report route")
-    groups, seen = defaultdict(list), set()
+    requests = {}
     counts = Counter()
     for row in rows:
         counts["records"] += 1
@@ -69,29 +74,51 @@ def summarize(rows, routes=None, since=None, until=None, target_ms=2000):
         if path not in routes or method != REPORT_METHODS[path]:
             counts["excluded_non_report"] += 1
             continue
-        ts = _timestamp(row.get("timestamp", worker.get("eventTimestamp")))
+        ts = _timestamp(row.get("timestamp"))
+        if ts is None:
+            ts = _timestamp(worker.get("eventTimestamp"))
+        request_id = row.get("$metadata", {}).get("requestId")
+        key = request_id if isinstance(request_id, str) and request_id else ("record", counts["records"])
+        raw_version = (worker.get("scriptVersion") or {}).get("id", "")
+        version = raw_version if isinstance(raw_version, str) and VERSION.fullmatch(raw_version) else None
+        duration = worker.get("wallTimeMs", worker.get("wallTime"))
+        if isinstance(duration, bool) or not isinstance(duration, (int, float)) or not isfinite(duration) or duration < 0:
+            duration = None
+        status = event.get("response", {}).get("status")
+        if isinstance(status, bool) or not isinstance(status, int):
+            status = None
+        outcome = worker.get("outcome")
+        sample = {"path": path, "method": method, "version": version, "duration": duration, "timestamp": ts,
+                  "status": status, "failed": (status is not None and status >= 400) or outcome not in (None, "ok")}
+        if key not in requests:
+            requests[key] = sample
+            continue
+        counts["duplicates"] += 1
+        previous = requests[key]
+        if (previous["path"], previous["method"]) != (path, method):
+            raise ValueError("conflicting routes for one request id")
+        for field, choose in (("duration", max), ("timestamp", min), ("status", max)):
+            if sample[field] is not None:
+                previous[field] = sample[field] if previous[field] is None else choose(previous[field], sample[field])
+        if version is not None:
+            if previous["version"] is None:
+                previous["version"] = version
+            elif previous["version"] != version:
+                previous["version"] = "unknown"
+        previous["failed"] |= sample["failed"]
+    groups = defaultdict(list)
+    for sample in requests.values():
+        ts = sample["timestamp"]
         if (since is not None or until is not None) and ts is None:
             counts["excluded_missing_timestamp"] += 1
             continue
         if ts is not None and ((since is not None and ts < since) or (until is not None and ts >= until)):
             counts["excluded_outside_window"] += 1
             continue
-        request_id = row.get("$metadata", {}).get("requestId")
-        if request_id:
-            if request_id in seen:
-                counts["duplicates"] += 1
-                continue
-            seen.add(request_id)
-        raw_version = worker.get("scriptVersion", {}).get("id", "")
-        version = raw_version if isinstance(raw_version, str) and VERSION.fullmatch(raw_version) else "unknown"
-        duration = worker.get("wallTimeMs", worker.get("wallTime"))
-        if isinstance(duration, bool) or not isinstance(duration, (int, float)) or not isfinite(duration) or duration < 0:
-            duration = None
-        status = event.get("response", {}).get("status")
-        outcome = worker.get("outcome")
-        failed = (isinstance(status, int) and status >= 400) or outcome not in (None, "ok")
-        groups[(path, method, version)].append((duration, ts, status, failed))
+        groups[(sample["path"], sample["method"], sample["version"] or "unknown")].append(
+            (sample["duration"], ts, sample["status"], sample["failed"]))
         counts["selected_requests"] += 1
+    del requests
     cuts = []
     for (path, method, version), sample in sorted(groups.items()):
         values = sorted(x[0] for x in sample if x[0] is not None)

@@ -166,6 +166,25 @@ So the frozen set can only show a **large** improvement. That may be enough, bec
 
 The Portuguese results show the system handles Portuguese, not that there is Portuguese demand. Offline results, simulations and projections are labelled separately, as the brief asks.
 
+### Historical development language comparison
+
+The saved Workers AI development run executed **2026-10-01T03:27:53.338606+00:00** was regrouped on 2026-10-03 without calling a system, rescoring predictions or changing labels. [Aggregate evidence](../Evidence/evaluation/development-cuts-2026-10-01.json) records the exact result and corpus SHA-256 hashes; the current corpus matches the run. Population: 18 authored development cases, nine Spanish and nine Portuguese, representing nine translated situation pairs. Each system contributes one primary outcome per case: reference execution or model majority over ten repetitions. There are no customer joins or exclusions.
+
+| Session language | Cases per system | Checklist correct (95% Wilson) | Extractor majority correct (95% Wilson) | Always handoff correct (95% Wilson) | Recorded unsafe per system |
+|---|---|---|---|---|---|
+| Spanish | 9 | 8/9 (56.5–98.0%) | 9/9 (70.1–100%) | 2/9 (6.3–54.7%) | 0/9 |
+| Portuguese | 9 | 8/9 (56.5–98.0%) | 9/9 (70.1–100%) | 2/9 (6.3–54.7%) | 0/9 |
+| All | 18 | 16/18 (67.2–96.9%) | 18/18 (82.4–100%) | 4/18 (9.0–45.2%) | 0/18 |
+
+These descriptive intervals do not account for correlated translation pairs; neither language ranks above the other. All **18/18 development cases lack authored segment metadata**, retained as the explicit null-segment population for every system. No named segment performance can be inferred. This historical tuned-development result is not a Bedrock or frozen result. The separate pooled 180-execution model latency remains p95 3,581.5 ms, interval 3,416.3–4,201.3 ms, failing the 3,000 ms development gate; per-case majority medians do not decide it.
+
+Reproduce the aggregate from the retained local result:
+
+```bash
+.venv/bin/python -m evals.intake.report_cuts \
+  data_foundation/runs/latency-2026-10-01/results.json evals/intake/cases.json
+```
+
 ### Language and segment reporting
 
 The runner already reports `all`, `es` and `pt` by trusted session language, with counts and Wilson intervals. The episode scorer reports `all`, `es`, `pt` and `en`. Unsupported message languages stay in their session-language group. Every table states its population and denominator; zero denominators yield no rate. Five live episodes, including one Spanish episode, cannot support language rankings or a comparative latency claim.
@@ -252,7 +271,7 @@ To summarize an authorized local export without exposing request identifiers, he
   data/observability/tail-2026-10-01.jsonl --route /intake/confirm
 ```
 
-[`summarize_worker_latency.py`](../../scripts/summarize_worker_latency.py) reads dashboard arrays or JSONL/pretty-printed tail records, deduplicates dashboard request IDs internally and reports only route/version aggregates. Each group includes total and timed requests, missing durations, failed requests and status counts, p50/p95 wall time and its 95% order-statistic interval. Optional `--since` (inclusive) and `--until` (exclusive) bound the UTC event-time window. The singleton's p95 interval and threshold assertion are undefined. Missing durations and non-successes remain visible rather than being dropped from the population description.
+[`summarize_worker_latency.py`](../../scripts/summarize_worker_latency.py) reads dashboard arrays or JSONL/pretty-printed tail records, coalesces dashboard records by request ID internally, preserving any observed failure and the largest known duration/status and reports only route/version aggregates. Each group includes total and timed requests, missing durations, failed requests and status counts, p50/p95 wall time and its 95% order-statistic interval. Optional `--since` (inclusive) and `--until` (exclusive) bound the UTC event-time window. The singleton's p95 interval and threshold assertion are undefined. Missing durations and non-successes remain visible rather than being dropped from the population description.
 
 A claim about the recorded or later deployment requires a new authorized export of that version with declared capture coverage, enough timed report requests for tail uncertainty, the exact event-time window, and counts of failures and missing durations. The analyzer is evidence from the supplied export only; it cannot establish completeness or replace that capture. No new live measurement was made in this review.
 
