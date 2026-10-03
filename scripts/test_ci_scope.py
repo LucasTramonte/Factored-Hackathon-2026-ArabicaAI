@@ -20,6 +20,8 @@ def scope(*paths):
     (('back-end/src/store/d1.js',), {'python': True, 'angular': False, 'worker': True}),
     (('data_pipelines/gold/cohort.py',), {'python': True, 'angular': False, 'worker': False}),
     (('intake_agent/extractor/vertex.py',), {'python': True, 'angular': False, 'worker': True}),
+    # A rename seen with --no-renames: the deleted source counts, not just the documentation destination.
+    (('Docs/old-page.md', 'front-end/src/app/old-page.ts'), {'python': False, 'angular': True, 'worker': True}),
 ])
 def test_each_area_runs_the_suites_that_read_it(paths, expected):
     assert scope(*paths) == expected

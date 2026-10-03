@@ -34,10 +34,11 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
+          # --no-renames lists both sides of a rename, so moving a file out of an app folder still runs its suite.
           # Fails closed: a diff that can't be computed counts as "everything changed", and pipefail stops the job
           # if the classifier itself fails (its outputs would be missing and every suite skipped).
           set -o pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ] && files=$(git diff --name-only "$BASE"...HEAD); then
+          if [ "${{ github.event_name }}" = "pull_request" ] && files=$(git diff --name-only --no-renames "$BASE"...HEAD); then
             printf '%s\n' "$files" | bash scripts/ci_scope.sh | tee -a "$GITHUB_OUTPUT"
           else
             printf 'python=true\nangular=true\nworker=true\n' | tee -a "$GITHUB_OUTPUT"
@@ -80,10 +81,11 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
+          # --no-renames lists both sides of a rename, so moving a file out of an app folder still runs its suite.
           # Fails closed: a diff that can't be computed counts as "everything changed", and pipefail stops the job
           # if the classifier itself fails (its outputs would be missing and every suite skipped).
           set -o pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ] && files=$(git diff --name-only "$BASE"...HEAD); then
+          if [ "${{ github.event_name }}" = "pull_request" ] && files=$(git diff --name-only --no-renames "$BASE"...HEAD); then
             printf '%s\n' "$files" | bash scripts/ci_scope.sh | tee -a "$GITHUB_OUTPUT"
           else
             printf 'python=true\nangular=true\nworker=true\n' | tee -a "$GITHUB_OUTPUT"
