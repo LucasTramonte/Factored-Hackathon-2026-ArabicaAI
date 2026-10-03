@@ -32,3 +32,12 @@ test('the context card shape is part of the session contract', () => {
     assert.throws(() => assertContract('customerSession', session(bad)), /violated/);
   }
 });
+
+
+test('feedback timestamp requires the UTC millisecond form returned by the Worker', () => {
+  const feedback = { protocol: receipt.protocol, easy: true, recorded_at: '2026-10-03T12:00:00.123Z' };
+  assertContract('reportFeedback', feedback);
+  for (const recorded_at of ['x', '', '2026-10-03', '2026-10-03T12:00:00Z', '2026-10-03T12:00:00.123+00:00']) {
+    assert.throws(() => assertContract('reportFeedback', { ...feedback, recorded_at }), /recorded_at/);
+  }
+});

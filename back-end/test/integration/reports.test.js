@@ -73,3 +73,23 @@ test('a reservation whose receipt was never read back does not appear', async ()
   assert.equal(listed.status, 200);
   assert.ok(!listed.body.items.some(x => x.protocol === pending.handoff_id), 'pending reservation is hidden');
 });
+
+
+test('receipt feedback has a two-session ownership oracle and first-answer replay is immutable', async () => {
+  const ana = await customer();
+  const bruno = await customer('demo-bruno');
+  const handoff = await ana.call('/intake/handoff', { episode_id: await start(ana), kind: 'incomplete', idempotency_key: crypto.randomUUID() });
+  assert.equal(handoff.status, 201);
+  const protocol = handoff.body.protocol;
+  const foreign = await bruno.call('/reports/feedback', { protocol, easy: false });
+  const missing = await bruno.call('/reports/feedback', { protocol: crypto.randomUUID(), easy: false });
+  assert.deepEqual([foreign.status, foreign.body], [missing.status, missing.body]);
+  assert.equal(foreign.status, 404);
+  assert.doesNotMatch(foreign.text, /demo-ana|demo-bruno|recorded_at|easy|episode_id/);
+  const first = await ana.call('/reports/feedback', { protocol, easy: true });
+  assert.equal(first.status, 200); assertContract('reportFeedback', first.body);
+  const replay = await ana.call('/reports/feedback', { protocol, easy: true });
+  assert.deepEqual(replay.body, first.body, 'the first answer and timestamp never change');
+  assert.equal((await ana.call('/reports/feedback', { protocol, easy: false })).status, 409);
+  assert.deepEqual((await bruno.call('/reports/feedback', { protocol, easy: true })).body, missing.body, 'stored feedback is also private');
+});

@@ -47,6 +47,11 @@ export class CustomerService {
     return this.api.request<ReportList>('/reports');
   }
 
+  /** The receipt answer "was it easy to report this charge?" for an own report; the first answer stands (409 on a different one). */
+  sendFeedback(protocol: string, easy: boolean): Promise<{ protocol: string; easy: boolean; recorded_at: string }> {
+    return this.api.request('/reports/feedback', { protocol, easy });
+  }
+
   /** Ask for a status email about one of the customer's reports (202; 409 no email on file; 429 sent recently). */
   requestUpdate(protocol: string): Promise<{ queued: true }> {
     return this.api.request<{ queued: true }>('/reports/update', { protocol });

@@ -312,6 +312,16 @@
         "scope": { "const": "references_only" }
       }
     },
+    "reportFeedback": {
+      "type": "object", "additionalProperties": false,
+      "required": ["protocol", "easy", "recorded_at"],
+      "description": "The customer's one receipt answer: was it easy to report this charge? Not CSAT; never an event field.",
+      "properties": {
+        "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+        "easy": {"type": "boolean"},
+        "recorded_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"}
+      }
+    },
     "identityList": {
       "type": "object",
       "additionalProperties": false,

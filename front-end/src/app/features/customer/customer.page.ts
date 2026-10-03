@@ -89,6 +89,11 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly episode = signal<IntakeStart | null>(null);
   readonly frozen = signal<Frozen | null>(null);
   readonly intakeReceipt = signal<IntakeReceipt | null>(null);
+  /** The receipt's stored answer, or null when unanswered or the server only confirmed an existing answer (409). */
+  readonly feedback = signal<boolean | null>(null);
+  readonly feedbackRecorded = signal(false);
+  readonly feedbackSending = signal(false);
+  readonly feedbackFailed = signal(false);
   readonly ended = signal(false);
   readonly chatError = signal('');
   readonly log = signal<ChatLine[]>([{ from: 'bot', key: 'chatHello' }]);
@@ -504,6 +509,43 @@ export class CustomerPage implements OnInit, OnDestroy {
     await this.run();
   }
 
+  /**
+   * Store one answer per receipt, ignoring duplicate clicks and results for a replaced receipt. A 409 confirms an
+   * existing answer without revealing its value. When a focused thumb disappears, its thanks line takes focus.
+   */
+  async sendFeedback(easy: boolean): Promise<void> {
+    const receipt = this.intakeReceipt();
+    if (!receipt || this.feedbackRecorded() || this.feedbackSending()) return;
+    this.feedbackSending.set(true);
+    this.feedbackFailed.set(false);
+    try {
+      const answer = await this.service.sendFeedback(receipt.protocol, easy);
+      if (this.intakeReceipt() !== receipt) return;
+      this.feedback.set(answer.easy);
+      this.feedbackRecorded.set(true);
+    } catch (e) {
+      if (this.intakeReceipt() !== receipt) return;
+      if (e instanceof ApiError && e.status === 409) this.feedbackRecorded.set(true);
+      else this.feedbackFailed.set(true);
+    } finally {
+      if (this.intakeReceipt() === receipt) {
+        this.feedbackSending.set(false);
+        const focused = document.activeElement;
+        const thumb = focused instanceof HTMLElement && focused.matches('.receipt-feedback button')
+          && this.host.nativeElement.contains(focused) ? focused : null;
+        if (this.feedbackRecorded() && thumb) {
+          afterNextRender(() => {
+            // Leave a customer who closed the panel or moved elsewhere where they chose to go.
+            if (this.intakeReceipt() === receipt && this.chatOpen()
+              && (document.activeElement === thumb || (!thumb.isConnected && document.activeElement === document.body))) {
+              this.host.nativeElement.querySelector<HTMLElement>('.feedback-thanks')?.focus();
+            }
+          }, { injector: this.injector });
+        }
+      }
+    }
+  }
+
   /** Customer-initiated only: a fresh report with a new start key. The button that called it is removed, so focus goes to the chat heading. */
   newReport(): void {
     if (this.busy() || this.frozen()) return;
@@ -515,6 +557,10 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.frozen.set(null);
     this.episode.set(null);
     this.intakeReceipt.set(null);
+    this.feedback.set(null);
+    this.feedbackRecorded.set(false);
+    this.feedbackSending.set(false);
+    this.feedbackFailed.set(false);
     this.ended.set(false);
     this.asking.set(false);
     this.chatError.set('');
