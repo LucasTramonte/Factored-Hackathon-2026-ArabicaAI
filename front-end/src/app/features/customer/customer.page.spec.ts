@@ -615,8 +615,12 @@ describe('CustomerPage', () => {
     it('"can\'t find it" asks once what the customer remembers before anything is sent, then sends it with the incomplete handoff', async () => {
       await startEpisode();
       service.handoffIntake.and.resolveTo({ ...intakeReceipt, kind: 'incomplete' });
+      page.choice = 'demo-tx-001';
+      page.chatConfirmed = true;
       page.cannotFind();
       expect(service.handoffIntake).not.toHaveBeenCalled();
+      expect(page.choice).toBe('', 'manual review and a selected charge are mutually exclusive');
+      expect(page.chatConfirmed).toBeFalse();
       expect(page.chatStep()).toBe('details');
       expect(page.identityLocked()).toBeTrue();
       expect(page.log().slice(-2)).toEqual([{ from: 'me', key: 'chatCannotFind' }, { from: 'bot', key: 'chatDetailsPrompt' }]);
@@ -1619,4 +1623,3 @@ describe('CustomerPage', () => {
     });
   });
 });
-
