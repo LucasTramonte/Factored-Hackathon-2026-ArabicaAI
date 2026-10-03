@@ -59,7 +59,7 @@ When a plan in `Docs/superpowers/plans/` is executed by agents:
 - The orchestrating session holds the hackathon briefing. **A subagent that receives a task brief from an orchestrator skips the Mandatory Session Startup below**; it reads `AGENTS.md`, the code it touches in full, and its brief, and asks the orchestrator instead of guessing.
 - Every agent works in ponytail ultra mode: does it need to exist, is it already in the repo, stdlib, platform feature, installed dependency, one line, then the minimum code. Deletion before addition. One runnable check per non-trivial change.
 - One coder agent per task, strictly sequential, on one branch per phase created from `main`. Two QA agents per task (spec compliance, then code quality), at most three rounds each, then escalate to a person.
-- Agents never run `--remote`, deploy, tag, merge or change permissions. Each phase PR ends with a section **"Human steps before merge"** listing only what agents cannot do: remote migrations and Worker secrets (exact commands), dashboard changes, external approvals, and the PR review itself.
+- Agents never run `--remote`, deploy, tag, merge or change permissions. Each phase PR ends with a section **"Human steps before merge"** listing only what agents cannot do: a non-additive migration a person applies on purpose (additive ones are applied by the deploy), Worker and repository secrets (exact commands), dashboard changes, external approvals, and the PR review itself.
 
 ## Interfaces
 

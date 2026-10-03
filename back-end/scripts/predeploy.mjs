@@ -44,12 +44,47 @@ export function appliedFromWranglerJson(text) {
 }
 
 /**
+ * The statements of a migration, with every quoted literal emptied (``'a;b'`` → ``''``) and
+ * comments removed, so neither quoted text nor a comment can hide or fake a keyword. ``;`` ends a statement only outside
+ * quotes, and a CREATE TRIGGER statement runs to its ``END``. ``unterminated`` is true for a quote or block comment that
+ * never closes, which the caller treats as not additive (fail closed).
+ */
+function statementsOf(sql) {
+  const statements = [];
+  let current = '';
+  const end = () => { const text = current.trim().replace(/\s+/g, ' '); if (text) statements.push(text); current = ''; };
+  for (let i = 0; i < sql.length;) {
+    const c = sql[i];
+    if (c === "'" || c === '"' || c === '`') {
+      let j = i + 1;
+      while (j < sql.length && !(sql[j] === c && sql[j + 1] !== c)) j += sql[j] === c ? 2 : 1; // a doubled quote is an escape
+      if (j >= sql.length) return { statements, unterminated: true };
+      current += c + c; i = j + 1;
+    } else if (c === '-' && sql[i + 1] === '-') {
+      const newline = sql.indexOf('\n', i);
+      current += ' '; i = newline === -1 ? sql.length : newline;
+    } else if (c === '/' && sql[i + 1] === '*') {
+      const close = sql.indexOf('*/', i + 2);
+      if (close === -1) return { statements, unterminated: true };
+      current += ' '; i = close + 2;
+    } else if (c === ';' && !(/^\s*CREATE\s+(TEMP\w*\s+)?TRIGGER\b/i.test(current) && !/\bEND\s*$/i.test(current))) {
+      end(); i++;
+    } else {
+      current += c; i++;
+    }
+  }
+  end();
+  return { statements, unterminated: false };
+}
+
+/**
  * Why a migration is not additive, or [] when it is. Additive means the Worker already running keeps working once it
  * is applied: CREATE TABLE / INDEX / TRIGGER / VIEW, ALTER TABLE … ADD COLUMN (a NOT NULL one needs a DEFAULT),
  * INSERT and UPDATE of rows. Anything that drops, renames or rebuilds is for a person.
  */
 export function additiveProblems(sql) {
-  const statements = sql.replace(/--[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '').split(';').map(t => t.trim().replace(/\s+/g, ' ')).filter(Boolean);
+  const { statements, unterminated } = statementsOf(sql);
+  if (unterminated) return ['an unterminated quote or comment: the statements after it cannot be checked'];
   const problems = [];
   for (const statement of statements) {
     const head = statement.toUpperCase();

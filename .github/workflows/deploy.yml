@@ -33,15 +33,27 @@ jobs:
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       BASE: https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev
     steps:
-      - name: Skip until the Cloudflare secrets exist
+      - name: Decide whether to deploy (secrets, main, newest commit)
         id: ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUTOMATIC: ${{ github.event_name == 'workflow_run' }}
         run: |
+          go=true
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "::warning::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not set; nothing was deployed (back-end/README.md, Deployment)."
-            echo "go=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "go=true" >> "$GITHUB_OUTPUT"
+            go=false
+          elif [ "${{ github.ref }}" != "refs/heads/main" ] && [ "$AUTOMATIC" != true ]; then
+            echo "::error::Deploy only from main."; exit 1
+          elif [ "$AUTOMATIC" = true ]; then
+            # Checked inside the concurrency group: a rerun of an older quality run never replaces a newer Worker.
+            head=$(gh api "repos/${{ github.repository }}/commits/main" --jq .sha)
+            if [ "$head" != "$SHA" ]; then
+              echo "::notice::${SHA::7} is no longer the head of main (${head::7}); the newer commit deploys instead."
+              go=false
+            fi
           fi
+          echo "go=$go" >> "$GITHUB_OUTPUT"
 
       - name: Check out the tested commit
         if: steps.ready.outputs.go == 'true'
