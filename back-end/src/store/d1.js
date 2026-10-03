@@ -257,10 +257,17 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       const reference = receipt.complete_case_id ?? receipt.handoff_id;
       const emailId = crypto.randomUUID();
       const complete = receipt.kind === 'complete';
-      // accepted_at is immutable and was read from this receipt. The cutoff is checked in the same batch as the
-      // acknowledgement, so an expired pending case cannot return after a fresh confirmation frees the charge.
-      const pendingAuthority = authority + (complete ? ' AND ?>?' : '');
-      const pendingParams = [...authorityParams, ...(complete ? [receipt.accepted_at, new Date(now - SESSION_MS).toISOString()] : [])];
+      // Check both age and persisted charge ownership in every pending write: an acknowledgement captured before
+      // expiry can arrive after its replacement. A newer reservation permanently supersedes this pending one,
+      // even after a person closes the replacement. Already acknowledged receipts still replay without writes.
+      const cutoff = new Date(now - SESSION_MS).toISOString();
+      // A stored completed episode only replays: SQL pending predicates prevent every write, so it needs no charge scan.
+      const checkPendingCharge = complete && episode.state !== 'complete_handoff';
+      const pendingAuthority = authority + (checkPendingCharge ? ' AND ?>? AND NOT EXISTS(' + OPEN_REPORT
+        + ' WHERE c.customer_id=? AND c.transaction_id=(SELECT transaction_id FROM cases WHERE case_id=? AND customer_id=?) '
+        + 'AND oh.handoff_id<>? AND (oh.accepted_at>? OR ' + STILL_OPEN + '))' : '');
+      const pendingParams = [...authorityParams, ...(checkPendingCharge ? [receipt.accepted_at, cutoff,
+        customerId, receipt.complete_case_id, customerId, receipt.handoff_id, receipt.accepted_at, cutoff] : [])];
       const extras = [
         ...(complete ? [{ event:'transaction_confirmed',transaction_ref:receipt.handoff_id }] : []),
         { event:'handoff_created',kind:receipt.kind,case_ref:reference,tool_status:receipt.tool_status },

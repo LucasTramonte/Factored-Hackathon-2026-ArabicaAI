@@ -262,3 +262,34 @@ test('acknowledged reports never expire at the pending cutoff and their receipts
   assert.equal((await route(post('/intake/confirm', confirm(await start())), env, store)).status, 409);
   assert.equal((await route(post('/intake/confirm', body), env, store)).status, 200);
 });
+
+test('a delayed pre-expiry acknowledgement stays superseded after its replacement is reserved, accepted or closed', async t => {
+  const { db, store, start } = await setup(t);
+  const failedRead = { ...store, readIntakeReceipt: async () => { throw new Error('readback down'); } };
+  const firstEpisode = await start(); const firstBody = confirm(firstEpisode);
+  assert.equal((await route(post('/intake/confirm', firstBody), env, failedRead)).status, 503);
+  const accepted = Date.now() - 3600000 - 100;
+  db.prepare('UPDATE intake_handoffs SET accepted_at=? WHERE episode_id=?').run(new Date(accepted).toISOString(), firstEpisode);
+  // This request captured its clock before expiry, then its D1 batch was delayed behind the replacement.
+  const oldNow = accepted + 3600000 - 1, sessionHash = await tokenHash(token);
+  const episode = await store.findIntake('ana', firstEpisode);
+  const receipt = await store.readIntakeReceipt('ana', firstEpisode, { sessionHash, now: oldNow });
+  const replacementEpisode = await start(); const replacementBody = confirm(replacementEpisode);
+  assert.equal((await route(post('/intake/confirm', replacementBody), env, failedRead)).status, 503);
+  const refuseOld = async label => {
+    const before = db.prepare('SELECT total_changes() n').get().n;
+    assert.deepEqual(await store.finishIntakeHandoff({ customerId: 'ana', episode, receipt, sessionHash,
+      now: oldNow, operationDuration: 0, toolCalls: 0 }), { acknowledged: false, emailId: null }, label);
+    assert.equal(db.prepare('SELECT total_changes() n').get().n, before, 'refused delayed acknowledgement writes nothing');
+    assert.equal((await store.findIntake('ana', firstEpisode)).state, 'handoff_pending');
+    assert.deepEqual(events(db).filter(e => e.case_id === firstEpisode).map(e => e.event), ['intake_started']);
+  };
+  await refuseOld('a newer pending reservation supersedes the old one');
+  const replacement = await route(post('/intake/confirm', replacementBody), env, store);
+  assert.equal(replacement.status, 200); const nextReceipt = await replacement.json();
+  await refuseOld('a newer accepted report supersedes the old one');
+  await closeReport(store, nextReceipt.protocol);
+  await refuseOld('closing the replacement never resurrects the superseded reservation');
+  assert.equal((await route(post('/intake/confirm', replacementBody), env, store)).status, 200, 'the acknowledged replacement still replays');
+  assert.equal((await route(post('/intake/confirm', firstBody), env, store)).status, 409, 'the old customer retry explains expiration');
+});
