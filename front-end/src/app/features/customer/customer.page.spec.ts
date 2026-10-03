@@ -808,7 +808,7 @@ describe('CustomerPage', () => {
       expect(answer.closest('.chat-faq-log')!.nextElementSibling!.classList).toContain('chat-faq');
       expect(scrolled.calls.mostRecent().object).toBe(answer);
       expect(document.activeElement).toBe(button, 'scrolling the answer never moves keyboard focus');
-      p['clearChat']();
+      p.newReport();
       fixture.detectChanges();
       expect(el.querySelectorAll('.chat-faq-log li').length).toBe(0, 'a new report starts without old answers');
       el.remove();
