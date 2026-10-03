@@ -102,7 +102,7 @@
               <a [routerLink]="frozen() ? null : '/agent'">{{ t().agentView }}</a>
               <details class="act-as" (toggle)="toggleActAs($any($event.target).open)">
                 <summary>{{ t().actAsTitle }}</summary>
-                @if (identitiesLoading()) { <p class="status-line" role="status">{{ t().working }}</p> }
+                @if (actAsLoading()) { <p class="status-line" role="status">{{ t().working }}</p> }
                 @if (identityLocked()) { <p class="ar-small" id="act-as-locked">{{ t().actAsLocked }}</p> }
                 <app-customer-picker [identities]="identities()" [disabled]="busy() || identityLocked()" [(value)]="actAsChoice" />
                 <div class="login-actions">

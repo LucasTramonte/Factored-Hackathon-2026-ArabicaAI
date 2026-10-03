@@ -197,7 +197,9 @@ export class CustomerPage implements OnInit, OnDestroy {
     if (!this.demoPicker) return;
     this.identitiesLoading.set(true);
     try {
-      this.identities.set(await this.service.identities());
+      const local = await this.service.identities();
+      // An admin list that arrived first (the panel opened while this loaded) is the fuller one: keep it.
+      if (!this.actAsLoaded) this.identities.set(local);
       this.identity ||= this.identities()[0]?.customer_id ?? '';
     } catch (e) {
       this.fail(e);
@@ -278,18 +280,20 @@ export class CustomerPage implements OnInit, OnDestroy {
   actAsChoice = '';
   /** The admin list replaced ``identities`` once; it is not fetched again in this page's life. */
   private actAsLoaded = false;
+  /** The admin list is loading; its own flag, so a local demo list still loading never blocks it. */
+  readonly actAsLoading = signal(false);
 
   /** The admin's "view as another customer" panel: the list loads the first time it opens (it is about 800 customers). */
   async toggleActAs(open: boolean): Promise<void> {
-    if (!open || this.actAsLoaded || this.identitiesLoading()) return;
-    this.identitiesLoading.set(true);
+    if (!open || this.actAsLoaded || this.actAsLoading()) return;
+    this.actAsLoading.set(true);
     try {
       this.identities.set(await this.service.adminCustomers());
       this.actAsLoaded = true;
     } catch (e) {
       this.fail(e);
     } finally {
-      this.identitiesLoading.set(false);
+      this.actAsLoading.set(false);
     }
   }
 

@@ -870,6 +870,26 @@ describe('CustomerPage', () => {
       expect(p.error()).not.toBe('');
     });
 
+    it('loads the admin list even while the local demo list is still loading, and the late demo list never replaces it', async () => {
+      let release!: (ids: Identity[]) => void;
+      service.identities.and.returnValue(new Promise<Identity[]>(r => release = r));
+      const adminIds: Identity[] = [{ customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' }];
+      const admin = jasmine.createSpy('adminCustomers').and.resolveTo(adminIds);
+      Object.assign(service, { adminCustomers: admin });
+      const fixture = TestBed.createComponent(CustomerPage);
+      const p = fixture.componentInstance;
+      const init = p.ngOnInit();
+      expect(p.identitiesLoading()).toBeTrue();
+      await p.toggleActAs(true);
+      expect(admin).toHaveBeenCalledTimes(1);
+      expect(p.identities()).toEqual(adminIds);
+      release([{ customer_id: 'demo-ana', display_name: 'Ana (demo)', country: null }]);
+      await init;
+      expect(p.identities()).toEqual(adminIds);
+      expect([p.actAsLoading(), p.identitiesLoading()]).toEqual([false, false]);
+      fixture.destroy();
+    });
+
     it('shows an administrator, and only them, a banner linking the agent view; reset clears the roles', async () => {
       TestBed.inject(LangService).set('es');
       service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'email_otp', context_card: null, roles: ['admin'] });
