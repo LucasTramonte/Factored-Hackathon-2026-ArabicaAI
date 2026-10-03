@@ -280,7 +280,7 @@ test('concurrent submissions with one key create exactly one case', async () => 
   for (const r of results) assertContract('caseReceipt', r.body);
 });
 
-const guidedStart = (c, language = 'es') => c.call('/intake/start', { language, mode: 'guided', report_type: 'unrecognized_charge',
+const guidedStart = (c, language = 'es') => c.call('/intake/start', { language, mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
   customer_statement: language === 'es' ? 'No reconozco este cargo.' : 'Não reconheço esta cobrança.', idempotency_key: uuid() });
 
 test('path tricks on the guided routes never confirm without a session or return evidence through a non-canonical path', async () => {

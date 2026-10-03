@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { client,base,closeReport } from '../support/client.js';
 import { assertContract } from '../support/contract.js';
 async function customer(id='demo-ana') { const c=client();assert.equal((await c.call('/demo/session',{customer_id:id})).status,200);return c; }
-async function start(c) { const r=await c.call('/intake/start',{language:'pt',mode:'guided',report_type:'unrecognized_charge',customer_statement:'Não reconheço esta cobrança.',idempotency_key:crypto.randomUUID()});assert.equal(r.status,201);return r.body.episode_id; }
+async function start(c) { const r=await c.call('/intake/start',{language:'pt',mode:'guided',report_type:'unrecognized_charge',reason:'not_mine',customer_statement:'Não reconheço esta cobrança.',idempotency_key:crypto.randomUUID()});assert.equal(r.status,201);return r.body.episode_id; }
 
 test('confirmed_case_and_handoff_chain_commit_once on real local D1',async()=>{
  const ana=await customer();const episode_id=await start(ana);const body={episode_id,transaction_id:'demo-tx-001',customer_confirmed:true,idempotency_key:crypto.randomUUID()};

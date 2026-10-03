@@ -5,7 +5,7 @@ import { client, base, closeReport } from '../support/client.js';
 import { assertContract } from '../support/contract.js';
 import { scorerPython } from '../../scripts/scorer-python.mjs';
 
-const startBody = (language = 'es') => ({ language, mode: 'guided', report_type: 'unrecognized_charge',
+const startBody = (language = 'es') => ({ language, mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
   customer_statement: language === 'es' ? 'No reconozco este cargo.' : 'Não reconheço esta cobrança.',
   idempotency_key: crypto.randomUUID() });
 
@@ -45,6 +45,31 @@ test('guided_start_is_owned_and_idempotent against local D1', async () => {
   assert.notEqual(other.body.episode_id, replay.body.episode_id, 'same key is scoped to authenticated owner');
   assert.equal((await bruno.call('/intake/start', { ...body, episode_id: replay.body.episode_id })).status, 422);
   console.log('D1_INTAKE_START_REPLAY ' + JSON.stringify(replay.metrics));
+});
+
+test('the reason is part of the start and shown to agents, never in events (ADR-010)', async () => {
+  const ana = await customer();
+  const body = { ...startBody(), reason: 'duplicate', customer_statement: 'Me cobraron dos veces la misma compra.' };
+  const started = await ana.call('/intake/start', body);
+  assert.equal(started.status, 201); assertContract('intakeStart', started.body);
+  const conflict = await ana.call('/intake/start', { ...body, reason: 'other' });
+  assert.equal(conflict.status, 409); assert.equal(conflict.body.detail, 'Key already used with different content');
+  const handoff = await ana.call('/intake/handoff', { episode_id: started.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() });
+  assert.equal(handoff.status, 201);
+  const agent = client(); assert.equal((await agent.call('/demo/agent-session', {})).status, 200);
+  const list = await agent.call('/agent/intakes'); assertContract('agentIntakeList', list.body);
+  assert.ok(list.body.items.every(item => typeof item.reason === 'string'));
+  assert.equal(list.body.items.find(item => item.protocol === handoff.body.protocol).reason, 'duplicate');
+  const detail = await agent.call('/agent/intake-detail?protocol=' + handoff.body.protocol);
+  assert.equal(detail.status, 200); assertContract('agentIntakeDetail', detail.body); assert.equal(detail.body.reason, 'duplicate');
+  const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
+  const { resolve } = await import('node:path');
+  await withIntakeStore({ config: resolve(process.cwd(), 'wrangler.jsonc') }, async store => {
+    const events = await store.listIntakeHistory(started.body.episode_id);
+    assert.ok(events.length >= 2);
+    for (const { event_json } of events) assert.ok(!('reason' in JSON.parse(event_json)), event_json);
+  });
+  await closeReport(handoff.body.protocol);
 });
 
 test('guided start gate, path, session-role and malformed-input boundaries', async () => {
@@ -116,7 +141,7 @@ test('idle_close_and_export_keep_pending_and_unknown_visible on local D1',async 
   const open=await ana.call('/intake/start',startBody('pt'));assert.equal(open.status,201);
   let expired;
   await withIntakeStore({config},async store=>{
-    const now=Date.now();expired=(await store.startIntake({customerId:'demo-ana',language:'es',statement:'No reconozco este cargo.',key:crypto.randomUUID(),now:now-600000,expiresAt:now+100000})).episode;
+    const now=Date.now();expired=(await store.startIntake({customerId:'demo-ana',language:'es',statement:'No reconozco este cargo.',reason:'not_mine',key:crypto.randomUUID(),now:now-600000,expiresAt:now+100000})).episode;
     const closed=await closeIdleIntakes(store,{now,limit:100});assert.ok(closed.closed>=1);assert.equal(closed.complete,true);assert.equal((await store.findIntake('demo-ana',expired.episode_id)).state,'abandoned');
     const repeated=await closeIdleIntakes(store,{now,limit:100});assert.equal(repeated.closed,0);console.log('D1_IDLE_TWO_SWEEPS '+JSON.stringify(store.metrics()));
   });

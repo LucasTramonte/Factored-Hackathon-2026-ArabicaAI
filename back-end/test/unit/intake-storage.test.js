@@ -58,7 +58,7 @@ test('retained storage per guided episode stays within the ADR-004 capacity inpu
       assert.equal((await call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
       const before = usage(db); const count = Object.fromEntries(TABLES.map(t => [t, rows(db, t)]));
       for (let i = 0; i < EPISODES; i++) {
-        const start = await call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', customer_statement: statement, idempotency_key: crypto.randomUUID() });
+        const start = await call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine', customer_statement: statement, idempotency_key: crypto.randomUUID() });
         assert.equal(start.status, 201);
         const done = kind === 'complete'
           ? await call('/intake/confirm', { episode_id: start.body.episode_id, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: crypto.randomUUID() })
@@ -87,7 +87,7 @@ test('the documented demo-activity reset respects intake foreign keys and keeps 
   const { db, store, call } = setup();
   assert.equal((await call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
   for (const complete of [true, false]) {
-    const start = await call('/intake/start', { language: 'pt', mode: 'guided', report_type: 'unrecognized_charge', customer_statement: 'Não reconheço esta cobrança.', idempotency_key: crypto.randomUUID() });
+    const start = await call('/intake/start', { language: 'pt', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine', customer_statement: 'Não reconheço esta cobrança.', idempotency_key: crypto.randomUUID() });
     const done = complete
       ? await call('/intake/confirm', { episode_id: start.body.episode_id, transaction_id: 'demo-tx-001', customer_confirmed: true, idempotency_key: crypto.randomUUID() })
       : await call('/intake/handoff', { episode_id: start.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() });
@@ -109,9 +109,12 @@ test('the documented demo-activity reset respects intake foreign keys and keeps 
 test('migration 0014 admits English and keeps every episode, foreign key and index of intake_episodes', async () => {
   const MIGRATION = '0014_english_reports.sql';
   const { db, store, call } = setup(MIGRATION);
+  // Today's start writes the reason (0016, ADR-010): add it to fill the old table, drop it to restore the pre-0014 shape.
+  const reason = readFileSync(new URL('../../migrations/0016_report_reason.sql', import.meta.url), 'utf8');
+  db.exec(reason);
   assert.equal((await call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
   for (const [language, statement, complete] of [['es', 'No reconozco este cargo.', true], ['pt', 'Não reconheço esta cobrança.', false], ['es', 'No reconozco este otro cargo.', null]]) {
-    const start = await call('/intake/start', { language, mode: 'guided', report_type: 'unrecognized_charge', customer_statement: statement, idempotency_key: crypto.randomUUID() });
+    const start = await call('/intake/start', { language, mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine', customer_statement: statement, idempotency_key: crypto.randomUUID() });
     assert.equal(start.status, 201);
     if (complete === null) continue; // an open episode with no handoff
     const done = complete
@@ -120,6 +123,7 @@ test('migration 0014 admits English and keeps every episode, foreign key and ind
     assert.equal(done.status, 201);
     if (complete) await close(store, done.body.protocol);
   }
+  db.exec('ALTER TABLE intake_episodes DROP COLUMN reason');
   assert.throws(() => db.exec("UPDATE intake_episodes SET language='en'"), /CHECK/, 'before 0014 English is refused');
   const indexes = () => db.prepare('PRAGMA index_list(intake_episodes)').all()
     .map(({ name, unique, origin, partial }) => ({ name, unique, origin, partial })).sort((a, b) => a.name.localeCompare(b.name));
@@ -133,7 +137,8 @@ test('migration 0014 admits English and keeps every episode, foreign key and ind
   for (const child of ['intake_turns', 'intake_events', 'intake_handoffs']) {
     assert.deepEqual(db.prepare(`PRAGMA foreign_key_list(${child})`).all().filter(k => k.from === 'episode_id').map(k => k.table), ['intake_episodes'], child);
   }
-  const english = await call('/intake/start', { language: 'en', mode: 'guided', report_type: 'unrecognized_charge', customer_statement: 'I do not recognize this charge.', idempotency_key: crypto.randomUUID() });
+  db.exec(reason);
+  const english = await call('/intake/start', { language: 'en', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine', customer_statement: 'I do not recognize this charge.', idempotency_key: crypto.randomUUID() });
   assert.equal(english.status, 201);
   assert.equal(db.prepare('SELECT language FROM intake_episodes WHERE episode_id=?').get(english.body.episode_id).language, 'en');
   assert.throws(() => db.exec("UPDATE intake_episodes SET language='fr'"), /CHECK/);

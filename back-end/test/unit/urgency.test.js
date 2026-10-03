@@ -38,6 +38,7 @@ test('an unknown currency uses the relative rule only', () => {
 test('the policy names every served currency with a positive round amount and a demo block line', () => {
   for (const currency of ['BRL', 'USD', 'COP', 'ARS', 'MXN']) assert.ok(config.fixed[currency] > 0, currency);
   assert.equal(config.relative_min_others, 5);
+  assert.deepEqual(config.high_reasons, ['card_lost_or_stolen']);
   assert.match(config.demo_block_line, /\(demo\)$/);
 });
 
@@ -62,7 +63,7 @@ test('a failed read of the served purchases still accepts the report, with only 
   };
   assert.equal((await call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
   const confirm = async transaction_id => call('/intake/confirm', { transaction_id, customer_confirmed: true, idempotency_key: crypto.randomUUID(),
-    episode_id: (await call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
+    episode_id: (await call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
       customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() })).body.episode_id });
   const normal = await confirm('demo-tx-001');
   assert.equal(normal.status, 201); assert.equal(normal.body.kind, 'complete'); assert.equal(normal.body.urgency, 'normal');

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { client, base, closeReport } from '../support/client.js';
 import { assertContract } from '../support/contract.js';
 async function report(c, complete) {
-  const started = await c.call('/intake/start',{language:'es',mode:'guided',report_type:'unrecognized_charge',customer_statement:'No reconozco este cargo; solicito revisión.',idempotency_key:crypto.randomUUID()});
+  const started = await c.call('/intake/start',{language:'es',mode:'guided',report_type:'unrecognized_charge',reason:'not_mine',customer_statement:'No reconozco este cargo; solicito revisión.',idempotency_key:crypto.randomUUID()});
   assert.equal(started.status,201);
   const episode_id = started.body.episode_id;
   const res = await c.call(complete?'/intake/confirm':'/intake/handoff',complete

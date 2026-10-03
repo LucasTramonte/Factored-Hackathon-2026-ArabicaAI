@@ -29,7 +29,7 @@ test('an email sign-in upserts the target, and an outbox row is queued, marked a
 test('an email sign-in stores ciphertext; each handoff queues one "received" email, delivered after the response', async () => {
   const { client, idToken } = await import('../support/client.js');
   const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
-  const startBody = language => ({ language, mode: 'guided', report_type: 'unrecognized_charge',
+  const startBody = language => ({ language, mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
     customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() });
   const ana = client({ authorization: 'Bearer ' + await idToken('demo-ana') });
   assert.equal((await ana.call('/auth/session', {})).status, 200);
@@ -61,7 +61,7 @@ test('POST /reports/update: the owner gets one "update" email per report per 5 m
   const { client, idToken } = await import('../support/client.js');
   const { assertContract } = await import('../support/contract.js');
   const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
-  const startBody = language => ({ language, mode: 'guided', report_type: 'unrecognized_charge',
+  const startBody = language => ({ language, mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
     customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() });
   const ana = client({ authorization: 'Bearer ' + await idToken('demo-ana') });
   assert.equal((await ana.call('/auth/session', {})).status, 200);
@@ -107,7 +107,7 @@ test('two concurrent update requests for one report queue exactly one email', as
   const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
   const ana = client({ authorization: 'Bearer ' + await idToken('demo-ana') });
   assert.equal((await ana.call('/auth/session', {})).status, 200);
-  const episode = (await ana.call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
+  const episode = (await ana.call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
     customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() })).body.episode_id;
   const receipt = (await ana.call('/intake/handoff', { episode_id: episode, kind: 'incomplete', idempotency_key: crypto.randomUUID() })).body;
   const results = await Promise.all([1, 2].map(() => ana.call('/reports/update', { protocol: receipt.protocol })));

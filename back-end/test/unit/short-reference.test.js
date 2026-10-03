@@ -38,7 +38,7 @@ async function customer(actor, id = 'demo-ana') {
   const call = actor(); assert.equal((await call('/demo/session', { customer_id: id })).status, 200); return call;
 }
 async function start(call) {
-  const r = await call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
+  const r = await call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
     customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() });
   assert.equal(r.status, 201); return r.body.episode_id;
 }

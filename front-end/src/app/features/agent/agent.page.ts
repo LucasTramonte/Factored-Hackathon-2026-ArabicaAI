@@ -10,7 +10,7 @@ import { formatSourceTime } from '../../shared/format/source-time.util';
 import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
-import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind, Role } from '../../shared/models/intake.model';
+import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind, REASON_LABEL, Role } from '../../shared/models/intake.model';
 import { AgentService } from './agent.service';
 
 const KIND_KEYS: Record<IntakeKind, keyof Strings> = { complete: 'kindComplete', technical: 'kindTechnical', incomplete: 'kindIncomplete' };
@@ -49,6 +49,7 @@ export class AgentPage {
   readonly openProtocol = signal<string | null>(null);
   private detailRequest = 0;
   readonly sourceTime = formatSourceTime;
+  readonly reasonLabel = REASON_LABEL;
   private readonly detailHeading = viewChild<ElementRef<HTMLElement>>('detailHeading');
   private readonly signInButton = viewChild<ElementRef<HTMLButtonElement>>('signIn');
   private readonly statusText = viewChild<ElementRef<HTMLElement>>('statusText');

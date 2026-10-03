@@ -8,7 +8,7 @@ import { tokenHash } from '../../src/auth/session.js';
 
 async function customer(id = 'demo-ana') { const c = client(); assert.equal((await c.call('/demo/session', { customer_id: id })).status, 200); return c; }
 async function start(c) {
-  const r = await c.call('/intake/start', { language: 'pt', mode: 'guided', report_type: 'unrecognized_charge',
+  const r = await c.call('/intake/start', { language: 'pt', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
     customer_statement: 'Não reconheço esta cobrança.', idempotency_key: crypto.randomUUID() });
   assert.equal(r.status, 201); return r.body.episode_id;
 }
@@ -62,7 +62,7 @@ test('a reservation whose receipt was never read back does not appear', async ()
   let pending;
   await withIntakeStore({ config: resolve(process.cwd(), 'wrangler.jsonc') }, async store => {
     await store.rotateSession({ now, oldHash: null, newHash: sessionHash, actor: 'customer', customerId: 'demo-ana', expiresAt: now + 3600000, requestId: 'reports-fixture' });
-    const { episode } = await store.startIntake({ customerId: 'demo-ana', language: 'es', statement: 'No reconozco este cargo.', key: crypto.randomUUID(), now, expiresAt: now + 3600000 });
+    const { episode } = await store.startIntake({ customerId: 'demo-ana', language: 'es', statement: 'No reconozco este cargo.', reason: 'not_mine', key: crypto.randomUUID(), now, expiresAt: now + 3600000 });
     ({ handoff: pending } = await store.persistIntakeHandoff({ customerId: 'demo-ana', episodeId: episode.episode_id, turnKey: crypto.randomUUID(),
       payloadHash: await tokenHash(JSON.stringify(['incomplete', null])), sessionHash, completeCase: null, kind: 'incomplete',
       evidence: { transaction: null, tool_status: 'ok' }, actions: [], questions: ['matching_transaction', 'customer_confirmation'],

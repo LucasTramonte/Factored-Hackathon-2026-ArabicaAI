@@ -8,7 +8,7 @@ import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
-  Report, ReportList, Transaction } from '../../shared/models/intake.model';
+  REASONS, REASON_LABEL, Reason, Report, ReportList, Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { demoPicker } from '../../core/auth/cognito.config';
@@ -35,6 +35,9 @@ type Frozen = { path: 'start'; body: IntakeStartBody } | { path: 'confirm'; body
 export const FAQ = { faqNextQ: 'faqNextA', faqTimeQ: 'faqTimeA', faqMissingQ: 'faqMissingA' } as const;
 /** Receipt title per server-decided kind. */
 const RECEIPT_TITLE = { complete: 'receiptComplete', incomplete: 'receiptIncomplete', technical: 'receiptTechnical' } as const;
+/** Reason → its one-line statement, filled in the report language. ``other`` has none. */
+const REASON_FILL = { not_mine: 'reasonFillNotMine', duplicate: 'reasonFillDuplicate', wrong_amount: 'reasonFillWrongAmount', cancelled_or_not_received: 'reasonFillCancelled',
+  subscription: 'reasonFillSubscription', card_lost_or_stolen: 'reasonFillLostCard' } as const;
 
 @Component({
   selector: 'app-customer-page',
@@ -75,6 +78,12 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly reportLang = computed<IntakeLang>(() => this.chosenLang() ?? this.lang.lang());
   /** The report-language choice is shown in an English interface, as before, and stays once the customer has chosen. */
   readonly askLang = computed(() => this.lang.lang() === 'en' || this.chosenLang() !== null);
+  readonly reasons = REASONS;
+  readonly reasonLabel = REASON_LABEL;
+  /** The reason chip the customer tapped; required before the start is sent (ADR-010). */
+  readonly reason = signal<Reason | null>(null);
+  /** The last text a chip wrote, so a chip never overwrites what the customer typed. */
+  private prefill = '';
   readonly episode = signal<IntakeStart | null>(null);
   readonly frozen = signal<Frozen | null>(null);
   readonly intakeReceipt = signal<IntakeReceipt | null>(null);
@@ -389,10 +398,29 @@ export class CustomerPage implements OnInit, OnDestroy {
     return transactionId ? this.transactions().find(tx => tx.transaction_id === transactionId) : undefined;
   }
 
-  /** Start the guided report: statement and report language only; no reference comes back. */
+  /**
+   * A reason chip: fills the statement with its one-line sentence in the report language, unless the customer has typed
+   * their own words. ``other`` fills nothing; focus never moves (WCAG 3.2.2). A lost or stolen card says at once to call the bank.
+   */
+  pickReason(r: Reason): void {
+    this.reason.set(r);
+    this.chatError.set('');
+    if (this.chatStatement.trim() === '' || this.chatStatement.trim() === this.prefill) {
+      this.prefill = r === 'other' ? '' : this.lang.stringsFor(this.reportLang())[REASON_FILL[r]];
+      this.chatStatement = this.prefill;
+    }
+    if (r === 'card_lost_or_stolen' && !this.log().some(l => 'key' in l && l.key === 'chatLostCard')) this.log.update(l => [...l, { from: 'bot', key: 'chatLostCard' }]);
+  }
+
+  /** Start the guided report: reason, statement and report language; no reference comes back. */
   async send(): Promise<void> {
     if (this.busy() || this.chatStep() !== 'describe') return;
     if (!this.frozen()) {
+      const reason = this.reason();
+      if (!reason) {
+        this.chatError.set(this.t().chatReasonValidation);
+        return;
+      }
       const statement = this.chatStatement.trim();
       const language = this.reportLang();
       if ([...statement].length < 10) {
@@ -400,7 +428,7 @@ export class CustomerPage implements OnInit, OnDestroy {
         return;
       }
       this.frozen.set({ path: 'start', body: { customer_statement: statement, idempotency_key: crypto.randomUUID(), language,
-        mode: 'guided', report_type: 'unrecognized_charge' } });
+        mode: 'guided', reason, report_type: 'unrecognized_charge' } });
       this.log.update(l => [...l, { from: 'me', text: statement }]);
     }
     await this.run();
@@ -467,6 +495,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.asking.set(false);
     this.chatError.set('');
     this.chatStatement = '';
+    this.prefill = '';
+    this.reason.set(null);
     this.chatDetails = '';
     this.choice = '';
     this.chatConfirmed = false;

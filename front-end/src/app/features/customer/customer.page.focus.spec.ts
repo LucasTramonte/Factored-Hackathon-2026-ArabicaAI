@@ -137,6 +137,7 @@ describe('CustomerPage focus', () => {
     page.chatOpen.set(true);
     page.episode.set({ episode_id: 'E-1', state: 'selection_required', language: 'es', mode: 'guided', replayed: false } as never);
     page.chatStatement = 'No reconozco este cargo.';
+    page.reason.set('not_mine');
     await fixture.whenStable();
     const cannotFind = [...el.querySelectorAll('.chat .ar-btn-secondary')].find((b: Element) => b.textContent!.trim() === page.t().chatCannotFind) as HTMLButtonElement;
     cannotFind.focus();

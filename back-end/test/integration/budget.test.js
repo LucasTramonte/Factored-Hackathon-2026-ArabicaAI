@@ -33,8 +33,10 @@ const CEILING = {
   create: [4, 12, 6, 4],
   agentLogin: [3, 6, 6, 1],
   agentList: [2, 250, 0, 2],
-  intakeStart: [6, 8, 11, 2],
-  intakeStartReplay: [6, 6, 2, 2],
+  // The CHECK on intake_episodes.reason (migration 0016, ADR-010) adds one counted read to each statement that writes an
+  // episode row, as 0004's CHECKs did: start 8 -> 9 and replay 6 -> 7 rows read, measured with and without it (ADR-004).
+  intakeStart: [6, 9, 11, 2],
+  intakeStartReplay: [6, 7, 2, 2],
   // The first acknowledgement queues one "received" email for a customer with a notification target (Task 3.2):
   // one more statement in the acknowledgement batch, 3 writes (row, primary key, email_outbox_recent).
   // One open report per charge (Task 4.4): one more query and round trip that reads only that charge's cases
@@ -120,7 +122,7 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
   console.log('D1_BUDGET ' + JSON.stringify({ per_request: measured, customer_episode: episode }));
 });
 
-const startBody = () => ({ language: 'es', mode: 'guided', report_type: 'unrecognized_charge',
+const startBody = () => ({ language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
   customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() });
 
 test('guided endpoints and complete and incomplete customer episodes preserve measured D1 budgets', async () => {
@@ -208,7 +210,7 @@ test('housekeeping and export store calls stay within their page budgets', async
   const now = Date.now();
   await withIntakeStore({ config: config() }, async store => {
     for (let i = 0; i < 100; i += 20) await Promise.all(Array.from({ length: 20 }, (_, j) => store.startIntake({ customerId: 'demo-bruno',
-      language: 'pt', statement: 'Não reconheço esta cobrança.', key: crypto.randomUUID(), now: now - 600000 - i - j, expiresAt: now + 3600000 })));
+      language: 'pt', statement: 'Não reconheço esta cobrança.', reason: 'not_mine', key: crypto.randomUUID(), now: now - 600000 - i - j, expiresAt: now + 3600000 })));
     const sweep = await storeCall(store, () => store.closeIdleIntakes({ now, limit: 100 }));
     assert.equal(sweep.result.length, 100, 'exactly the fixture page was due');
     within('idleSweepPage', sweep.metrics);
@@ -243,7 +245,7 @@ test('50-row queue scan budget is qualified against 50 terminal and 50 pending t
   await withIntakeStore({ config: config() }, async store => {
     await store.rotateSession({ now: Date.now(), oldHash: null, newHash: sessionHash, actor: 'customer', customerId: 'demo-ana', expiresAt: now + 3600000, requestId: 'budget-fixture' });
     const reserve = async i => {
-      const { episode } = await store.startIntake({ customerId: 'demo-ana', language: 'es', statement: 'No reconozco este cargo.', key: crypto.randomUUID(), now, expiresAt: now + 3600000 });
+      const { episode } = await store.startIntake({ customerId: 'demo-ana', language: 'es', statement: 'No reconozco este cargo.', reason: 'not_mine', key: crypto.randomUUID(), now, expiresAt: now + 3600000 });
       const { handoff } = await store.persistIntakeHandoff({ customerId: 'demo-ana', episodeId: episode.episode_id, turnKey: crypto.randomUUID(), payloadHash,
         sessionHash, completeCase: null, kind: 'incomplete', evidence: { transaction: null, tool_status: 'ok' }, actions: [],
         questions: ['matching_transaction', 'customer_confirmation'], usage: { tool_calls: 0, operation_duration_ms: 0 }, now });

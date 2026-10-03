@@ -9,7 +9,7 @@ test('an English report is stored, emailed and shown to the agent in English', a
   const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
   const ana = client({ authorization: 'Bearer ' + await idToken('demo-ana') });
   assert.equal((await ana.call('/auth/session', {})).status, 200);
-  const start = await ana.call('/intake/start', { language: 'en', mode: 'guided', report_type: 'unrecognized_charge',
+  const start = await ana.call('/intake/start', { language: 'en', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
     customer_statement: 'I do not recognize this charge.', idempotency_key: crypto.randomUUID() });
   assert.equal(start.status, 201); assertContract('intakeStart', start.body); assert.equal(start.body.language, 'en');
   const receipt = await ana.call('/intake/confirm', { episode_id: start.body.episode_id, transaction_id: 'demo-tx-001',

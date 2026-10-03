@@ -1,1 +1,1 @@
-{ "fixed": { "MXN": 10000, "COP": 2000000, "ARS": 500000, "USD": 500, "BRL": 2500 }, "relative_min_others": 5, "demo_block_line": "+52 55 0000 0000 (demo)" }
+{ "fixed": { "MXN": 10000, "COP": 2000000, "ARS": 500000, "USD": 500, "BRL": 2500 }, "relative_min_others": 5, "high_reasons": ["card_lost_or_stolen"], "demo_block_line": "+52 55 0000 0000 (demo)" }

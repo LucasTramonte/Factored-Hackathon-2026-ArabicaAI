@@ -10,8 +10,8 @@ import { AgentService } from './agent.service';
 
 const P1 = '11111111-1111-4111-8111-111111111111';
 const P2 = '22222222-2222-4222-8222-222222222222';
-const intake = (protocol: string, kind: AgentIntake['kind'] = 'complete'): AgentIntake =>
-  ({ protocol, reference_short: protocol === P1 ? 'AR-7K3M-2Q4X' : null, episode_id: P2, kind, status: 'received', tool_status: 'ok', destination: 'case_service', priority: 'normal', urgency: 'normal', accepted_at: '2026-09-30T12:00:00.000Z' });
+const intake = (protocol: string, kind: AgentIntake['kind'] = 'complete', reason: AgentIntake['reason'] = 'duplicate'): AgentIntake =>
+  ({ protocol, reference_short: protocol === P1 ? 'AR-7K3M-2Q4X' : null, episode_id: P2, kind, reason, status: 'received', tool_status: 'ok', destination: 'case_service', priority: 'normal', urgency: 'normal', accepted_at: '2026-09-30T12:00:00.000Z' });
 const detail = (protocol: string, over: Partial<AgentIntakeDetail> = {}): AgentIntakeDetail => ({
   ...intake(protocol), language: 'es', customer_statement: 'No reconozco este cargo',
   verified_evidence: { transaction: { transaction_id: 'TX-9', merchant_name: 'Café', occurred_at: null, source_occurred_at: '2026-09-01 10:00:00', amount: '12.50', currency: 'MXN' } },
@@ -370,6 +370,30 @@ describe('AgentPage', () => {
         expect(row.querySelector('dd')!.textContent!.trim()).toBe(text);
         expect(el().querySelector('#intake-detail')!.textContent).not.toContain('legacy-p');
       }
+    });
+
+    const reasonChips = async () => {
+      service.intakes.and.resolveTo({ items: [intake(P1), intake(P2, 'complete', 'card_lost_or_stolen')], has_more: false, scope: 'synthetic_demo_only' });
+      await page.load();
+      fixture.detectChanges();
+      return [...el().querySelectorAll<HTMLElement>('.intake-row span.reason-chip')];
+    };
+
+    it('shows the customer\'s reason as a chip on every queue row', async () => {
+      expect((await reasonChips()).map(c => c.textContent!.trim())).toEqual([t().reasonDuplicate, t().reasonLostCard]);
+    });
+
+    it('marks only a lost or stolen card reason red', async () => {
+      expect((await reasonChips()).map(c => c.classList.contains('ar-chip-err'))).toEqual([false, true]);
+    });
+
+    it('shows the reason in the detail before the language', async () => {
+      service.intakeDetail.and.resolveTo(detail(P1));
+      await loadAndOpen();
+      const rows = [...el().querySelectorAll('#intake-detail .detail-meta div')];
+      const i = rows.findIndex(d => d.querySelector('dt')!.textContent === t().reasonLabel);
+      expect(rows[i].querySelector('dd')!.textContent!.trim()).toBe(t().reasonDuplicate);
+      expect(rows[i + 1].querySelector('dt')!.textContent).toBe(t().languageCode);
     });
 
     it('shows the status as text on every queue row', async () => {
