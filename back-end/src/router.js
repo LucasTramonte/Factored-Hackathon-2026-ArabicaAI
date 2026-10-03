@@ -5,7 +5,7 @@
 import { fail, json } from './http.js';
 import { GRANTED } from './auth/cognito.js';
 import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession } from './modules/customer/routes.js';
-import { startIntake, confirmIntake, handoffIntake, listReports, requestUpdate } from './modules/intake/routes.js';
+import { startIntake, confirmIntake, handoffIntake, listReports, recordFeedback, requestUpdate } from './modules/intake/routes.js';
 import { listAgentIntakes, getAgentIntakeDetail, startAgentSession, transitionIntake } from './modules/agent/routes.js';
 import { listAuditEvents } from './modules/audit/routes.js';
 
@@ -22,6 +22,7 @@ export const API_ROUTES = {
   '/intake/handoff': { POST: handoffIntake },
   '/reports': { GET: listReports },
   '/reports/update': { POST: requestUpdate },
+  '/reports/feedback': { POST: recordFeedback },
   '/demo/agent-session': { POST: startAgentSession },
   '/agent/intakes': { GET: listAgentIntakes },
   '/agent/intake-detail': { GET: getAgentIntakeDetail },
@@ -46,6 +47,7 @@ export const ROUTE_ROLES = {
   '/intake/handoff': 'customer',
   '/reports': 'customer',
   '/reports/update': 'customer',
+  '/reports/feedback': 'customer',
   '/demo/agent-session': 'public',
   '/agent/intakes': 'agent',
   '/agent/intake-detail': 'agent',

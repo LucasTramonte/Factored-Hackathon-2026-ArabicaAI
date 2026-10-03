@@ -170,6 +170,28 @@ async function unreserved(request, store, { customerId, episodeId, toolCalls, st
   return fail(503, 'Acceptance not confirmed; retry with the same idempotency key');
 }
 
+/**
+ * POST /reports/feedback ``{ protocol, easy }``: the customer's answer, on the receipt, to "was it easy to report this
+ * charge?" for an own acknowledged report. The first answer stands: the same answer again is 200, a different one 409.
+ * A missing or another customer's report is the same 404. It is stored on the report, never in events or logs.
+ */
+export async function recordFeedback(request, env, store) {
+  const current = await requireSession(request, store, 'customer');
+  if (!current) return fail(401, 'Start a demo session first');
+  const body = await readJsonBody(request);
+  if (body.error) return body.error;
+  const value = body.value;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).sort().join() !== 'easy,protocol'
+    || typeof value.protocol !== 'string' || !UUID.test(value.protocol) || typeof value.easy !== 'boolean') {
+    return fail(422, 'Provide exactly a protocol and a boolean easy');
+  }
+  const protocol = value.protocol.toLowerCase();
+  const stored = await store.recordReportFeedback(current.customer_id, protocol, value.easy, Date.now());
+  if (!stored) return fail(404, 'Report not found');
+  if (Boolean(stored.easy) !== value.easy) return fail(409, 'Feedback already recorded for this report');
+  return json({ protocol, easy: value.easy, recorded_at: new Date(stored.created_at).toISOString() });
+}
+
 const REPORTS_PAGE = 20;
 /** What happens next for the customer, per stored review status. */
 const NEXT_STEP = { received: 'review_pending', in_review: 'being_reviewed', closed: 'closed_by_person' };

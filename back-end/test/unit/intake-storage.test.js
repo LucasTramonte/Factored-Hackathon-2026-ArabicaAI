@@ -100,7 +100,7 @@ test('the documented demo-activity reset respects intake foreign keys and keeps 
   db.exec('ROLLBACK');
   const seed = ['customers', 'transactions', 'context_cards', 'sample_provenance'].map(t => rows(db, t));
   db.exec(readFileSync(new URL('../../scripts/reset-demo-activity.sql', import.meta.url), 'utf8'));
-  for (const table of [...TABLES, 'sessions', 'charge_views']) assert.equal(rows(db, table), 0, table);
+  for (const table of [...TABLES, 'sessions', 'charge_views', 'report_feedback', 'handoff_status_history']) assert.equal(rows(db, table), 0, table);
   assert.deepEqual(['customers', 'transactions', 'context_cards', 'sample_provenance'].map(t => rows(db, t)), seed);
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
   db.close();

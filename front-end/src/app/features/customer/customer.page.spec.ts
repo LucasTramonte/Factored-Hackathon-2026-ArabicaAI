@@ -17,7 +17,7 @@ describe('CustomerPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed'], { client: signal(''), card: signal(null), roles: signal([]) });
+      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed', 'sendFeedback'], { client: signal(''), card: signal(null), roles: signal([]) });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null, roles: ['customer'] });
@@ -897,6 +897,47 @@ describe('CustomerPage', () => {
       expect(closed).toContain(p.t().statusClosed);
       expect(closed).not.toContain(p.t().nextStepReview);
       expect(el.querySelector('.your-reports')!.textContent).not.toMatch(/resuelt|resolvid|resolved/i);
+    });
+
+    describe('receipt feedback', () => {
+      const PROTOCOL = '99999999-8888-4777-8666-555555555555';
+      const withReceipt = async () => {
+        const ctx = await home();
+        ctx.p.openChat('demo-tx-001');
+        ctx.p.intakeReceipt.set({ episode_id: 'E', protocol: PROTOCOL, kind: 'complete', accepted_at: 'x', replayed: false, urgency: 'normal',
+          actions_taken: [], unresolved_questions: [], reference_short: 'AR-AAAA-BBBB', next_step_code: 'await_human_review' });
+        ctx.fixture.detectChanges();
+        return ctx;
+      };
+      const buttons = (el: HTMLElement) => [...el.querySelectorAll<HTMLButtonElement>('.receipt-feedback button')];
+
+      it('asks one question with a thumbs up and a thumbs down, labelled for screen readers', async () => {
+        const { el, p } = await withReceipt();
+        expect(el.querySelector('.receipt-feedback')!.getAttribute('aria-label')).toBe(p.t().feedbackQuestion);
+        expect(buttons(el).map(b => b.getAttribute('aria-label'))).toEqual([p.t().feedbackYes, p.t().feedbackNo]);
+      });
+
+      it('sends the answer for this receipt and then thanks the customer', async () => {
+        const { el, p, fixture } = await withReceipt();
+        service.sendFeedback.and.resolveTo({ protocol: PROTOCOL, easy: false, recorded_at: 'x' });
+        buttons(el)[1].click(); await fixture.whenStable(); fixture.detectChanges();
+        expect(service.sendFeedback).toHaveBeenCalledOnceWith(PROTOCOL, false);
+        expect(p.feedback()).toBeFalse();
+        expect(el.querySelector('.receipt-feedback')!.textContent).toContain(p.t().feedbackThanks);
+        expect(buttons(el).length).toBe(0);
+      });
+
+      it('an answer already stored (409) still thanks; another failure keeps the buttons and says so', async () => {
+        const { p } = await withReceipt();
+        service.sendFeedback.and.rejectWith(new ApiError(409, 'Feedback already recorded for this report'));
+        await p.sendFeedback(true); expect(p.feedback()).toBeTrue();
+        p.newReport(); expect(p.feedback()).toBeNull();
+        const again = await withReceipt();
+        service.sendFeedback.and.rejectWith(new ApiError(503, 'x'));
+        await again.p.sendFeedback(true); again.fixture.detectChanges();
+        expect(again.p.feedback()).toBeNull(); expect(again.p.feedbackFailed()).toBeTrue();
+        expect(buttons(again.el).length).toBe(2);
+      });
     });
 
     it('reloads the reports after a receipt', async () => {

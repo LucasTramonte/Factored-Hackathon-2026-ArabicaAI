@@ -89,6 +89,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly episode = signal<IntakeStart | null>(null);
   readonly frozen = signal<Frozen | null>(null);
   readonly intakeReceipt = signal<IntakeReceipt | null>(null);
+  /** The receipt's "was it easy?" answer once stored (true/false), or null until the customer answers. */
+  readonly feedback = signal<boolean | null>(null);
+  readonly feedbackFailed = signal(false);
   readonly ended = signal(false);
   readonly chatError = signal('');
   readonly log = signal<ChatLine[]>([{ from: 'bot', key: 'chatHello' }]);
@@ -504,6 +507,22 @@ export class CustomerPage implements OnInit, OnDestroy {
     await this.run();
   }
 
+  /**
+   * The receipt's one question, "was it easy to report this charge?" (thumbs up or down). The first answer stands; a
+   * 409 means one was already stored, so the thanks line shows either way. Focus stays on the panel (WCAG 3.2.2).
+   */
+  async sendFeedback(easy: boolean): Promise<void> {
+    const receipt = this.intakeReceipt();
+    if (!receipt || this.feedback() !== null) return;
+    this.feedbackFailed.set(false);
+    try {
+      this.feedback.set((await this.service.sendFeedback(receipt.protocol, easy)).easy);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) this.feedback.set(easy);
+      else this.feedbackFailed.set(true);
+    }
+  }
+
   /** Customer-initiated only: a fresh report with a new start key. The button that called it is removed, so focus goes to the chat heading. */
   newReport(): void {
     if (this.busy() || this.frozen()) return;
@@ -515,6 +534,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.frozen.set(null);
     this.episode.set(null);
     this.intakeReceipt.set(null);
+    this.feedback.set(null);
+    this.feedbackFailed.set(false);
     this.ended.set(false);
     this.asking.set(false);
     this.chatError.set('');

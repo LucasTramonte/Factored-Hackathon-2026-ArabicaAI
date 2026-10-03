@@ -59,6 +59,9 @@ const CEILING = {
   // Session, owned report with its target flag, the outbox insert that checks the 5-minute window itself (row, primary
   // key, email_outbox_recent); the send marks the row from its own store after the response (Task 3.3).
   reportsUpdate: [3, 14, 3, 3],
+  // POST /reports/feedback (migration 0019): session, then one batch that inserts the first answer (row + primary key)
+  // and reads it back; a repeated answer inserts nothing. Outside the episode ceilings: the customer may never answer.
+  reportFeedback: [3, 10, 2, 2],
   // Agent session, then one batch: history row (+ unique index), the customer's email (row, primary key,
   // email_outbox_recent) and the status update; each statement resolves the handoff by its unique keys (ADR-004).
   agentTransition: [5, 26, 6, 2],
@@ -156,6 +159,10 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   const confirmReplay = await c.call('/intake/confirm', confirmation);
   assert.equal(confirmReplay.status, 200); assert.equal(confirmReplay.body.protocol, complete.body.protocol);
   measured.confirmReplay = within('intakeConfirmReplay', confirmReplay.metrics);
+  const feedback = await c.call('/reports/feedback', { protocol: complete.body.protocol, easy: true });
+  assert.equal(feedback.status, 200); assertContract('reportFeedback', feedback.body);
+  measured.feedback = within('reportFeedback', feedback.metrics);
+  measured.feedbackReplay = within('reportFeedback', (await c.call('/reports/feedback', { protocol: complete.body.protocol, easy: true })).metrics);
   const open = await c.call('/intake/start', startBody()); assert.equal(open.status, 201);
   measured.start2 = within('intakeStart', open.metrics);
   const handoff = { episode_id: open.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() };

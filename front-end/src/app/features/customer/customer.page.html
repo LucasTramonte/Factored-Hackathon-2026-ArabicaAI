@@ -252,6 +252,16 @@
                       <ul class="open-questions">@for (q of r.unresolved_questions; track $index) { <li>{{ check(q) }}</li> }</ul>
                     }
                     @if (r.replayed) { <p class="ar-small">{{ t().replayed }}</p> }
+                    <div class="receipt-feedback" role="group" [attr.aria-label]="t().feedbackQuestion">
+                      @if (feedback() === null) {
+                        <span>{{ t().feedbackQuestion }}</span>
+                        <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm" (click)="sendFeedback(true)" [attr.aria-label]="t().feedbackYes">👍 {{ t().feedbackYesShort }}</button>
+                        <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm" (click)="sendFeedback(false)" [attr.aria-label]="t().feedbackNo">👎 {{ t().feedbackNoShort }}</button>
+                        @if (feedbackFailed()) { <span class="ar-small" role="alert">{{ t().feedbackFailed }}</span> }
+                      } @else {
+                        <span role="status">{{ t().feedbackThanks }}</span>
+                      }
+                    </div>
                   </div>
                 }
                 <div class="report-actions chat-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="newReport()">{{ t().chatNew }}</button></div>

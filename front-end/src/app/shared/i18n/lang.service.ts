@@ -70,6 +70,7 @@ const es = {
     statement: 'Relato del cliente', reasonLabel: 'Motivo', languageCode: 'Idioma del reporte', customerHistory: 'Historial del cliente', historyNone: 'Primer reporte de este cliente.', historyLine: '{n} reportes anteriores: {open} abiertos, {high} de prioridad alta. Último: {status}.',
     agentErr401: 'La sesión de agente expiró. Vuelve a entrar como agente.', agentErr404: 'No se encontró el reporte.',
     // Guided intake chat
+    feedbackQuestion: '¿Fue fácil reportar este cargo?', feedbackYes: 'Sí, fue fácil', feedbackNo: 'No, fue difícil', feedbackYesShort: 'Sí', feedbackNoShort: 'No', feedbackThanks: 'Gracias, tu respuesta nos ayuda a mejorar.', feedbackFailed: 'No pudimos guardar tu respuesta. Inténtalo de nuevo.',
     chatClose: 'Cerrar', chatYou: 'Tú', chatGuide: 'Guía',
     chatHello: 'Cuéntame qué pasó con el cargo que no reconoces. Después eliges el cargo y confirmas.',
     chatHelloGeneralNoName: '¿Cómo te ayudamos hoy? Si es un cargo que no ves en tu lista, cuéntanos el comercio, el monto y la fecha aproximada. Después revisas tus cargos y, si no está, una persona lo revisa contigo.', chatHelloGeneral: '¿Cómo te ayudamos hoy, {name}? Si es un cargo que no ves en tu lista, cuéntanos el comercio, el monto y la fecha aproximada. Después revisas tus cargos y, si no está, una persona lo revisa contigo.', help: 'Ayuda',
@@ -178,6 +179,7 @@ const STRINGS: Record<Lang, Strings> = {
     statement: 'Relato do cliente', reasonLabel: 'Motivo', languageCode: 'Idioma do relato', customerHistory: 'Histórico do cliente', historyNone: 'Primeiro relato deste cliente.', historyLine: '{n} relatos anteriores: {open} abertos, {high} de prioridade alta. Último: {status}.',
     agentErr401: 'A sessão de agente expirou. Entre novamente como agente.', agentErr404: 'Relato não encontrado.',
     // Guided intake chat
+    feedbackQuestion: 'Foi fácil relatar esta cobrança?', feedbackYes: 'Sim, foi fácil', feedbackNo: 'Não, foi difícil', feedbackYesShort: 'Sim', feedbackNoShort: 'Não', feedbackThanks: 'Obrigado, sua resposta nos ajuda a melhorar.', feedbackFailed: 'Não conseguimos salvar sua resposta. Tente de novo.',
     chatClose: 'Fechar', chatYou: 'Você', chatGuide: 'Guia',
     chatHello: 'Conte o que aconteceu com a cobrança que você não reconhece. Depois você escolhe a cobrança e confirma.',
     chatHelloGeneralNoName: 'Como podemos ajudar hoje? Se for uma cobrança que você não vê na sua lista, conte o estabelecimento, o valor e a data aproximada. Depois você revisa suas cobranças e, se não estiver lá, uma pessoa analisa com você.', chatHelloGeneral: 'Como podemos ajudar hoje, {name}? Se for uma cobrança que você não vê na sua lista, conte o estabelecimento, o valor e a data aproximada. Depois você revisa suas cobranças e, se não estiver lá, uma pessoa analisa com você.', help: 'Ajuda',
@@ -280,6 +282,7 @@ const STRINGS: Record<Lang, Strings> = {
     statement: 'Customer statement', reasonLabel: 'Reason', languageCode: 'Report language', customerHistory: 'Customer history', historyNone: "This customer's first report.", historyLine: '{n} previous reports: {open} open, {high} high priority. Latest: {status}.',
     agentErr401: 'The agent session expired. Sign in as an agent again.', agentErr404: 'Report not found.',
     // Guided intake chat
+    feedbackQuestion: 'Was it easy to report this charge?', feedbackYes: 'Yes, it was easy', feedbackNo: 'No, it was hard', feedbackYesShort: 'Yes', feedbackNoShort: 'No', feedbackThanks: 'Thanks, your answer helps us improve.', feedbackFailed: "We couldn't save your answer. Please try again.",
     chatClose: 'Close', chatYou: 'You', chatGuide: 'Guide',
     chatHello: 'Tell me what happened with the charge you do not recognize. Then you choose the charge and confirm.',
     chatHelloGeneralNoName: "How can we help you today? If it's a charge you don't see in your list, tell us the merchant, the amount and the approximate date. Then you check your charges and, if it isn't there, a person reviews it with you.", chatHelloGeneral: "How can we help you today, {name}? If it's a charge you don't see in your list, tell us the merchant, the amount and the approximate date. Then you check your charges and, if it isn't there, a person reviews it with you.", help: 'Help',

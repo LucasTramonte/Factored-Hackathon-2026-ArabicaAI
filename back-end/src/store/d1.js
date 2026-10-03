@@ -411,6 +411,20 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       + "WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
       + 'ORDER BY h.accepted_at DESC,protocol LIMIT ?', customerId, limit),
     /**
+     * Record this customer's one receipt answer for an own acknowledged report (migration 0019), then read what is
+     * stored, in one batch: the first answer stands, so a concurrent or repeated answer inserts nothing. Returns
+     * ``{ easy, created_at }``, or null when the report is missing or another customer's (they look the same).
+     */
+    recordReportFeedback: async (customerId, protocol, easy, now) => {
+      const mine = "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
+        + 'AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))';
+      const [, stored] = await batch([
+        ['INSERT INTO report_feedback(handoff_id,easy,created_at) SELECT h.handoff_id,?,? ' + mine + ' ON CONFLICT(handoff_id) DO NOTHING',
+          easy ? 1 : 0, now, customerId, protocol, protocol],
+        ['SELECT f.easy,f.created_at FROM report_feedback f WHERE f.handoff_id=(SELECT h.handoff_id ' + mine + ')', customerId, protocol, protocol]]);
+      return stored.results[0] ?? null;
+    },
+    /**
      * One acknowledged report of this customer (same predicate as ``listCustomerHandoffs``) with its episode language
      * and whether the customer has a notification target; null when missing or another customer's.
      */

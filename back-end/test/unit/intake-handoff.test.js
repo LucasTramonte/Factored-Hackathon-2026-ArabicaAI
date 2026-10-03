@@ -230,3 +230,23 @@ test('a pending reservation (lost acknowledgement) also blocks a second report o
   assert.equal(second.status,409); assert.equal((await second.json()).detail,'This charge already has an open report');
   assert.equal(db.prepare('SELECT count(*) n FROM cases').get().n,1);
 });
+
+test('receipt feedback: one answer per own report, first answer stands, hostile bodies refused, nothing in events', async t => {
+  const { db,store,start }=await setup(t);
+  const res=await route(post('/intake/confirm',confirm(await start())),env,store); assert.equal(res.status,201);
+  const { protocol }=await res.json();
+  const send=body=>route(post('/reports/feedback',body),env,store);
+  for (const bad of [{protocol},{protocol,easy:'true'},{protocol,easy:1},{protocol,easy:true,extra:1},{protocol:'nope',easy:true},[],null])
+    assert.equal((await send(bad)).status,422,JSON.stringify(bad));
+  assert.equal((await send({protocol:crypto.randomUUID(),easy:true})).status,404,'a missing report');
+  const eventsBefore=events(db).length;
+  // Concurrent answers: exactly one row; the same answer is 200 everywhere, a different one 409.
+  const answers=await Promise.all(Array.from({length:6},(_,i)=>send({protocol:protocol.toUpperCase(),easy:i%2===0})));
+  const statuses=answers.map(r=>r.status).sort(); assert.deepEqual(statuses,[200,200,200,409,409,409]);
+  const okBody=await answers.find(r=>r.status===200).json(); assertContract('reportFeedback',okBody); assert.equal(okBody.protocol,protocol);
+  assert.equal(db.prepare('SELECT count(*) n FROM report_feedback').get().n,1);
+  assert.equal(events(db).length,eventsBefore,'feedback is never an event');
+  // Another customer's report looks exactly like a missing one.
+  db.prepare("UPDATE intake_episodes SET customer_id='bruno'").run();
+  const foreign=await send({protocol,easy:okBody.easy}); assert.equal(foreign.status,404);
+});
