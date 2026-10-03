@@ -53,7 +53,7 @@ The question is which model, doing what, and how we avoid spending more than the
 
 ## Pre-freeze amendments (2026-09-30)
 
-These were written before any frozen scoring. Amendments 1, 2, 6 and 7 change how a result is measured and what follows from it, not the result itself. Amendments 3 and 4 change labels and policy, so they need Manoella's approval as the unexposed reviewer (decision 5), given in the PR that carries them.
+These were written before any frozen scoring. Amendments 1, 2, 6, 7 and 8 change how a result is measured and what follows from it, not the result itself. Amendments 3 and 4 change labels and policy, so they need Manoella's approval as the unexposed reviewer (decision 5), given in the PR that carries them.
 
 1. **Latency is measured on enough calls to decide.** Forty-eight calls can't estimate a p95: a two-sided distribution-free 95% interval needs 72 values (a one-sided 95% upper bound needs 59), and at a true p95 of exactly 3 s the old trigger fires 43% of the time. The rule, fixed before the measurement it applies to:
    - **Sample:** at least 150 model-calling executions on the development split (10 repetitions of the 16 model-calling cases), each counted at its wall time, timeouts included at their full duration.
@@ -83,6 +83,12 @@ These were written before any frozen scoring. Amendments 1, 2, 6 and 7 change ho
    - **Credentials:** a short-lived OAuth token (`gcloud auth print-access-token`, about one hour) in `VERTEX_ACCESS_TOKEN`, with `VERTEX_PROJECT`; set by a person on their machine, never committed or logged.
    - **Who changes what:** as in amendment 6. The transport is non-behavioural (an exposed author may write it); any reasoning-level change stays with the isolated builder, in `workers_ai.build_body`.
    - **Approval:** the host owner (Lucas) approved Vertex AI on 2026-10-03. Manoella, as the unexposed reviewer, approves this amendment in the PR that carries it.
+8. **Where the reasoning level is documented for the Vertex host (2026-10-03).** The isolated builder stopped at the Vertex revision's step 1, as it should: Google names the request field but documents no default for `gpt-oss-20b-maas`, and that model's capability table says "Thinking: Not supported" (its `DEV_LOG.md` entry of 2026-10-03 has the pages and quotes). This amendment supplies the sources; it changes no behaviour, and the level is still chosen and set by the isolated builder under amendment 2.
+   - **The field:** `reasoning_effort` in the OpenAI-compatible Chat Completions body, per Google's "Thinking for open models" page ("These models also support the `reasoning_effort` parameter", GPT OSS section; https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/capabilities/thinking, read 2026-10-03).
+   - **The levels and the default** come from the model's author: OpenAI's gpt-oss model card lists low, medium and high (https://huggingface.co/openai/gpt-oss-20b), and its Harmony format guide says "by default, the model will do medium level reasoning" (https://developers.openai.com/cookbook/articles/openai-harmony, read 2026-10-03).
+   - **The 20B endpoint honours it (probe, 2026-10-03, Lucas's session):** one content-free arithmetic question, never an evaluation case, twice per setting at temperature 0. No field: 110 completion tokens and 244 reasoning characters; `medium`: identical (110 and 244); `low`: 32 and 45; `high`: 145 and 342. All eight answered correctly. So the omitted field behaves as `medium`, `low` is accepted, and the "Thinking: Not supported" row does not describe this endpoint's behaviour.
+   - **Deadline:** Google's page for the model says the `gpt-oss-20b-maas` endpoint is deprecated (2026-07-21) and retires on 2026-10-21. The frozen run must happen before then; after it, the result can't be re-run on this host.
+   - **Approval:** Manoella, as the unexposed reviewer, approves this amendment in the PR that carries it, together with the builder's change.
 
 ## Consequences
 
