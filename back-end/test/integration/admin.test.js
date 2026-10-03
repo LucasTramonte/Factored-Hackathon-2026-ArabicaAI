@@ -128,3 +128,31 @@ test('act-as is single-use: of concurrent calls on one admin session exactly one
   const original = await ref(cookie);
   assert.equal((await store(s => s.listAdminActions(50))).filter(r => r.admin_session_ref === original).length, 1);
 });
+
+test("an update an admin asks for while acting is queued to the admin's own address; status emails never are", async () => {
+  const admin = await signedIn(['admin'], 'demo-diego');
+  assert.ok(await store(s => s.findNotificationTarget('demo-diego')), "the admin's own email sign-in stores their address");
+  for (const id of ['CLI-COHORT-2', 'CLI-COHORT-3']) {
+    const res = await admin.call('/admin/act-as', { customer_id: id });
+    assert.equal(res.status, 200); assert.ok(!res.text.includes('demo-diego'), 'act-as never names the admin identity');
+  }
+  const episode = (await admin.call('/intake/start', { language: 'pt', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
+    customer_statement: 'Não reconheço esta cobrança.', idempotency_key: crypto.randomUUID() })).body.episode_id;
+  const receipt = (await admin.call('/intake/handoff', { episode_id: episode, kind: 'incomplete', idempotency_key: crypto.randomUUID() })).body;
+  const reports = await admin.call('/reports');
+  assert.ok(reports.body.items.some(r => r.protocol === receipt.protocol)); assert.ok(!reports.text.includes('demo-diego'));
+  const first = await admin.call('/reports/update', { protocol: receipt.protocol });
+  assert.equal(first.status, 202); assertContract('updateQueued', first.body); assert.deepEqual(first.body, { queued: true });
+  const again = await admin.call('/reports/update', { protocol: receipt.protocol });
+  assert.equal(again.status, 429, 'the 5-minute limit still applies'); assert.ok(Number(again.headers.get('Retry-After')) > 0);
+  const agent = client(); assert.equal((await agent.call('/demo/agent-session', {})).status, 200);
+  for (const status of ['in_review', 'closed']) {
+    assert.equal((await agent.call('/agent/intake-status', { protocol: receipt.protocol, status })).status, 200);
+  }
+  await store(async s => {
+    assert.equal(await s.findNotificationTarget('CLI-COHORT-3'), null, 'acting still stores no address for the customer');
+    assert.deepEqual((await s.findEmails('demo-diego', receipt.reference_short)).map(r => [r.template, r.language]), [['update', 'pt']],
+      'one update to the original admin identity (kept across two switches), no status email');
+    assert.deepEqual(await s.findEmails('CLI-COHORT-3', receipt.reference_short), [], 'the customer has no address, so nothing queues for them');
+  });
+});
