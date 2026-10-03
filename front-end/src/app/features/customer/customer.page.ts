@@ -533,9 +533,14 @@ export class CustomerPage implements OnInit, OnDestroy {
     return STATEMENT_MAX - 1 - [...this.chatStatement.trim()].length;
   }
 
-  /** "I can't find it": nothing is sent yet; the guide asks once what the customer remembers (one extra turn, no more). */
+  /**
+   * "I can't find it": nothing is sent yet; the guide asks once what the customer remembers (one extra turn, no more).
+   * A charge picked before is dropped, so it never looks chosen beside the review without one.
+   */
   cannotFind(): Promise<void> | void {
     if (this.busy() || this.chatStep() !== 'choose' || this.frozen()) return;
+    this.choice = '';
+    this.chatConfirmed = false;
     if (this.room < 10) return this.handoff(); // no room for an answer: the statement already carries the detail
     this.asking.set(true);
     this.log.update(l => [...l, { from: 'me', key: 'chatCannotFind' }, { from: 'bot', key: 'chatDetailsPrompt' }]);
