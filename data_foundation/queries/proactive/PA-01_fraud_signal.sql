@@ -3,8 +3,10 @@
 -- scope: design (2023-06-17 to 2025-12-31, ADR-005), temporal split: derive on 2023-06-17..2024-12-31, check on 2025 H1 and H2
 -- memory: about 3.7M design-window transactions projected to five columns; every query is one grouped aggregate
 --   (DuckDB spills to disk); only aggregates leave the database. Run read-only, memory_limit 3GB, threads 2.
--- target: is_fraud (the dataset's label). Prediction unit: one transaction. Signal available when a proactive message
---   would be sent: fraud_score is assigned with the transaction. Outcomes after the fact (complaints) are not used.
+-- target: is_fraud (the dataset's label; no availability timestamp). Prediction unit: one transaction. Outcomes after
+--   the fact (complaints) are not used. fraud_score's assignment time is UNKNOWN: it is deterministically tied to the
+--   label (data_profiles/fraud_readiness_findings.md), so queries 2-3 and 7 describe volume and separation only; they are
+--   exploratory and never a performance estimate until the organizers confirm the score precedes the label (ADR-011).
 
 -- 1. Prevalence, missing labels and missing scores.
 SELECT count(*) AS transactions, count(*) FILTER (WHERE is_fraud) AS fraud,
@@ -56,3 +58,30 @@ GROUP BY 1;
 SELECT count(DISTINCT customer_id) AS customers, count(*) AS charges
 FROM silver.fact_transactions
 WHERE transaction_date >= TIMESTAMP '2025-07-01' AND transaction_date < TIMESTAMP '2026-01-01' AND fraud_score > 30;
+
+-- 8. Every alternative signal per period (the temporal split used above), not pooled: amount quantiles by label, the
+--    range of fraud rates across categories (categories with at least 1,000 rows), and foreign vs home country.
+WITH t AS (
+  SELECT CASE WHEN transaction_date < TIMESTAMP '2025-01-01' THEN 'train'
+              WHEN transaction_date < TIMESTAMP '2025-07-01' THEN 'validation' ELSE 'test' END AS period, *
+  FROM silver.fact_transactions
+  WHERE transaction_date >= TIMESTAMP '2023-06-17' AND transaction_date < TIMESTAMP '2026-01-01'
+)
+SELECT period, is_fraud, quantile_cont(amount_usd, 0.5) AS p50, quantile_cont(amount_usd, 0.9) AS p90, quantile_cont(amount_usd, 0.99) AS p99
+FROM t WHERE amount_usd IS NOT NULL GROUP BY period, is_fraud ORDER BY period, is_fraud;
+
+-- Repeat with channel, transaction_status, merchant_category and currency in place of transaction_type.
+WITH t AS (
+  SELECT CASE WHEN transaction_date < TIMESTAMP '2025-01-01' THEN 'train'
+              WHEN transaction_date < TIMESTAMP '2025-07-01' THEN 'validation' ELSE 'test' END AS period, transaction_type AS category, is_fraud
+  FROM silver.fact_transactions
+  WHERE transaction_date >= TIMESTAMP '2023-06-17' AND transaction_date < TIMESTAMP '2026-01-01'
+), rates AS (SELECT period, category, avg(is_fraud::INT) AS rate FROM t GROUP BY period, category HAVING count(*) >= 1000)
+SELECT period, min(rate) AS min_rate, max(rate) AS max_rate FROM rates GROUP BY period ORDER BY period;
+
+SELECT CASE WHEN t.transaction_date < TIMESTAMP '2025-01-01' THEN 'train'
+            WHEN t.transaction_date < TIMESTAMP '2025-07-01' THEN 'validation' ELSE 'test' END AS period,
+       (t.transaction_country IS DISTINCT FROM c.country) AS foreign_tx, count(*) AS n, avg(t.is_fraud::INT) AS fraud_rate
+FROM silver.fact_transactions t JOIN silver.dim_customers c ON c.customer_id = t.customer_id
+WHERE t.transaction_date >= TIMESTAMP '2023-06-17' AND t.transaction_date < TIMESTAMP '2026-01-01'
+GROUP BY 1, 2 ORDER BY 1, 2;
