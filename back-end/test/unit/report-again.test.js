@@ -129,3 +129,28 @@ test('revocation during a linked replay neither renews the episode nor returns i
   assert.equal(refused.status, 401);
   assert.deepEqual(db.prepare('SELECT * FROM intake_episodes WHERE episode_id=?').get(started.episode_id), saved);
 });
+
+
+test('lost linked-start authority hides whether the source is open, closed, missing or foreign', async t => {
+  const { db, store, call, source } = await setup(t);
+  const closed = await source(), open = await source('ana', false, false), foreign = await source('bruno');
+  const hash = await tokenHash(tokens.ana);
+  const saved = db.prepare('SELECT * FROM sessions WHERE token_hash=?').get(hash);
+  for (const protocol of [closed.receipt.protocol, open.receipt.protocol, foreign.receipt.protocol, crypto.randomUUID()]) {
+    for (const mutation of [
+      () => db.prepare('DELETE FROM sessions WHERE token_hash=?').run(hash),
+      () => db.prepare('UPDATE sessions SET expires_at=1 WHERE token_hash=?').run(hash),
+      () => db.prepare("UPDATE sessions SET actor='agent',customer_id=NULL WHERE token_hash=?").run(hash),
+      () => db.prepare("UPDATE sessions SET customer_id='bruno' WHERE token_hash=?").run(hash)
+    ]) {
+      const before = db.prepare('SELECT * FROM intake_episodes ORDER BY episode_id').all();
+      const refused = await call('/intake/start', body(protocol), 'ana', { ...store, startIntake: args => {
+        mutation(); return store.startIntake(args);
+      } });
+      assert.equal(refused.status, 401);
+      assert.deepEqual(await refused.json(), { detail: 'Start a demo session first' });
+      assert.deepEqual(db.prepare('SELECT * FROM intake_episodes ORDER BY episode_id').all(), before);
+      db.prepare('INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)').run(saved.token_hash, saved.actor, saved.customer_id, saved.expires_at);
+    }
+  }
+});

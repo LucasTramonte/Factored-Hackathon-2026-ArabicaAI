@@ -75,7 +75,8 @@ const CEILING = {
   // The detail batch (migration 0018): stamp the first open (1 write, once), the row, and the customer's newest 21
   // episodes (index intake_episodes_owner_recent) with at most 20 other reports, so reads are bounded by window size.
   // The raw window also keeps null pending/current slots internally so has_more cannot under-report a full window.
-  completeDetail: [5, 80, 1, 3],
+  // Linked follow-up fixtures fill more acknowledged slots: complete detail measures 82 reads (ADR-004).
+  completeDetail: [5, 82, 1, 3],
   incompleteDetail: [5, 80, 1, 3],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
   idleSweepPage: [2, 1210, 300, 1],
@@ -288,4 +289,32 @@ test('50-row queue scan budget is qualified against 50 terminal and 50 pending t
   within('incompleteDetail', detail.metrics);
   console.log('D1_FULL_QUEUE ' + JSON.stringify({ terminal: 50, pending: 50, tied: true, ...queue.metrics }));
   console.log('D1_FULL_HISTORY ' + JSON.stringify({ ...detail.metrics, customer_history: detail.body.customer_history }));
+});
+
+
+test('a dense acknowledged history qualifies detail reads with the current report outside the window', async () => {
+  const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
+  const now = Date.now() + 366 * 86400000, sessionHash = await tokenHash('dense-history-' + crypto.randomUUID()); // unique: fixed hashes collide with other fixtures
+  const payloadHash = await tokenHash(JSON.stringify(['incomplete', null]));
+  let protocol;
+  // Bounded 22-report synthetic fixture, newer than the mixed queue fixture; the oldest report is outside LIMIT21.
+  await withIntakeStore({ config: config() }, async store => {
+    await store.rotateSession({ now: Date.now(), oldHash: null, newHash: sessionHash, actor: 'customer', customerId: 'demo-ana', expiresAt: now + 3600000, requestId: 'dense-history-fixture' });
+    for (let i = 0; i < 22; i++) {
+      const at = now + i;
+      const { episode } = await store.startIntake({ customerId: 'demo-ana', language: 'es', statement: 'No reconozco este cargo.', reason: 'not_mine', key: crypto.randomUUID(), now: at, expiresAt: now + 3600000 });
+      await store.persistIntakeHandoff({ customerId: 'demo-ana', episodeId: episode.episode_id, turnKey: crypto.randomUUID(), payloadHash, sessionHash,
+        completeCase: null, kind: 'incomplete', evidence: { transaction: null, tool_status: 'ok' }, actions: [], questions: ['matching_transaction', 'customer_confirmation'], usage: { tool_calls: 0, operation_duration_ms: 0 }, now: at });
+      const receipt = await store.readIntakeReceipt('demo-ana', episode.episode_id, { sessionHash, now: at });
+      assert.equal((await store.finishIntakeHandoff({ customerId: 'demo-ana', episode, receipt, sessionHash, now: at, operationDuration: 0, toolCalls: 0 })).acknowledged, true);
+      if (!i) protocol = receipt.handoff_id;
+    }
+  });
+  const agent = client(); await agent.call('/demo/agent-session', {});
+  const first = await agent.call('/agent/intake-detail?protocol=' + protocol);
+  assert.equal(first.status, 200); assertContract('agentIntakeDetail', first.body);
+  assert.equal(first.body.customer_history.reports, 20); assert.equal(first.body.customer_history.has_more, true);
+  const replay = await agent.call('/agent/intake-detail?protocol=' + protocol);
+  assert.equal(replay.status, 200); assert.equal(replay.metrics.rows_written, 0);
+  console.log('D1_DENSE_HISTORY ' + JSON.stringify({ first: first.metrics, replay: replay.metrics }));
 });
