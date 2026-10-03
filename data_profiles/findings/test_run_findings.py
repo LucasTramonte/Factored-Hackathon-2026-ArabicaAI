@@ -82,6 +82,25 @@ def make_db(path: Path, with_holdout: bool) -> Path:
         # Added after the inserts above, which list the original nine complaint columns.
         con.execute("ALTER TABLE silver.fact_complaints ADD COLUMN status VARCHAR; "
                     "ALTER TABLE silver.fact_complaints ADD COLUMN resolution VARCHAR;")
+        # DF-027 columns: one design-window Phone contact with a wait and a survey that asks about it.
+        con.execute("""ALTER TABLE silver.fact_call_center_interactions ADD COLUMN interaction_date TIMESTAMP;
+            ALTER TABLE silver.fact_call_center_interactions ADD COLUMN channel VARCHAR;
+            ALTER TABLE silver.fact_call_center_interactions ADD COLUMN wait_time_seconds DOUBLE;
+            UPDATE silver.fact_call_center_interactions SET interaction_date = '2025-01-01', channel = 'Phone', wait_time_seconds = 30 WHERE interaction_id = 'I1';
+            UPDATE silver.fact_call_center_interactions SET interaction_date = '2025-01-01', channel = 'Email' WHERE interaction_id = 'I2';
+            ALTER TABLE silver.fact_satisfaction_surveys ADD COLUMN interaction_id VARCHAR;
+            ALTER TABLE silver.fact_satisfaction_surveys ADD COLUMN survey_date TIMESTAMP;
+            ALTER TABLE silver.fact_satisfaction_surveys ADD COLUMN question_1_text VARCHAR;
+            ALTER TABLE silver.fact_satisfaction_surveys ADD COLUMN question_1_response DOUBLE;
+            ALTER TABLE silver.fact_satisfaction_surveys ADD COLUMN question_2_text VARCHAR;
+            ALTER TABLE silver.fact_satisfaction_surveys ADD COLUMN question_2_response DOUBLE;
+            ALTER TABLE silver.fact_satisfaction_surveys ADD COLUMN question_3_text VARCHAR;
+            ALTER TABLE silver.fact_satisfaction_surveys ADD COLUMN question_3_response DOUBLE;
+            UPDATE silver.fact_satisfaction_surveys SET interaction_id = 'I1', survey_date = '2025-01-02',
+              question_2_text = 'Tiempo de espera', question_2_response = 4 WHERE comment_sentiment = 'Positive'""")
+        if with_holdout:
+            con.execute("INSERT INTO silver.fact_call_center_interactions (interaction_id, interaction_date, channel, wait_time_seconds) "
+                        "VALUES ('I9', '2026-02-01', 'Phone', 99)")
     return path
 
 
