@@ -45,7 +45,8 @@ const CEILING = {
   // (index cases_customer_transaction, migration 0011), and one more write for that index on the case insert (ADR-004).
   // Urgency lane (Task 5.1, migration 0013): one more query and round trip reads the customer's served purchases
   // (at most 21) to apply the stated policy; a normal charge writes no urgent-index entry (ADR-004).
-  intakeConfirm: [21, 74, 27, 10],
+  // Seven acknowledgement writes exclude newer or still-open same-charge reports: +28 reads in this fixture (ADR-004).
+  intakeConfirm: [21, 102, 27, 10],
   intakeConfirmReplay: [18, 54, 0, 7],
   intakeIncomplete: [15, 55, 18, 7],
   intakeIncompleteReplay: [15, 44, 0, 7],
@@ -68,7 +69,8 @@ const CEILING = {
   // A high-priority charge (Task 5.1): its confirm writes one more row, the entry in the partial index
   // intake_handoffs_urgent; closing it writes what a normal close writes, since D1 counts no write for leaving that index.
   // The confirm batch repeats the one-open-report check atomically (NOT EXISTS over cases_customer_transaction): +1 read.
-  intakeConfirmHigh: [21, 78, 28, 10],
+  // Its earlier closed same-charge report makes those seven guards cost +42 reads (ADR-004).
+  intakeConfirmHigh: [21, 120, 28, 10],
   agentTransitionHigh: [5, 26, 6, 2],
   // The detail batch (migration 0018): stamp the first open (1 write, once), the row, and the customer's newest 21
   // episodes (index intake_episodes_owner_recent) with at most 20 other reports, so reads are bounded by window size.
@@ -89,7 +91,7 @@ const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + 
 // Customer requests of one guided episode (login + list?lang= + displayed + start + terminal request), as the client
 // sends them from ADR-009 on; ADR-004 sizes capacity on these.
 // Migration 0018's episode index adds one write to each episode's start (complete 46 -> 47, incomplete 37 -> 38).
-const EPISODE_CEILING = { complete: [37, 97, 47, 20], incomplete: [31, 75, 38, 17] };
+const EPISODE_CEILING = { complete: [37, 125, 47, 20], incomplete: [31, 75, 38, 17] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);
