@@ -8,6 +8,7 @@ import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logou
 import { startIntake, confirmIntake, handoffIntake, listReports, recordFeedback, requestUpdate } from './modules/intake/routes.js';
 import { listAgentIntakes, getAgentIntakeDetail, startAgentSession, transitionIntake } from './modules/agent/routes.js';
 import { listAuditEvents } from './modules/audit/routes.js';
+import { actAs, listCustomers } from './modules/admin/routes.js';
 
 export const API_ROUTES = {
   '/demo/identities': { GET: listIdentities },
@@ -27,11 +28,14 @@ export const API_ROUTES = {
   '/agent/intakes': { GET: listAgentIntakes },
   '/agent/intake-detail': { GET: getAgentIntakeDetail },
   '/agent/intake-status': { POST: transitionIntake },
-  '/audit/events': { GET: listAuditEvents }
+  '/audit/events': { GET: listAuditEvents },
+  '/admin/customers': { GET: listCustomers },
+  '/admin/act-as': { POST: actAs }
 };
 /** Who may call what. ``public`` needs no session; ``customer`` and ``agent`` need that actor's live session, which each
- *  handler reads itself; ``auditor`` needs a verified Cognito token on every call (no session). ``admin`` owns no route:
- *  ``hasRole`` lets it start a customer or agent session and read the audit (ADR-007, decision 8). Agents see only the
+ *  handler reads itself; ``auditor`` needs a verified Cognito token on every call (no session). ``admin`` needs a customer
+ *  session an admin token opened (its ``admin`` mark), read by the handler; ``hasRole`` also lets an admin start a
+ *  customer or agent session and read the audit (ADR-007, decisions 8 and 10). Agents see only the
  *  approved queue of acknowledged handoffs. Declarative: adding a route without a role fails at module load. */
 export const ROLES = ['public', ...GRANTED];
 export const ROUTE_ROLES = {
@@ -52,12 +56,14 @@ export const ROUTE_ROLES = {
   '/agent/intakes': 'agent',
   '/agent/intake-detail': 'agent',
   '/agent/intake-status': 'agent',
-  '/audit/events': 'auditor'
+  '/audit/events': 'auditor',
+  '/admin/customers': 'admin',
+  '/admin/act-as': 'admin'
 };
 for (const path of Object.keys(API_ROUTES)) if (!ROLES.includes(ROUTE_ROLES[path])) throw new Error(`Route ${path} has no role`);
-export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/audit/', '/transactions/', '/cases/', '/intake/', '/reports/'];
+export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/audit/', '/admin/', '/transactions/', '/cases/', '/intake/', '/reports/'];
 /** Bare API namespace paths that have no handler but must still answer JSON 404. */
-export const API_NAMESPACES = new Set(['/intake', '/auth', '/audit']);
+export const API_NAMESPACES = new Set(['/intake', '/auth', '/audit', '/admin']);
 /** HTML documents the Worker sees first; all are public. Hashed bundles skip the Worker. */
 export const DOCUMENT_PATHS = new Set(['/', '/index.html', '/agent']);
 

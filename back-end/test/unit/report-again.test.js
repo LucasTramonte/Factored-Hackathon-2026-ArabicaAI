@@ -18,7 +18,7 @@ async function setup(t) {
   const dir = new URL('../../migrations/', import.meta.url);
   for (const file of readdirSync(dir).sort()) db.exec(readFileSync(new URL(file, dir), 'utf8'));
   db.exec("INSERT INTO customers(customer_id,display_name) VALUES('ana','Ana'),('bruno','Bruno'); INSERT INTO transactions VALUES('tx-ana','ana',NULL,'2026-06-17 12:00:00','Shop','10.00','ARS'),('tx-bruno','bruno',NULL,'2026-06-17 12:00:00','Other','20.00','ARS')");
-  for (const [actor, token] of Object.entries(tokens)) db.prepare('INSERT INTO sessions VALUES(?,?,?,?)')
+  for (const [actor, token] of Object.entries(tokens)) db.prepare('INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)')
     .run(await tokenHash(token), actor === 'agent' ? 'agent' : 'customer', actor === 'agent' ? null : actor, Date.now() + 3600000);
   const store = createStore({ prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
     batch: async statements => { db.exec('BEGIN'); try { const result = statements.map(s => s.all()); db.exec('COMMIT'); return result; }
@@ -150,7 +150,7 @@ test('lost linked-start authority hides whether the source is open, closed, miss
       assert.equal(refused.status, 401);
       assert.deepEqual(await refused.json(), { detail: 'Start a demo session first' });
       assert.deepEqual(db.prepare('SELECT * FROM intake_episodes ORDER BY episode_id').all(), before);
-      db.prepare('INSERT OR REPLACE INTO sessions VALUES(?,?,?,?)').run(saved.token_hash, saved.actor, saved.customer_id, saved.expires_at);
+      db.prepare('INSERT OR REPLACE INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(saved.token_hash, saved.actor, saved.customer_id, saved.expires_at);
     }
   }
 });

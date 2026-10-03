@@ -27,7 +27,7 @@ async function setup(t) {
   for (const file of readdirSync(migrations).sort()) db.exec(readFileSync(new URL(file, migrations), 'utf8'));
   db.exec("INSERT INTO customers(customer_id,display_name) VALUES('ana','Ana'),('bruno','Bruno')");
   const expiry = Date.now() + 3600_000;
-  db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(token), 'customer', 'ana', expiry);
+  db.prepare('INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(await tokenHash(token), 'customer', 'ana', expiry);
   const prepare = sql => ({ bind: (...params) => ({ all: () => ({ results: db.prepare(sql).all(...params) }) }) });
   const store = createStore({ prepare, batch: async statements => {
     db.exec('BEGIN');
@@ -95,7 +95,7 @@ test('same-owner renewal keeps opaque session reference and original replay whil
   assert.equal(row.expires_at, expiry);
   const renewed = 'b'.repeat(64);
   db.prepare('DELETE FROM sessions').run();
-  db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(renewed), 'customer', 'ana', expiry + 1000);
+  db.prepare('INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(await tokenHash(renewed), 'customer', 'ana', expiry + 1000);
   const replay = await route(request(body, { cookie: `demo_session=${renewed}` }), env, store);
   assert.equal(replay.status, 200);
   assert.deepEqual(await replay.json(), { ...original, replayed: true });
@@ -106,7 +106,7 @@ test('same-owner renewal keeps opaque session reference and original replay whil
   await route(request(body, { cookie: `demo_session=${renewed}` }), env, store);
   assert.equal((await store.findIntake('ana', original.episode_id)).state, 'abandoned');
   const bruno = 'c'.repeat(64);
-  db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(await tokenHash(bruno), 'customer', 'bruno', expiry + 2000);
+  db.prepare('INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)').run(await tokenHash(bruno), 'customer', 'bruno', expiry + 2000);
   const other = await (await route(request(body, { cookie: `demo_session=${bruno}` }), env, store)).json();
   assert.notEqual(other.episode_id, original.episode_id);
   assert.equal(await store.findIntake('bruno', original.episode_id), null);

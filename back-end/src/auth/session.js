@@ -43,15 +43,31 @@ export async function requireSession(request, store, actor) {
 /**
  * Create a session and return its Set-Cookie value. The presented token for this actor is revoked
  * and expired sessions are purged in the same atomic store call (one D1 round trip), which also stores
- * ``emailEnc`` (an encrypted address) when given.
+ * ``emailEnc`` (an encrypted address) when given. ``admin`` marks a session an admin opened (ADR-007, decision 10).
  */
-export async function startSession(request, store, actor, customerId = null, emailEnc = null) {
+export async function startSession(request, store, actor, customerId = null, emailEnc = null, { admin = false } = {}) {
   const now = Date.now();
   const previous = readCookies(request)[COOKIE[actor]];
+  const oldHash = previous && TOKEN.test(previous) ? await tokenHash(previous) : null;
   const token = newToken();
-  await store.rotateSession({ now, oldHash: previous && TOKEN.test(previous) ? await tokenHash(previous) : null,
-    newHash: await tokenHash(token), actor, customerId, expiresAt: now + SESSION_MS, emailEnc, requestId: requestId(request) });
+  await store.rotateSession({ now, oldHash, newHash: await tokenHash(token), actor, customerId, expiresAt: now + SESSION_MS, emailEnc,
+    requestId: requestId(request), admin });
   return cookieHeader(COOKIE[actor], token, request, SESSION_MS / 1000);
+}
+
+/**
+ * Replace the presented admin customer session with one for ``customerId`` (ADR-007, decision 10) and return its
+ * Set-Cookie value, or ``null`` when the presented session was no longer a live admin session by the time the
+ * store's single-use batch ran (a concurrent act-as already used it).
+ */
+export async function actAsSession(request, store, customerId) {
+  const now = Date.now();
+  const previous = readCookies(request)[COOKIE.customer];
+  if (!previous || !TOKEN.test(previous)) return null;
+  const token = newToken();
+  const created = await store.actAsSession({ now, oldHash: await tokenHash(previous), newHash: await tokenHash(token), customerId,
+    expiresAt: now + SESSION_MS, requestId: requestId(request) });
+  return created ? cookieHeader(COOKIE.customer, token, request, SESSION_MS / 1000) : null;
 }
 
 /** Revoke the presented token for ``actor`` (no-op when absent or malformed) and return the clearing Set-Cookie. */

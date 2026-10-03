@@ -146,6 +146,51 @@
         }
       }
     },
+    "actAsSession": {
+      "description": "POST /admin/act-as (ADR-007, decision 10): an admin's session for the chosen customer.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "customer_id",
+        "mode",
+        "roles"
+      ],
+      "properties": {
+        "roles": { "type": "array", "maxItems": 4, "items": { "type": "string", "pattern": "^(customer|agent|admin|auditor)$" } },
+        "customer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "const": "admin_act_as"
+        },
+        "context_card": {
+          "type": ["object", "null"],
+          "description": "Snapshot prepared by the quality-gated load; locale_hint never overrides session language.",
+          "additionalProperties": false,
+          "required": ["version", "snapshot_at", "first_name", "locale_hint", "products"],
+          "properties": {
+            "version": { "const": 1 },
+            "snapshot_at": { "type": "string", "minLength": 1 },
+            "first_name": { "type": ["string", "null"], "minLength": 1 },
+            "locale_hint": { "type": "string", "pattern": "^(es|pt)(-[A-Za-z0-9]+)*$" },
+            "products": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["product_type", "last4", "currency"],
+                "properties": {
+                  "product_type": { "type": ["string", "null"] },
+                  "last4": { "type": ["string", "null"], "pattern": "^[0-9]{4}$" },
+                  "currency": { "type": ["string", "null"], "pattern": "^[A-Z]{3}$" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "agentSession": {
       "type": "object",
       "additionalProperties": false,

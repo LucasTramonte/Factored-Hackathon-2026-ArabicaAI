@@ -76,7 +76,7 @@ test('a real pending reservation is never abandoned and only a live same-owner s
   const now = Date.now();
   const episode = await start(now - 3600000, now - 3000000);
   const owner = await tokenHash('o'.repeat(64)), other = await tokenHash('b'.repeat(64));
-  db.prepare('INSERT INTO sessions VALUES(?,?,?,?),(?,?,?,?)').run(owner,'customer','ana',now + 3600000, other,'customer','bruno',now + 3600000);
+  db.prepare('INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?),(?,?,?,?)').run(owner,'customer','ana',now + 3600000, other,'customer','bruno',now + 3600000);
   const reserved = await store.persistIntakeHandoff({ customerId:'ana', episodeId:episode.episode_id, turnKey:crypto.randomUUID(), payloadHash:'h',
     sessionHash:owner, completeCase:{transaction_id:'tx-ana'}, kind:'complete', evidence:{transaction:null,tool_status:'ok'}, actions:[], questions:[],
     usage:{tool_calls:0,operation_duration_ms:0}, now });

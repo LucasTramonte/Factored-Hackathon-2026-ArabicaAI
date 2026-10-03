@@ -138,17 +138,41 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /**
      * In one atomic batch: purge expired sessions, revoke the presented token, insert the new one and, with
      * ``emailEnc`` (an email sign-in), upsert the customer's encrypted address in the same round trip. Records
-     * ``session_started`` in the same batch.
+     * ``session_started`` in the same batch. ``admin`` marks a session an admin opened (migration 0021).
      */
-    rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt, emailEnc, requestId }) => batch([
+    rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt, emailEnc, requestId, admin = false }) => batch([
       ['DELETE FROM sessions WHERE expires_at<=?', now],
       ...(oldHash ? [['DELETE FROM sessions WHERE token_hash=?', oldHash]] : []),
-      ['INSERT INTO sessions(token_hash,actor,customer_id,expires_at) VALUES(?,?,?,?)', newHash, actor, customerId, expiresAt],
+      ['INSERT INTO sessions(token_hash,actor,customer_id,expires_at,admin) VALUES(?,?,?,?,?)', newHash, actor, customerId, expiresAt, admin ? 1 : 0],
       ...(emailEnc ? [[UPSERT_TARGET, customerId, emailEnc, now]] : []),
       [AUTH_EVENT, now, actor, 'session_started', newHash.slice(0, 12), requestId]
     ]),
+    /**
+     * Act-as (ADR-007, decision 10), single-use in one atomic batch: the new admin-marked customer session is inserted
+     * only while ``oldHash`` is still a live admin session, the two audit rows only if that insert happened, and then
+     * the old session is deleted. Of concurrent calls with one cookie, only the first finds it; the rest insert nothing.
+     * Stores no email. Resolves ``true`` when the new session exists.
+     */
+    actAsSession: async ({ now, oldHash, newHash, customerId, expiresAt, requestId }) => {
+      const created = "WHERE EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer')";
+      const results = await batch([
+        ['DELETE FROM sessions WHERE expires_at<=?', now],
+        ["INSERT INTO sessions(token_hash,actor,customer_id,expires_at,admin) SELECT ?,'customer',?,?,1 "
+          + "WHERE EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND admin=1 AND expires_at>?)",
+          newHash, customerId, expiresAt, oldHash, now],
+        ["INSERT INTO auth_events(ts,actor,event,session_ref,request_id) SELECT ?,'customer','session_started',?,? " + created,
+          now, newHash.slice(0, 12), requestId, newHash],
+        ["INSERT INTO admin_actions(ts,action,admin_session_ref,session_ref,request_id) SELECT ?,'act_as',?,?,? " + created,
+          now, oldHash.slice(0, 12), newHash.slice(0, 12), requestId, newHash],
+        ["DELETE FROM sessions WHERE token_hash=? AND actor='customer'", oldHash]
+      ]);
+      return results[1]?.meta?.changes === 1;
+    },
+    /** The live ``actor`` session: ``{ customer_id, expires_at, admin }`` (``admin`` is 1 for a session an admin opened). */
     findSession: (hash, actor, now) =>
-      first('SELECT customer_id, expires_at FROM sessions WHERE token_hash=? AND actor=? AND expires_at>?', hash, actor, now),
+      first('SELECT customer_id, expires_at, admin FROM sessions WHERE token_hash=? AND actor=? AND expires_at>?', hash, actor, now),
+    /** Newest act-as rows (references only), for tests and operators. */
+    listAdminActions: limit => all('SELECT * FROM admin_actions ORDER BY id DESC LIMIT ?', limit),
 
     /**
      * Atomically store a start, its immutable turn receipt and one opaque event; conflicting keys never update state.

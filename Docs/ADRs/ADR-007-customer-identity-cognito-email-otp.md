@@ -19,10 +19,17 @@
 3. **Roles are Cognito groups:** `customer`, `agent`, `admin`, `auditor`.
 4. **No Basic team gate.** Customer and agent routes are public behind their session checks; an agent session needs an ID token in group `agent`. Every API path is rate-limited per IP at 60 requests a minute. (Until task 1.6 the Basic gate covered `/agent`, `/agent/*` and `/demo/*`.)
 5. **Cloudflare Access is removed from the hostname.**
-6. **The demo picker exists only in local development** (`DEMO_PICKER=1`).
+6. **The demo picker exists only in local development** (`DEMO_PICKER=1`). Admins get their own server-checked picker (decision 10).
 7. **The Worker and D1 stay the single runtime.** The rest of ADR-003 stands.
 8. **`admin` is a superset.** An admin token may start a customer session (with its own `custom:customer_id`, which must be loaded) and an agent session, and may read the audit. Both session responses list the verified roles, and the client shows an evaluation banner when they include `admin`. An admin enters one code: the client exchanges the same ID token for the other view's session too, then drops it, so the two sessions stay separate cookies (2026-10-03). The banner lives in the tab, like the sign-in: a reload drops both, and signing in again brings it back. Admin sees customer data only as the agent queue does, on synthetic demo data; it has no route of its own. Tests: `back-end/test/unit/email-session.test.js`.
 9. **`auditor` reads the audit, and nothing else.** `GET /audit/events` returns the newest sign-in events and review-status changes (references only) to a verified token in group `auditor` (or `admin`), checked on every call; no session is started, so the read writes nothing. Customer and agent tokens get 403. Tests: `back-end/test/integration/audit.test.js` (issue #69).
+10. **An admin may act as any loaded customer (2026-10-03).** The hackathon evaluators are admins and need to see the service from any customer's side; an ordinary customer must never learn that another exists. So the picker returns for admins only, server-side, and decision 6 still holds for everyone else:
+    - A customer session opened by a verified token in group `admin` carries an `admin` mark (migration 0021). `GET /admin/customers` (the committed identities and the loaded cohort) and `POST /admin/act-as` with exactly `{ customer_id }` need that mark: no session is 401, any other customer session is 403, and an agent cookie or a bearer token alone is no customer session.
+    - Act-as replaces the admin's session with one for the chosen customer, under the same allowlist as the local picker, and keeps the mark so the admin can switch again. The swap is single-use in one D1 batch: of concurrent calls with one cookie, one wins and the rest are 401. From there identity comes from the session, as everywhere; the body names the customer only on this admin-authorised call.
+    - It stores no email, so no report notification goes to the admin's address for another customer, and that customer's own address on file is untouched.
+    - Each act-as writes one `admin_actions` row in the session batch: the 12-hex references of the admin's presented session and of the new one, and the request id. Never a customer id, email or token.
+    - Accepted limits: the row links sessions, not people, and a session row (with its customer id) is purged after expiry, so the audit says that an admin acted as someone at that time, not later whom. Act-as is a demo affordance on synthetic data; a bank would need a reason, a time box and the customer's consent.
+    - Tests: `back-end/test/integration/admin.test.js`; D1 ceilings in `budget.test.js` (ADR-004).
 
 ## Consequences
 

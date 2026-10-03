@@ -85,7 +85,9 @@ test('no path has a Basic gate: documents are served and every API path reaches 
   for (const [method, path, status] of [['GET', '/', 200], ['GET', '/index.html', 200], ['GET', '/agent', 200], ['GET', '/transactions', 401],
     ['POST', '/intake/start', 401], ['POST', '/auth/logout', 204], ['POST', '/auth/session', 422], ['GET', '/cases/nope', 404], ['GET', '/intake', 404],
     ['DELETE', '/transactions', 405], ['GET', '/agent/intakes', 401], ['GET', '/agent/cases', 404], ['GET', '/agent/intake-detail', 401], ['GET', '/audit/events', 422],
-    ['POST', '/agent/intake-status', 401], ['OPTIONS', '/agent/intakes', 405], ['POST', '/audit/events', 405], ['POST', '/agent', 405], ['GET', '/demo/identities', 200]]) {
+    ['POST', '/agent/intake-status', 401], ['OPTIONS', '/agent/intakes', 405], ['POST', '/audit/events', 405], ['POST', '/agent', 405], ['GET', '/demo/identities', 200],
+    ['GET', '/admin/customers', 401], ['POST', '/admin/act-as', 401], ['POST', '/admin/customers', 405], ['GET', '/admin/act-as', 405],
+    ['GET', '/admin', 404], ['GET', '/admin/customers/x', 404]]) {
     const res = await anon(path, method);
     assert.equal(res.headers.get('WWW-Authenticate'), null, `${method} ${path}`);
     assert.equal(res.status, status, `${method} ${path}`);
@@ -246,15 +248,17 @@ test('every API path is limited per IP before any store call; documents are not'
   assert.deepEqual(keys, ['unknown']);
 });
 
-test('every route has a declared role; admin owns none; each protected route refuses the other actor\'s live session', async () => {
+test('every route has a declared role; each protected route refuses the other actor\'s live session', async () => {
   assert.deepEqual(Object.keys(ROUTE_ROLES).sort(), Object.keys(API_ROUTES).sort());
-  assert.deepEqual([...new Set(Object.values(ROUTE_ROLES))].sort(), ['agent', 'auditor', 'customer', 'public']);
+  assert.deepEqual([...new Set(Object.values(ROUTE_ROLES))].sort(), ['admin', 'agent', 'auditor', 'customer', 'public']);
   assert.deepEqual(ROLES, ['public', 'customer', 'agent', 'admin', 'auditor']);
   // The fake store accepts ``token`` only as a live customer session, so each request carries a session, just not this role's.
   const store = await fakeStore();
-  const other = { customer: `demo_agent_session=${token}`, agent: `demo_session=${token}`, auditor: `demo_session=${token}` };
+  const other = { customer: `demo_agent_session=${token}`, agent: `demo_session=${token}`, auditor: `demo_session=${token}`,
+    admin: `demo_agent_session=${token}` };
   // A session is never enough for the auditor: it needs a verified token on every call (422 without one).
-  const refused = { customer: 401, agent: 401, auditor: 422 };
+  // Admin routes need a customer session an admin opened: an agent cookie is no customer session (401).
+  const refused = { customer: 401, agent: 401, auditor: 422, admin: 401 };
   for (const [path, role] of Object.entries(ROUTE_ROLES)) {
     if (role === 'public') continue;
     for (const method of Object.keys(API_ROUTES[path])) {
