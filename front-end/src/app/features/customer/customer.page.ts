@@ -399,7 +399,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
-  /** "Email me an update" on a report row; the button keeps focus and the answer is announced under the row. */
+  /** Queue "Email me an update" on a report row; never claim background delivery, and keep focus on the button. */
   async requestUpdate(protocol: string): Promise<void> {
     if (this.updating()) return;
     this.updating.set(protocol);

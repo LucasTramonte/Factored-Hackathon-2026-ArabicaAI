@@ -111,8 +111,8 @@ const es = {
     inReview: 'En revisión', takeCase: 'Tomar el caso', closeReview: 'Cerrar la revisión',
     agentErr409: 'Otra persona ya cambió este caso.',
     moreReports: 'Hay más reportes que no se muestran aquí.', reportsFailed: 'No se pudieron cargar tus reportes.',
-    updateMe: 'Enviarme una actualización por correo', updateSent: 'Te enviamos un correo con el estado.',
-    updateRecent: 'Ya te enviamos una actualización hace poco.', updateNoEmail: 'No hay un correo asociado a este inicio de sesión. El estado de cada reporte se muestra aquí, en «Tus reportes».',
+    updateMe: 'Enviarme una actualización por correo', updateSent: 'Pedimos el correo con el estado. Si no llega en unos minutos, revisa la carpeta de spam o inténtalo de nuevo.',
+    updateRecent: 'Ya pediste una actualización hace poco.', updateNoEmail: 'No hay un correo asociado a este inicio de sesión. El estado de cada reporte se muestra aquí, en «Tus reportes».',
     sessionRenewed: 'Tu sesión había expirado. La renovamos con la misma identidad y reenviamos la misma solicitud.'
 };
 
@@ -228,8 +228,8 @@ const STRINGS: Record<Lang, Strings> = {
     inReview: 'Em análise', takeCase: 'Assumir o caso', closeReview: 'Encerrar a análise',
     agentErr409: 'Outra pessoa já mudou este caso.',
     moreReports: 'Há mais relatos que não aparecem aqui.', reportsFailed: 'Não foi possível carregar seus relatos.',
-    updateMe: 'Receber atualização por e-mail', updateSent: 'Enviamos um e-mail com o status.',
-    updateRecent: 'Já enviamos uma atualização há pouco.', updateNoEmail: 'Não há um e-mail associado a este login. O status de cada relato aparece aqui, em «Seus relatos».',
+    updateMe: 'Receber atualização por e-mail', updateSent: 'Pedimos o e-mail com o status. Se não chegar em alguns minutos, confira o spam ou tente de novo.',
+    updateRecent: 'Você já pediu uma atualização há pouco.', updateNoEmail: 'Não há um e-mail associado a este login. O status de cada relato aparece aqui, em «Seus relatos».',
     sessionRenewed: 'Sua sessão tinha expirado. Nós a renovamos com a mesma identidade e reenviamos o mesmo pedido.'
   },
   en: {
@@ -339,8 +339,8 @@ const STRINGS: Record<Lang, Strings> = {
     inReview: 'In review', takeCase: 'Take the case', closeReview: 'Close the review',
     agentErr409: 'Someone else already changed this case.',
     moreReports: 'There are more reports that are not shown here.', reportsFailed: 'Your reports could not be loaded.',
-    updateMe: 'Email me an update', updateSent: 'We emailed you the status.',
-    updateRecent: 'We sent you an update a moment ago.', updateNoEmail: 'There is no email linked to this sign-in. Each report\'s status is shown here, under "Your reports".',
+    updateMe: 'Email me an update', updateSent: 'We requested the status email. If it has not arrived in a few minutes, check your spam folder or try again.',
+    updateRecent: 'You asked for an update a moment ago.', updateNoEmail: 'There is no email linked to this sign-in. Each report\'s status is shown here, under "Your reports".',
     sessionRenewed: 'Your session had expired. We renewed it with the same identity and resent the same request.'
   }
 };

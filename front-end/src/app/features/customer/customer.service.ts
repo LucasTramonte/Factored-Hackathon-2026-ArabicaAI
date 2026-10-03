@@ -62,7 +62,7 @@ export class CustomerService {
     return this.api.request('/reports/feedback', { protocol, easy });
   }
 
-  /** Ask for a status email about one of the customer's reports (202; 409 no email on file; 429 sent recently). */
+  /** Queue a status email for one own report (202; 409 no email; 429 another request is queued or recently accepted). */
   requestUpdate(protocol: string): Promise<{ queued: true }> {
     return this.api.request<{ queued: true }>('/reports/update', { protocol });
   }

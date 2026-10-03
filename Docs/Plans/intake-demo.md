@@ -112,6 +112,8 @@ The Worker will send notification emails through Amazon SES v2 (`us-east-2`, acc
 
 The account is in the SES sandbox (200 emails a day, 1 a second), and SES delivers only to verified addresses. On 2026-10-02 a production-access request was filed (`put-account-details`, mail type `TRANSACTIONAL`, under 50 emails a day, recipients limited to Cognito-enrolled users, bounces and complaints stop sends to that address). It was denied the same day: `ProductionAccessEnabled` is `false` and the review status is `DENIED`. The account stays in the sandbox, so each recipient's address must be created as an SES email identity and its owner must click AWS's verification email. Re-filing with more detail from the SES console is optional. Check it with `aws sesv2 get-account --profile arabica --region us-east-2 --query '[ProductionAccessEnabled,Details.ReviewDetails.Status]'`.
 
+`POST /reports/update` confirms only that D1 queued the request. The background sender records `queued`, `failed`, `skipped`, or `sent` in `email_outbox`; in this schema `sent` means SES accepted the API request and returned a message id, not that the recipient's mailbox delivered it. A failed or unconfigured attempt has a ten-second retry delay (so concurrent clicks cannot duplicate a send); queued or SES-accepted requests keep the five-minute suppression window. The customer interface uses the same distinction and never claims delivery from the 202 response. The outbox contains only reference metadata, never the address, statement, or email body.
+
 ```bash
 SES_FROM_EMAIL=<sender address> back-end/scripts/ses/setup.sh   # creates or finds the sender identity and the send-only user; prints verification status and the user ARN
 ```
@@ -128,6 +130,7 @@ Human steps (the access key never passes through an agent or the repository):
    ```
 
 3. For each judge, run `aws sesv2 create-email-identity --email-identity <judge email> --profile arabica --region us-east-2` and ask them to click AWS's verification email.
+4. Before the demo, sign in as that customer, request one report update, confirm the message arrives in that verified mailbox, and have an operator check the corresponding reference-only outbox row. Agents do not run the remote query or inspect a person's inbox. SES delivery-event tracking is not configured, so mailbox receipt is the delivery proof; the stored provider message id proves only SES acceptance.
 
 ## Known limits
 
