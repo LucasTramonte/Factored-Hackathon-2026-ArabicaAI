@@ -33,8 +33,13 @@ export async function startIntake(request, env, store, ctx, approved = APPROVED_
     return fail(503, 'Start not confirmed; retry with the same idempotency key');
   }
   if (result.conflict) return fail(409, 'Key already used with different content');
-  if (result.previousError) return fail(result.previousError, result.previousError === 404 ? 'Previous report not found'
-    : result.previousError === 409 ? 'Previous report is not closed' : 'Start a demo session first');
+  if (result.previousError) {
+    // A failed insert must not reveal the source's existence or status after authority was lost during the request.
+    const live = await requireSession(request, store, 'customer');
+    if (!live || live.customer_id !== current.customer_id) return fail(401, 'Start a demo session first');
+    return fail(result.previousError, result.previousError === 404 ? 'Previous report not found'
+      : result.previousError === 409 ? 'Previous report is not closed' : 'Start a demo session first');
+  }
   const { episode, replayed } = result;
   if (!episode) return fail(503, 'Start not confirmed; retry with the same idempotency key');
   if (extractor && !replayed) await inShadow(ctx, async () => {
