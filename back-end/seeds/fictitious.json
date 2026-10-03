@@ -1,5 +1,5 @@
 {
-  "description": "Visibly fictitious charges for the demo identities marked 'fictitious' in back-end/src/config/identities.json. Regenerate seed_fictitious.sql with: python -m data_pipelines.gold.fictitious_seed. Three small charges carry bank_flagged (ADR-011), authored for the evaluator identities to show that the proactive alert follows the bank's fraud flag, not the amount; dataset customers get the flag from the data in Gold",
+  "description": "Visibly fictitious charges for the demo identities marked 'fictitious' in back-end/src/config/identities.json. Regenerate seed_fictitious.sql with: python -m data_pipelines.gold.fictitious_seed. Three small charges carry bank_flagged (ADR-011), authored for the evaluator identities to show that the proactive alert follows the bank's own flag, not the amount; dataset customers are not flagged until fraud_score's provenance is confirmed",
   "transactions": [
     { "transaction_id": "demo-tx-001", "customer_id": "demo-ana", "occurred_at": "2026-09-25T14:00:00+00:00", "merchant_name": "Mercado Demo", "amount": "125.50", "currency": "BRL" },
     { "transaction_id": "demo-tx-002", "customer_id": "demo-ana", "occurred_at": "2026-09-26T15:00:00+00:00", "merchant_name": "Loja Demo", "amount": "89.90", "currency": "BRL" },
