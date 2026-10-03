@@ -152,7 +152,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly displayName = computed(() => this.identities().find(i => i.customer_id === this.client())?.display_name ?? this.client());
   readonly initials = computed(() => initialsOf(this.displayName()) || 'AA');
   /** The customer's first name for the guide's greeting. */
-  readonly firstName = computed(() => this.card()?.first_name || this.displayName());
+  /** The customer's first name for the guide's greeting, or '' when none is known (never the customer id or a "(demo)" label). */
+  readonly firstName = computed(() => this.card()?.first_name
+    || (this.identities().find(i => i.customer_id === this.client())?.display_name ?? '').replace(/\s*\(demo\)$/, ''));
 
   constructor() {
     // Move focus to the receipt, the choose step (it replaces the focused Send button), the details field (it replaces the
@@ -413,11 +415,25 @@ export class CustomerPage implements OnInit, OnDestroy {
   pickReason(r: Reason): void {
     this.reason.set(r);
     this.chatError.set('');
-    if (this.chatStatement.trim() === '' || this.chatStatement.trim() === this.prefill) {
-      this.prefill = r === 'other' ? '' : this.lang.stringsFor(this.reportLang())[REASON_FILL[r]];
-      this.chatStatement = this.prefill;
-    }
-    if (r === 'card_lost_or_stolen' && !this.log().some(l => 'key' in l && l.key === 'chatLostCard')) this.log.update(l => [...l, { from: 'bot', key: 'chatLostCard' }]);
+    this.refill();
+    const lost = this.log().some(l => 'key' in l && l.key === 'chatLostCard');
+    if (r === 'card_lost_or_stolen' && !lost) this.log.update(l => [...l, { from: 'bot', key: 'chatLostCard' }]);
+    // The call-your-bank line belongs to a lost card only; another reason takes it back.
+    if (r !== 'card_lost_or_stolen' && lost) this.log.update(l => l.filter(x => !('key' in x && x.key === 'chatLostCard')));
+  }
+
+  /** The report-language radios: a statement a chip wrote follows the new language; the customer's own words never change. */
+  setReportLang(lang: IntakeLang): void {
+    this.chosenLang.set(lang);
+    this.refill();
+  }
+
+  /** Rewrite the chosen reason's sentence in the report language, unless the customer has typed their own words. */
+  private refill(): void {
+    const r = this.reason();
+    if (!r || (this.chatStatement.trim() !== '' && this.chatStatement.trim() !== this.prefill)) return;
+    this.prefill = r === 'other' ? '' : this.lang.stringsFor(this.reportLang())[REASON_FILL[r]];
+    this.chatStatement = this.prefill;
   }
 
   /** Start the guided report: reason, statement and report language; no reference comes back. */
@@ -513,7 +529,9 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Guide lines are i18n keys; the greeting carries the customer's first name. */
   lineText(line: ChatLine): string {
-    return 'key' in line ? this.t()[line.key].replace('{name}', () => this.firstName()) : line.text;
+    if (!('key' in line)) return line.text;
+    const key = line.key === 'chatHelloGeneral' && !this.firstName() ? 'chatHelloGeneralNoName' : line.key;
+    return this.t()[key].replace('{name}', () => this.firstName());
   }
 
   ask(question: keyof typeof FAQ): void {
