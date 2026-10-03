@@ -27,14 +27,6 @@ export async function startAgentSession(request, env, store, ctx, verify = verif
     { 'Set-Cookie': await startSession(request, store, 'agent') });
 }
 
-/** GET /agent/cases: newest accepted cases with their transaction evidence. */
-export async function listAgentCases(request, env, store) {
-  if (!await requireSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');
-  const rows = await store.listAgentCases(PAGE + 1);
-  return json({ items: rows.slice(0, PAGE).map(row => ({ ...row, customer_confirmed: row.customer_confirmed === 1 })),
-    has_more: rows.length > PAGE, scope: 'synthetic_demo_only' });
-}
-
 /** GET /agent/intakes: newest acknowledged handoffs, including technical and incomplete receipts. */
 export async function listAgentIntakes(request, env, store) {
   if (!await requireSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');

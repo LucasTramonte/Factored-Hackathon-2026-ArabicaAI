@@ -21,7 +21,8 @@
 5. **Cloudflare Access is removed from the hostname.**
 6. **The demo picker exists only in local development** (`DEMO_PICKER=1`).
 7. **The Worker and D1 stay the single runtime.** The rest of ADR-003 stands.
-8. **`admin` is a superset.** An admin token may start a customer session (with its own `custom:customer_id`, which must be loaded) and an agent session. `auditor` stays reserved. Both session responses list the verified roles, and the client shows an evaluation banner when they include `admin`. Tests: `back-end/test/unit/email-session.test.js`.
+8. **`admin` is a superset.** An admin token may start a customer session (with its own `custom:customer_id`, which must be loaded) and an agent session, and may read the audit. Both session responses list the verified roles, and the client shows an evaluation banner when they include `admin`. The banner lives in the tab, like the sign-in: a reload drops both, and signing in again brings it back. Admin sees customer data only as the agent queue does, on synthetic demo data; it has no route of its own. Tests: `back-end/test/unit/email-session.test.js`.
+9. **`auditor` reads the audit, and nothing else.** `GET /audit/events` returns the newest sign-in events and review-status changes (references only) to a verified token in group `auditor` (or `admin`), checked on every call; no session is started, so the read writes nothing. Customer and agent tokens get 403. Tests: `back-end/test/integration/audit.test.js` (issue #69).
 
 ## Consequences
 
@@ -72,3 +73,5 @@ sh back-end/scripts/cognito/enroll.sh <email> <customer_id> admin   # an admin a
 ```
 
 An enrolled person receives sign-in codes at once (Cognito), but report emails only after verifying their address in SES (`aws sesv2 create-email-identity --email-identity <email> --profile arabica --region us-east-2`) while production access is pending.
+
+The full procedure (setup, enrolment, removal, local and deployed tests, troubleshooting and the RBAC/ABAC model) is the [auth runbook](../Plans/auth-runbook.md).

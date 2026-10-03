@@ -459,6 +459,22 @@ describe('CustomerPage', () => {
         expect(page.log().at(-1)).toEqual({ from: 'bot', key: 'chatLostCard' });
       });
 
+      it('another reason takes the call-your-bank line back', () => {
+        page.pickReason('card_lost_or_stolen');
+        page.pickReason('duplicate');
+        expect(page.log().some(l => 'key' in l && l.key === 'chatLostCard')).toBeFalse();
+      });
+
+      it('a sentence a chip wrote follows a new report language; the customer\'s own words never change', () => {
+        page.pickReason('duplicate');
+        page.setReportLang('pt');
+        expect(page.chatStatement).toBe(lang.stringsFor('pt').reasonFillDuplicate);
+        page.chatStatement = 'Comprei em outra loja.';
+        page.setReportLang('en');
+        expect(page.chatStatement).toBe('Comprei em outra loja.');
+        expect(page.reportLang()).toBe('en');
+      });
+
       it('a new report clears the reason and the prefill', () => {
         page.pickReason('duplicate');
         page.newReport();
@@ -1186,7 +1202,17 @@ describe('CustomerPage', () => {
         fixture.detectChanges();
         expect(p.chatStep()).toBe('describe');
         expect(p.choice).toBe('');
-        expect(el.querySelector('.chat-log li')!.textContent).toContain(greeting(p, 'Ana (demo)'));
+        expect(el.querySelector('.chat-log li')!.textContent).toContain(greeting(p, 'Ana'));
+      });
+
+      it('without any known name the greeting has no name, never the customer id', async () => {
+        const { fixture, p, el } = await home();
+        p.client.set('CLI-UNKNOWN');
+        fab(el).click();
+        fixture.detectChanges();
+        const text = el.querySelector('.chat-log li')!.textContent!;
+        expect(text).toContain(p.t().chatHelloGeneralNoName);
+        expect(text).not.toContain('CLI-UNKNOWN');
       });
 
       it('a charge row after a general chat greets as usual and keeps the usual button order', async () => {

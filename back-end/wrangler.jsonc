@@ -6,7 +6,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/", "/index.html", "/agent", "/healthz", "/demo/*", "/auth", "/auth/*", "/agent/*", "/transactions", "/transactions/*", "/cases", "/cases/*", "/intake", "/intake/*", "/reports", "/reports/*"],
+    "run_worker_first": ["/", "/index.html", "/agent", "/healthz", "/demo/*", "/auth", "/auth/*", "/agent/*", "/audit", "/audit/*", "/transactions", "/transactions/*", "/cases", "/cases/*", "/intake", "/intake/*", "/reports", "/reports/*"],
     "not_found_handling": "single-page-application"
   },
   "placement": { "mode": "smart" },
@@ -14,8 +14,7 @@
     "COGNITO_REGION": "us-east-2",
     "COGNITO_USER_POOL_ID": "us-east-2_Lo7KrT6MT",
     "COGNITO_CLIENT_ID": "5ak5cbjgdddso1c3h3i2aha7sn",
-    "SES_REGION": "us-east-2",
-    "SES_FROM": "ArabicaAI demo <rzuniga@aptsny.co>"
+    "SES_REGION": "us-east-2"
   },
   "observability": {
     "logs": { "enabled": true, "head_sampling_rate": 1, "invocation_logs": true, "persist": true },

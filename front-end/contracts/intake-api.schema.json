@@ -285,100 +285,31 @@
         }
       }
     },
-    "agentCase": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "protocol",
-        "customer_id",
-        "display_name",
-        "transaction_id",
-        "merchant_name",
-        "occurred_at",
-        "source_occurred_at",
-        "amount",
-        "currency",
-        "customer_statement",
-        "customer_confirmed",
-        "status",
-        "accepted_at"
-      ],
+    "auditEvents": {
+      "type": "object", "additionalProperties": false,
+      "required": ["auth_events", "auth_events_has_more", "status_changes", "status_changes_has_more", "scope"],
       "properties": {
-        "protocol": {
-          "type": "string",
-          "minLength": 1
-        },
-        "customer_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "display_name": {
-          "type": "string"
-        },
-        "transaction_id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "merchant_name": {
-          "type": "string"
-        },
-        "occurred_at": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "source_occurred_at": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "amount": {
-          "type": "string"
-        },
-        "currency": {
-          "type": "string"
-        },
-        "customer_statement": {
-          "type": "string",
-          "minLength": 10,
-          "maxLength": 2000
-        },
-        "customer_confirmed": {
-          "const": true
-        },
-        "status": {
-          "const": "accepted"
-        },
-        "accepted_at": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "agentCaseList": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "items",
-        "has_more",
-        "scope"
-      ],
-      "properties": {
-        "items": {
-          "type": "array",
-          "maxItems": 50,
-          "items": {
-            "$ref": "#/$defs/agentCase"
-          }
-        },
-        "has_more": {
-          "type": "boolean"
-        },
-        "scope": {
-          "const": "synthetic_demo_only"
-        }
+        "auth_events": { "type": "array", "maxItems": 100, "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["id", "ts", "actor", "event", "session_ref", "request_id"],
+          "properties": {
+            "id": { "type": "integer" },
+            "ts": { "type": "integer" },
+            "actor": { "type": "string", "pattern": "^(customer|agent)$" },
+            "event": { "type": "string", "pattern": "^(session_started|session_rejected|session_expired|logged_out)$" },
+            "session_ref": { "type": "string", "pattern": "^[0-9a-f]{12}$" },
+            "request_id": { "type": "string", "minLength": 1 } } } },
+        "auth_events_has_more": { "type": "boolean" },
+        "status_changes": { "type": "array", "maxItems": 100, "items": {
+          "type": "object", "additionalProperties": false,
+          "required": ["handoff_id", "status", "changed_at", "agent_session_ref"],
+          "properties": {
+            "handoff_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+            "status": { "type": "string", "pattern": "^(in_review|closed)$" },
+            "changed_at": { "type": "integer" },
+            "agent_session_ref": { "type": "string", "pattern": "^[0-9a-f]{12}$" } } } },
+        "status_changes_has_more": { "type": "boolean" },
+        "scope": { "const": "references_only" }
       }
     },
     "identityList": {
@@ -428,7 +359,7 @@
         "destination": {"type": "string", "minLength": 1},
         "priority": {"type": "string", "minLength": 1},
         "urgency": {"type": "string", "pattern": "^(normal|high)$"},
-        "reason": {"type": "string", "pattern": "^(not_mine|duplicate|wrong_amount|cancelled_or_not_received|subscription|card_lost_or_stolen|other)$"},
+        "reason": {"type": ["string", "null"], "pattern": "^(not_mine|duplicate|wrong_amount|cancelled_or_not_received|subscription|card_lost_or_stolen|other)$"},
         "accepted_at": {"type": "string", "minLength": 1}
       }
     },
@@ -504,7 +435,7 @@
         "destination": {"type": "string", "minLength": 1},
         "priority": {"type": "string", "minLength": 1},
         "urgency": {"type": "string", "pattern": "^(normal|high)$"},
-        "reason": {"type": "string", "pattern": "^(not_mine|duplicate|wrong_amount|cancelled_or_not_received|subscription|card_lost_or_stolen|other)$"},
+        "reason": {"type": ["string", "null"], "pattern": "^(not_mine|duplicate|wrong_amount|cancelled_or_not_received|subscription|card_lost_or_stolen|other)$"},
         "accepted_at": {"type": "string", "minLength": 1},
         "language": {"type": "string", "pattern": "^(es|pt|en)$"},
         "customer_statement": {"type": "string", "minLength": 10, "maxLength": 2000},

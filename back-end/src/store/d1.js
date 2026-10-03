@@ -40,6 +40,9 @@ const UPSERT_TARGET = 'INSERT INTO notification_targets(customer_id,email_enc,up
 /** One authentication audit row (migration 0012): references only, never a customer id, email or token. */
 const AUTH_EVENT = 'INSERT INTO auth_events(ts,actor,event,session_ref,request_id) VALUES(?,?,?,?,?)';
 
+/** The episode's reason only when the customer chose it (migration 0017); older rows read null, never 0016's default. */
+const REASON = "CASE WHEN e.reason_source='customer' THEN e.reason END AS reason";
+
 /** At most one ``update`` email per customer and reference in this window; ``enqueueEmail`` enforces it in SQL. */
 export const UPDATE_EVERY_MS = 300000;
 
@@ -79,7 +82,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         + "SELECT ?,e.episode_id,?,?,?,?,?,?,?,?,?,?,?,json_set(?,'$.tool_calls',json_extract(e.usage_json,'$.tool_calls'),'$.operation_duration_ms',COALESCE(json_extract(e.usage_json,'$.operation_duration_ms'),0)),?,? FROM intake_episodes e WHERE " + eligible
         + (kind === 'complete' ? ' AND EXISTS(SELECT 1 FROM cases WHERE case_id=?)' : ''),
         handoffId,caseId,turnKey,payloadHash,kind,kind === 'technical' ? 'failed' : 'ok',
-        JSON.stringify(evidence),JSON.stringify(actions),JSON.stringify(questions),'case_service','normal',new Date(now).toISOString(),JSON.stringify(usage),referenceShort,kind === 'complete' ? urgency : 'normal',
+        JSON.stringify(evidence),JSON.stringify(actions),JSON.stringify(questions),'case_service','normal',new Date(now).toISOString(),JSON.stringify(usage),referenceShort,urgency,
         ...params,...(kind === 'complete' ? [caseId] : [])],
       ['INSERT INTO intake_turns(episode_id,turn_key,payload_hash,response_json) '
         + 'SELECT episode_id,turn_key,payload_hash,? FROM intake_handoffs WHERE handoff_id=?',
@@ -115,7 +118,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       ['DELETE FROM sessions WHERE token_hash=? AND actor=?', hash, actor]]),
     /** Record a refused presented cookie (``session_expired`` or ``session_rejected``). */
     recordAuthEvent: ({ now, actor, event, sessionRef, requestId }) => all(AUTH_EVENT, now, actor, event, sessionRef, requestId),
-    /** Newest audit rows; read only by tests and operators (no route serves them). */
+    /** Newest audit rows, for tests and operators; the auditor route reads them through ``listAuditEvents``. */
     listAuthEvents: limit => all('SELECT * FROM auth_events ORDER BY id DESC LIMIT ?', limit),
 
     /**
@@ -150,9 +153,9 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         known_output_tokens: 0, usage_unavailable_calls: 1 } : { tool_calls: 1 });
       const results = await batch([
         ['INSERT INTO intake_episodes(episode_id,customer_id,session_ref,language,mode,state,customer_statement,'
-          + 'start_key,payload_hash,created_at,updated_at,expires_at,usage_json,reason) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) '
+          + 'start_key,payload_hash,created_at,updated_at,expires_at,usage_json,reason,reason_source) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) '
           + 'ON CONFLICT(customer_id,start_key) DO NOTHING',
-          episodeId, customerId, sessionRef, language, 'guided', 'selection_required', statement, key, payloadHash, now, now, expiresAt, usage, reason],
+          episodeId, customerId, sessionRef, language, 'guided', 'selection_required', statement, key, payloadHash, now, now, expiresAt, usage, reason, 'customer'],
         ['INSERT INTO intake_turns(episode_id,turn_key,payload_hash,response_json) '
           + 'SELECT episode_id,?,?,? FROM intake_episodes WHERE episode_id=?', key, payloadHash, response, episodeId],
         ['INSERT INTO intake_events(episode_id,seq,event_json) '
@@ -372,11 +375,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /**
      * One handoff per episode; only acknowledged terminal rows enter this bounded queue. Open high-urgency reports come
      * first (partial index ``intake_handoffs_urgent``, migration 0013), then the rest newest first; one round trip.
-     * Each row carries the episode's ``reason``.
+     * Each row carries the episode's ``reason``, or null when the customer never chose one.
      */
     listIntakeHandoffs: async limit => {
       const lane = urgent => 'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
-        + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status,e.reason FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+        + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status,' + REASON + ' FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
         + "WHERE e.state=h.kind||'_handoff' AND " + (urgent ? '' : 'NOT ') + "(h.urgency='high' AND h.status<>'closed') "
         + 'ORDER BY h.accepted_at DESC,protocol LIMIT ?';
       const [high, rest] = await batch([[lane(true), Math.min(limit, 51)], [lane(false), Math.min(limit, 51)]]);
@@ -406,12 +409,12 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /**
      * Optional complete evidence is one-to-one and owner-scoped; missing evidence never drops a handoff. ``model_version``
      * and ``llm_calls`` come from the episode's usage (set only by shadow extraction), never the model's output.
-     * The episode's ``reason`` is returned with it.
+     * The episode's ``reason`` is returned with it, or null when the customer never chose one.
      */
     findIntakeHandoff: protocol => first(
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
       + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status,h.evidence_json,h.actions_json,h.questions_json,'
-      + 'e.customer_statement,e.language,e.reason,t.transaction_id AS verified_transaction_id,'
+      + 'e.customer_statement,e.language,' + REASON + ',t.transaction_id AS verified_transaction_id,'
       + "json_extract(e.usage_json,'$.model_version') AS model_version,COALESCE(json_extract(e.usage_json,'$.llm_calls'),0) AS llm_calls "
       + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
       + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
@@ -478,12 +481,15 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       'SELECT COUNT(*) AS count,MAX(created_at) AS latest FROM email_outbox WHERE customer_id=? AND reference=? AND created_at>? AND template=?',
       customerId, reference, sinceMs, template),
 
-    listAgentCases: limit => all(
-      'SELECT c.case_id AS protocol, c.customer_id, u.display_name, c.transaction_id, t.merchant_name, '
-      + 't.occurred_at, t.source_occurred_at, t.amount, t.currency, c.customer_statement, '
-      + 'c.customer_confirmed, c.status, c.accepted_at FROM cases c '
-      + 'JOIN customers u ON u.customer_id=c.customer_id '
-      + 'JOIN transactions t ON t.transaction_id=c.transaction_id AND t.customer_id=c.customer_id '
-      + 'ORDER BY c.accepted_at DESC, c.case_id LIMIT ?', limit)
+    /**
+     * The auditor's read (``GET /audit/events``): the newest ``limit`` sign-in events and review-status changes, newest
+     * first by primary key / rowid (no sort, ``limit`` rows read each), in one round trip. References only.
+     */
+    listAuditEvents: async limit => {
+      const [auth, status] = await batch([
+        ['SELECT id,ts,actor,event,session_ref,request_id FROM auth_events ORDER BY id DESC LIMIT ?', limit],
+        ['SELECT handoff_id,status,changed_at,agent_session_ref FROM handoff_status_history ORDER BY rowid DESC LIMIT ?', limit]]);
+      return { auth: auth.results, status: status.results };
+    }
   };
 }

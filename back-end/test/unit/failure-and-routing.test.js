@@ -72,7 +72,7 @@ test('known paths answer 405 with Allow, unknown API paths 404', async () => {
   assert.equal(wrong.status, 405);
   assert.equal(wrong.headers.get('Allow'), 'POST');
   assert.equal((await route(get('/agent/unknown'), env, store)).status, 404);
-  const anonymous = await route(new Request('https://d.example/agent/cases', { method: 'OPTIONS' }), env, store);
+  const anonymous = await route(new Request('https://d.example/agent/intakes', { method: 'OPTIONS' }), env, store);
   assert.equal(anonymous.status, 405);
   assert.equal(anonymous.headers.get('Allow'), 'GET');
 });
@@ -84,8 +84,8 @@ test('no path has a Basic gate: documents are served and every API path reaches 
   const anon = (path, method = 'GET') => route(new Request('https://d.example' + path, { method }), assetsEnv, store);
   for (const [method, path, status] of [['GET', '/', 200], ['GET', '/index.html', 200], ['GET', '/agent', 200], ['GET', '/transactions', 401],
     ['POST', '/intake/start', 401], ['POST', '/auth/logout', 204], ['POST', '/auth/session', 422], ['GET', '/cases/nope', 404], ['GET', '/intake', 404],
-    ['DELETE', '/transactions', 405], ['GET', '/agent/intakes', 401], ['GET', '/agent/cases', 401], ['GET', '/agent/intake-detail', 401],
-    ['POST', '/agent/intake-status', 401], ['OPTIONS', '/agent/cases', 405], ['POST', '/agent', 405], ['GET', '/demo/identities', 200]]) {
+    ['DELETE', '/transactions', 405], ['GET', '/agent/intakes', 401], ['GET', '/agent/cases', 404], ['GET', '/agent/intake-detail', 401], ['GET', '/audit/events', 422],
+    ['POST', '/agent/intake-status', 401], ['OPTIONS', '/agent/intakes', 405], ['POST', '/audit/events', 405], ['POST', '/agent', 405], ['GET', '/demo/identities', 200]]) {
     const res = await anon(path, method);
     assert.equal(res.headers.get('WWW-Authenticate'), null, `${method} ${path}`);
     assert.equal(res.status, status, `${method} ${path}`);
@@ -246,18 +246,20 @@ test('every API path is limited per IP before any store call; documents are not'
   assert.deepEqual(keys, ['unknown']);
 });
 
-test('every route has a declared role; admin and auditor own none; each protected route refuses the other actor\'s live session', async () => {
+test('every route has a declared role; admin owns none; each protected route refuses the other actor\'s live session', async () => {
   assert.deepEqual(Object.keys(ROUTE_ROLES).sort(), Object.keys(API_ROUTES).sort());
-  assert.deepEqual([...new Set(Object.values(ROUTE_ROLES))].sort(), ['agent', 'customer', 'public']);
+  assert.deepEqual([...new Set(Object.values(ROUTE_ROLES))].sort(), ['agent', 'auditor', 'customer', 'public']);
   assert.deepEqual(ROLES, ['public', 'customer', 'agent', 'admin', 'auditor']);
   // The fake store accepts ``token`` only as a live customer session, so each request carries a session, just not this role's.
   const store = await fakeStore();
-  const other = { customer: `demo_agent_session=${token}`, agent: `demo_session=${token}` };
+  const other = { customer: `demo_agent_session=${token}`, agent: `demo_session=${token}`, auditor: `demo_session=${token}` };
+  // A session is never enough for the auditor: it needs a verified token on every call (422 without one).
+  const refused = { customer: 401, agent: 401, auditor: 422 };
   for (const [path, role] of Object.entries(ROUTE_ROLES)) {
     if (role === 'public') continue;
     for (const method of Object.keys(API_ROUTES[path])) {
       const res = await route(new Request('https://d.example' + path, { method, headers: { Cookie: other[role] } }), env, store);
-      assert.equal(res.status, 401, `${method} ${path} (${role})`);
+      assert.equal(res.status, refused[role], `${method} ${path} (${role})`);
     }
   }
 });

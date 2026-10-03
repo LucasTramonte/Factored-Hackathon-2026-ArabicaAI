@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Creates or finds the Cognito user pool for email one-time-code sign-in.
 # Idempotent: rerunning finds the existing pool, attribute, client and groups.
-# Usage: back-end/scripts/cognito/setup.sh   (AWS_PROFILE defaults to arabica)
+# Usage: back-end/scripts/cognito/setup.sh   (AWS_PROFILE defaults to arabica, AWS_REGION to us-east-2)
 set -euo pipefail
 
 POOL_NAME=arabicaai-demo
 CLIENT_NAME=arabicaai-web
-REGION=us-east-2
+REGION=${AWS_REGION:-us-east-2}
 AWS=(aws cognito-idp --profile "${AWS_PROFILE:-arabica}" --region "$REGION" --output text)
 
 pool_id=$("${AWS[@]}" list-user-pools --max-results 60 \
