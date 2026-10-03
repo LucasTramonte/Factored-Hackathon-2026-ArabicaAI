@@ -125,10 +125,20 @@ export interface ContextCard {
   products: { product_type: string | null; last4: string | null; currency: string | null }[];
 }
 
+/** Verified session roles from the Worker; ``admin`` grants both the customer and the agent view. */
+export type Role = 'customer' | 'agent' | 'admin' | 'auditor';
+
 export interface CustomerSession {
   customer_id: string;
   mode: 'simulated_login' | 'email_otp';
   context_card?: ContextCard | null;
+  roles: Role[];
+}
+
+export interface AgentSession {
+  role: 'agent';
+  mode: 'simulated_login' | 'email_otp';
+  roles: Role[];
 }
 
 /** The back-end accepts only these report languages (en since ADR-008). */

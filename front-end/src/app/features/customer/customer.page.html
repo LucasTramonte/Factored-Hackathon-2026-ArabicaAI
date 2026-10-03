@@ -95,6 +95,12 @@
         </nav>
 
         <main class="home-main" id="inicio" [inert]="chatOpen() && narrow()">
+          @if (roles().includes('admin')) {
+            <aside class="role-banner" role="status">
+              <span class="ar-chip">{{ t().adminChip }}</span><span>{{ t().adminOnCustomer }}</span>
+              <a [routerLink]="frozen() ? null : '/agent'">{{ t().agentView }}</a>
+            </aside>
+          }
           <div class="topbar">
             <div style="display: flex; flex-direction: column; gap: 4px">
               <h1 class="ar-h1" tabindex="-1">{{ t().hello }}, {{ card()?.first_name || displayName() }}</h1>

@@ -57,6 +57,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly error = signal('');
   readonly client = this.service.client;
   readonly card = this.service.card;
+  readonly roles = this.service.roles;
   /** "Your reports" from GET /reports, so it survives the tab; null until loaded. */
   readonly reports = signal<ReportList | null>(null);
   readonly reportsFailed = signal(false);
@@ -281,6 +282,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       if (s.customer_id !== this.client()) this.reset();
       this.card.set(s.context_card ?? null);
       this.client.set(s.customer_id);
+      this.roles.set(s.roles);
       this.codeSent.set(false);
       this.code = '';
       await this.loadTransactions();
@@ -532,6 +534,7 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   private reset(): void {
     this.client.set('');
+    this.roles.set([]);
     this.transactions.set([]);
     this.hasMore.set(false);
     this.viewRef.set(null);

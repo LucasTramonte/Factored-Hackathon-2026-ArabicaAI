@@ -8,10 +8,10 @@ import { IntakeReceipt } from '../../shared/models/intake.model';
 
 describe('CustomerPage focus', () => {
   it('leaves focus alone on first render, then moves it to each new step heading', async () => {
-    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null) }); // untyped: only what this flow calls
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null), roles: signal([]) }); // untyped: only what this flow calls
     service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' }]);
-    service.signIn.and.resolveTo();
+    service.signIn.and.resolveTo({ roles: [] });
     service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] });
     const fixture = TestBed.createComponent(CustomerPage);
@@ -35,10 +35,10 @@ describe('CustomerPage focus', () => {
   });
 
   it('moves focus to the chat heading when a new report replaces the receipt', async () => {
-    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null) });
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null), roles: signal([]) });
     service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([]);
-    service.signIn.and.resolveTo();
+    service.signIn.and.resolveTo({ roles: [] });
     service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] });
     const fixture = TestBed.createComponent(CustomerPage);
@@ -60,10 +60,10 @@ describe('CustomerPage focus', () => {
   });
 
   it('makes the page behind the open chat inert only at narrow widths, never the chat itself', async () => {
-    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null) });
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null), roles: signal([]) });
     service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([]);
-    service.signIn.and.resolveTo();
+    service.signIn.and.resolveTo({ roles: [] });
     service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] });
     const fixture = TestBed.createComponent(CustomerPage);
@@ -85,10 +85,10 @@ describe('CustomerPage focus', () => {
   });
 
   async function home() {
-    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null) });
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null), roles: signal([]) });
     service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([]);
-    service.signIn.and.resolveTo();
+    service.signIn.and.resolveTo({ roles: [] });
     service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] });
     const fixture = TestBed.createComponent(CustomerPage);
@@ -183,10 +183,10 @@ describe('CustomerPage focus', () => {
   });
 
   it('returns focus to the charge row button that opened the panel', async () => {
-    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null) });
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null), roles: signal([]) });
     service.reports.and.resolveTo({ items: [], has_more: false });
     service.identities.and.resolveTo([]);
-    service.signIn.and.resolveTo();
+    service.signIn.and.resolveTo({ roles: [] });
     service.transactions.and.resolveTo({ items: [{ transaction_id: 'demo-tx-001', merchant_name: 'Mercado', occurred_at: null, source_occurred_at: '2026-02-26T13:21:51', amount: '125.50', currency: 'BRL' }], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [{ provide: CustomerService, useValue: service }, provideRouter([])] });
     const fixture = TestBed.createComponent(CustomerPage);
@@ -209,7 +209,7 @@ describe('CustomerPage focus', () => {
   });
 
   it('focuses the code field when it appears and the email field on "use another email"', async () => {
-    const service = jasmine.createSpyObj('CustomerService', ['identities', 'transactions', 'reports'], { client: signal(''), card: signal(null) });
+    const service = jasmine.createSpyObj('CustomerService', ['identities', 'transactions', 'reports'], { client: signal(''), card: signal(null), roles: signal([]) });
     service.reports.and.resolveTo({ items: [], has_more: false });
     const cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
     cognito.requestCode.and.resolveTo();
