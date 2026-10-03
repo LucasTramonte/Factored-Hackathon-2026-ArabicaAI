@@ -13,7 +13,7 @@ async function report(c, complete) {
   assert.equal(res.status,201); assertContract('intakeReceipt',res.body); return res.body;
 }
 
-test('agent detail retrieves complete and incomplete evidence and actual ordered service history without writes',async()=>{
+test('agent detail retrieves complete and incomplete evidence and service history; only the first open writes (its stamp)',async()=>{
   const c=client(); await c.call('/demo/session',{customer_id:'demo-ana'});
   const complete=await report(c,true), incomplete=await report(c,false);
   const agent=client(); await agent.call('/demo/agent-session',{});
@@ -30,7 +30,7 @@ test('agent detail retrieves complete and incomplete evidence and actual ordered
       ?['intake_started','transaction_confirmed','handoff_created','handoff_accepted','intake_ended']
       :['intake_started','handoff_created','intake_ended']);
     assert.equal(detail.body.history.at(-1).outcome,receipt.kind==='complete'?'accepted':'routed');
-    assert.equal(detail.body.history_has_more,false); assert.equal(detail.metrics.rows_written,0);
+    assert.equal(detail.body.history_has_more,false); assert.equal(detail.metrics.rows_written,1,'the first open stamps first_opened_at');
     assert.deepEqual(detail.body.model_reading,{mode:'off',model_version:null,llm_calls:0},'switch off locally: no model read the case');
     if(receipt.kind==='complete'){
       assert.equal(detail.body.verified_evidence.transaction.transaction_id,'demo-tx-001');
@@ -39,7 +39,8 @@ test('agent detail retrieves complete and incomplete evidence and actual ordered
     }else{
       assert.equal(detail.body.verified_evidence.transaction,null); assert.deepEqual(detail.body.unresolved_questions,['matching_transaction','customer_confirmation']);
     }
-    assert.deepEqual((await agent.call('/agent/intake-detail?protocol='+receipt.protocol)).body,detail.body);
+    const again=await agent.call('/agent/intake-detail?protocol='+receipt.protocol);
+    assert.deepEqual(again.body,detail.body,'a later read returns the same detail, first_opened_at included'); assert.equal(again.metrics.rows_written,0);
     measurements[receipt.kind]=detail.metrics;
   }
   assert.equal(queue.metrics.rows_written,0); console.log('D1_AGENT_INTAKES '+JSON.stringify(measurements));
@@ -67,4 +68,5 @@ test('agent handoff reads reject method path customer swaps forged tokens expiry
     const res=await agent.call('/agent/intake-detail'+query); assert.equal(res.status,422); assertContract('error',res.body);
   }
   const missing=await agent.call('/agent/intake-detail?protocol='+crypto.randomUUID()); assert.equal(missing.status,404); assertContract('error',missing.body);
+  assert.equal(missing.metrics.rows_written,0,'an unknown protocol never stamps any report');
 });
