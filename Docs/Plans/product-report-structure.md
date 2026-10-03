@@ -8,7 +8,7 @@
 ## Scope for 2026-10-05
 Submission closes on 2026-10-05. Nothing below is deleted; sections are only ordered.
 - **By 10-05:**
-  - section 0: KPIs 1–3 and the 43.60% against 76.65% resolution figure, as reviewed `make report` aggregates with their SQL;
+  - section 0: KPIs 1–3 and the resolution gap (43.65% against 76.61%, design window; #86's 43.60% / 76.65% are *full period*), as reviewed `make report` aggregates with their SQL;
   - section 4, the "before" picture: unresolved share, SLA breaches, time to first response and to close (non-escalated), closed-case satisfaction (F5), contact-centre CSAT by resolution;
   - section 9's segment cut;
   - F1 and the wait missingness registered as DF-027 in `DATA_QUALITY.md`;
@@ -117,7 +117,7 @@ Source: `fact_complaints`, design window.
 **Segmentation:** escalated or not (escalated cases get status age only: in the design window none of the 514 has a first-response, resolution or closing date), segment, country, priority.
 
 **Contact-centre satisfaction**, kept separate and clearly labelled as complaint *contacts* (`Queja`, not unrecognized charges):
-- the resolution gap: 43.60% of complaint contacts resolved against 76.65% of all contacts (section 0);
+- the resolution gap: 43.65% of complaint contacts resolved against 76.61% of all contacts, design window (section 0 also gives the *full period* figures);
 - CSAT by resolution and contact reason (F3, F4);
 - CES and NPS with their own populations, on the observed scales (CSAT 1–4, CES 1–4, NPS 2–7, all inside the documented scales).
 

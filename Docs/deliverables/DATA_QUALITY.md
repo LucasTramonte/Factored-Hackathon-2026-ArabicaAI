@@ -291,10 +291,10 @@ The [bronze profile findings](../../data_profiles/bronze_data_profile/bronze_pro
 ### DF-027 Wait time exists only for Phone contacts, and survey wait answers don't track it
 
 - **Evidence** (design window, findings run `20261003T182506Z`, query `DF-027_wait_missingness.sql`):
-  - **Phone:** `wait_time_seconds` is present on 406,622 of 493,375 contacts.
-  - **Every other channel** (Email, App, WhatsApp, Web Chat, Web): present on 0 of 87,171 contacts. Their surveys still ask the wait question, and 9,805 answers exist with no measured wait behind them.
-  - **Answers against measured wait:** on the 45,919 Phone contacts that have both, the correlation is 0.000. Lucas's insights report (F1, #86) finds no substantial association in any country, survey type or month either.
-  - **Grain:** at most one survey per contact, so the join doesn't duplicate contacts.
+  - **Population:** the 580,546 contact-centre contacts of the design window, and their surveys (at most one per contact, so the join doesn't duplicate contacts).
+  - **Phone, measured wait:** `wait_time_seconds` is present on 406,622 of 493,375 Phone contacts; 86,753 are missing.
+  - **Every other channel** (Email, App, WhatsApp, Web Chat, Web), measured wait: present on 0 of 87,171 contacts. Their surveys still ask the wait question: 9,805 wait answers among the 26,883 surveyed non-Phone contacts, none with a measured wait behind it.
+  - **Answers against measured wait:** Phone has 55,575 wait answers among 152,972 surveyed Phone contacts. The 45,919 of them whose contact also has a measured wait are the pairs; 9,656 Phone answers have no measured wait. Over those 45,919 pairs the correlation is 0.000. Lucas's insights report (F1, #86) finds no substantial association in any country, survey type or month either.
 - **Interpretation:** wait is measured only on the phone, and what customers answer about waiting is not a proxy for it in this synthetic data.
 - **Impact on the product:** no "time saved waiting" claim can come from the historical data, and wait can't be compared across channels.
 - **Handling:** the product report shows wait only for Phone, labelled, and never charts survey answers or comments as evidence of wait or quality. Our own service measures its timings from the case status history instead.
