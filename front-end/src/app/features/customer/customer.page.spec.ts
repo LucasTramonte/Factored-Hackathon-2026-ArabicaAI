@@ -6,7 +6,8 @@ import { CustomerPage, initialsOf } from './customer.page';
 import { LangService, errorText } from '../../shared/i18n/lang.service';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
-import { Identity, IntakeReceipt, IntakeStart, Report, Transaction } from '../../shared/models/intake.model';
+import { AgentService } from '../agent/agent.service';
+import { Identity, IntakeReceipt, IntakeStart, Report, Role, Transaction } from '../../shared/models/intake.model';
 
 describe('CustomerPage', () => {
   let service: jasmine.SpyObj<CustomerService>;
@@ -171,6 +172,34 @@ describe('CustomerPage', () => {
       expect(service.signInWithToken).toHaveBeenCalledWith('id.token');
       expect(p.client()).toBe('CLI-1');
       expect(p.step()).toBe('home');
+    });
+
+    it("opens the agent view with an admin's one code, never for a customer, and a failed agent exchange still signs in", async () => {
+      const agent = TestBed.inject(AgentService);
+      const agentSignIn = spyOn(agent, 'signIn').and.resolveTo({ role: 'agent', mode: 'email_otp', roles: ['admin'] });
+      const signInAs = async (roles: Role[]) => {
+        service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', context_card: null, roles });
+        const { p } = await open(false);
+        await toCode(p);
+        p.code = '12345678';
+        await p.verify();
+        return p;
+      };
+      await signInAs(['customer']);
+      expect(agentSignIn).not.toHaveBeenCalled();
+      expect(agent.roles()).toEqual([]);
+      const p = await signInAs(['admin']);
+      expect(agentSignIn).toHaveBeenCalledOnceWith('id.token');
+      expect(agent.roles()).toEqual(['admin']);
+      expect(p.step()).toBe('home');
+      agent.roles.set([]);
+      agentSignIn.calls.reset();
+      agentSignIn.and.rejectWith(new ApiError(503));
+      const again = await signInAs(['admin']);
+      expect(agentSignIn).toHaveBeenCalledTimes(1);
+      expect(agent.roles()).toEqual([]);
+      expect(again.step()).toBe('home');
+      expect(again.error()).toBe('');
     });
 
     it('maps each failure to its own text and keeps the right step', async () => {

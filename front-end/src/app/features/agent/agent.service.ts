@@ -1,11 +1,13 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/http/api.service';
-import { AgentIntakeDetail, AgentIntakeList, AgentSession, IntakeTransition } from '../../shared/models/intake.model';
+import { AgentIntakeDetail, AgentIntakeList, AgentSession, IntakeTransition, Role } from '../../shared/models/intake.model';
 
 /** Agent calls: a separate session, read-only views and the one status step a person takes. Nothing refunds, blocks or decides. */
 @Injectable({ providedIn: 'root' })
 export class AgentService {
   private readonly api = inject(ApiService);
+  /** Tab-scoped session roles that survive in-app navigation; set by a sign-in on either page (an admin's opens both). */
+  readonly roles = signal<Role[]>([]);
 
   /** An agent session from a Cognito ID token (groups ``agent`` or ``admin``); without one, the local one-click session (``DEMO_PICKER`` only). */
   signIn(idToken?: string): Promise<AgentSession> {
