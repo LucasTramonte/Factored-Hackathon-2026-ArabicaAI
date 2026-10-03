@@ -28,7 +28,7 @@ Due when all hold: something to release (a user-visible `feat`, or a fix for a l
 ```bash
 cd back-end
 npx wrangler deployments list | head -20                                     # live Worker version and its tag
-npx wrangler d1 migrations list arabica-intake-demo --remote                 # must list nothing pending
+npx wrangler d1 migrations list arabica-intake-demo --remote                 # the deploy applies additive ones; anything left is non-additive
 ```
 
 Plus the cohort `slice_version` from its manifest and the extractor switch (off or shadow).

@@ -1,10 +1,11 @@
 /** The deploy guard must stop a Worker from running ahead of its D1 schema (the PR #19 login outage). */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { assertNoLocalVars, localMigrations, pendingMigrations, appliedFromWranglerJson, readWranglerConfig } from '../../scripts/predeploy.mjs';
+import { additiveProblems, assertNoLocalVars, localMigrations, pendingMigrations, appliedFromWranglerJson, readWranglerConfig } from '../../scripts/predeploy.mjs';
 
 test('every local migration file is known to the guard, in order', async () => {
   const files = await localMigrations();
@@ -50,4 +51,29 @@ test('the guard refuses a config that would ship the local test JWKS or the demo
   assert.doesNotThrow(() => assertNoLocalVars({}));
   const shipped = await readWranglerConfig();
   assert.doesNotThrow(() => assertNoLocalVars(shipped));
+});
+
+test('the deploy applies only additive migrations; anything that drops, renames or rebuilds is for a person', () => {
+  for (const sql of ['CREATE TABLE t (id INTEGER PRIMARY KEY);', 'CREATE UNIQUE INDEX i ON t(id);',
+    "ALTER TABLE t ADD COLUMN c TEXT NOT NULL DEFAULT 'x' CHECK (c IN ('x','y'));", 'ALTER TABLE t ADD COLUMN d TEXT;',
+    "-- a comment; with a semicolon\nINSERT INTO t VALUES (1); INSERT INTO t VALUES (2);",
+    'CREATE TRIGGER tr AFTER INSERT ON t BEGIN UPDATE u SET n = n + 1; DELETE FROM v WHERE id = 1; END;',
+    "INSERT INTO t VALUES ('a;b'), ('drop it'), ('it''s -- fine');"]) {
+    assert.deepEqual(additiveProblems(sql), [], sql);
+  }
+  for (const [sql, why] of [['DROP TABLE t;', /drops or renames/], ['ALTER TABLE t RENAME TO u;', /drops or renames/],
+    ['ALTER TABLE t DROP COLUMN c;', /drops or renames/], ['ALTER TABLE t ADD COLUMN c TEXT NOT NULL;', /NOT NULL column without a default/],
+    ['DELETE FROM t;', /not additive/], ['UPDATE customers SET display_name = NULL;', /not additive/], ['CREATE TABLE t2 (id INTEGER); /* rebuild */ DROP TABLE t;', /drops or renames/],
+    ["INSERT INTO t VALUES ('--'); DROP TABLE t;", /drops or renames/], ["INSERT INTO t VALUES ('/*'); DROP TABLE t;", /drops or renames/],
+    ["INSERT INTO t VALUES ('never closed); DROP TABLE t;", /unterminated/], ['CREATE TABLE t2 (id INTEGER); /* never closed DROP TABLE t;', /unterminated/]]) {
+    assert.match(additiveProblems(sql).join(), why, sql);
+  }
+});
+
+test('every migration after the 0014 rebuild is additive, so the deploy can apply it unattended', async () => {
+  // 0014 rebuilt intake_episodes to widen a CHECK; it was applied by hand and is the only exception (ADR-008).
+  for (const file of (await localMigrations()).filter(f => f > '0014_english_reports.sql')) {
+    const sql = await readFile(new URL('../../migrations/' + file, import.meta.url), 'utf8');
+    assert.deepEqual(additiveProblems(sql), [], `${file} is not additive: split it, or a person applies it before the deploy`);
+  }
 });
