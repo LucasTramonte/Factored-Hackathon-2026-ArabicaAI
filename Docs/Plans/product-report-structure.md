@@ -3,7 +3,7 @@
 - **Status:** Draft for team review (v3: v2 plus gaps found in the v1→v2 comparison, aligned with #86 and scoped for 2026-10-05). No figure here is final: each one comes from a query, and is published with that query.
 - **Owner:** Manoella R. Branch `data/analytics-kpis`.
 - **Date:** 2026-10-03
-- **Builds on:** `Docs/Plans/insights-report.md` (Lucas, [PR #86](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/pull/86)). It defines the problem-sizing KPIs, the survey findings F1–F5, "what not to claim" and the queries. This plan doesn't repeat them; it adds the product questions below and how the report gets built.
+- **Builds on:** [`insights-report.md`](insights-report.md) (Lucas, merged in #86). It defines the problem-sizing KPIs, the survey findings F1–F5, "what not to claim" and the queries. This plan doesn't repeat them; it adds the product questions below and how the report gets built.
 
 ## Scope for 2026-10-05
 Submission closes on 2026-10-05. Nothing below is deleted; sections are only ordered.
@@ -150,7 +150,7 @@ Survey answers and comments are never charted as evidence of wait or quality (F1
   - a repeat unrecognized-charge complaint by the same customer within 30 or 90 days of a resolved or closed one;
   - `is_repeat_complainer`;
   - `Escalated`.
-- **In the product:** a second report for a charge after its report was closed. While a report is open, a second one is refused with 409, though that check isn't yet atomic across episodes (insights report §6).
+- **In the product, a real signal:** since #90, a customer who marks a closed report "not resolved" starts a new report that cites the old one. Count those over closed reports. While a report is open, a second one for the same charge is refused with 409, and since #87 that holds under concurrent confirmations.
 - **Charts:**
   - unresolved complaints by status and age band, as stacked bars;
   - repeat-complaint rate within 30 and 90 days, by country.
@@ -181,7 +181,7 @@ Survey answers and comments are never charted as evidence of wait or quality (F1
 | Escalated cases: time open (substitute, since there is no closing date) | Status age of escalated complaints (section 4) | Lower | Product: in review → closed for reports a person escalates. Same metric, live |
 | CSAT holds | Contact-centre CSAT for complaint contacts (`Queja`), by resolution (F3, F4); closed-case complaint satisfaction (F5) | Hold | Not measurable until real users take part (the user test in the customer contract). In-app thumbs up/down is not CSAT |
 | **NPS holds** | Contact-centre NPS answers for complaint contacts against other reasons: the **distribution and mean** (63,668 NPS surveys overall). **The standard NPS score is degenerate here:** answers stop at 7 on the 0–10 scale, so no one is a promoter (9–10) and the score is almost entirely detractors. Report the distribution, and the formal NPS only with that caveat | Hold | Same as CSAT: needs real users |
-| **Verification answered in under 4 s, 95% of the time** | Not in the data | **p95 < 4 s** | Server time of `GET /transactions`, `POST /intake/start` and `POST /intake/confirm`. Known so far: about 1.4 s for one earlier episode, and confirm projected at about 1.2 s of D1 waiting (ADR-004). **To do:** a scripted run against the deployed Worker recording p50/p95 per request. The extractor is off the path (its own p95 is 3.58 s) |
+| **Verification answered in under 4 s, 95% of the time** | Not in the data | **p95 < 4 s** | Server time of `GET /transactions`, `POST /intake/start` and `POST /intake/confirm`. Known so far: about 1.4 s for one earlier episode, and confirm projected at about 1.2 s of D1 waiting (ADR-004). **Tool:** [`scripts/summarize_worker_latency.py`](../../scripts/summarize_worker_latency.py) (#91) summarizes exported Worker logs without headers, bodies or customer data. **To do:** a scripted run against the deployed Worker recording p50/p95 per request. The extractor is off the path (its own p95 is 3.58 s) |
 | Safe accepted intake | — | High, with 0 unsafe | Event export |
 
 **Chart:** one row per success metric, a "baseline → target → current" bullet chart, with "not yet measured" shown as an empty marker rather than a zero.
@@ -262,4 +262,4 @@ The metric dictionary grows with each step: a metric is added to it when its que
 ## Open decisions
 1. **Report format:** the `make report` HTML hub only, or also a Markdown deliverable (`Docs/deliverables/PRODUCT_REPORT.md`) with static charts.
 2. **Whether the critical-customer and priority definitions** stay report-only, or are proposed for the product.
-3. **Who runs the latency measurement** for the 4 s target, and who exports the D1 status history.
+3. **Who runs the latency measurement** for the 4 s target (the summarizer exists since #91; the run and log export need a person with the Cloudflare account), and who exports the D1 status history.
