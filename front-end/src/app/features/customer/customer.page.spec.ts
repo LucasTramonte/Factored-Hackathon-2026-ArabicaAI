@@ -671,6 +671,11 @@ describe('CustomerPage', () => {
       const pending = { status: 'pending' as const, items: [], choice: null, chosen_transaction_id: null, answerable: false };
       const shown = { status: 'suggested' as const, items: [charge, other], choice: null, chosen_transaction_id: null, answerable: true };
       const settle = () => new Promise(r => setTimeout(r, 20));
+      // Waits for a state, not a guessed delay: on a loaded CI ChromeHeadless 20 ms may not cover several poll turns.
+      // performance.now, because some tests here fake Date.now.
+      const until = async (done: () => boolean) => {
+        for (const end = performance.now() + 2000; !done() && performance.now() < end;) await new Promise(r => setTimeout(r, 5));
+      };
 
       beforeEach(() => { page.suggestionPollMs = 1; });
 
@@ -680,7 +685,7 @@ describe('CustomerPage', () => {
         await startEpisode();
         await review();
         expect(page.chatStep()).toBe('receipt');
-        await settle();
+        await until(() => page.suggestionList() !== null);
         expect(service.suggestions.calls.allArgs()).toEqual([[incomplete.protocol], [incomplete.protocol], [incomplete.protocol]]);
         expect(page.suggestionList()?.items.map(c => c.transaction_id)).toEqual(['demo-tx-001', 'demo-tx-004']);
       });
