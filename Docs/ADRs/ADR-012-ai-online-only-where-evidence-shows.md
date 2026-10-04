@@ -46,7 +46,7 @@ No step needs the service to understand free text in order to act: the charge co
 3. **Speed shows no reliable effect on satisfaction.** Unrecognized-charge complaints with a resolution score: 397 of 10,370 (3.8%, closed cases only).
    - **Days to resolution against the score:** correlation 0.036 (n = 397).
    - **SLA breached against not:** 3.21 against 3.01.
-   - **Hours to first response:** correlation −0.069 (n = 384). The one hint in favour of speed is that complaints answered within 12 hours score 3.42 (n = 77), against 2.83–3.11 in the slower bands. It isn't monotonic, and it is the best of four bands chosen after looking, so it is a hypothesis, not evidence.
+   - **Hours to first response:** correlation −0.069 (n = 373: 11 of the 384 have no assignment date, and none was answered before assignment). The one hint in favour of speed is that complaints answered within 12 hours score 3.42 (n = 77), against 2.83–3.11 in the slower bands. It isn't monotonic, and it is the best of four bands chosen after looking, so it is a hypothesis, not evidence.
 4. **What a resolution is.** Of 2,535 resolved or closed unrecognized-charge complaints:
    - account adjustment: 20.0%;
    - detailed explanation: 19.4%;
@@ -57,7 +57,7 @@ No step needs the service to understand free text in order to act: the charge co
 
    754 (29.7%) record a compensation amount. **About 80% of resolutions move money or change the account.** ADR-002 and the brief keep those out of a model's hands (no refund, no money movement, no fraud decision). Only the "explanation" fifth is informational, and even there the explanation follows an investigation, which no field records.
 
-**What the challenge changes.** It doesn't change the decision to keep the reviewer human. The data offers no evidence that a different handler raises satisfaction, no automated comparison, and no ground truth for a correct dispute outcome against which an AI reviewer could be evaluated. It does sharpen one point: if anything moves satisfaction besides resolution, it is likely a **fast first response**. Our service already gives one deterministically (the reference in seconds, status emails at each step). An AI-drafted first explanation for the agent to send is the one AI step this evidence leaves open (decision 5).
+**What the challenge changes.** It doesn't change the decision to keep the reviewer human. The data offers no evidence that a different handler raises satisfaction, no automated comparison, and no ground truth for a correct dispute outcome against which an AI reviewer could be evaluated. It does leave one **unconfirmed hypothesis to test**: a fast first response might matter besides resolution. The only support is the post-hoc, non-monotonic 12-hour band above, which is not evidence. Our service already responds at once deterministically (the reference right away, status emails at each step). An AI-drafted first explanation for the agent to send is the one AI step left open, and it would itself be the test of that hypothesis (decision 5).
 
 ## Decision
 

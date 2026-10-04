@@ -32,10 +32,21 @@ FROM silver.fact_complaints
 WHERE creation_date >= TIMESTAMP '2023-06-17' AND creation_date < TIMESTAMP '2026-01-01'
   AND subcategory = 'Cargo no reconocido' AND resolution_satisfaction IS NOT NULL;
 
-SELECT corr(date_diff('hour', assignment_date, first_response_date), resolution_satisfaction) AS corr_first_response_hours, count(*) AS n
+-- Data quality first: rows without an assignment date, and rows answered before assignment (2026-10-04: 11 and 0 of 384).
+SELECT count(*) AS scored_with_response, count(*) FILTER (WHERE assignment_date IS NULL) AS no_assignment_date,
+       count(*) FILTER (WHERE first_response_date < assignment_date) AS response_before_assignment
 FROM silver.fact_complaints
 WHERE creation_date >= TIMESTAMP '2023-06-17' AND creation_date < TIMESTAMP '2026-01-01'
   AND subcategory = 'Cargo no reconocido' AND resolution_satisfaction IS NOT NULL AND first_response_date IS NOT NULL;
+
+-- Only complete, non-negative response times enter the correlation and the bands (n = 373 on 2026-10-04).
+SELECT corr(h, s) AS corr_first_response_hours, count(*) AS n
+FROM (SELECT date_diff('hour', assignment_date, first_response_date) AS h, resolution_satisfaction AS s
+      FROM silver.fact_complaints
+      WHERE creation_date >= TIMESTAMP '2023-06-17' AND creation_date < TIMESTAMP '2026-01-01'
+        AND subcategory = 'Cargo no reconocido' AND resolution_satisfaction IS NOT NULL
+        AND first_response_date IS NOT NULL AND assignment_date IS NOT NULL)
+WHERE h >= 0;
 
 SELECT CASE WHEN h < 12 THEN '<12h' WHEN h < 24 THEN '12-24h' WHEN h < 36 THEN '24-36h' ELSE '>=36h' END AS first_response_band,
        count(*) AS n, avg(s) AS mean_score
@@ -44,6 +55,7 @@ FROM (SELECT date_diff('hour', assignment_date, first_response_date) AS h, resol
       WHERE creation_date >= TIMESTAMP '2023-06-17' AND creation_date < TIMESTAMP '2026-01-01'
         AND subcategory = 'Cargo no reconocido' AND resolution_satisfaction IS NOT NULL
         AND first_response_date IS NOT NULL AND assignment_date IS NOT NULL)
+WHERE h >= 0
 GROUP BY 1 ORDER BY 1;
 
 SELECT sla_breached, count(*) AS n, avg(resolution_satisfaction) AS mean_score
