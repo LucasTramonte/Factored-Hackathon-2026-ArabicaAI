@@ -20,7 +20,7 @@ We also follow Y Combinator's "A Guide to Demo Day Presentations" (Geoff Ralston
 
 ## The four points everyone should remember (the "vertebrae")
 
-1. **"I don't recognize this charge" is the most anxious moment in banking, and today it waits in line.** In this bank's data, 11 such complaints a day are handled exactly like any other complaint: a first answer after about a day, and three in four still unresolved.
+1. **"I don't recognize this charge" is the most anxious moment in banking, and today it waits in line.** In the challenge's synthetic bank data, 11 such complaints a day are handled exactly like any other complaint: a first answer after about a day, and three in four recorded as Open, In Process or Escalated.
 2. **ArabicaAI aims to turn that moment into one minute** (a design target, not a measured average). The customer picks the charge from their own list, confirms it, and gets a reference before they close the app. A person reviews every report.
 3. **The bank speaks first.** When the bank's fraud system flags a charge, the customer is asked before they have to go looking (in the demo the flag is an illustration we set on demo customers). We tested the obvious trigger, "big amount", and the data showed it doesn't work.
 4. **AI where it earns its place, and nowhere else.** A model passed every gate we set in advance on development cases; its comparison on held-out cases is pending. Every result is published, including the ones that didn't go our way.
@@ -45,8 +45,8 @@ Production rules:
 | # | Time | Beat | Picture (animated) | Voice-over (draft) | Must be true before capture |
 |---|---|---|---|---|---|
 | 1 | 0:00–0:15 | **Why** (hook) | Black screen. A phone buzzes: "Compra aprobada: 3.150,00 BRL". A thumb hovers. | "You open your bank app and there's a charge you've never seen. What do you do?" | — |
-| 2 | 0:15–0:35 | **Why** (the problem in numbers) | Kinetic numbers on a clean background: **11 a day**, **1 day to a first answer**, **3 in 4 still open**. Small caption: "LATAM bank dataset, 2023–2025". | "In this bank, that moment happens 11 times a day. Today it's a complaint like any other: a first answer after about a day, and three in four still open." | Product report (#94, merged) |
-| 3 | 0:35–0:45 | **What** (the name and promise) | Logo reveal: **ArabicaAI**. Tagline: "Report it in a minute. A person takes it from there." | "ArabicaAI is built to turn that moment into a minute." | Name decided (open decision 1) |
+| 2 | 0:15–0:35 | **Why** (the problem in numbers) | Kinetic numbers on a clean background: **11 a day**, **1 day to a first answer**, **3 in 4 still in progress**. Small caption: "Synthetic LATAM bank dataset (challenge data), 2023–2025". | "In the challenge's bank data, that moment happens 11 times a day. It's handled like any other complaint: a first answer after about a day, and three in four still listed as open, in process or escalated." | Product report (#94, merged) |
+| 3 | 0:35–0:45 | **What** (the name and promise) | Logo reveal: **ArabicaAI**. Tagline: "Built to report it in a minute. A person takes it from there." (a target, never an achieved time) | "ArabicaAI is built to turn that moment into a minute." | Name decided (open decision 1) |
 | 4 | 0:45–1:10 | **What** (the bank speaks first) | Phone mockup: sign in, then the home. The banner slides in: "Notamos un cargo inusual…" over a **19,90 BRL** charge, while the 3.150 BRL charge sits untouched above it. | "Before you even look, the bank asks you: do you recognize this? Not the biggest charge: the one the bank's fraud system flagged. We tested 'flag big amounts', and the data said no." On-screen caption: "Demo: illustrative flag". | #105 and #106 merged and deployed; the fictitious seed reloaded on remote D1 (#106's human step) |
 | 5 | 1:10–1:40 | **What** (the report in a minute) | Tap "No lo reconozco": one-tap reason, a short sentence, pick the charge from your own list, confirm, then the **reference** animates in. Switch the language to Portuguese for one shot. | "Pick the reason. Pick the charge from your own purchases. Confirm. You get a reference right away, in Spanish or Portuguese, and the status by email. Nothing is refunded or blocked by a machine: a person reviews every report." | #99 and #103 merged and deployed |
 | 6 | 1:40–2:00 | **What** (the agent side) | Laptop mockup: the agent queue, the flagged report at the top in red, the detail with what was verified and what's still open; click "In review". | "On the bank's side, urgent reports come first, already verified: which charge, which customer, what's still open. No re-asking." | Agent view deployed |
@@ -60,7 +60,7 @@ One point per slide, at most about 7 words of text, large type, a picture doing 
 | # | One point (on the slide) | Picture | Spoken (product → technical, tied to value) |
 |---|---|---|---|
 | 1 | "A strange charge waits in line." | The three numbers from beat 2, huge | The problem and who has it; the data source |
-| 2 | "Report it in one minute." | Phone mockup of the flow, three frames | The product and the customer; the proactive alert |
+| 2 | "Built to report it in a minute." (target) | Phone mockup of the flow, three frames | The product and the customer; the proactive alert |
 | 3 | "One service. Each customer sees only theirs." | The one-line architecture from beat 7 | Security and data engineering: the reviewed slice, the quality gate, the isolation tests |
 | 4 | "AI where it earns its place." | Our rules against the model, side by side, held-out cases | ML practice: the pre-registered gates, what passed, what's pending; why the live flow stays deterministic (ADR-012) |
 | 5 | "Seconds, not days. A person decides." | Logo, link, team | Next steps and the four points again |
@@ -69,13 +69,13 @@ One point per slide, at most about 7 words of text, large type, a picture doing 
 
 | Claim | Status | Source |
 |---|---|---|
-| 11 unrecognized-charge complaints a day; three in four unresolved; first response after about a day (25 h at p50) | Yes, about the dataset bank | `PRODUCT_REPORT.md` |
+| 11 unrecognized-charge complaints a day; three in four recorded as Open, In Process or Escalated; first response after about a day (25 h at p50) | Yes, as figures from the challenge's **synthetic** bank data. Never "unresolved forever" or "real customers" | `PRODUCT_REPORT.md` |
 | "A reference in seconds" / "one minute" | **Target only.** Five team episodes (four accepted, one routed incomplete) support no rate, so never "on average" or "customers do it in" | `EVALUATION.md` §9 |
 | "Big amounts don't mean fraud" | Yes, in this data, in every period | ADR-011 |
 | "The bank's fraud flag" in the demo | It's an authored flag on demo customers. Say "when the bank's fraud system flags a charge", not "we detect fraud" | ADR-011 |
 | "Tested on cases it never saw" / "AI is X% better" | **No**, until the frozen comparison runs. Today: "passed every pre-registered development gate; held-out comparison pending" | ADR-006 amendments 7–9 |
 | Money saved, customers retained, satisfaction raised | **No.** No measured product effect exists | `PRODUCT_REPORT.md`: "every figure is descriptive" |
-| Market size in dollars | **No** dollar TAM. Bottom-up per bank: about 4,000 such complaints a year in a bank this size (11.16 × 365). Say exactly that | `PRODUCT_REPORT.md` |
+| Market size in dollars | **No** dollar TAM. Bottom-up per bank: about 4,000 such complaints a year in a bank like the challenge's synthetic one (11.16 × 365). Say exactly that | `PRODUCT_REPORT.md` |
 | Traction | Pre-traction: a working, deployed product with tests. Lean on the story and the rigor, as YC advises | — |
 
 ## Open decisions for Lucas and Roberto
