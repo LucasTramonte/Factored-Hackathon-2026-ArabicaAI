@@ -34,7 +34,7 @@ data "google_project" "current" {
 
 locals {
   # The extractor's successor (ADR-012, AI suggestion plan). Gemini 3.5 Flash-Lite has no single-region endpoint
-  # (404 in 9 regions, 2026-10-04) but answers in the `us` multi-region (aiplatform.us.rep.googleapis.com), which keeps
+  # (404 in 10 regions, 2026-10-04) but answers in the `us` multi-region (aiplatform.us.rep.googleapis.com), which keeps
   # customer text inside the United States; `global` would pin nothing.
   vertex_model    = "gemini-3.5-flash-lite"
   vertex_location = "us"

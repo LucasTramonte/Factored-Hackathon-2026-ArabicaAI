@@ -138,7 +138,7 @@ The table maps each question to a measure, gives the baseline in the supplied da
 1. **Historical baselines.**
    - They come only from the design window.
    - **Confirmation rule, fixed before the holdout is read (committed with this section):**
-     - run the same queries once on the holdout window (2026-01-01 to 2026-06-17);
+     - run the same queries once on the holdout window (2026-01-01 inclusive to 2026-06-18 exclusive);
      - for each of the five rates, run a two-proportion z-test of holdout against design at α = 0.01 (0.05 / 5, Bonferroni). A baseline is confirmed when p ≥ 0.01;
      - repeat reporting is confirmed when the holdout Poisson fit has p ≥ 0.01;
      - the merchant-familiarity result is confirmed when the holdout risk-ratio interval includes 1.

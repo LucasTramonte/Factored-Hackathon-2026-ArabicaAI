@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
 import seaborn as sns  # noqa: E402
 
-from data_foundation.scripts.run_intake_kpis import wilson  # noqa: E402
+from data_foundation.src.intake_stats import wilson  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "Docs" / "Evidence" / "business"

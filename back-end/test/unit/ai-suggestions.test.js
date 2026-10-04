@@ -228,20 +228,28 @@ async function run(t, env, mocked = google(), { arm = 'B', now } = {}) {
   return { ctx, outcome, row, suggested, recorded, calls: mocked.calls, vertexCalls: mocked.vertexCalls() };
 }
 
-test('guards that stop before any call: off (switch, control arm, credential), retired, capped; no fetch', async t => {
+test('guards that stop before any call: off (switch, control arm, credential), retired; no fetch', async t => {
   const silent = { fetcher: noFetch, calls: [], vertexCalls: () => [] };
   for (const [label, env, opts, expected] of [
     ['switch off', { ...CREDS, INTAKE_AI_ENABLED: '0' }, {}, 'off'],
     ['control arm A', ON, { arm: 'A' }, 'off'],
     ['retired', { ...ON, VERTEX_MODEL_RETIRES: '2026-01-01' }, {}, 'retired'],
     ['unreadable retirement date', { ...ON, VERTEX_MODEL_RETIRES: 'soon' }, {}, 'retired'],
-    ['cap 0', { ...ON, INTAKE_AI_DAILY_CAP: '0' }, {}, 'capped'],
-    ['cap not a number', { ...ON, INTAKE_AI_DAILY_CAP: 'many' }, {}, 'capped'],
     ...Object.keys(CREDS).filter(k => k !== 'VERTEX_MODEL_RETIRES').map(k => [`missing ${k}`, { ...ON, [k]: '' }, {}, 'off'])
   ]) {
     const r = await run(t, env, silent, opts);
     assert.equal(r.outcome, expected, label);
     assert.deepEqual([r.row.llm_calls, r.row.producer, r.suggested.length, r.recorded.llm_calls], [0, null, 0, 0], label);
+  }
+});
+
+test('zero or invalid daily caps stop extraction after authentication', async t => {
+  for (const cap of ['0', 'many']) {
+    const r = await run(t, { ...ON, INTAKE_AI_DAILY_CAP: cap });
+    assert.equal(r.outcome, 'capped', cap);
+    assert.equal(r.calls.length, 2, 'STS and IAM exchange succeed before checking the cap');
+    assert.equal(r.vertexCalls.length, 0);
+    assert.deepEqual([r.row.llm_calls, r.row.producer, r.suggested.length, r.recorded.llm_calls], [0, null, 0, 0]);
   }
 });
 
@@ -268,7 +276,7 @@ test('the retirement guard can only move earlier than 2026-10-21, the built-in d
   assert.equal(asOfAt(Date.parse('2026-10-05T23:30:12.345Z')), '2026-10-05T23:30:12');
 });
 
-test('token exchange failures are auth_error, with no model call and nothing cached', async t => {
+test('token exchange failures are auth_error, with no model call or daily cap reservation', async t => {
   for (const [label, mocked] of [
     ['STS 403', google({ sts: () => json({ error: 'denied' }, 403) })],
     ['STS unreachable', google({ sts: () => { throw new TypeError('network'); } })],
@@ -282,10 +290,12 @@ test('token exchange failures are auth_error, with no model call and nothing cac
     assert.equal(r.outcome, 'auth_error', label);
     assert.equal(r.vertexCalls.length, 0, label);
     assert.equal(r.row.llm_calls, 0, label);
+    assert.equal(r.ctx.one('SELECT count(*) n FROM ai_daily_calls').n, 0, label);
   }
   const malformed = await run(t, { ...ON, VERTEX_SERVICE_ACCOUNT: 'someone@evil.example/../x' }, google());
   assert.equal(malformed.outcome, 'auth_error');
   assert.equal(malformed.calls.length, 0, 'a malformed account never reaches a Google path');
+  assert.equal(malformed.ctx.one('SELECT count(*) n FROM ai_daily_calls').n, 0);
 });
 
 test('model failures fall back with honest usage: config_error, provider_error (no retry), invalid_output (one retry)', async t => {

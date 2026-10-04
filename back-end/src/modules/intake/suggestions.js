@@ -9,7 +9,7 @@
  *
  * Guards, in order, each recorded as the run's outcome when it stops the call: the switch (``INTAKE_AI_ENABLED`` exactly
  * ``'1'``, else ``off``), the pilot arm (A is the control: ``off``), the model's retirement date (``retired``), the
- * credential vars and secret (missing: ``off``), the daily cap in D1 (``capped``), the token exchange (``auth_error``).
+ * credential vars and secret (missing: ``off``), the token exchange (``auth_error``), the daily cap in D1 (``capped``).
  * Then the call (``timeout``, ``provider_error``, ``config_error``, ``invalid_output``) and the rule (``no_match``,
  * ``ambiguous``, ``suggested``). Nothing here throws into the request, and the request's response never depends on it.
  */
@@ -100,10 +100,10 @@ export async function runSuggestion(env, store, { handoffId, customerId, details
     if (retired(env, now())) return await finish('retired');
     const config = credentialConfig(env);
     if (!config) return await finish('off');
-    if (!await store.reserveAiCall({ day: new Date(now()).toISOString().slice(0, 10), cap: dailyCap(env) })) return await finish('capped');
     const origin = testOrigin(env);
     const token = await accessToken(config, { fetcher, now, origin });
     if (!token) return await finish('auth_error');
+    if (!await store.reserveAiCall({ day: new Date(now()).toISOString().slice(0, 10), cap: dailyCap(env) })) return await finish('capped');
     const producer = await registeredVersion();
     await store.startSuggestionCall({ handoffId, producer });
     const url = vertexUrl(config.project, origin ?? undefined);
