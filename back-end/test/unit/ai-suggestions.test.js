@@ -671,3 +671,23 @@ test('the sweep closes only runs of acknowledged handoffs, so each abandoned run
   assert.equal(ctx.one('SELECT outcome FROM handoff_suggestion_runs WHERE handoff_id=?', pendingReservation.receipt.protocol).outcome, null);
   assert.equal(ctx.events(acked.episode_id).at(-1).result, 'abandoned');
 });
+
+test('stored suggestion outcomes expose safe reasons, including disabled runs', async t => {
+  const ctx = await setup(t);
+  const off = await handoff(ctx, {});
+  const env = { DB: ctx.d1 };
+  const read = async receipt => {
+    const response = await route(req(`/intake/handoff/${receipt.protocol}/suggestions`), env, ctx.store());
+    assert.equal(response.status, 200);
+    const body = await response.json(); assertContract('suggestionList', body); return body;
+  };
+  assert.equal((await read(off.receipt)).reason, 'unavailable');
+  t.mock.method(globalThis, 'fetch', google().fetcher);
+  const found = await handoff(ctx, ON_B); await Promise.all(found.pending);
+  for (const outcome of ['no_match', 'ambiguous', 'provider_error', 'off', 'timeout', 'invalid_output', 'abandoned']) {
+    ctx.db.prepare('UPDATE handoff_suggestion_runs SET outcome=? WHERE handoff_id=?').run(outcome, found.receipt.protocol);
+    const body = await read(found.receipt);
+    assert.equal(body.status, 'none');
+    assert.equal(body.reason, ['no_match', 'ambiguous'].includes(outcome) ? 'no_clear_match' : 'unavailable');
+  }
+});

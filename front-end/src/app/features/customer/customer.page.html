@@ -215,6 +215,10 @@
                       <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm report-again-btn" (click)="reportAgain(r)" [disabled]="!!frozen()"
                         [attr.aria-label]="t().reportAgain + ': ' + (r.reference_short ?? r.protocol)">{{ t().reportAgain }}</button>
                     }
+                    @if (r.kind === 'incomplete') {
+                      <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm suggestions-btn" (click)="reopenSuggestions(r)" [disabled]="busy() || !!frozen()"
+                        [attr.aria-label]="t().suggestReopen + ': ' + (r.reference_short ?? r.protocol)">{{ t().suggestReopen }}</button>
+                    }
                     <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm messages-btn" (click)="toggleMessages(r.protocol)"
                       [attr.aria-expanded]="openThread() === r.protocol" [attr.aria-label]="t().messagesTitle + ': ' + (r.reference_short ?? r.protocol)">{{ t().messagesTitle }}</button>
                     <span class="ar-caption" role="status">@if (updateNote()?.protocol === r.protocol) { {{ updateNote()!.text }} }</span>
@@ -308,6 +312,7 @@
                 <div class="report-actions chat-actions"><button type="button" class="ar-btn" (click)="handoff()" [disabled]="busy()">{{ frozen() ? t().retry : t().chatSend }}</button></div>
               }
               @case ('receipt') {
+                @if (suggestionReport(); as report) { <p class="ar-ref ar-mono">{{ report.reference_short ?? report.protocol }}</p> }
                 @if (intakeReceipt(); as r) {
                   <div class="ar-panel ar-panel-ok" role="status" id="intake-receipt" #intakeReceiptEl tabindex="-1">
                     <h3 class="ar-panel-title">{{ receiptTitle() }}</h3>
@@ -336,7 +341,7 @@
                 @if (suggestionList(); as s) {
                   <section class="ar-panel suggestions" id="suggestions" aria-labelledby="suggestions-title">
                     <h4 id="suggestions-title">{{ t().suggestTitle }}</h4>
-                    @if (!suggestionAnswer() && s.answerable) {
+                    @if (!suggestionAnswer() && s.status === 'suggested' && s.answerable) {
                       <p class="ar-small">{{ t().suggestIntro }}</p>
                       <ul class="suggestion-list">
                         @for (c of s.items; track c.transaction_id) {
@@ -350,7 +355,7 @@
                       <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm suggestion-none" (click)="answerSuggestion(null)" [attr.aria-disabled]="suggestionSending()">{{ t().suggestNone }}</button>
                       @if (suggestionFailed()) { <p class="ar-small" role="alert">{{ t().suggestFailed }}</p> }
                     }
-                    <p class="suggestion-thanks" role="status" tabindex="-1">{{ suggestionAnswer() === 'confirmed' ? t().suggestThanksConfirmed : suggestionAnswer() === 'none' ? t().suggestThanksNone : !s.answerable ? t().suggestInReview : '' }}</p>
+                    <p class="suggestion-thanks" role="status" tabindex="-1">{{ suggestionAnswer() === 'confirmed' ? t().suggestThanksConfirmed : suggestionAnswer() === 'none' ? t().suggestThanksNone : !s.answerable ? suggestionMessage() : '' }}</p>
                   </section>
                 }
                 <p class="sr-only suggestion-announce" aria-live="polite">{{ suggestionList()?.answerable && !suggestionAnswer() ? t().suggestFound : '' }}</p>

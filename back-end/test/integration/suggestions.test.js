@@ -185,7 +185,7 @@ test('"none of these" is stored once; a report without suggestions has none to c
   assert.equal((await a.call('/agent/suggestion-mark', { protocol: receipt.protocol, mark: 'correct' })).status, 404, 'nothing confirmed to mark');
   const plain = await handoff(ana, null);
   const nothing = await ana.call(path(plain));
-  assert.deepEqual(nothing.body, { status: 'none', items: [], choice: null, chosen_transaction_id: null, answerable: false });
+  assert.deepEqual(nothing.body, { status: 'none', reason: 'unavailable', items: [], choice: null, chosen_transaction_id: null, answerable: false });
   assert.equal((await ana.call(path(plain, '/confirm'), { none: true })).status, 404);
   for (const r of [receipt, plain]) await closeReport(r.protocol);
 });
@@ -198,7 +198,7 @@ test('waitUntil with mocked Vertex: timeout, invalid output, provider error and 
   const receipts = await Promise.all(cases.map(([details]) => handoff(ana, details)));
   for (const [i, [details, kind, [calls, unknown]]] of cases.entries()) {
     const shown = await settled(ana, receipts[i]);
-    assert.deepEqual(shown, { status: 'none', items: [], choice: null, chosen_transaction_id: null, answerable: false }, details);
+    assert.deepEqual(shown, { status: 'none', reason: ['no_match', 'ambiguous'].includes(kind) ? 'no_clear_match' : 'unavailable', items: [], choice: null, chosen_transaction_id: null, answerable: false }, details);
     const run = await recorded(receipts[i].episode_id);
     assert.deepEqual([run.result, run.llm_calls, run.usage_unavailable_calls, run.suggestions], [kind, calls, unknown, 0], details);
     assert.equal((await ana.call(path(receipts[i], '/confirm'), { none: true })).status, 404, details);
@@ -215,6 +215,7 @@ test('once an agent opens the report, the customer can no longer answer: 409 alr
   const a = await agent();
   assert.equal((await a.call('/agent/intake-detail?protocol=' + receipt.protocol)).status, 200);
   const late = await ana.call(path(receipt));
+  assert.equal(late.body.reason, 'review_started');
   assert.deepEqual([late.body.status, late.body.answerable, late.body.choice], ['suggested', false, null]);
   for (const body of [{ transaction_id: 'demo-tx-001' }, { none: true }]) {
     const res = await ana.call(path(receipt, '/confirm'), body);

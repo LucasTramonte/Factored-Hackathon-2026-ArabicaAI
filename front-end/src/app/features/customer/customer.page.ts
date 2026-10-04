@@ -147,7 +147,18 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly feedbackRecorded = signal(false);
   readonly feedbackSending = signal(false);
   readonly feedbackFailed = signal(false);
-  /** Charges the service suggests for an "I can't find it" receipt (ADR-012), or null when there are none (yet). */
+  /** A saved report reopened for its stored suggestion state, without inventing a new receipt. */
+  readonly suggestionReport = signal<Report | null>(null);
+  readonly suggestionTimedOut = signal(false);
+  private readonly suggestionContext = computed(() => this.suggestionReport() ?? this.intakeReceipt());
+  readonly suggestionMessage = computed(() => {
+    const s = this.suggestionList(), t = this.t();
+    if (!s) return '';
+    if (s.reason === 'review_started') return t.suggestInReview;
+    if (s.status === 'pending') return this.suggestionTimedOut() ? t.suggestStillPending : t.suggestPending;
+    return s.reason === 'no_clear_match' ? t.suggestNoMatch : s.reason === 'unavailable' ? t.suggestUnavailable : t.suggestLegacy;
+  });
+  /** Stored search state for the current saved report (ADR-012). */
   readonly suggestionList = signal<SuggestionList | null>(null);
   /** The customer's stored answer to the suggestions; nothing is closed or decided by it. */
   readonly suggestionAnswer = signal<SuggestionAnswer | null>(null);
@@ -168,7 +179,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly promptLast = computed(() => this.log().at(-1)?.from === 'bot');
   /** "I can't find it" was pressed: the guide asks once what the customer remembers before anything is sent. */
   readonly asking = signal(false);
-  readonly chatStep = computed<ChatStep>(() => this.intakeReceipt() ? 'receipt' : this.ended() ? 'ended' : !this.episode() ? 'describe' : this.asking() ? 'details' : 'choose');
+  readonly chatStep = computed<ChatStep>(() => (this.intakeReceipt() || this.suggestionReport()) ? 'receipt' : this.ended() ? 'ended' : !this.episode() ? 'describe' : this.asking() ? 'details' : 'choose');
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
   /** A charge whose newest server report is still open is not offered again (the server refuses it with 409). */
@@ -269,11 +280,11 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Leave the receipt for its saved report; a failed list load falls back to the reports heading. */
   viewMyReport(): void {
-    const receipt = this.intakeReceipt();
+    const receipt = this.suggestionContext();
     if (!receipt || this.busy() || this.frozen()) return;
     this.chatOpen.set(false);
     afterNextRender(() => {
-      if (this.intakeReceipt() !== receipt || this.step() !== 'home' || this.chatOpen()) return;
+      if (this.suggestionContext() !== receipt || this.step() !== 'home' || this.chatOpen()) return;
       const report = [...this.host.nativeElement.querySelectorAll<HTMLElement>('[data-report-protocol]')]
         .find(el => el.dataset['reportProtocol'] === receipt.protocol);
       const target = report ?? this.host.nativeElement.querySelector<HTMLElement>('#your-reports-title');
@@ -897,6 +908,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.feedbackSending.set(false);
     this.feedbackFailed.set(false);
     this.suggestionWatch++;
+    this.suggestionReport.set(null);
+    this.suggestionTimedOut.set(false);
     this.suggestionList.set(null);
     this.suggestionAnswer.set(null);
     this.suggestionSending.set(false);
@@ -1018,24 +1031,37 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * Check for suggestions for at most ``SUGGESTION_WAIT_MS`` after the receipt, then stop. Shown only for the receipt
-   * they belong to and only while unanswered; any failure simply shows nothing (the report already reached a person).
-   */
-  private async watchSuggestions(receipt: IntakeReceipt): Promise<void> {
+  /** Reopen one listed incomplete report and read its stored suggestions through the owned endpoint. */
+  reopenSuggestions(report: Report): void {
+    if (this.busy() || this.frozen() || report.kind !== 'incomplete' || !this.reports()?.items.includes(report)) return;
+    this.opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    this.clearChat();
+    this.suggestionReport.set(report);
+    this.log.set([]);
+    this.chatOpen.set(true);
+    void this.watchSuggestions(report);
+  }
+
+  /** Poll the stored run for 15 seconds; the deadline stops this watch, never the server's run. */
+  private async watchSuggestions(receipt: IntakeReceipt | Report): Promise<void> {
     const watch = ++this.suggestionWatch;
+    const generation = this.generation;
     const until = Date.now() + SUGGESTION_WAIT_MS;
-    const current = () => watch === this.suggestionWatch && this.intakeReceipt() === receipt;
+    const current = () => generation === this.generation && watch === this.suggestionWatch && this.suggestionContext() === receipt;
+    this.suggestionTimedOut.set(false);
+    this.suggestionList.set({ status: 'pending', items: [], choice: null, chosen_transaction_id: null, answerable: false });
     for (;;) {
       let list: SuggestionList;
-      try { list = await this.service.suggestions(receipt.protocol); } catch { return; }
-      if (!current()) return;
-      if (list.status === 'suggested' && list.items.length) {
-        this.suggestionList.set(list);
-        this.suggestionAnswer.set(list.choice);
+      try { list = await this.service.suggestions(receipt.protocol); }
+      catch {
+        if (current()) this.suggestionList.set({ status: 'none', reason: 'unavailable', items: [], choice: null, chosen_transaction_id: null, answerable: false });
         return;
       }
-      if (list.status !== 'pending' || Date.now() + this.suggestionPollMs > until) return;
+      if (!current()) return;
+      this.suggestionList.set(list);
+      this.suggestionAnswer.set(list.choice);
+      if (list.status !== 'pending' || list.reason === 'review_started') return;
+      if (Date.now() + this.suggestionPollMs > until) { this.suggestionTimedOut.set(true); return; }
       await new Promise(done => { this.suggestionTimer = setTimeout(done, this.suggestionPollMs); });
       if (!current()) return;
     }
@@ -1046,29 +1072,31 @@ export class CustomerPage implements OnInit, OnDestroy {
    * has started the review) the client reads the suggestions again and shows what the server holds, never its own attempt.
    */
   async answerSuggestion(transactionId: string | null): Promise<void> {
-    const receipt = this.intakeReceipt();
+    const receipt = this.suggestionContext();
     if (!receipt || !this.suggestionList()?.answerable || this.suggestionAnswer() || this.suggestionSending()) return;
+    const generation = this.generation;
+    const current = () => generation === this.generation && this.suggestionContext() === receipt;
     this.suggestionSending.set(true);
     this.suggestionFailed.set(false);
     try {
       const stored = await this.service.answerSuggestions(receipt.protocol, transactionId);
-      if (this.intakeReceipt() !== receipt) return;
+      if (!current()) return;
       this.suggestionAnswer.set(stored.choice);
     } catch (e) {
-      if (this.intakeReceipt() !== receipt) return;
+      if (!current()) return;
       if (e instanceof ApiError && e.status === 409) {
         try {
           const fresh = await this.service.suggestions(receipt.protocol);
-          if (this.intakeReceipt() !== receipt) return;
-          if (fresh.status === 'suggested') this.suggestionList.set(fresh);
+          if (!current()) return;
+          this.suggestionList.set(fresh);
           this.suggestionAnswer.set(fresh.choice);
-        } catch { this.suggestionFailed.set(true); }
+        } catch { if (current()) this.suggestionFailed.set(true); }
       } else this.suggestionFailed.set(true);
     } finally {
-      if (this.intakeReceipt() === receipt) {
+      if (current()) {
         this.suggestionSending.set(false);
         // The buttons are gone once answered: keep keyboard and screen-reader users on the confirmation.
-        if (this.suggestionAnswer() || !this.suggestionList()?.answerable) afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('.suggestion-thanks')?.focus(), { injector: this.injector });
+        if (this.suggestionAnswer() || !this.suggestionList()?.answerable) afterNextRender(() => { if (current()) this.host.nativeElement.querySelector<HTMLElement>('.suggestion-thanks')?.focus(); }, { injector: this.injector });
       }
     }
   }

@@ -306,7 +306,7 @@ const charge = ({ transaction_id, merchant_name, amount, currency, occurred_at, 
  * GET /intake/handoff/{protocol or short reference}/suggestions: for the session customer's own acknowledged report,
  * ``status`` ``pending`` (the run has not finished), ``none`` (no run, or any outcome but ``suggested``) or
  * ``suggested`` with up to three of their own charges as stored, plus the customer's answer if any. A missing or
- * another customer's report is the same 404. Never the model's output, the outcome kind or any usage.
+ * another customer's report is the same 404. Optional reason groups recorded outcomes without provider details, model output or usage.
  */
 export async function getSuggestions(request, env, store) {
   const current = await requireSession(request, store, 'customer');
@@ -320,7 +320,9 @@ export async function getSuggestions(request, env, store) {
   // The charges are served only while they can be answered, or with the answer given: once an agent opened an unanswered
   // report, the status stays 'suggested' but nothing is shown (and shown_at is not stamped).
   const answerable = status === 'suggested' && found.choice === null && found.answerable;
-  return json({ status, items: answerable || (status === 'suggested' && found.choice !== null) ? found.items.map(charge) : [], choice: found.choice,
+  const reason = found.choice === null && !found.answerable ? 'review_started'
+    : status === 'none' ? (['no_match', 'ambiguous'].includes(found.outcome) ? 'no_clear_match' : 'unavailable') : undefined;
+  return json({ status, ...(reason && { reason }), items: answerable || (status === 'suggested' && found.choice !== null) ? found.items.map(charge) : [], choice: found.choice,
     chosen_transaction_id: found.chosen_transaction_id, answerable });
 }
 

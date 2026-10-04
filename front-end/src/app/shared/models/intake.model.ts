@@ -144,6 +144,7 @@ export type SuggestionAnswer = 'confirmed' | 'none';
 /** GET /intake/handoff/{reference}/suggestions (contract ``suggestionList``). */
 export interface SuggestionList {
   status: 'pending' | 'none' | 'suggested';
+  reason?: 'no_clear_match' | 'unavailable' | 'review_started';
   items: SuggestedCharge[];
   choice: SuggestionAnswer | null;
   chosen_transaction_id: string | null;

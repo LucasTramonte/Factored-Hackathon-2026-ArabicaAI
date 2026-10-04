@@ -847,12 +847,12 @@ describe('CustomerPage', () => {
         await startEpisode();
         await review();
         expect(page.chatStep()).toBe('receipt');
-        await until(() => page.suggestionList() !== null);
+        await until(() => page.suggestionList()?.status === 'suggested');
         expect(service.suggestions.calls.allArgs()).toEqual([[incomplete.protocol], [incomplete.protocol], [incomplete.protocol]]);
         expect(page.suggestionList()?.items.map(c => c.transaction_id)).toEqual(['demo-tx-001', 'demo-tx-004']);
       });
 
-      it('never checks without details or for another kind of receipt, and shows nothing for none', async () => {
+      it('never checks without details or for another kind of receipt, and keeps the legacy outcome neutral', async () => {
         service.handoffIntake.and.resolveTo(incomplete);
         await startEpisode();
         service.startIntake.and.resolveTo(started);
@@ -868,7 +868,7 @@ describe('CustomerPage', () => {
         expect(service.suggestions).not.toHaveBeenCalled();
         page.newReport(); await startEpisode(); await review(); await settle();
         expect(service.suggestions).toHaveBeenCalledTimes(1);
-        expect(page.suggestionList()).toBeNull();
+        expect(page.suggestionList()?.status).toBe('none');
       });
 
       it('stops checking after about 15 seconds, and a new report stops a watch in flight', async () => {
@@ -882,14 +882,90 @@ describe('CustomerPage', () => {
         const calls = service.suggestions.calls.count();
         expect(calls).toBeGreaterThan(0);
         expect(calls).toBeLessThanOrEqual(4);
-        expect(page.suggestionList()).toBeNull();
+        expect(page.suggestionList()?.status).toBe('pending');
+        expect(page.suggestionMessage()).toBe(page.t().suggestStillPending);
         (Date.now as jasmine.Spy).and.callThrough();
+        const saved: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete', status: 'received',
+          next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+        page.reports.set({ items: [saved], has_more: false });
+        service.suggestions.and.resolveTo(shown);
+        page.reopenSuggestions(saved); await settle();
+        expect(page.suggestionList()?.status).toBe('suggested');
+        expect(page.suggestionTimedOut()).toBeFalse();
+        expect(service.suggestions.calls.mostRecent().args).toEqual([saved.protocol]);
         let answer!: (l: typeof shown) => void;
         service.suggestions.and.returnValue(new Promise(r => answer = r));
         page.newReport(); await startEpisode(); await review();
         page.newReport();
         answer(shown); await settle();
         expect(page.suggestionList()).toBeNull();
+      });
+
+      it('shows recorded no-match, unavailable, pending and legacy states in every language', async () => {
+        const fixture = TestBed.createComponent(CustomerPage), p = fixture.componentInstance;
+        p.step.set('home'); p.chatOpen.set(true); p.intakeReceipt.set(incomplete);
+        for (const code of ['es', 'pt', 'en'] as const) {
+          lang.set(code);
+          for (const [list, key] of [
+            [{ ...pending }, 'suggestPending'],
+            [{ ...pending, status: 'none', reason: 'no_clear_match' }, 'suggestNoMatch'],
+            [{ ...pending, status: 'none', reason: 'unavailable' }, 'suggestUnavailable'],
+            [{ ...pending, status: 'none' }, 'suggestLegacy'],
+            [{ ...shown, answerable: false, reason: 'review_started' }, 'suggestInReview']
+          ] as const) {
+            p.suggestionList.set(list); fixture.detectChanges();
+            expect(fixture.nativeElement.querySelector('.suggestion-thanks').textContent.trim()).toBe(p.t()[key]);
+            expect(fixture.nativeElement.querySelectorAll('#suggestions button').length).toBe(0);
+          }
+          p.suggestionList.set(pending); p.suggestionTimedOut.set(true); fixture.detectChanges();
+          expect(fixture.nativeElement.querySelector('.suggestion-thanks').textContent.trim()).toBe(p.t().suggestStillPending);
+          p.suggestionTimedOut.set(false);
+        }
+        lang.set('es');
+      });
+
+      it('a request failure leaves the immediate saved receipt and an unavailable search', async () => {
+        service.suggestions.and.rejectWith(new ApiError(503, 'provider detail'));
+        service.handoffIntake.and.resolveTo(incomplete);
+        await startEpisode(); await review(); await settle();
+        expect(page.intakeReceipt()).toBe(incomplete);
+        expect(page.suggestionList()?.reason).toBe('unavailable');
+        expect(page.suggestionMessage()).toBe(page.t().suggestUnavailable);
+      });
+
+      it('reopens a listed report through the owned endpoint without making another receipt, and ignores an old report response', async () => {
+        const r: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete',
+          status: 'received', next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+        const later = { ...r, protocol: 'other-report' };
+        page.reports.set({ items: [r, later], has_more: false });
+        let old!: (l: typeof shown) => void;
+        service.suggestions.and.returnValue(new Promise(resolve => old = resolve));
+        page.reopenSuggestions(r);
+        expect(page.chatStep()).toBe('receipt'); expect(page.intakeReceipt()).toBeNull();
+        service.suggestions.and.resolveTo({ ...shown, choice: 'none', answerable: false });
+        page.reopenSuggestions(later); await settle(); old(shown); await settle();
+        expect(page.suggestionReport()).toBe(later); expect(page.suggestionAnswer()).toBe('none');
+        expect(service.suggestions.calls.allArgs()).toEqual([[r.protocol], [later.protocol]]);
+        expect(service.handoffIntake).not.toHaveBeenCalled();
+        page.reopenSuggestions({ ...r, protocol: 'unlisted' });
+        expect(page.suggestionReport()).toBe(later);
+      });
+
+      it('an identity reset ignores both a late saved-report read and a late confirmation', async () => {
+        const r: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete',
+          status: 'received', next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+        page.reports.set({ items: [r], has_more: false });
+        let old!: (l: typeof shown) => void;
+        service.suggestions.and.returnValue(new Promise(resolve => old = resolve));
+        page.reopenSuggestions(r); await page.signOut(); old(shown); await settle();
+        expect(page.suggestionList()).toBeNull(); expect(page.suggestionReport()).toBeNull();
+        page.reports.set({ items: [r], has_more: false }); service.suggestions.and.resolveTo(shown);
+        page.reopenSuggestions(r); await settle();
+        let answer!: (v: { choice: 'confirmed'; transaction_id: string; chosen_at: string }) => void;
+        service.answerSuggestions.and.returnValue(new Promise(resolve => answer = resolve));
+        const confirmation = page.answerSuggestion('demo-tx-001');
+        await page.signOut(); answer({ choice: 'confirmed', transaction_id: 'demo-tx-001', chosen_at: 'now' }); await confirmation;
+        expect(page.suggestionAnswer()).toBeNull(); expect(page.suggestionList()).toBeNull();
       });
 
       it('picking a charge sends only its id, once; "none of these" sends none; a 409 or a failure behaves', async () => {
@@ -929,7 +1005,7 @@ describe('CustomerPage', () => {
         const el = fixture.nativeElement as HTMLElement;
         expect(el.querySelectorAll('#suggestions .suggestion-pick').length).toBe(2);
         service.answerSuggestions.and.rejectWith(new ApiError(409, 'already_in_review'));
-        service.suggestions.and.resolveTo({ ...shown, answerable: false });
+        service.suggestions.and.resolveTo({ ...shown, answerable: false, reason: 'review_started' });
         el.querySelector<HTMLButtonElement>('.suggestion-pick')!.click();
         await fixture.whenStable(); fixture.detectChanges(); await fixture.whenStable();
         expect(p.suggestionAnswer()).toBeNull();
