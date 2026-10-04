@@ -1,8 +1,8 @@
--- id: PR-08
--- title: Segment cut: unrecognized-charge complaints by the customer's current segment (a snapshot)
+-- id: PR-11
+-- title: Unrecognized-charge complaints by the customer's country (a snapshot): volume, unresolved, SLA, first response, closed-case satisfaction
 -- scope: design
--- memory: Design-window unrecognized-charge complaints (about 10k rows) left-joined many-to-one to dim_customers (150k rows) on the complaint's own customer_id; grouped by segment.
-SELECT coalesce(cu.segment, '(no customer)') AS segment,
+-- memory: Design-window unrecognized-charge complaints (about 10k rows) left-joined many-to-one to dim_customers (150k rows) on the complaint's own customer_id; grouped by country.
+SELECT coalesce(cu.country, '(no customer)') AS country,
        count(*) AS complaints,
        count(DISTINCT c.customer_id) AS customers,
        count(*) FILTER (WHERE c.status IN ('Open', 'In Process', 'Escalated')) AS unresolved,
@@ -18,4 +18,4 @@ FROM silver.fact_complaints c
 LEFT JOIN silver.dim_customers cu ON cu.customer_id = c.customer_id
 WHERE c.subcategory = 'Cargo no reconocido' AND c.creation_date >= $design_start AND c.creation_date < $design_end
 GROUP BY ALL
-ORDER BY complaints DESC, segment
+ORDER BY complaints DESC, country

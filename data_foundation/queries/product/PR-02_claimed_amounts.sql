@@ -14,8 +14,9 @@ WITH c AS (
 SELECT coalesce(currency, '(none)') AS currency,
        count(*) AS complaints,
        count(a) AS amount_present,
-       sum(a) AS source_amount_sum,
-       median(a) AS source_amount_p50,
+       -- No currency, no total: those amounts may mix currencies.
+       CASE WHEN currency IS NOT NULL THEN sum(a) END AS source_amount_sum,
+       CASE WHEN currency IS NOT NULL THEN median(a) END AS source_amount_p50,
        count(*) FILTER (WHERE a IS NOT NULL AND (currency = 'USD' OR rate IS NOT NULL)) AS usd_convertible,
        sum(CASE WHEN currency = 'USD' THEN a ELSE a * rate END) AS usd_amount_sum,
        currency IS DISTINCT FROM 'USD' AS usd_is_estimated
