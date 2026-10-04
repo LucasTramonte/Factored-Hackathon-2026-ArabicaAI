@@ -117,4 +117,3 @@ Prepared 2026-10-04 from what merged after `v0.2.0` (#85–#110). The tag goes o
 - Cohort: 796 dataset customers, `slice_version` `c32369c464eec13a` (one part, `4fe90381be8d8fef`), from the cohort manifest (`data/gold_cohort/2026-06-17/manifest.json`). Remote `seed_loads` holds that part, `4fe90381be8d8fef`, loaded 2026-10-01 12:45:10 (a person's read-only query, 2026-10-04).
 - Demo alert flags (#106): the fictitious seed's three `bank_flagged` updates (`demo-tx-015`, `-020`, `-025` for Diego, Elena and Marco) were missing on remote D1 and were applied by a person on 2026-10-04; a read-back shows all three set.
 - Extractor switch: off. The new `VERTEX_WIF_SIGNING_KEY` secret is unused until the AI suggestion path ships.
-
