@@ -10,7 +10,7 @@ import { formatSourceTime } from '../../shared/format/source-time.util';
 import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
-import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind, REASON_LABEL, Reason } from '../../shared/models/intake.model';
+import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind, REASON_LABEL, Reason, SuggestionMarkValue } from '../../shared/models/intake.model';
 import { AgentService } from './agent.service';
 import { CustomerService } from '../customer/customer.service';
 
@@ -86,9 +86,43 @@ export class AgentPage {
     return this.t()[KIND_KEYS[kind]];
   }
 
-  /** One line: whether a model read the case in shadow (count and version only; it decides nothing). */
+  /** One line: whether a model read the customer's details to suggest charges (count and version only; it decides nothing). */
   modelLine({ model_reading: m }: AgentIntakeDetail): string {
-    return m.mode === 'shadow' ? this.t().modelShadow.replace('{n}', String(m.llm_calls)).replace('{calls}', m.llm_calls === 1 ? this.t().callOne : this.t().callMany).replace('{v}', m.model_version ?? '') : this.t().modelOff;
+    return m.mode === 'suggestion' ? this.t().modelSuggestion.replace('{n}', String(m.llm_calls)).replace('{calls}', m.llm_calls === 1 ? this.t().callOne : this.t().callMany).replace('{v}', m.model_version ?? '') : this.t().modelOff;
+  }
+
+  /** The mark request in flight, and a failure to show beside the buttons. */
+  readonly marking = signal(false);
+  readonly markFailed = signal(false);
+  private readonly markStatus = viewChild<ElementRef<HTMLElement>>('markStatus');
+
+  /**
+   * Label a customer-confirmed suggestion correct or wrong (the pilot's measure); the first mark stands. On 409 another
+   * person marked it first: reload the detail to show their mark. Focus lands on the mark's status line after a stored
+   * mark (ours or theirs); on a failure it stays on the button, beside the alert.
+   */
+  async mark(d: AgentIntakeDetail, mark: SuggestionMarkValue): Promise<void> {
+    if (this.marking() || d.customer_suggestion?.choice !== 'confirmed' || d.customer_suggestion.mark) return;
+    this.marking.set(true);
+    this.markFailed.set(false);
+    let shown = false;
+    try {
+      const stored = await this.service.markSuggestion(d.protocol, mark);
+      this.detail.update(x => x?.protocol === d.protocol && x.customer_suggestion ? { ...x, customer_suggestion: { ...x.customer_suggestion, mark: stored.mark } } : x);
+      shown = true;
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        try {
+          const fresh = await this.service.intakeDetail(d.protocol);
+          this.detail.update(x => x?.protocol === d.protocol ? fresh : x);
+          shown = true;
+        } catch (again) { this.fail(again); }
+      } else if (e instanceof ApiError && e.status === 401) this.fail(e);
+      else this.markFailed.set(true);
+    } finally {
+      this.marking.set(false);
+      if (shown) afterNextRender(() => this.markStatus()?.nativeElement.focus(), { injector: this.injector });
+    }
   }
 
   /** The customer's reason, or "not recorded" for reports from before the choice existed (never a default). */

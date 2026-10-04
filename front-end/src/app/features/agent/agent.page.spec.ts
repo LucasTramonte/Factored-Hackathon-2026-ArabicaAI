@@ -18,7 +18,7 @@ const detail = (protocol: string, over: Partial<AgentIntakeDetail> = {}): AgentI
   ...intake(protocol), language: 'es', customer_statement: 'No reconozco este cargo',
   verified_evidence: { transaction: { transaction_id: 'TX-9', merchant_name: 'Café', occurred_at: null, source_occurred_at: '2026-09-01 10:00:00', amount: '12.50', currency: 'MXN' } },
   actions_taken: ['owned_transaction_retrieved'], unresolved_questions: [], history: [{ seq: 1, event: 'intake_started', ts: '2026-09-30T11:59:00.000Z' }],
-  history_has_more: false, model_reading: { mode: 'off', model_version: null, llm_calls: 0 }, scope: 'synthetic_demo_only',
+  history_has_more: false, model_reading: { mode: 'off', model_version: null, llm_calls: 0 }, customer_suggestion: null, scope: 'synthetic_demo_only',
   first_opened_at: '2026-10-03T12:00:00.000Z', customer_history: { reports: 0, open: 0, high_urgency: 0, last_status: null, last_accepted_at: null, has_more: false }, ...over
 });
 
@@ -33,7 +33,7 @@ describe('AgentPage', () => {
   const el = () => fixture.nativeElement as HTMLElement;
 
   beforeEach(async () => {
-    service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'intakes', 'intakeDetail', 'setStatus'], { roles: signal([]) });
+    service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'intakes', 'intakeDetail', 'setStatus', 'markSuggestion'], { roles: signal([]) });
     service.signIn.and.resolveTo(agentSession);
     cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
     cognito.requestCode.and.resolveTo();
@@ -202,27 +202,27 @@ describe('AgentPage', () => {
     await loadAndOpen();
     const line = () => el().querySelector('#model-reading')!.textContent!.trim();
     expect(line()).toBe('Model reading: off.');
-    service.intakeDetail.and.resolveTo(detail(P1, { model_reading: { mode: 'shadow', model_version: 'extractor-v1@a270773600cf', llm_calls: 2 } }));
+    service.intakeDetail.and.resolveTo(detail(P1, { model_reading: { mode: 'suggestion', model_version: 'extractor-v1@a270773600cf', llm_calls: 2 } }));
     await page.open(P1, el().querySelector<HTMLButtonElement>('.intake-row')!);
     fixture.detectChanges();
-    expect(line()).toBe('Model reading: in shadow, 2 calls, version extractor-v1@a270773600cf. The model decides nothing.');
+    expect(line()).toBe('Model reading: read the details to suggest charges, 2 calls, version extractor-v1@a270773600cf. The model decides nothing.');
     TestBed.inject(LangService).set('es');
     fixture.detectChanges();
-    expect(line()).toBe('Lectura del modelo: en sombra, 2 llamadas, versión extractor-v1@a270773600cf. El modelo no decide nada.');
+    expect(line()).toBe('Lectura del modelo: leyó los detalles para sugerir cargos, 2 llamadas, versión extractor-v1@a270773600cf. El modelo no decide nada.');
     TestBed.inject(LangService).set('pt');
     fixture.detectChanges();
-    expect(line()).toBe('Leitura do modelo: em sombra, 2 chamadas, versão extractor-v1@a270773600cf. O modelo não decide nada.');
+    expect(line()).toBe('Leitura do modelo: leu os detalhes para sugerir cobranças, 2 chamadas, versão extractor-v1@a270773600cf. O modelo não decide nada.');
   });
 
   it('says 1 call in the singular', async () => {
-    service.intakeDetail.and.resolveTo(detail(P1, { model_reading: { mode: 'shadow', model_version: 'v1', llm_calls: 1 } }));
+    service.intakeDetail.and.resolveTo(detail(P1, { model_reading: { mode: 'suggestion', model_version: 'v1', llm_calls: 1 } }));
     await loadAndOpen();
     const line = () => el().querySelector('#model-reading')!.textContent!.trim();
-    expect(line()).toBe('Model reading: in shadow, 1 call, version v1. The model decides nothing.');
+    expect(line()).toBe('Model reading: read the details to suggest charges, 1 call, version v1. The model decides nothing.');
     TestBed.inject(LangService).set('es'); fixture.detectChanges();
-    expect(line()).toBe('Lectura del modelo: en sombra, 1 llamada, versión v1. El modelo no decide nada.');
+    expect(line()).toBe('Lectura del modelo: leyó los detalles para sugerir cargos, 1 llamada, versión v1. El modelo no decide nada.');
     TestBed.inject(LangService).set('pt'); fixture.detectChanges();
-    expect(line()).toBe('Leitura do modelo: em sombra, 1 chamada, versão v1. O modelo não decide nada.');
+    expect(line()).toBe('Leitura do modelo: leu os detalhes para sugerir cobranças, 1 chamada, versão v1. O modelo não decide nada.');
   });
 
   it('says so when there is no verified transaction', async () => {
@@ -596,6 +596,72 @@ describe('AgentPage', () => {
           expect(el().textContent).not.toMatch(/reembols|bloque|fraude|refund|block|verdict/i);
         }
       }
+    });
+  });
+
+  describe('a charge the customer confirmed from a suggestion (ADR-012)', () => {
+    const charge = { transaction_id: 'demo-tx-001', merchant_name: 'Mercado Demo', occurred_at: '2026-09-25T14:00:00+00:00', source_occurred_at: null, amount: '125.50', currency: 'BRL' };
+    const suggested = (mark: 'correct' | 'wrong' | null = null) => detail(P1, { kind: 'incomplete', verified_evidence: { transaction: null },
+      model_reading: { mode: 'suggestion', model_version: 'v1', llm_calls: 1 }, customer_suggestion: { choice: 'confirmed', verified_by_bank: false, mark, transaction: charge } });
+    const marker = () => el().querySelector<HTMLElement>('#customer-suggestion');
+
+    it('is shown as a suggestion, never as verified evidence, with its charge and the two marks', async () => {
+      service.intakeDetail.and.resolveTo(suggested());
+      await loadAndOpen();
+      const box = marker()!;
+      expect(box.querySelector('h3')!.textContent!.trim()).toBe(t().suggestionHeading);
+      expect(box.textContent).toContain(t().suggestionNotVerified);
+      expect(box.textContent).toContain('demo-tx-001');
+      expect(box.textContent).toContain('125.50 BRL');
+      expect(el().textContent).toContain(t().noEvidence);
+      expect(box.querySelector('.mark-bar')!.getAttribute('role')).toBe('group');
+      expect([...box.querySelectorAll('.mark-bar button')].map(b => b.textContent!.trim())).toEqual([t().suggestionMarkCorrect, t().suggestionMarkWrong]);
+      for (const code of ['es', 'pt'] as const) {
+        TestBed.inject(LangService).set(code); fixture.detectChanges();
+        expect(marker()!.textContent).toContain(t().suggestionNotVerified);
+      }
+    });
+
+    it('marks it once; the buttons go and focus lands on the stored mark', async () => {
+      service.intakeDetail.and.resolveTo(suggested());
+      service.markSuggestion.and.resolveTo({ protocol: P1, mark: 'wrong', marked_at: '2026-10-04T12:00:00.000Z' });
+      await loadAndOpen();
+      marker()!.querySelector<HTMLButtonElement>('.mark-wrong')!.click();
+      await fixture.whenStable(); fixture.detectChanges();
+      expect(service.markSuggestion).toHaveBeenCalledOnceWith(P1, 'wrong');
+      expect(marker()!.querySelectorAll('.mark-bar button').length).toBe(0);
+      const status = marker()!.querySelector<HTMLElement>('.mark-status')!;
+      expect(status.textContent!.trim()).toBe(t().suggestionMarkedWrong);
+      await fixture.whenStable();
+      expect(document.activeElement).toBe(status);
+      await page.mark(page.detail()!, 'correct');
+      expect(service.markSuggestion).toHaveBeenCalledTimes(1);
+    });
+
+    it('on 409 shows the mark another person stored; a failure keeps both buttons', async () => {
+      service.intakeDetail.and.resolveTo(suggested());
+      await loadAndOpen();
+      service.markSuggestion.and.rejectWith(new ApiError(503, 'x'));
+      const correct = marker()!.querySelector<HTMLButtonElement>('.mark-correct')!;
+      correct.focus(); correct.click();
+      await fixture.whenStable(); fixture.detectChanges(); await fixture.whenStable();
+      expect(marker()!.querySelectorAll('.mark-bar button').length).toBe(2);
+      expect(document.activeElement).toBe(correct, 'a failure leaves focus on the button the agent pressed');
+      expect(marker()!.querySelector('[role=alert]')!.textContent!.trim()).toBe(t().suggestionMarkFailed);
+      service.markSuggestion.and.rejectWith(new ApiError(409, 'x'));
+      service.intakeDetail.and.resolveTo(suggested('correct'));
+      await page.mark(page.detail()!, 'wrong'); fixture.detectChanges();
+      expect(marker()!.querySelector('.mark-status')!.textContent!.trim()).toBe(t().suggestionMarkedCorrect);
+    });
+
+    it('"none of these" is shown as the customer\'s answer, with nothing to mark; no answer shows no marker', async () => {
+      service.intakeDetail.and.resolveTo(detail(P1, { customer_suggestion: { choice: 'none', verified_by_bank: false, mark: null, transaction: null } }));
+      await loadAndOpen();
+      expect(marker()!.textContent).toContain(t().suggestionNoneChosen);
+      expect(marker()!.querySelectorAll('button').length).toBe(0);
+      service.intakeDetail.and.resolveTo(detail(P1));
+      await page.open(P1, el().querySelector<HTMLButtonElement>('.intake-row')!); fixture.detectChanges();
+      expect(marker()).toBeNull();
     });
   });
 });

@@ -258,14 +258,14 @@ test('housekeeping sweeps at one cutoff, one bounded atomic page at a time, and 
   const now = Date.parse('2026-09-30T12:00:00.000Z');
   for (let i = 0; i < 5; i++) await start(now - 600000 - i, now + 3600000);
   const {closeIdleIntakes} = await import('../../scripts/close-idle-intakes.mjs');
-  assert.deepEqual(Object.entries(await closeIdleIntakes(store,{now,limit:2})).filter(([k])=>k!=='metrics'),[['closed',2],['pages',1],['complete',false],['cutoff','2026-09-30T12:00:00.000Z']]);
+  assert.deepEqual(Object.entries(await closeIdleIntakes(store,{now,limit:2})).filter(([k])=>k!=='metrics'),[['closed',2],['pages',1],['complete',false],['cutoff','2026-09-30T12:00:00.000Z'],['suggestions_abandoned',0]]);
   const rest = await closeIdleIntakes(store,{now,limit:2,maxPages:5});
   assert.equal(rest.closed,3); assert.equal(rest.pages,2); assert.equal(rest.complete,true);
   const noop = await closeIdleIntakes(store,{now,limit:2,maxPages:5});
   assert.equal(noop.closed,0); assert.equal(noop.pages,1); assert.equal(noop.complete,true);
   for (const maxPages of [0,101,1.5]) await assert.rejects(closeIdleIntakes(store,{now,maxPages}),/Invalid closure bounds/);
   // complete comes from a due probe, not page size: a short page that leaves due work behind is not complete.
-  const stuck = { closeIdleIntakes: async () => [], hasDueIdleIntakes: async () => true, metrics: () => ({}) };
+  const stuck = { closeIdleIntakes: async () => [], hasDueIdleIntakes: async () => true, closeStaleSuggestionRuns: async () => [], metrics: () => ({}) };
   assert.equal((await closeIdleIntakes(stuck,{now,limit:2,maxPages:5})).complete,false);
 });
 

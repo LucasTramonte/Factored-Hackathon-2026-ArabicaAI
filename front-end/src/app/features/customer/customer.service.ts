@@ -3,7 +3,7 @@ import { ApiService } from '../../core/http/api.service';
 import { LangService } from '../../shared/i18n/lang.service';
 import type { SessionState } from '../../shared/models/intake.model';
 import { ContextCard, CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeReceipt, IntakeStart, IntakeStartBody,
-  ReportList, Role, TransactionList, AlertResponse } from '../../shared/models/intake.model';
+  ReportList, Role, SuggestionChoice, SuggestionList, TransactionList, AlertResponse } from '../../shared/models/intake.model';
 
 /** Customer calls: email sign-in (simulated in local development), own charges and the guided intake. */
 @Injectable({ providedIn: 'root' })
@@ -93,5 +93,16 @@ export class CustomerService {
 
   handoffIntake(body: IntakeHandoffBody): Promise<IntakeReceipt> {
     return this.api.request<IntakeReceipt>('/intake/handoff', body);
+  }
+
+  /** Suggested charges for one own report (ADR-012): ``pending`` while the service reads the details, then ``none`` or up to three. */
+  suggestions(protocol: string): Promise<SuggestionList> {
+    return this.api.request<SuggestionList>(`/intake/handoff/${encodeURIComponent(protocol)}/suggestions`);
+  }
+
+  /** Answer the suggestions once: one suggested charge, or none of them; a different later answer is 409. Nothing is closed or decided. */
+  answerSuggestions(protocol: string, transactionId: string | null): Promise<SuggestionChoice> {
+    return this.api.request<SuggestionChoice>(`/intake/handoff/${encodeURIComponent(protocol)}/suggestions/confirm`,
+      transactionId ? { transaction_id: transactionId } : { none: true });
   }
 }

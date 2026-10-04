@@ -17,15 +17,24 @@ LANGUAGES = ('es', 'pt', 'en')  # en is additional (ADR-008); the frozen evaluat
 USAGE = ('duration_ms', 'llm_calls', 'input_tokens', 'output_tokens', 'tool_calls')
 TOKENS = ('input_tokens', 'output_tokens')
 V2_USAGE = ('known_input_tokens', 'known_output_tokens', 'usage_unavailable_calls')
+# One per incomplete handoff with details, after intake_ended (ADR-012): the pilot arm, the outcome kind and usage counts.
+SUGGESTION = 'suggestion_recorded'
+SUGGESTION_FIELDS = {'case_ref', 'arm', 'result', 'producer', 'llm_calls', 'known_input_tokens', 'known_output_tokens',
+                     'usage_unavailable_calls', 'injection_flagged', 'suggestions'}
 REQUIRED = {'intake_started': set(), 'clarification_requested': {'missing'}, 'transaction_confirmed': {'transaction_ref'},
             'handoff_created': {'kind', 'case_ref'}, 'handoff_accepted': {'case_ref', 'accepted_by'},
-            'intake_ended': {'outcome', 'safety', *USAGE}}
+            'intake_ended': {'outcome', 'safety', *USAGE}, SUGGESTION: SUGGESTION_FIELDS}
 OPTIONAL = {'intake_started': {'scenario'}, 'handoff_created': {'tool_status'}}
 KINDS = ('complete', 'technical', 'incomplete')
 TOOL_STATUS = ('ok', 'failed', 'timeout')
 REFS = {'case_id', 'session_ref', 'model_version', 'case_ref', 'transaction_ref', 'accepted_by'}
 OUTCOMES = ('accepted', 'abandoned', 'withdrawn', 'technical_failure', 'routed')
 SAFETY = ('assessed_safe', 'unsafe', 'not_assessed')
+ARMS = (None, 'A', 'B')
+# Outcome kinds of a suggestion run; the first four never call the model, and only 'suggested' shows charges.
+# 'abandoned' is the idle sweep's: a run still pending after 10 minutes, its pre-recorded call kept as unknown.
+RESULTS = ('off', 'capped', 'retired', 'auth_error', 'timeout', 'provider_error', 'config_error', 'invalid_output',
+           'no_match', 'ambiguous', 'suggested', 'abandoned')
 CHAIN = ('transaction_confirmed', 'handoff_created', 'handoff_accepted')
 TS = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z')
 # Contract vocabulary for clarification_requested.missing (Docs/intake/intake-events.md).
@@ -77,6 +86,8 @@ def _check_event(e):
         raise ValueError(f'handoff_created tool_status must be one of {TOOL_STATUS}, got {e["tool_status"]!r}')
     if name == 'handoff_created' and e['kind'] == 'complete' and e.get('tool_status', 'ok') != 'ok':
         raise ValueError(f'handoff_created for {e["case_id"]}: a failed tool cannot back a complete handoff')
+    if name == SUGGESTION:
+        _check_suggestion(e)
     if name == 'intake_ended':
         integer_usage = USAGE if e['version'] == '1' else ('duration_ms', 'llm_calls', 'tool_calls', *V2_USAGE)
         if (e['outcome'] not in OUTCOMES or e['safety'] not in SAFETY
@@ -91,6 +102,53 @@ def _check_event(e):
                     raise ValueError('Unavailable usage requires null token totals')
             elif any(type(e[k]) is not int or e[k] < 0 or e[k] != e['known_' + k] for k in TOKENS):
                 raise ValueError('Available usage requires non-negative integer token totals equal to known subtotals')
+
+
+def _check_suggestion(e):
+    """A suggestion run: references and counts only, consistent with its outcome kind."""
+    counts = ('llm_calls', 'known_input_tokens', 'known_output_tokens', 'usage_unavailable_calls', 'suggestions')
+    if e['version'] != '2' or e['arm'] not in ARMS or e['result'] not in RESULTS:
+        raise ValueError('suggestion_recorded needs version 2, an arm in (null, A, B) and a known result')
+    if any(type(e[k]) is not int or e[k] < 0 for k in counts):
+        raise ValueError('suggestion_recorded counts must be non-negative integers')
+    if e['producer'] is not None and (not isinstance(e['producer'], str) or not e['producer']):
+        raise ValueError('suggestion_recorded.producer must be null or a model version')
+    if e['llm_calls'] > 2 or e['usage_unavailable_calls'] > e['llm_calls'] or (e['llm_calls'] and e['producer'] is None):
+        raise ValueError('suggestion_recorded usage is inconsistent')
+    if (e['suggestions'] > 0) != (e['result'] == 'suggested') or e['suggestions'] > 3:
+        raise ValueError('suggestion_recorded shows 1-3 charges exactly when the result is suggested')
+    if e['result'] in ('off', 'capped', 'retired', 'auth_error') and e['llm_calls']:
+        raise ValueError(f'suggestion_recorded result {e["result"]} makes no model call')
+    if e['arm'] != 'B' and (e['result'] not in ('off', 'abandoned') or e['llm_calls']):
+        raise ValueError('only arm B is ever read by the model')
+    if e['injection_flagged'] is not None and (type(e['injection_flagged']) is not bool or e['result'] not in ('no_match', 'ambiguous', 'suggested')):
+        raise ValueError('suggestion_recorded.injection_flagged is a boolean, known only when the model answered')
+
+
+def _check_suggestions(groups, suggestions):
+    """Each run follows its own episode's intake_ended, once, for that episode's incomplete handoff."""
+    seen = set()
+    for e in suggestions:
+        seq = groups.get(e['case_id'])
+        if not seq or seq[-1]['event'] != 'intake_ended' or e['seq'] <= seq[-1]['seq'] or e['case_id'] in seen:
+            raise ValueError(f'Episode {e["case_id"]}: suggestion_recorded must follow intake_ended, once')
+        if e['language'] != seq[0]['language'] or not any(x['event'] == 'handoff_created' and x['kind'] == 'incomplete'
+                                                          and x['case_ref'] == e['case_ref'] for x in seq):
+            raise ValueError(f'Episode {e["case_id"]}: suggestion_recorded without its incomplete handoff')
+        seen.add(e['case_id'])
+
+
+def _suggestion_summary(suggestions):
+    """Runs by arm and result, with usage; unknown usage keeps the token totals null, never zero."""
+    unknown = sum(e['usage_unavailable_calls'] for e in suggestions)
+    return dict(runs=len(suggestions), injection_flagged=sum(e['injection_flagged'] is True for e in suggestions),
+                by_arm={str(arm): dict(Counter(e['result'] for e in suggestions if e['arm'] == arm)) for arm in ARMS
+                        if any(e['arm'] == arm for e in suggestions)},
+                llm_calls=sum(e['llm_calls'] for e in suggestions), usage_unavailable_calls=unknown,
+                known_input_tokens=sum(e['known_input_tokens'] for e in suggestions),
+                known_output_tokens=sum(e['known_output_tokens'] for e in suggestions),
+                input_tokens=None if unknown else sum(e['known_input_tokens'] for e in suggestions),
+                output_tokens=None if unknown else sum(e['known_output_tokens'] for e in suggestions))
 
 
 def _check_episode(case_id, seq):
@@ -158,12 +216,15 @@ def summarize(events):
     """Return episode KPIs for 'all', 'es', 'pt' and 'en' from a list of event dicts; unsafe is a gate, not a rate."""
     for e in events:
         _check_event(e)
+    suggestions = [e for e in events if e['event'] == SUGGESTION]
     groups = {}
-    for e in sorted(events, key=lambda e: (e['case_id'], e['seq'])):
+    for e in sorted((e for e in events if e['event'] != SUGGESTION), key=lambda e: (e['case_id'], e['seq'])):
         groups.setdefault(e['case_id'], []).append(e)
     for case_id, seq in groups.items():
         _check_episode(case_id, seq)
-    return {label: _summary([seq for seq in groups.values() if label == 'all' or seq[0]['language'] == label])
+    _check_suggestions(groups, suggestions)
+    return {label: {**_summary([seq for seq in groups.values() if label == 'all' or seq[0]['language'] == label]),
+                    'suggestions': _suggestion_summary([e for e in suggestions if label == 'all' or e['language'] == label])}
             for label in ('all', *LANGUAGES)}
 
 

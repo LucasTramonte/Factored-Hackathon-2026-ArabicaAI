@@ -64,6 +64,18 @@ jobs:
       - name: Check relative Markdown links and anchors
         run: python scripts/check_doc_links.py
 
+      # The online parity fixture records the interpreter extractor-v1 was evaluated on (Python 3.12), whose
+      # fromisoformat accepts more forms than 3.10's; check it there. Last, so every step above stays on 3.10.
+      - name: Set up Python 3.12 for the parity fixture
+        if: steps.scope.outputs.python == 'true'
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Check the online parity fixture on Python 3.12
+        if: steps.scope.outputs.python == 'true'
+        run: python -m unittest evals.intake.test_online_parity -v  # stdlib only; the 3.12 interpreter has no pytest
+
   web:
     runs-on: ubuntu-latest
     steps:

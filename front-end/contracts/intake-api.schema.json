@@ -45,6 +45,11 @@
         "detail": {
           "type": "string",
           "minLength": 1
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z_]+$",
+          "description": "A machine-readable reason on some refusals, e.g. already_in_review (a suggestion answered after an agent opened the report)."
         }
       }
     },
@@ -468,7 +473,7 @@
       "required": ["seq", "event", "ts"],
       "properties": {
         "seq": {"type": "integer"},
-        "event": {"type": "string", "pattern": "^(intake_started|clarification_requested|transaction_confirmed|handoff_created|handoff_accepted|intake_ended)$"},
+        "event": {"type": "string", "pattern": "^(intake_started|clarification_requested|transaction_confirmed|handoff_created|handoff_accepted|intake_ended|suggestion_recorded)$"},
         "ts": {"type": "string", "minLength": 1},
         "transaction_ref": {"type": "string", "minLength": 1},
         "case_ref": {"type": "string", "minLength": 1},
@@ -481,7 +486,7 @@
     },
     "agentIntakeDetail": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at", "first_opened_at", "reason", "language", "customer_statement", "customer_history", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "model_reading", "scope"],
+      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at", "first_opened_at", "reason", "language", "customer_statement", "customer_history", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "model_reading", "customer_suggestion", "scope"],
       "properties": {
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
@@ -503,10 +508,15 @@
         "history_has_more": {"type": "boolean"},
         "first_opened_at": {"type": "string", "minLength": 1, "description": "UTC ISO timestamp of the first agent open, stored as epoch-ms INTEGER in D1. API pickup ms = Date.parse(first_opened_at) - Date.parse(accepted_at). In SQL subtract CAST(ROUND((julianday(accepted_at)-2440587.5)*86400000) AS INTEGER) from the stored first_opened_at."},
         "customer_history": {"type": "object", "additionalProperties": false, "required": ["reports", "open", "high_urgency", "last_status", "last_accepted_at", "has_more"], "description": "The same customer's other acknowledged reports in their newest 21 episodes, at most 20 reports and no identifiers. Counts and latest status/time cover this bounded window only. has_more means the raw episode window or report bound is full, so older acknowledged reports may be missing even with reports=0.", "properties": {"has_more": {"type": "boolean"}, "reports": {"type": "integer"}, "open": {"type": "integer"}, "high_urgency": {"type": "integer"}, "last_status": {"type": ["string", "null"], "pattern": "^(received|in_review|closed)$"}, "last_accepted_at": {"type": ["string", "null"], "minLength": 1}}},
-        "model_reading": {"type": "object", "additionalProperties": false, "required": ["mode", "model_version", "llm_calls"], "description": "Whether a model read the case in shadow: version and call count only, never its output; it decides nothing.", "properties": {"mode": {"type": "string", "pattern": "^(off|shadow)$"}, "model_version": {"type": ["string", "null"], "minLength": 1}, "llm_calls": {"type": "integer"}}},
+        "model_reading": {"type": "object", "additionalProperties": false, "required": ["mode", "model_version", "llm_calls"], "description": "Whether a model read the customer's details to suggest charges (ADR-012): version and call count only, never its output; it decides nothing.", "properties": {"mode": {"type": "string", "pattern": "^(off|suggestion)$"}, "model_version": {"type": ["string", "null"], "minLength": 1}, "llm_calls": {"type": "integer"}}},
+        "customer_suggestion": {"type": ["object", "null"], "additionalProperties": false, "required": ["choice", "verified_by_bank", "mark", "transaction"], "description": "The customer's answer to an AI suggestion (ADR-012): a charge they confirmed from the suggestion, or none of them. A suggestion, never bank-verified evidence; the agent still reviews and may mark it.", "properties": {"choice": {"type": "string", "pattern": "^(confirmed|none)$"}, "verified_by_bank": {"const": false}, "mark": {"type": ["string", "null"], "pattern": "^(correct|wrong)$"}, "transaction": {"$ref": "#/$defs/suggestedCharge"}}},
         "scope": {"const": "synthetic_demo_only"}
       }
     },
+    "suggestedCharge": {"type": ["object", "null"], "additionalProperties": false, "required": ["transaction_id", "occurred_at", "source_occurred_at", "merchant_name", "amount", "currency"], "description": "One of the customer's own charges as stored (source amount and currency, timezone-free source time).", "properties": {"transaction_id": {"type": "string", "minLength": 1}, "occurred_at": {"type": ["string", "null"]}, "source_occurred_at": {"type": ["string", "null"]}, "merchant_name": {"type": "string"}, "amount": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$"}, "currency": {"type": "string", "pattern": "^[A-Z]{3}$"}}},
+    "suggestionList": {"description": "GET /intake/handoff/{reference}/suggestions (ADR-012): pending while the Worker reads the details; none for any outcome but a suggestion; else up to three of the customer's own charges, and the customer's answer once given. answerable: suggested, unanswered and no agent has opened the report yet (after that an answer is 409 already_in_review; shown and unanswered by then counts as not_answered). The first read that serves suggested charges records shown_at. Never the model's output or the outcome kind.", "type": "object", "additionalProperties": false, "required": ["status", "items", "choice", "chosen_transaction_id", "answerable"], "properties": {"answerable": {"type": "boolean"}, "status": {"type": "string", "pattern": "^(pending|none|suggested)$"}, "items": {"type": "array", "maxItems": 3, "items": {"$ref": "#/$defs/suggestedCharge"}}, "choice": {"type": ["string", "null"], "pattern": "^(confirmed|none)$"}, "chosen_transaction_id": {"type": ["string", "null"], "minLength": 1}}},
+    "suggestionChoice": {"description": "POST /intake/handoff/{reference}/suggestions/confirm: the stored first answer. It records the customer's choice only; nothing closes or is decided.", "type": "object", "additionalProperties": false, "required": ["choice", "transaction_id", "chosen_at"], "properties": {"choice": {"type": "string", "pattern": "^(confirmed|none)$"}, "transaction_id": {"type": ["string", "null"], "minLength": 1}, "chosen_at": {"type": "string", "minLength": 1}}},
+    "suggestionMark": {"description": "POST /agent/suggestion-mark: the agent's stored first mark on a customer-confirmed suggestion.", "type": "object", "additionalProperties": false, "required": ["protocol", "mark", "marked_at"], "properties": {"protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}, "mark": {"type": "string", "pattern": "^(correct|wrong)$"}, "marked_at": {"type": "string", "minLength": 1}}},
     "sessionState": {"description": "GET /auth/me (ADR-013, phase 0): the browser's live sessions, restored after a reload; never a token or an expiry.", "type": "object", "additionalProperties": false, "required": ["customer", "agent"], "properties": {"customer": {"type": ["object", "null"], "additionalProperties": false, "required": ["customer_id", "roles", "context_card"], "properties": {"customer_id": {"type": "string", "minLength": 1}, "roles": {"type": "array", "maxItems": 1, "items": {"type": "string", "pattern": "^(customer|admin)$"}}, "context_card": {"type": ["object", "null"], "description": "Snapshot prepared by the quality-gated load; locale_hint never overrides session language.", "additionalProperties": false, "required": ["version", "snapshot_at", "first_name", "locale_hint", "products"], "properties": {"version": {"const": 1}, "snapshot_at": {"type": "string", "minLength": 1}, "first_name": {"type": ["string", "null"], "minLength": 1}, "locale_hint": {"type": "string", "pattern": "^(es|pt)(-[A-Za-z0-9]+)*$"}, "products": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["product_type", "last4", "currency"], "properties": {"product_type": {"type": ["string", "null"]}, "last4": {"type": ["string", "null"], "pattern": "^[0-9]{4}$"}, "currency": {"type": ["string", "null"], "pattern": "^[A-Z]{3}$"}}}}}}}}, "agent": {"type": "boolean"}}}
   }
 }

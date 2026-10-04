@@ -5,7 +5,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { exportJWK, generateKeyPair } from 'jose';
+import { exportJWK, exportPKCS8, generateKeyPair } from 'jose';
 import { readWranglerConfig } from '../scripts/predeploy.mjs';
 import { issuerFor } from '../src/auth/cognito.js';
 
@@ -22,16 +22,24 @@ function run(args) {
   });
   if (result.status !== 0) throw new Error(`${args.join(' ')} failed:\n${result.stdout}\n${result.stderr}`);
 }
-const port = await new Promise((resolvePort, reject) => {
-  const server = createServer();
-  server.on('error', reject);
-  server.listen(0, '127.0.0.1', () => {
-    const selected = server.address().port;
-    server.close(() => resolvePort(selected));
-  });
+// Two distinct free ports, held open together so the OS cannot hand out the same one twice: the Worker's and Google's mock.
+const [port, mockPort] = await new Promise((resolvePorts, reject) => {
+  const servers = [createServer(), createServer()];
+  let listening = 0;
+  for (const held of servers) {
+    held.on('error', reject);
+    held.listen(0, '127.0.0.1', () => {
+      if (++listening < servers.length) return;
+      const selected = servers.map(x => x.address().port);
+      let closed = 0;
+      for (const x of servers) x.close(() => { if (++closed === servers.length) resolvePorts(selected); });
+    });
+  }
 });
 let server;
+let google;
 const testEnv = {};
+
 try {
   for (const name of ['src', 'migrations', 'public']) {
     await cp(join(project, name), join(temp, name), { recursive: true });
@@ -50,11 +58,23 @@ try {
   const { vars } = await readWranglerConfig(join(temp, 'wrangler.jsonc'));
   Object.assign(testEnv, { COGNITO_TEST_PRIVATE_JWK: JSON.stringify({ ...(await exportJWK(privateKey)), kid }),
     COGNITO_TEST_ISSUER: issuerFor(vars), COGNITO_TEST_CLIENT_ID: vars.COGNITO_CLIENT_ID });
+  // The AI suggestion switch is on locally, against the mock above, with a throwaway signing key and arm B forced, so
+  // every incomplete handoff with details exercises the waitUntil path (predeploy refuses these seams in vars).
+  const ai = await generateKeyPair('RS256', { extractable: true });
+  google = spawn(process.execPath, [join(project, 'test/support/google-mock.mjs')], { cwd: project, stdio: ['ignore', 'pipe', 'inherit'],
+    env: { ...env, GOOGLE_MOCK_PORT: String(mockPort), GOOGLE_MOCK_VARS: JSON.stringify(vars), GOOGLE_MOCK_PUBLIC_JWK: JSON.stringify(await exportJWK(ai.publicKey)) } });
+  await new Promise((done, fail) => {
+    google.stdout.once('data', chunk => chunk.toString().startsWith('PORT ' + mockPort) ? done() : fail(new Error('Google mock did not start')));
+    google.once('exit', () => fail(new Error('Google mock exited')));
+  });
+  testEnv.VERTEX_MOCK_URL = `http://127.0.0.1:${mockPort}`;
   await writeFile(join(temp, '.dev.vars'),
     'DEMO_EXPOSE_DB_METRICS="1"\nDEMO_PICKER="1"\n'
     + `COGNITO_TEST_JWKS='${jwks}'\n`
     // A throwaway address key; no SES secrets are written, so every local send is skipped.
-    + `EMAIL_KEY="${randomBytes(32).toString('base64')}"\n`);
+    + `EMAIL_KEY="${randomBytes(32).toString('base64')}"\n`
+    + `INTAKE_AI_ENABLED="1"\nINTAKE_AI_TEST_ARM="B"\nINTAKE_AI_DAILY_CAP="100000"\nVERTEX_MODEL_RETIRES="2099-01-01"\n`
+    + `VERTEX_TEST_ORIGIN="${testEnv.VERTEX_MOCK_URL}"\nVERTEX_WIF_SIGNING_KEY="${(await exportPKCS8(ai.privateKey)).trim().replace(/\n/g, '\\n')}"\n`);
   run(['d1', 'migrations', 'apply', 'arabica-intake-demo', '--local']);
   run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file', 'seed_fictitious.sql']);
   run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file', 'seed_fictitious.sql']);
@@ -69,6 +89,8 @@ try {
     join(project, 'test/integration/sample_seed.sql')]);
   run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file',
     join(project, 'test/integration/cohort_seed.sql')]);
+  run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file',
+    join(project, 'test/integration/kpi_seed.sql')]);
   // A customer session that expired long ago, so tests can prove expiry is enforced server-side.
   const expiredToken = 'e'.repeat(64);
   const expiredHash = createHash('sha256').update(expiredToken).digest('hex');
@@ -94,12 +116,14 @@ try {
   // Budgets run last, in their own test-runner invocation (the runner orders files itself): they measure against
   // every other suite's retained rows, and their bounded fixtures (100 queue reservations, 100 idle starts)
   // cannot change what earlier suites observe in the shared D1.
-  const names = (await readdir(join(project, 'test/integration'))).filter(name => name.endsWith('.test.js')).sort();
+  // ONLY=<file name> runs one suite (local debugging); CI runs them all.
+  const names = (await readdir(join(project, 'test/integration'))).filter(name => name.endsWith('.test.js') && (!process.env.ONLY || name === process.env.ONLY)).sort();
   for (const group of [names.filter(name => name !== 'budget.test.js'), names.filter(name => name === 'budget.test.js')]) {
     if (!group.length) continue;
     const tested = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...group.map(name => join(project, 'test/integration', name))], {
       cwd: temp, env: { ...env, ...testEnv, WORKER_TEST_URL: `http://127.0.0.1:${port}`, EXPIRED_TOKEN: 'e'.repeat(64) },
-      encoding: 'utf8', timeout: 120_000
+      // The suites' group takes about 82 s since the KPI journeys (2026-10-04); 300 s leaves room. Budgets alone stay at 120 s.
+      encoding: 'utf8', timeout: group.includes('budget.test.js') ? 120_000 : 300_000
     });
     process.stdout.write(tested.stdout ?? '');
     process.stderr.write(tested.stderr ?? '');
@@ -109,5 +133,6 @@ try {
   }
 } finally {
   if (server && server.exitCode === null) server.kill('SIGTERM');
+  if (google && google.exitCode === null) google.kill('SIGTERM');
   await rm(temp, { recursive: true, force: true });
 }
