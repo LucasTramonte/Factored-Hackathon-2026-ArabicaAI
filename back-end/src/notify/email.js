@@ -27,10 +27,10 @@ export async function decrypt(blob, env) {
 }
 
 /**
- * Send one plain-text email through SES v2. Returns ``{ ok: true, messageId }``, ``{ ok: false }`` on any failure,
+ * Send one email (plain text, plus HTML when given) through SES v2. Returns ``{ ok: true, messageId }``, ``{ ok: false }`` on any failure,
  * or ``{ ok: false, skipped: true }`` (no request made) when an SES setting is missing. Never throws.
  */
-export async function sendEmail(env, { to, subject, text }, fetchImpl = fetch) {
+export async function sendEmail(env, { to, subject, text, html }, fetchImpl = fetch) {
   const { SES_ACCESS_KEY_ID: accessKeyId, SES_SECRET_ACCESS_KEY: secretAccessKey, SES_REGION: region, SES_FROM: from } = env;
   if (!accessKeyId || !secretAccessKey || !region || !from) return { ok: false, skipped: true };
   try {
@@ -38,7 +38,8 @@ export async function sendEmail(env, { to, subject, text }, fetchImpl = fetch) {
     const signed = await aws.sign(`https://email.${region}.amazonaws.com/v2/email/outbound-emails`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ FromEmailAddress: from, Destination: { ToAddresses: [to] }, Content: { Simple: {
-        Subject: { Data: subject, Charset: 'UTF-8' }, Body: { Text: { Data: text, Charset: 'UTF-8' } } } } })
+        Subject: { Data: subject, Charset: 'UTF-8' },
+        Body: { Text: { Data: text, Charset: 'UTF-8' }, ...(html && { Html: { Data: html, Charset: 'UTF-8' } }) } } } })
     });
     const res = await fetchImpl(signed);
     if (!res.ok) return { ok: false };
