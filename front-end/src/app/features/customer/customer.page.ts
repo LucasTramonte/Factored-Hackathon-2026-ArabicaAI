@@ -547,14 +547,15 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** Open or close one own report's messages with the agent. */
   async toggleMessages(protocol: string): Promise<void> {
     if (this.openThread() === protocol) { this.openThread.set(null); return; }
+    const g = this.generation;
     this.openThread.set(protocol);
     this.thread.set(null);
     this.messageFailed.set('');
     try {
       const thread = await this.service.messages(protocol);
-      if (this.openThread() === protocol) this.thread.set(thread);
+      if (g === this.generation && this.openThread() === protocol) this.thread.set(thread);
     } catch (e) {
-      if (this.openThread() === protocol) this.messageFailed.set(errorText(this.t(), e));
+      if (g === this.generation && this.openThread() === protocol) this.messageFailed.set(errorText(this.t(), e));
     }
   }
 
@@ -1034,6 +1035,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.card.set(null);
     this.reports.set(null);
     this.reportsFailed.set(false);
+    this.openThread.set(null);
+    this.thread.set(null);
     this.chosenLang.set(null);
     this.general.set(false);
     this.clearChat();

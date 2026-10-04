@@ -75,6 +75,69 @@ describe('CustomerPage', () => {
     expect([p.client(), p.step()]).toEqual(['', 'login']);
   });
 
+  it('reload and same-owner sign-out/sign-in restore saved references, independent progress and stored messages from the API', async () => {
+    TestBed.inject(LangService).set('es');
+    const saved: Report[] = [
+      { protocol: '99999999-8888-4777-8666-555555555555', reference_short: 'AR-AAAA-BBBB', kind: 'complete', status: 'received', next_step: 'review_pending', accepted_at: '2026-10-01T12:00:00Z', transaction_id: 'demo-tx-001' },
+      { protocol: '11111111-2222-4333-8444-555555555555', reference_short: 'AR-CCCC-DDDD', kind: 'incomplete', status: 'in_review', next_step: 'being_reviewed', accepted_at: '2026-10-02T12:00:00Z', transaction_id: null },
+      { protocol: '22222222-2222-4333-8444-555555555555', reference_short: 'AR-EEEE-FFFF', kind: 'technical', status: 'closed', next_step: 'closed_by_person', accepted_at: '2026-10-03T12:00:00Z', transaction_id: null }
+    ];
+    service.reports.and.resolveTo({ items: saved, has_more: true });
+    service.messages.and.resolveTo({ status: 'in_review', can_post: true, items: [
+      { message_id: 'aaaaaaaa-1111-4111-8111-111111111111', author: 'agent', body: 'Necesitamos el recibo.', created_at: '2026-10-04T18:00:00.000Z' }] });
+    Object.assign(service, { me: jasmine.createSpy('me').and.resolveTo({ customer: { customer_id: 'demo-ana', roles: ['customer'], context_card: null }, agent: false }) });
+    // A reload has no tab state: only /auth/me and the owned API responses rebuild the screen.
+    const fixture = TestBed.createComponent(CustomerPage);
+    const p = fixture.componentInstance;
+    await p.ngOnInit(); await fixture.whenStable(); fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const rows = () => [...el.querySelectorAll<HTMLElement>('.your-reports ul > li')];
+    expect(p.intakeReceipt()).toBeNull();
+    expect(rows().map(r => r.querySelector('.report-progress [aria-current="step"]')?.textContent?.trim()))
+      .toEqual([p.t().statusReceived, p.t().inReview, `✓${p.t().stepDone}: ${p.t().chipClosed}`]);
+    expect(rows().map(r => r.textContent)).toEqual(saved.map(r => jasmine.stringMatching(r.reference_short!)));
+    expect(rows()[0].textContent).toContain('Mercado');
+    expect(el.textContent).toContain(p.t().moreReports);
+    await p.toggleMessages(saved[1].protocol); fixture.detectChanges();
+    expect(el.querySelector('.message-agent')?.textContent).toContain('Necesitamos el recibo.');
+    await p.signOut(); fixture.detectChanges();
+    expect(el.textContent).not.toContain('AR-CCCC-DDDD');
+    expect(el.textContent).not.toContain('Necesitamos el recibo.');
+    service.messages.and.resolveTo({ status: 'in_review', can_post: true, items: [
+      { message_id: 'bbbbbbbb-1111-4111-8111-111111111111', author: 'agent', body: 'Recibimos el comprobante.', created_at: '2026-10-04T19:00:00.000Z' }] });
+    p.identity = 'demo-ana'; await p.login();
+    await p.toggleMessages(saved[1].protocol); fixture.detectChanges();
+    expect(rows().length).toBe(3);
+    expect(el.querySelector('.message-agent')?.textContent).toContain('Recibimos el comprobante.');
+    expect(el.textContent).not.toContain('Necesitamos el recibo.');
+    await p.signOut();
+    service.reports.and.resolveTo({ items: [], has_more: false });
+    service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
+    service.signIn.and.resolveTo({ customer_id: 'demo-bruno', mode: 'simulated_login', context_card: null, roles: ['customer'] });
+    p.identity = 'demo-bruno'; await p.login(); fixture.detectChanges();
+    expect(rows().length).toBe(0);
+    for (const r of saved) expect(el.textContent).not.toContain(r.reference_short!);
+    expect(el.textContent).not.toContain('Recibimos el comprobante.');
+  });
+
+  for (const failed of [false, true]) it(`ignores an old session's late thread ${failed ? 'failure' : 'success'} after the owner signs back in`, async () => {
+    page.identity = 'demo-ana'; await page.login();
+    const protocol = '99999999-8888-4777-8666-555555555555';
+    let complete!: () => void;
+    service.messages.and.returnValue(new Promise((resolve, reject) => { complete = () => failed ? reject(new ApiError(503))
+      : resolve({ status: 'received', can_post: true, items: [] }); }));
+    const old = page.toggleMessages(protocol);
+    await page.signOut();
+    page.identity = 'demo-ana'; await page.login();
+    const current: MessageThread = { status: 'in_review', can_post: true, items: [
+      { message_id: 'aaaaaaaa-1111-4111-8111-111111111111', author: 'agent', body: 'Respuesta actual.', created_at: '2026-10-04T18:00:00.000Z' }] };
+    service.messages.and.resolveTo(current);
+    await page.toggleMessages(protocol);
+    complete(); await old;
+    expect(page.thread()).toEqual(current);
+    expect(page.messageFailed()).toBe('');
+  });
+
   it('starts on the intro, moves to sign-in on start, and to the home once charges are loaded', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     const p = fixture.componentInstance;
