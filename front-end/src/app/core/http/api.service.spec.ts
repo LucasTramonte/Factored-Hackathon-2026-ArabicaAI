@@ -65,6 +65,11 @@ describe('ApiService', () => {
     }
   });
 
+  it('a 204 resolves without reading a body', async () => {
+    fetchSpy.and.returnValue(Promise.resolve(new Response(null, { status: 204 })));
+    expect(await api.request('/auth/logout', {})).toBeUndefined();
+  });
+
   it('preserves allowlisted conflict reasons without retaining server text', async () => {
     const cases = [
       ['This report is closed; messages are read-only', 'closed-thread'],

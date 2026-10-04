@@ -46,6 +46,7 @@ export class ApiService {
         ? conflictReason((await response.json().catch(() => null))?.detail) : 'unknown';
       throw new ApiError(response.status, undefined, reason === 'open-report', reason);
     }
+    if (response.status === 204) return undefined as T; // no body (logout)
     return response.json() as Promise<T>;
   }
 }

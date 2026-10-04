@@ -137,9 +137,14 @@ export async function whoAmI(request, env, store) {
   });
 }
 
-/** POST /auth/logout: revoke the presented customer session; always 204, so it reveals nothing. */
+/**
+ * POST /auth/logout: revoke the presented customer and agent sessions (an admin sign-in opens both) and clear both
+ * cookies; each actor reads only its own cookie, and an absent one costs no query. Always 204, so it reveals nothing.
+ */
 export async function logout(request, env, store) {
-  return new Response(null, { status: 204, headers: { 'Set-Cookie': await endSession(request, store, 'customer') } });
+  const headers = new Headers();
+  for (const actor of ['customer', 'agent']) headers.append('Set-Cookie', await endSession(request, store, actor));
+  return new Response(null, { status: 204, headers });
 }
 
 const VIEW_LANGUAGES = new Set(['es', 'pt', 'en']);

@@ -91,7 +91,17 @@
           </div>
           <div class="sidebar-foot">
             <div class="ar-note"><span class="ar-chip ar-chip-warn">{{ t().sandbox }}</span><span class="ar-small">{{ t().noMoney }}</span></div>
-            <div class="user"><span class="avatar" aria-hidden="true">{{ initials() }}</span><span class="user-name"><span>{{ displayName() }}</span><span class="mono-meta">{{ client() }}</span></span></div>
+            <details class="user-menu" #userMenu (keydown.escape)="closeUserMenu(userMenu)">
+              <summary class="user"><span class="sr-only">{{ t().account }}: </span><span class="avatar" aria-hidden="true">{{ initials() }}</span><span class="user-name"><span>{{ displayName() }}</span><span class="mono-meta">{{ client() }}</span></span></summary>
+              <div class="ar-panel user-panel">
+                <p><strong>{{ displayName() }}</strong></p>
+                <p class="ar-small">{{ t().customerIdLabel }}: <span class="ar-mono">{{ client() }}</span></p>
+                @if (roles().includes('admin')) { <p><span class="ar-chip">{{ t().adminChip }}</span></p> }
+                @if (identityLocked()) { <p class="ar-small" id="sign-out-locked">{{ t().signOutLocked }}</p> }
+                <button type="button" class="ar-btn ar-btn-secondary" id="sign-out" (click)="signOut()" [disabled]="busy() || identityLocked()"
+                  [attr.aria-describedby]="identityLocked() ? 'sign-out-locked' : null">{{ t().signOut }}</button>
+              </div>
+            </details>
           </div>
         </nav>
 

@@ -24,7 +24,7 @@ describe('CustomerPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed', 'sendFeedback', 'suggestions', 'answerSuggestions', 'serviceTimes', 'messages', 'postMessage'],
+      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed', 'sendFeedback', 'suggestions', 'answerSuggestions', 'serviceTimes', 'messages', 'postMessage', 'alert'],
       { client: signal(''), card: signal(null), roles: signal([]) });
     service.suggestions.and.resolveTo({ status: 'none', items: [], choice: null, chosen_transaction_id: null, answerable: false });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
@@ -34,6 +34,7 @@ describe('CustomerPage', () => {
     service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', context_card: null, roles: ['customer'] });
     service.logout.and.resolveTo();
     service.reports.and.resolveTo({ items: [], has_more: false });
+    service.alert.and.resolveTo({ alert: null });
     service.serviceTimes.and.resolveTo(TIMES);
     service.displayed.and.resolveTo({});
     cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
@@ -135,6 +136,76 @@ describe('CustomerPage', () => {
     await page.login();
     expect(service.signIn).toHaveBeenCalledWith('demo-ana');
     expect(page.transactions()).toEqual([tx]);
+  });
+
+  it('the account menu shows the name and id; Sign out ends the sessions and returns to the email field', async () => {
+    const fixture = TestBed.createComponent(CustomerPage);
+    const p = fixture.componentInstance;
+    const el = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(el);
+    Object.defineProperty(p, 'demoPicker', { value: false });
+    service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'email_otp', context_card: null, roles: ['admin'] });
+    p.identity = 'demo-ana';
+    fixture.autoDetectChanges();
+    await p.login();
+    await fixture.whenStable();
+    const menu = el.querySelector<HTMLDetailsElement>('nav.ar-sidebar details.user-menu')!;
+    menu.querySelector<HTMLElement>('summary')!.click();
+    expect(menu.open).toBeTrue();
+    el.querySelector<HTMLElement>('#sign-out')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect([menu.open, document.activeElement]).toEqual([false, menu.querySelector('summary')]);
+    menu.querySelector<HTMLElement>('summary')!.click();
+    const panel = menu.querySelector('.user-panel')!.textContent!;
+    expect(panel).toContain(p.displayName());
+    expect(panel).toContain('demo-ana');
+    expect(panel).toContain(p.t().adminChip);
+    p.frozen.set({} as never);
+    await fixture.whenStable();
+    const button = () => el.querySelector<HTMLButtonElement>('#sign-out')!;
+    expect([button().disabled, !!el.querySelector('#sign-out-locked')]).toEqual([true, true]);
+    p.frozen.set(null);
+    await fixture.whenStable();
+    p.email = 'ana@example.com';
+    // A failed call keeps the session: the cookies would still be live, so a cleared tab would only look signed out.
+    service.logout.and.rejectWith(new ApiError(0));
+    const before = [p.step(), p.client(), p.transactions().length];
+    button().click();
+    await new Promise(r => setTimeout(r));
+    await fixture.whenStable();
+    expect(service.logout).toHaveBeenCalledTimes(1);
+    expect(cognito.forget).not.toHaveBeenCalled();
+    expect([p.step(), p.client(), p.transactions().length, p.error(), p.busy()]).toEqual([...before, p.t().err503, false]);
+    // Once the server confirms, everything in the tab goes and the email field takes focus.
+    service.logout.and.resolveTo();
+    button().click();
+    await new Promise(r => setTimeout(r));
+    await fixture.whenStable();
+    expect(service.logout).toHaveBeenCalledTimes(2);
+    expect(cognito.forget).toHaveBeenCalled();
+    expect(TestBed.inject(AgentService).roles()).toEqual([]);
+    expect([p.step(), p.client(), p.roles(), p.transactions(), p.email, p.codeSent()]).toEqual(['login', '', [], [], '', false]);
+    expect(document.activeElement?.id).toBe('login-email');
+    el.remove();
+  });
+
+  it('a load started for the previous customer never writes into the signed-out page', async () => {
+    Object.defineProperty(page, 'demoPicker', { value: false });
+    page.identity = 'demo-ana';
+    await page.login();
+    type Reports = Awaited<ReturnType<CustomerService['reports']>>;
+    let release!: (list: Reports) => void;
+    service.reports.and.returnValue(new Promise<Reports>(r => { release = r; }));
+    let alertRelease!: (a: { alert: Transaction | null }) => void;
+    service.alert.and.returnValue(new Promise<{ alert: Transaction | null }>(r => { alertRelease = r; }));
+    const inner = page as unknown as { loadReports(): Promise<void>; loadAlert(): Promise<void> };
+    const pending = Promise.all([inner.loadReports(), inner.loadAlert()]);
+    await page.signOut();
+    expect([page.step(), page.client(), page.reports()]).toEqual(['login', '', null]);
+    release({ items: [{ protocol: 'p1', reference_short: 'AR-AAAA-BBBB', kind: 'complete', status: 'received', next_step: 'review_pending',
+      accepted_at: '2026-10-01T00:00:00Z', transaction_id: 'demo-tx-001', urgency: 'normal' } as never], has_more: false });
+    alertRelease({ alert: tx });
+    await pending;
+    expect([page.reports(), page.reportsFailed(), page.alert()]).toEqual([null, false, null]);
   });
 
   it('stays on sign-in and shows the mapped error when sign-in fails', async () => {
