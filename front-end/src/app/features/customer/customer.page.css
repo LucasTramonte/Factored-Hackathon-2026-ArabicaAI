@@ -23,7 +23,12 @@
 /* On a phone the panel is a full sheet, so nothing tappable shows beside or below it. */
 @media (max-width: 640px) { .chat { inset: 16px; width: auto; max-height: none; } .stage:has(.chat) .disc { visibility: hidden; } } /* the fixed disc would paint over the sheet */
 .login-email { display: flex; flex-direction: column; gap: 10px; margin: 0; }
-.your-reports li + li { margin-top: 12px; }
+.your-reports ul > li + li { margin-top: 12px; }
+/* Each report's progress map: received, in review, closed. A check marks done steps and the current one is bold, so colour is never the only cue; wraps at 320px. */
+.report-progress { list-style: none; padding: 0; margin: 0 0 8px; display: flex; flex-wrap: wrap; gap: 4px; font: 500 12px/18px var(--font-mono); text-transform: lowercase; color: var(--ink-muted); }
+.report-progress li { display: inline-flex; gap: 4px; padding: 2px 8px; border: var(--hairline) solid var(--line); border-radius: var(--radius-sm); }
+.report-progress .done { color: var(--ok); }
+.report-progress .current { color: var(--ink); font-weight: 700; border-color: var(--line-strong); }
 .report-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 4px 0 8px; }
 .box-body > .ar-caption { display: block; margin-top: 4px; } .table + .ar-caption { margin-top: 12px; }
 

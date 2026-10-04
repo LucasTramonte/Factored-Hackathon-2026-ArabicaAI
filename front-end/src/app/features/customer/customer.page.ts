@@ -128,6 +128,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** A charge whose newest server report is still open is not offered again (the server refuses it with 409). */
   readonly choosable = computed(() => this.transactions().filter(tx => (this.reportOf(tx.transaction_id)?.status ?? 'closed') === 'closed'));
   readonly statusChip = STATUS_CHIP;
+  /** The steps a report moves through, in order; a person moves it forward one step at a time. */
+  readonly progressSteps = ['received', 'in_review', 'closed'] as const;
   /** Locked while a request is frozen or a guided report is open: renewing must keep the same customer. */
   readonly identityLocked = computed(() => this.frozen() !== null || this.chatStep() === 'choose' || this.chatStep() === 'details');
   readonly step = signal<Step>('intro');
