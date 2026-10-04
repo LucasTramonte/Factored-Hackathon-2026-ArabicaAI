@@ -16,6 +16,15 @@ const TIMES: ServiceTimes = { basis: 'bank_history', version: '4e2a1b33eac4812d'
     { metric: 'first_response', unit: 'hours', p50: 25, p90: 44, n: 6045, missing: 4325, negative: 0, covers: 'responded' }] };
 
 describe('CustomerPage', () => {
+  let previousTourPreference: string | null;
+  beforeEach(() => {
+    previousTourPreference = localStorage.getItem('arabica.customer-tour.v1');
+    localStorage.setItem('arabica.customer-tour.v1', 'dismissed'); // These existing flow checks represent a returning browser.
+  });
+  afterEach(() => {
+    if (previousTourPreference === null) localStorage.removeItem('arabica.customer-tour.v1');
+    else localStorage.setItem('arabica.customer-tour.v1', previousTourPreference);
+  });
   let service: jasmine.SpyObj<CustomerService>;
   let page: CustomerPage;
   let cognito: jasmine.SpyObj<CognitoService>;
@@ -73,6 +82,69 @@ describe('CustomerPage', () => {
     answer({ customer: { customer_id: 'demo-ana', roles: ['customer'], context_card: null }, agent: false });
     await new Promise(r => setTimeout(r));
     expect([p.client(), p.step()]).toEqual(['', 'login']);
+  });
+
+  it('reload and same-owner sign-out/sign-in restore saved references, independent progress and stored messages from the API', async () => {
+    TestBed.inject(LangService).set('es');
+    const saved: Report[] = [
+      { protocol: '99999999-8888-4777-8666-555555555555', reference_short: 'AR-AAAA-BBBB', kind: 'complete', status: 'received', next_step: 'review_pending', accepted_at: '2026-10-01T12:00:00Z', transaction_id: 'demo-tx-001' },
+      { protocol: '11111111-2222-4333-8444-555555555555', reference_short: 'AR-CCCC-DDDD', kind: 'incomplete', status: 'in_review', next_step: 'being_reviewed', accepted_at: '2026-10-02T12:00:00Z', transaction_id: null },
+      { protocol: '22222222-2222-4333-8444-555555555555', reference_short: 'AR-EEEE-FFFF', kind: 'technical', status: 'closed', next_step: 'closed_by_person', accepted_at: '2026-10-03T12:00:00Z', transaction_id: null }
+    ];
+    service.reports.and.resolveTo({ items: saved, has_more: true });
+    service.messages.and.resolveTo({ status: 'in_review', can_post: true, items: [
+      { message_id: 'aaaaaaaa-1111-4111-8111-111111111111', author: 'agent', body: 'Necesitamos el recibo.', created_at: '2026-10-04T18:00:00.000Z' }] });
+    Object.assign(service, { me: jasmine.createSpy('me').and.resolveTo({ customer: { customer_id: 'demo-ana', roles: ['customer'], context_card: null }, agent: false }) });
+    // A reload has no tab state: only /auth/me and the owned API responses rebuild the screen.
+    const fixture = TestBed.createComponent(CustomerPage);
+    const p = fixture.componentInstance;
+    await p.ngOnInit(); await fixture.whenStable(); fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const rows = () => [...el.querySelectorAll<HTMLElement>('.your-reports ul > li')];
+    expect(p.intakeReceipt()).toBeNull();
+    expect(rows().map(r => r.querySelector('.report-progress [aria-current="step"]')?.textContent?.trim()))
+      .toEqual([p.t().statusReceived, p.t().inReview, `✓${p.t().stepDone}: ${p.t().chipClosed}`]);
+    expect(rows().map(r => r.textContent)).toEqual(saved.map(r => jasmine.stringMatching(r.reference_short!)));
+    expect(rows()[0].textContent).toContain('Mercado');
+    expect(el.textContent).toContain(p.t().moreReports);
+    await p.toggleMessages(saved[1].protocol); fixture.detectChanges();
+    expect(el.querySelector('.message-agent')?.textContent).toContain('Necesitamos el recibo.');
+    await p.signOut(); fixture.detectChanges();
+    expect(el.textContent).not.toContain('AR-CCCC-DDDD');
+    expect(el.textContent).not.toContain('Necesitamos el recibo.');
+    service.messages.and.resolveTo({ status: 'in_review', can_post: true, items: [
+      { message_id: 'bbbbbbbb-1111-4111-8111-111111111111', author: 'agent', body: 'Recibimos el comprobante.', created_at: '2026-10-04T19:00:00.000Z' }] });
+    p.identity = 'demo-ana'; await p.login();
+    await p.toggleMessages(saved[1].protocol); fixture.detectChanges();
+    expect(rows().length).toBe(3);
+    expect(el.querySelector('.message-agent')?.textContent).toContain('Recibimos el comprobante.');
+    expect(el.textContent).not.toContain('Necesitamos el recibo.');
+    await p.signOut();
+    service.reports.and.resolveTo({ items: [], has_more: false });
+    service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
+    service.signIn.and.resolveTo({ customer_id: 'demo-bruno', mode: 'simulated_login', context_card: null, roles: ['customer'] });
+    p.identity = 'demo-bruno'; await p.login(); fixture.detectChanges();
+    expect(rows().length).toBe(0);
+    for (const r of saved) expect(el.textContent).not.toContain(r.reference_short!);
+    expect(el.textContent).not.toContain('Recibimos el comprobante.');
+  });
+
+  for (const failed of [false, true]) it(`ignores an old session's late thread ${failed ? 'failure' : 'success'} after the owner signs back in`, async () => {
+    page.identity = 'demo-ana'; await page.login();
+    const protocol = '99999999-8888-4777-8666-555555555555';
+    let complete!: () => void;
+    service.messages.and.returnValue(new Promise((resolve, reject) => { complete = () => failed ? reject(new ApiError(503))
+      : resolve({ status: 'received', can_post: true, items: [] }); }));
+    const old = page.toggleMessages(protocol);
+    await page.signOut();
+    page.identity = 'demo-ana'; await page.login();
+    const current: MessageThread = { status: 'in_review', can_post: true, items: [
+      { message_id: 'aaaaaaaa-1111-4111-8111-111111111111', author: 'agent', body: 'Respuesta actual.', created_at: '2026-10-04T18:00:00.000Z' }] };
+    service.messages.and.resolveTo(current);
+    await page.toggleMessages(protocol);
+    complete(); await old;
+    expect(page.thread()).toEqual(current);
+    expect(page.messageFailed()).toBe('');
   });
 
   it('starts on the intro, moves to sign-in on start, and to the home once charges are loaded', async () => {
@@ -1811,7 +1883,7 @@ describe('CustomerPage', () => {
 
     it('reloads the reports after a receipt', async () => {
       const { fixture, p, el } = await home();
-      expect(el.querySelector('.your-reports')).toBeNull();
+      expect(el.querySelector('#reports')?.textContent).toContain(p.t().reportsEmpty);
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', mode: 'guided' } as never);
       p.chatStatement = 'No reconozco este cargo.';
       p.reason.set('not_mine');
@@ -1880,7 +1952,7 @@ describe('CustomerPage', () => {
       const { el, p } = await home();
       expect(p.step()).toBe('home');
       expect(el.textContent).toContain(p.t().reportsFailed);
-      expect(el.querySelector('.your-reports')).toBeNull();
+      expect(el.querySelector('#reports')?.textContent).toContain(p.t().reportsEmpty);
       expect(el.querySelectorAll('.td-state .ar-btn').length).toBe(1);
       expect(el.querySelector('.ar-alert')).toBeNull();
     });
@@ -1889,7 +1961,7 @@ describe('CustomerPage', () => {
       const { el } = await home();
       expect(el.querySelector('h1')).not.toBeNull();
       expect(el.querySelector('#cargos')).not.toBeNull();
-      for (const gone of ['.ar-card', '.agent-panel', '.stats', '.chat-toggle', '.home-top', '.your-reports']) expect(el.querySelector(gone)).withContext(gone).toBeNull(); // the hero is .ar-card; there is no .hero class
+      for (const gone of ['.ar-card', '.agent-panel', '.stats', '.chat-toggle', '.home-top']) expect(el.querySelector(gone)).withContext(gone).toBeNull(); // the hero is .ar-card; there is no .hero class
       expect(el.querySelectorAll('.box').length).toBe(1);
       expect(el.querySelectorAll('.td-state .ar-btn').length).toBe(1);
     });
@@ -2094,8 +2166,33 @@ describe('CustomerPage', () => {
       expect(el.querySelectorAll('.td-state .ar-btn').length).toBe(1);
     });
 
-    describe('the "?" help entry', () => {
+    it('shows reports even when empty and explicit Help choices in every language without starting intake', async () => {
+      const { fixture, p, el } = await home();
+      for (const code of ['es', 'pt', 'en'] as const) {
+        p.lang.set(code); fixture.detectChanges();
+        expect(el.querySelector('#charges')?.textContent).toContain(p.t().recent);
+        expect(el.querySelector('#reports')?.textContent).toContain(p.t().reportsEmpty);
+        el.querySelector<HTMLButtonElement>('.help-fab')!.click();
+        expect(el.querySelector<HTMLDetailsElement>('#help')!.open).toBeTrue();
+        expect(el.querySelector('#help-how')?.textContent).toContain(p.t().helpHow);
+        expect(el.querySelector('#report-entry')?.textContent).toContain(p.t().helpProblem);
+        el.querySelector<HTMLDetailsElement>('#help-how')!.open = true;
+        el.querySelector<HTMLButtonElement>('#help .help-faq button')!.click();
+        fixture.detectChanges();
+        expect(el.querySelector('#help .help-faq-log')?.textContent).toContain(p.t().faqNextA);
+        expect(p.chatOpen()).toBeFalse();
+        expect(p.episode()).toBeNull();
+        expect(p.t().reasonLegend).not.toMatch(/no reconoces|não.*reconhece|don't.*recognize/i);
+        expect(p.t().emailSignIn + p.t().err409 + p.t().noMerchant).not.toMatch(/Cognito|clave|request key|fuente|source|fonte/i);
+      }
+      expect(service.startIntake).not.toHaveBeenCalled();
+      expect(service.confirmIntake).not.toHaveBeenCalled();
+      expect(service.handoffIntake).not.toHaveBeenCalled();
+    });
+
+    describe('the explicit Help problem entry', () => {
       const fab = (el: HTMLElement) => el.querySelector<HTMLButtonElement>('button.help-fab')!;
+      const problem = (el: HTMLElement) => { fab(el).click(); return el.querySelector<HTMLButtonElement>('#report-entry')!; };
       const greeting = (p: CustomerPage, name: string) => p.t().chatHelloGeneral.replace('{name}', name);
       const started: IntakeStart = { episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false };
       async function toChoose(p: CustomerPage) {
@@ -2119,7 +2216,7 @@ describe('CustomerPage', () => {
 
       it('opens the chat greeting the customer by first name, with no charge chosen and "I can\'t find it" first', async () => {
         const { fixture, p, el } = await home({ version: 1, snapshot_at: '2026-06-01', first_name: 'Bruno', locale_hint: 'es-CO', products: [] });
-        fab(el).click();
+        problem(el).click();
         fixture.detectChanges();
         expect(p.log()).toEqual([{ from: 'bot', key: 'chatHelloGeneral' }]);
         expect(el.querySelector('.chat-log li')!.textContent).toContain(greeting(p, 'Bruno'));
@@ -2137,7 +2234,7 @@ describe('CustomerPage', () => {
         p.intakeReceipt.set({ episode_id: 'E', protocol: 'P', kind: 'complete', accepted_at: 'x', replayed: false, urgency: 'normal',
           actions_taken: [], unresolved_questions: [], reference_short: 'AR-AAAA-BBBB', next_step_code: 'await_human_review' });
         fixture.detectChanges();
-        fab(el).click();
+        problem(el).click();
         fixture.detectChanges();
         expect(p.chatStep()).toBe('describe');
         expect(p.choice).toBe('');
@@ -2147,7 +2244,7 @@ describe('CustomerPage', () => {
       it('without any known name the greeting has no name, never the customer id', async () => {
         const { fixture, p, el } = await home();
         p.client.set('CLI-UNKNOWN');
-        fab(el).click();
+        problem(el).click();
         fixture.detectChanges();
         const text = el.querySelector('.chat-log li')!.textContent!;
         expect(text).toContain(p.t().chatHelloGeneralNoName);
@@ -2156,7 +2253,7 @@ describe('CustomerPage', () => {
 
       it('a charge row after a general chat greets as usual and keeps the usual button order', async () => {
         const { fixture, p, el } = await home();
-        fab(el).click();
+        problem(el).click();
         p.intakeReceipt.set({ episode_id: 'E', protocol: 'P', kind: 'incomplete', accepted_at: 'x', replayed: false, urgency: 'normal',
           actions_taken: [], unresolved_questions: [], reference_short: 'AR-AAAA-BBBB', next_step_code: 'await_human_review' });
         fixture.detectChanges();
@@ -2172,7 +2269,7 @@ describe('CustomerPage', () => {
 
       it('a charge row on an untouched general chat switches to the usual greeting and button order', async () => {
         const { fixture, p, el } = await home();
-        fab(el).click();
+        problem(el).click();
         fixture.detectChanges();
         p.openChat('demo-tx-001');
         fixture.detectChanges();
@@ -2188,7 +2285,7 @@ describe('CustomerPage', () => {
         const { fixture, p, el } = await home();
         el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!.click();
         expect(p.choice).toBe('demo-tx-001');
-        fab(el).click();
+        problem(el).click();
         fixture.detectChanges();
         expect(p.choice).toBe('');
         expect(p.chatConfirmed).toBeFalse();
@@ -2197,7 +2294,7 @@ describe('CustomerPage', () => {
 
       it('a new report keeps the general greeting; a reset ends general mode', async () => {
         const { p, el } = await home();
-        fab(el).click();
+        problem(el).click();
         p.newReport();
         expect(p.log()).toEqual([{ from: 'bot', key: 'chatHelloGeneral' }]);
         p['reset']();

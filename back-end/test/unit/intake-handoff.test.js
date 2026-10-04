@@ -26,6 +26,30 @@ async function setup(t) {
 const confirm = episode_id => ({episode_id,transaction_id:'tx-ana',customer_confirmed:true,idempotency_key:crypto.randomUUID()});
 const events = db => db.prepare('SELECT event_json FROM intake_events ORDER BY seq').all().map(r=>JSON.parse(r.event_json));
 
+for (const kind of ['complete', 'incomplete', 'technical']) for (const failure of ['write', 'missing readback', 'readback outage']) {
+  test(`${kind} ${failure} never acknowledges a report or returns a success reference`, async t => {
+    const { store, start } = await setup(t);
+    const episode_id = await start();
+    const path = kind === 'incomplete' ? '/intake/handoff' : '/intake/confirm';
+    const body = kind === 'incomplete' ? { episode_id, kind, idempotency_key: crypto.randomUUID() } : confirm(episode_id);
+    const scoped = kind === 'technical' ? { ...store, findOwnedTransaction: async () => { throw new Error('test lookup outage'); } } : store;
+    const failed = { ...scoped, ...(failure === 'write'
+      ? { persistIntakeHandoff: async () => { throw new Error('test write outage'); } }
+      : { readIntakeReceipt: async () => { if (failure === 'readback outage') throw new Error('test read outage'); return null; } }) };
+    const rejected = await route(post(path, body), env, failed);
+    assert.equal(rejected.status, 503);
+    const error = await rejected.json(); assertContract('error', error);
+    assert.equal(error.protocol, undefined); assert.equal(error.reference_short, undefined);
+    assert.equal((await store.listCustomerHandoffs('ana', 21)).length, 0, 'unacknowledged reservations stay out of saved reports');
+    const recovery = await route(post(path, body), env, scoped);
+    assert.equal(recovery.status, failure === 'write' ? 201 : 200);
+    const receipt = await recovery.json(); assertContract('intakeReceipt', receipt); assert.equal(receipt.kind, kind);
+    const replay = await route(post(path, body), env, scoped);
+    assert.equal(replay.status, 200); assert.deepEqual(await replay.json(), { ...receipt, replayed: true });
+    assert.equal((await store.listCustomerHandoffs('ana', 21)).length, 1);
+  });
+}
+
 test('confirmed_case_and_handoff_chain_commit_once', async t => {
   const { db,store,start }=await setup(t); const episode=await start(); const body=confirm(episode);
   assert.equal((await route(post('/intake/confirm',{...body,transaction_id:'tx-bruno'}),env,store)).status,404);

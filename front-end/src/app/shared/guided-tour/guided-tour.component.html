@@ -1,0 +1,20 @@
+<dialog #dialog (keydown)="contain($event)" aria-labelledby="tour-title" aria-describedby="tour-body" (cancel)="$event.preventDefault(); exit()">
+  <div class="shade" [style.clip-path]="mask()" aria-hidden="true"></div>
+  @if (bounds(); as r) {
+    <div class="spotlight" aria-hidden="true" [style.left.px]="r.left" [style.top.px]="r.top" [style.width.px]="r.width" [style.height.px]="r.height"></div>
+  }
+  <section class="card" [class.at-top]="cardAtTop()" [class.welcome]="index() < 0">
+    <h2 id="tour-title" tabindex="-1">{{ current()?.title ?? t().tourWelcome }}</h2>
+    <p id="tour-body">{{ current()?.body ?? t().tourWelcomeBody }}</p>
+    @if (index() < 0) {
+      <div class="actions"><button type="button" class="ar-btn" (click)="move(0)">{{ t().tourStart }}</button><button type="button" class="ar-btn ar-btn-secondary" (click)="exit()">{{ t().tourLater }}</button></div>
+    } @else {
+      <p class="progress" aria-live="polite">{{ progress() }}</p>
+      <div class="actions">
+        <button type="button" class="ar-btn ar-btn-secondary" [disabled]="index() === 0" (click)="move(index() - 1)">{{ t().tourPrevious }}</button>
+        <button type="button" class="ar-btn" (click)="index() === steps().length - 1 ? exit(true) : move(index() + 1)">{{ index() === steps().length - 1 ? t().tourDone : t().tourNext }}</button>
+        <button type="button" class="ar-btn ar-btn-secondary" (click)="exit()">{{ t().tourSkip }}</button>
+      </div>
+    }
+  </section>
+</dialog>

@@ -12,10 +12,10 @@ describe('LangService', () => {
     const lang = TestBed.inject(LangService);
     expect(lang.all).toEqual(['es', 'pt', 'en']);
     lang.set('pt');
-    expect(lang.t().whoAreYou).toBe('Quem é você?');
+    expect(lang.t().whoAreYou).toBe('Entre para revisar suas cobranças');
     expect(document.documentElement.lang).toBe('pt');
     lang.set('es');
-    expect(lang.t().whoAreYou).toBe('¿Quién eres?');
+    expect(lang.t().whoAreYou).toBe('Entra para revisar tus cargos');
   });
 
   it('never leaves a string untranslated', () => {
@@ -24,6 +24,14 @@ describe('LangService', () => {
     expect(keys('pt')).toEqual(keys('es'));
     expect(keys('en')).toEqual(keys('es'));
     lang.set('es'); // set() persists to localStorage: leaving 'en' would start the next spec's LangService in English
+  });
+
+  it('uses report vocabulary for a recovered receipt in every language', () => {
+    const lang = TestBed.inject(LangService);
+    for (const [code, term] of [['es', 'reporte'], ['pt', 'relato'], ['en', 'report']] as const) {
+      expect(lang.stringsFor(code).replayed).toContain(term);
+      expect(lang.stringsFor(code).replayed).not.toMatch(/\bcaso\b|\bcase\b/);
+    }
   });
 
   it('translates failures by status and never shows server text', () => {
