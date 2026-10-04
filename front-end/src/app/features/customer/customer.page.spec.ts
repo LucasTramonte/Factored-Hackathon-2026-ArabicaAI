@@ -1301,7 +1301,7 @@ describe('CustomerPage', () => {
       expect(again.componentInstance.step()).toBe('home');
       expect(html.textContent).toContain('AR-3F9Q-1Z7P'); // the home shows the short code; the UUID lives in the receipt panel as the case id
       expect(html.querySelector('.ar-count')).withContext('no receipt badge on the agent link: it read as a queue count').toBeNull();
-      const reports = [...html.querySelectorAll('.your-reports li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim());
+      const reports = [...html.querySelectorAll('.your-reports ul > li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim());
       expect(reports.length).toBe(1);
       expect(reports[0]).toContain(p.t().kindIncomplete);
       expect(reports[0]).toContain('AR-3F9Q-1Z7P'); // the short code is the reference a customer keeps
@@ -1310,7 +1310,7 @@ describe('CustomerPage', () => {
 
     const report = (kind: 'complete' | 'incomplete' | 'technical', ref: string | null, at = '2026-10-01T12:00:00Z', protocol = '99999999-8888-4777-8666-555555555555') =>
       ({ protocol, reference_short: ref, kind, status: 'received', next_step: 'review_pending', accepted_at: at, transaction_id: null } as const);
-    const rows = (el: HTMLElement) => [...el.querySelectorAll('.your-reports li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim() ?? '');
+    const rows = (el: HTMLElement) => [...el.querySelectorAll('.your-reports ul > li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim() ?? '');
 
     it('after sign-in lists the server reports in server order (newest first), with reference, kind and status as text', async () => {
       service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB', '2026-10-02T09:30:00Z'),
@@ -1367,6 +1367,23 @@ describe('CustomerPage', () => {
           expect(chip(el)).toBe(term + ' AR-AAAA-BBBB');
         });
       }
+
+      it('"Your reports" maps an in-review report: received done, in review current, closed upcoming', async () => {
+        listed('in_review');
+        const { el, p } = await home();
+        const map = el.querySelector('.your-reports .report-progress')!;
+        expect(map.getAttribute('aria-label')).toBe(p.t().reportProgress);
+        const steps = [...map.querySelectorAll('li')];
+        expect(steps.map(s => s.textContent!.replace(/\s+/g, ' ').trim())).toEqual([`✓${p.t().stepDone}: ${p.t().statusReceived}`, p.t().inReview, p.t().chipClosed]);
+        expect(steps.map(s => [s.classList.contains('done'), s.getAttribute('aria-current')])).toEqual([[true, null], [false, 'step'], [false, null]]);
+      });
+
+      it('"Your reports" maps a closed report as complete: all three steps done, closed current', async () => {
+        listed('closed');
+        const { el } = await home();
+        const steps = [...el.querySelectorAll('.your-reports .report-progress li')];
+        expect(steps.map(s => [s.classList.contains('done'), s.getAttribute('aria-current')])).toEqual([[true, null], [true, null], [true, 'step']]);
+      });
 
       it('"Your reports" names the charge by merchant and amount', async () => {
         listed('received');
