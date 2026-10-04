@@ -28,6 +28,7 @@ What the data says about unrecognized-charge disputes before our service: how ma
 
 - **Unrecognized charges are handled like any other complaint.** Customers experience a large unexpected charge as urgent ([DF-024](DATA_QUALITY.md#df-024-purchase-amounts-are-almost-flat-up-to-usd-509-with-no-high-value-tail)), but nothing in today's handling sets these complaints apart.
 - **Escalated cases have no outcome at all.** The 514 escalated in the window have no first response, resolution or closing date. At the data end (2026-06-18, **full period**), the 618 escalated cases had been open 535 days at p50 and 973 days at p90. That is a lower bound, not a closing time.
+- **Repeat complaints are rare.** 350 of 10,013 customers (3.5%) filed two or more, 707 complaints in all. The source has no re-opened status, so these are labelled proxies: of 10,370 complaints, 357 follow an earlier one by the same customer, 27 within 30 days and 64 within 90, and 92 after the earlier one had a resolution or closing date. The source's `is_repeat_complainer` flag is set on 1,517 complaints, more than repeats explain, so it isn't used. In the product, "not resolved" on a closed report starts a new one that cites it (#90); that live signal isn't exported yet.
 - **Kept and counted:** 52 complaints from the window have outcome dates in 2026. Another 84 have a resolution date before their first response; they are left out of the durations.
 
 ## 3. Satisfaction, each with its own population
@@ -46,7 +47,7 @@ What the data says about unrecognized-charge disputes before our service: how ma
 - **NPS:** 74.49% of 53,790 answers are detractors (0–6) and none is a promoter: answers stop at 7. So we report the distribution, not the formal score, which would say nothing about loyalty.
 - **No survey CSAT exists for unrecognized-charge complainants.** Surveys link to contact-centre interactions, not complaints.
 
-## 4. The required cut: by customer segment
+## 4. The cuts: segment, country, channel and language
 
 Segment is today's snapshot. Cells under 30 are not compared.
 
@@ -58,7 +59,22 @@ Segment is today's snapshot. Cells under 30 are not compared.
 | Student | 539 | 74.03% | 15.21% | too few (n = 21) | 2.41 |
 
 - **Premium complaints stay unresolved and breach SLAs as often as anyone's.** No segment is handled differently today.
-- **By language:** only our live episodes carry it, and there are 5 team episodes so far, too few for any rate.
+- **By country and by reception channel, unrecognized-charge complaints are handled the same way too.** Country is today's customer snapshot; the channel is where the complaint was received.
+
+  | Cut | Complaints | Unresolved | SLA breached | First response p50 | Closed-case satisfaction |
+  |---|---|---|---|---|---|
+  | Mexico | 5,188 | 74.69% | 20.28% | 25 h | 3.07 (n = 181) |
+  | Colombia | 3,129 | 74.98% | 19.69% | 25 h | 3.04 (n = 120) |
+  | Argentina | 2,053 | 73.65% | 20.31% | 25 h | 3.10 (n = 70) |
+  | Call Center | 5,210 | 74.64% | 19.94% | 25 h | 3.16 (n = 190) |
+  | Email | 2,013 | 75.11% | 19.62% | 25 h | 3.06 (n = 83) |
+  | Web | 1,524 | 74.67% | 19.75% | 24 h | 3.12 (n = 43) |
+  | App | 1,103 | 73.98% | 21.67% | 24 h | 2.87 (n = 39) |
+  | Branch | 402 | 71.89% | 21.39% | 24 h | too few (n = 13) |
+  | Regulator | 118 | 75.42% | 21.19% | 26.5 h | too few (n = 3) |
+
+  Half of these disputes (5,210 of 10,370) arrive through the Call Center.
+- **By language:** only our live service records it. Its first export (2026-10-02, 5 team and reviewer episodes, on the flow that calls no model) has 1 Spanish and 4 Portuguese reports: 4 accepted as complete handoffs, 1 routed, 0 recorded unsafe. These are counts, not rates; the table and its method are in [EVALUATION.md §9](EVALUATION.md#9-live-service-as-measured).
 - **The held-out comparison** of the learned component against the baseline is required too. It is not run yet, and will be reported in [`EVALUATION.md`](EVALUATION.md).
 
 ## 5. What not to claim
@@ -68,3 +84,24 @@ Segment is today's snapshot. Cells under 30 are not compared.
 - No complaint links to a transaction ([DF-002, DF-003](DATA_QUALITY.md)), so "large for this customer" is measured only live.
 - Survey answers about waiting are not evidence of measured wait, and wait is recorded only for Phone contacts ([DF-027](DATA_QUALITY.md#df-027-wait-time-exists-only-for-phone-contacts-and-survey-wait-answers-dont-track-it)).
 - The data is synthetic, and all associations are descriptive.
+
+## 6. Metric dictionary
+
+Every published metric, with what it counts. "Window" is the design window unless it says *full period*; "UC" means `Cargo no reconocido` complaints created in that window. Queries are in [`data_foundation/queries/product/`](../../data_foundation/queries/product/).
+
+| Metric | Population | Numerator / denominator | Window | Query |
+|---|---|---|---|---|
+| UC complaints a day; share of complaints | All complaints, by `creation_date` | UC complaints / 929 calendar days; UC / all complaints | Design | PR-01 |
+| Recorded claims a day | UC complaints | Sum of claimed amounts in source USD, and with FX estimates (creation-day rate) / 929 days; coverage = convertible / UC complaints. Never summed across source currencies | Design | PR-02 |
+| Complaint-contact workload | Contacts with `reason_category = 'Queja'` | Observed `duration_seconds` / 3,600 / 929 days; mean over observed durations only | Design | PR-03 |
+| Resolution gap | Contact-centre contacts | `was_resolved` contacts / contacts, for `Queja` and for all reasons | Design | PR-03 |
+| Unresolved share | UC complaints, and all other complaints | Status Open, In Process or Escalated / complaints (a status snapshot) | Design | PR-04 |
+| SLA breach rate | Same | `sla_breached` / complaints with the flag | Design | PR-04 |
+| Step durations (p50, p90) | Same, with both dates and a non-negative interval | Assignment → first response; first response → resolution or closing; creation → resolution; `resolution_days` | Design (outcomes may fall in 2026) | PR-04 |
+| Escalated time open (p50, p90) | UC complaints with status Escalated | Data end (latest `creation_date`) − creation | *Full period* | PR-05 |
+| Repeat customers; re-open proxies | Customers with UC complaints; UC complaints | Customers with 2 or more / customers; complaints after an earlier one by the same customer (within 30 or 90 days, or after its outcome) / complaints | Design | PR-10 |
+| Closed-case satisfaction (F5) | UC complaints | Mean `resolution_satisfaction` over complaints closed in the window with a score; coverage = scored / UC complaints | Design | PR-06 |
+| Contact CSAT, CES, NPS | Surveys joined one-to-one to their contact | Mean and share by score, by contact reason and resolution; NPS detractors (0–6) / answers | Design | PR-07 |
+| Cuts by segment, country, channel | UC complaints, by the customer's snapshot segment or country, or by `reception_channel` | Unresolved, SLA breached, escalated / complaints; first response p50; F5 mean. Cells under 30 publish no numerators | Design | PR-08, PR-11, PR-12 |
+| Complaint-contact CSAT by segment | CSAT surveys of complaint and other contacts | Mean score; share scoring 4 / answers | Design | PR-09 |
+| Live outcomes by language | Report episodes in the live store at export | Counts only (5 episodes) | 2026-10-02 export | [EVALUATION.md §9](EVALUATION.md#9-live-service-as-measured) |

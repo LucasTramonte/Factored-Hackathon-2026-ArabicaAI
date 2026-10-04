@@ -8,7 +8,7 @@ there is deliberately no option to move either bound. Output is aggregates only:
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from data_foundation.src.marketing_product_report import card, esc, num, pct, shell, table
@@ -18,6 +18,7 @@ DESIGN_START = "2023-06-17"
 QUERY_DIR = Path(__file__).resolve().parents[1] / "queries" / "product"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIN_CELL = 30
+MAX_GAP_PTS = 2.0  # the largest gap, in points, a generated sentence may still call "no different"
 TARGET = "Cargo no reconocido"
 REQUIRED = {"fact_complaints", "fact_call_center_interactions", "fact_satisfaction_surveys", "dim_customers", "dim_fx_rates"}
 NOT_TO_CLAIM = [
@@ -112,13 +113,8 @@ def summarize(results: dict) -> dict:
     closed = [r for r in results["PR-06"]["rows"] if r["closed_in_window"] and r["score"] is not None]
     scored = sum(r["complaints"] for r in closed)
 
-    segments = []
-    for r in results["PR-08"]["rows"]:
-        too_few = r["complaints"] < MIN_CELL
-        segments.append({**r, "too_few": too_few,
-                         "unresolved_share": None if too_few else _ratio(r["unresolved"], r["complaints"]),
-                         "sla_breach_rate": None if too_few else _ratio(r["sla_breached"], r["sla_known"]),
-                         "closed_mean": round(r["closed_score_sum"] / r["closed_scored"], 3) if r["closed_score_sum"] is not None else None})
+    segments = _cut(results["PR-08"]["rows"])
+    repeat = results["PR-10"]["rows"][0]
     segment_csat = [{**r, "too_few": r["surveys"] < MIN_CELL,
                      "mean": round(r["score_sum"] / r["surveys"], 3) if r["surveys"] >= MIN_CELL else None,
                      "top_score_share": _ratio(r["top_score"], r["surveys"]) if r["surveys"] >= MIN_CELL else None}
@@ -161,17 +157,34 @@ def summarize(results: dict) -> dict:
                 "formal_score_note": "Not reported: no answer reaches 9-10, so the formal NPS would be almost all detractors and says nothing about loyalty."
                 if promoters == 0 else None},
         "segments": segments, "segment_csat": segment_csat, "min_cell": MIN_CELL,
+        "repeat": {**repeat, "repeat_customer_share": _ratio(repeat["repeat_customers"], repeat["customers"]),
+                   "follow_up_share": _ratio(repeat["follow_up_complaints"], repeat["complaints"])},
+        "by_country": _cut(results["PR-11"]["rows"]), "by_channel": _cut(results["PR-12"]["rows"]),
     }
+
+
+def _cut(rows: list[dict]) -> list[dict]:
+    """Rates for one complaint cut (segment, country or channel); a suppressed cell gets no rate."""
+    out = []
+    for r in rows:
+        too_few = r["complaints"] < MIN_CELL
+        out.append({**r, "too_few": too_few,
+                    "unresolved_share": None if too_few else _ratio(r["unresolved"], r["complaints"]),
+                    "sla_breach_rate": None if too_few else _ratio(r["sla_breached"], r["sla_known"]),
+                    "closed_mean": round(r["closed_score_sum"] / r["closed_scored"], 3) if r["closed_score_sum"] is not None else None})
+    return out
 
 
 def suppress_small_cells(results: dict) -> dict:
     """Null, in place, the raw numerators of segment cells under MIN_CELL, so a hidden rate or mean can't be
     recomputed from the published JSON. Cell counts stay, so the page can say how small a cell is."""
-    for r in results["PR-08"]["rows"]:
-        if r["complaints"] < MIN_CELL:
-            r.update(unresolved=None, escalated=None, sla_known=None, sla_breached=None, closed_score_sum=None)
-        elif r["closed_scored"] < MIN_CELL:
-            r["closed_score_sum"] = None
+    for qid in ("PR-08", "PR-11", "PR-12"):  # complaint cuts by segment, country and channel share one row shape
+        for r in results.get(qid, {}).get("rows", []):
+            if r["complaints"] < MIN_CELL:
+                r.update({k: None for k in ("unresolved", "escalated", "sla_known", "sla_breached", "closed_score_sum",
+                                            "first_response_h_p50") if k in r})
+            elif r["closed_scored"] < MIN_CELL:
+                r["closed_score_sum"] = None
     for r in results["PR-09"]["rows"]:
         if r["surveys"] < MIN_CELL:
             r.update(score_sum=None, top_score=None, resolved=None)
@@ -265,6 +278,58 @@ def _distributions(satisfaction: dict) -> str:
     return out + '</div>'
 
 
+CUT_COLUMNS = [("label", ""), ("complaints", "Complaints"), ("unresolved", "Unresolved"), ("sla", "SLA breached"),
+               ("escalated", "Escalated"), ("first", "First response, p50"), ("closed", "Closed-case satisfaction")]
+
+
+def _cut_table(label: str, rows: list[dict], key: str) -> str:
+    """One complaint cut as a table, largest group first; every cut uses the same columns, each value's n underneath."""
+    out = []
+    for r in sorted(rows, key=lambda r: -r["complaints"]):
+        if r["too_few"]:
+            out.append({"label": r[key], "complaints": num(r["complaints"]), "unresolved": "too few to compare"})
+            continue
+        out.append({"label": r[key], "complaints": num(r["complaints"]), "unresolved": pct(r["unresolved"], r["complaints"]),
+                    "sla": pct(r["sla_breached"], r["sla_known"]), "escalated": pct(r["escalated"], r["complaints"]),
+                    "first": (f'{_fmt(r["first_response_h_p50"])} h', f'n = {num(r["first_response_n"])}'),
+                    "closed": (_fmt(r["closed_mean"], 2), f'n = {num(r["closed_scored"])}') if r["closed_mean"] is not None
+                    else ("too few", f'n = {num(r["closed_scored"])}')})
+    return table(out, [("label", label)] + CUT_COLUMNS[1:])
+
+
+def _dot_plot(rows: list[dict], lo: float, hi: float, ticks: list, refs: list[tuple] = (), fmt=lambda v: f"{v:g}") -> str:
+    """A responsive dot plot drawn in CSS, so it reads at phone width.
+
+    rows: {"label", "heading": bool, "dots": [(value, tone[, hover])], "note", "join": bool}. refs: (value, label[, tone])
+    reference lines drawn through every row and labelled once above the plot, in the tone's colour when one is given.
+    join draws a line between a row's dots (a dumbbell). hover is a native tooltip; every value it repeats is also in
+    the row's note, so nothing depends on hovering.
+    """
+    pos = lambda v: 100 * (v - lo) / (hi - lo)
+    refs = [(ref[0], ref[1], ref[2] if len(ref) > 2 else "") for ref in refs]
+    lines = "".join(f'<i class="dp-ref {"ref-" + tone if tone else ""}" style="left:{pos(v):.2f}%"></i>' for v, _, tone in refs)
+    out = '<div class="dp">'
+    if refs:
+        out += ('<div class="dp-row dp-top"><span></span><div>' + "".join(
+            f'<span class="{"ref-" + tone if tone else ""}" style="left:{pos(v):.2f}%">{esc(text)}</span>' for v, text, tone in refs)
+            + '</div><span></span></div>')
+    for r in rows:
+        if r.get("heading"):
+            out += f'<div class="dp-row dp-head"><span>{esc(r["label"])}</span><div class="dp-track">{lines}</div><span></span></div>'
+            continue
+        dots = [(d[0], d[1], d[2] if len(d) > 2 else "") for d in r["dots"]]
+        values = [v for v, _, _ in dots if v is not None]
+        mark = lines
+        if r.get("join") and len(values) > 1:
+            mark += f'<i class="dp-join" style="left:{pos(min(values)):.2f}%;width:{pos(max(values)) - pos(min(values)):.2f}%"></i>'
+        mark += "".join(f'<b class="dp-dot {tone}" style="left:{pos(v):.2f}%"' + (f' title="{esc(hover)}"' if hover else '') + '></b>'
+                        for v, tone, hover in dots if v is not None)
+        out += f'<div class="dp-row"><span>{esc(r["label"])}</span><div class="dp-track">{mark}</div><em>{esc(r.get("note", ""))}</em></div>'
+    out += ('<div class="dp-row dp-axis"><span></span><div>' + "".join(
+        f'<span style="left:{pos(t):.2f}%">{esc(fmt(t))}</span>' for t in ticks) + '</div><span></span></div>')
+    return out + '</div>'
+
+
 def _fmt(value, digits: int = 1) -> str:
     return "n/a" if value is None else f"{value:,.{digits}f}"
 
@@ -273,81 +338,133 @@ def _share(n, d) -> str:
     return f"{pct(n, d)} ({num(n)} of {num(d)})"
 
 
+def _rate(n, d) -> float | None:
+    return 100 * n / d if d else None
+
+
+def _mirrors(satisfaction: dict, a: str, b: str, tolerance_pts: float = 1.0) -> float | None:
+    """The largest gap, in points, between two surveys' score shares across groups and scores, or None when they
+    don't share the same scores and groups; below the tolerance one survey can be stated as mirroring the other."""
+    if a not in satisfaction or b not in satisfaction or satisfaction[a].keys() != satisfaction[b].keys():
+        return None
+    gap = 0.0
+    for group in satisfaction[a]:
+        da, db = satisfaction[a][group]["all"], satisfaction[b][group]["all"]
+        if da["distribution"].keys() != db["distribution"].keys() or not da["n"] or not db["n"]:
+            return None
+        for score in da["distribution"]:
+            gap = max(gap, abs(100 * da["distribution"][score] / da["n"] - 100 * db["distribution"][score] / db["n"]))
+    return gap if gap <= tolerance_pts else None
+
+
 def render(report: dict, manifest: dict) -> str:
-    """Offline, aggregate-only HTML; every value carries its numerator, denominator and limit."""
+    """Offline, aggregate-only HTML; every value carries its numerator, denominator and limit.
+
+    The headline and the section 3 lead are generated from the figures, and each states "no different" only while
+    the gaps stay within MAX_GAP_PTS, so a rebuild on new data can't keep a claim the data no longer supports."""
     s, q = report["summary"], report["queries"]
     k1, k2, k3, gap = s["kpi1_demand"], s["kpi2_claimed"], s["kpi3_workload"], s["resolution_gap"]
     w = s["window"]
-    body = (f'<section class="note"><p>Design window {esc(w["start"])} to {esc(w["end_exclusive"])} (exclusive), '
-            f'{num(w["calendar_days"])} calendar days, unless a figure is labelled <b>full period</b>. Synthetic data; '
-            'every figure is descriptive and comes from the query named under it (appendix).</p></section>')
+    uc, other = s["before"]["unrecognized charge / all"], s["before"]["other complaint / all"]
+    unresolved = lambda r: r["open"] + r["in_process"] + r["escalated_status"]
+    uc_unres, uc_sla = _rate(unresolved(uc), uc["complaints"]), _rate(uc["sla_breached"], uc["sla_known"])
+    other_unres, other_sla = _rate(unresolved(other), other["complaints"]), _rate(other["sla_breached"], other["sla_known"])
+    same = (None not in (uc_unres, uc_sla, other_unres, other_sla)
+            and abs(uc_unres - other_unres) <= MAX_GAP_PTS and abs(uc_sla - other_sla) <= MAX_GAP_PTS)
 
-    body += '<section><h2>1. The problem in numbers</h2><div class="cards">'
+    # --- headline, window and contents
+    headline = (f'Unrecognized charges are {pct(k1["unrecognized_charges"], k1["all_complaints"])} of all complaints, and '
+                f'{uc_unres:.1f}% of them are still unresolved'
+                + (f', handled no differently from other complaints ({other_unres:.1f}% unresolved, {uc_sla:.1f}% against '
+                   f'{other_sla:.1f}% past their SLA).' if same else
+                   f'; other complaints: {other_unres:.1f}% unresolved. SLA breached: {uc_sla:.1f}% against {other_sla:.1f}%.'))
+    last_day = date.fromisoformat(w["end_exclusive"]) - timedelta(days=1)
+    sections = [("s1", "1. The problem in numbers"), ("s2", "2. How disputes are handled today"), ("s3", "3. The cuts"),
+                ("s4", "4. Data trust and limits"), ("appendix", "Appendix: queries")]
+    intro = (f'<p class="muted">Design window {esc(w["start"])} to {last_day.isoformat()} ({num(w["calendar_days"])} days) unless a figure says '
+             '<b>full period</b> · synthetic data · every figure is descriptive, with its query in the appendix · '
+             '<a href="product-report.json">aggregate JSON</a> · <a href="product-manifest.json">quality manifest</a></p>'
+             '<nav class="toc" aria-label="Contents">' + "".join(f'<a href="#{i}">{esc(t)}</a>' for i, t in sections) + '</nav>')
+
+    # --- 1. the problem in numbers
+    years = [r["share"] for r in k1["by_year"] if r["share"] is not None]
+    year_note = f'; {100 * min(years):.1f}–{100 * max(years):.1f}% in each year' if years else ''
+    body = '<section id="s1"><h2>1. The problem in numbers</h2><div class="cards">'
     body += card("Unrecognized-charge complaints a day", _fmt(k1["per_day"], 2),
-                 f'{num(k1["unrecognized_charges"])} complaints; {pct(k1["unrecognized_charges"], k1["all_complaints"])} of {num(k1["all_complaints"])} complaints (PR-01)')
-    body += card("Recorded claims a day, USD only", f'US${_fmt(k2["direct_usd_per_day"], 2)}',
-                 f'US${_fmt(k2["usd_with_fx_estimates_per_day"], 2)} with FX-estimated amounts; coverage {_share(k2["usd_convertible"], k2["complaints"])}. Claims, not losses (PR-02)')
+                 f'{num(k1["unrecognized_charges"])} complaints, {pct(k1["unrecognized_charges"], k1["all_complaints"])} of all{year_note} (PR-01)')
+    body += card("Recorded claims a day, in USD", f'US${_fmt(k2["direct_usd_per_day"], 2)}',
+                 f'US${_fmt(k2["usd_with_fx_estimates_per_day"], 2)} with FX estimates · amounts on {pct(k2["usd_convertible"], k2["complaints"])} · claims, not losses (PR-02)')
     body += card("Complaint-contact hours a day", _fmt(k3["observed_hours_per_day"], 2),
-                 f'{_fmt(k3["per_day"], 2)} complaint contacts a day; duration observed on {_share(k3["duration_observed"], k3["contacts"])}. All complaint contacts, not only unrecognized charges (PR-03)')
+                 f'{_fmt(k3["per_day"], 2)} contacts a day, every complaint reason · duration on {pct(k3["duration_observed"], k3["contacts"])} (PR-03)')
     body += card("Complaint contacts resolved", pct(gap["queja_resolved"], gap["queja_contacts"]),
-                 f'{num(gap["queja_resolved"])} of {num(gap["queja_contacts"])}, against {_share(gap["all_resolved"], gap["all_contacts"])} for all contacts (PR-03)')
+                 f'against {pct(gap["all_resolved"], gap["all_contacts"])} for all contacts · {num(gap["queja_resolved"])} of {num(gap["queja_contacts"])} (PR-03)')
     body += ('</div><ul class="muted">'
              f'<li>Claims: {num(k2["direct_usd_cases"])} cases recorded in USD; {num(k2["fx_estimated_cases"])} FX-estimated at the creation-day rate '
              f'(US${_fmt(k2["fx_estimated_usd"], 2)} in all, flagged as estimated). Excluded: {num(k2["no_amount"])} with no amount and '
              f'{num(k2["amount_without_currency"])} with an amount but no currency.</li>'
              f'<li>Workload: mean duration {_fmt(k3["mean_duration_seconds"], 2)} s over {num(k3["duration_observed"])} observed durations; '
              f'{num(k3["duration_missing"])} missing. A cost per contact is only a scenario: contact hours times a rate the data does not contain.</li></ul>')
-    body += '<figure><figcaption>Unrecognized charges as a share of all complaints, by year (PR-01; 2023 starts on 17 June)</figcaption>'
-    body += _bars([(r["period"], r["share"], f'{pct(r["unrecognized_charges"], r["all_complaints"])} · {num(r["unrecognized_charges"])}/{num(r["all_complaints"])}', UC) for r in k1["by_year"]])
-    body += '</figure><figure><figcaption>Claimed amounts per source currency, one row each, never added together (PR-02)</figcaption>'
-    body += table([{**r, "present": _share(r["amount_present"], r["complaints"]), "sum": _fmt(r["source_amount_sum"], 2),
-                    "p50": _fmt(r["source_amount_p50"], 2), "usd": _fmt(r["usd_amount_sum"], 2),
-                    "est": "not converted" if r["usd_convertible"] == 0 else "FX estimate" if r["usd_is_estimated"] else "source USD"}
-                   for r in k2["by_currency"]],
-                  [("currency", "Currency"), ("present", "Amount present"), ("sum", "Sum, source currency"), ("p50", "Median, source currency"),
-                   ("usd", "In USD"), ("est", "USD basis")])
+    currency_rows = []
+    for r in sorted(k2["by_currency"], key=lambda r: (r["currency"] == "(none)", r["currency"])):
+        # Amounts without a currency may mix currencies, so they get no total and no median.
+        known = r["currency"] != "(none)"
+        currency_rows.append({"currency": r["currency"] if known else "No currency",
+                              "present": (pct(r["amount_present"], r["complaints"]), f'{num(r["amount_present"])} of {num(r["complaints"])}'),
+                              "p50": f'{_fmt(r["source_amount_p50"], 2)} {r["currency"]}' if known and r["source_amount_p50"] is not None else "n/a",
+                              "sum": f'{_fmt(r["source_amount_sum"], 2)} {r["currency"]}' if known and r["source_amount_sum"] is not None else "n/a",
+                              "usd": f'US${_fmt(r["usd_amount_sum"], 2)}' if r["usd_amount_sum"] is not None else "n/a",
+                              "basis": "not converted" if r["usd_convertible"] == 0 else "FX estimate" if r["usd_is_estimated"] else "source USD"})
+    body += '<figure><figcaption>Claimed amounts per source currency, each in its own currency, never added together (PR-02)</figcaption>'
+    body += table(currency_rows, [("currency", "Currency"), ("present", "Amount present"), ("p50", "Median claim"), ("sum", "Total claimed"),
+                                  ("usd", "Converted to USD"), ("basis", "USD basis")])
     body += ('<p class="muted">FX uses the creation-day rate. Every source amount sits on the same scale as USD whatever its currency (DF-023), '
              'so converting ARS, COP and MXN with real rates shrinks them: the figure with FX estimates is the less certain one. '
-             'Amounts without a currency are not converted.</p></figure></section>')
+             'Amounts without a currency may mix currencies, so they have no total or median.</p></figure></section>')
 
+    # --- 2. how disputes are handled today
     groups = [("unrecognized charge", "Unrecognized charges", UC), ("other complaint", "Other complaints", "")]
-    target, esc_age = s["before"]["unrecognized charge / all"], s["escalated_age"]
-    escalated = s["before"]["unrecognized charge / escalated"]
-    body += '<section><h2>2. The "before" picture: unrecognized charges against other complaints</h2>'
-    body += (f'<p>Complaints chosen by creation date in the design window: {num(target["complaints"])} unrecognized charges against '
-             f'{num(s["before"]["other complaint / all"]["complaints"])} other complaints.</p>' + LEGEND)
-    body += '<figure><figcaption>How long each step takes (PR-04)</figcaption><p class="muted">Dot: median (p50). Line: to p90, the time 9 in 10 complaints stay within. Only complaints that have both dates.</p>'
+    esc_age, escalated = s["escalated_age"], s["before"]["unrecognized charge / escalated"]
+    body += '<section id="s2"><h2>2. How disputes are handled today: unrecognized charges against other complaints</h2>'
+    body += (f'<p>Complaints chosen by creation date in the design window: {num(uc["complaints"])} unrecognized charges against '
+             f'{num(other["complaints"])} other complaints.</p>' + LEGEND)
+    body += ('<figure><figcaption>How long each step takes (PR-04)</figcaption><p class="muted">Dot: median (p50). Line: to p90, '
+             'the time 9 in 10 complaints stay within. Only complaints that have both dates.</p>')
     for title, unit, key in (("Assignment → first response", "hours", "first_response_h"), ("First response → resolution", "days", "to_resolution_d"),
-                             ("First response → closing", "days", "to_closing_d"), ("Customer wait: creation → resolution", "days", "customer_wait_d"),
-                             ("Resolution days (source field)", "days", "resolution_days")):
-        n_key = "resolution_days_n" if key == "resolution_days" else key.rsplit("_", 1)[0] + "_n"
-        rows = []
-        for grp, label, tone in groups:
-            r = s["before"][f"{grp} / all"]
-            rows.append((label, tone, r[f"{key}_p50"], r[f"{key}_p90"],
-                         f'p50 {_fmt(r[f"{key}_p50"])} · p90 {_fmt(r[f"{key}_p90"])} {unit} · n = {num(r[n_key])}'))
-        body += _range_plot(title, unit, rows)
-    body += '</figure>'
+                             ("First response → closing", "days", "to_closing_d"), ("Customer wait: creation → resolution", "days", "customer_wait_d")):
+        n_key = key.rsplit("_", 1)[0] + "_n"
+        body += _range_plot(title, unit, [(label, tone, s["before"][f"{grp} / all"][f"{key}_p50"], s["before"][f"{grp} / all"][f"{key}_p90"],
+                                           f'p50 {_fmt(s["before"][f"{grp} / all"][f"{key}_p50"])} · p90 {_fmt(s["before"][f"{grp} / all"][f"{key}_p90"])} '
+                                           f'{unit} · n = {num(s["before"][f"{grp} / all"][n_key])}') for grp, label, tone in groups])
+    body += ('<p class="muted">The source\'s own <code>resolution_days</code> field gives the same picture as the customer wait '
+             f'(p50 {_fmt(uc["resolution_days_p50"])} against {_fmt(other["resolution_days_p50"])} days), so it is not drawn twice.</p></figure>')
     rates = []
     for grp, label, tone in groups:
         r = s["before"][f"{grp} / all"]
-        unresolved = r["open"] + r["in_process"] + r["escalated_status"]
-        rates += [(f'{label}: unresolved', _ratio(unresolved, r["complaints"]), pct(unresolved, r["complaints"]), tone),
+        rates += [(f'{label}: unresolved', _ratio(unresolved(r), r["complaints"]), pct(unresolved(r), r["complaints"]), tone),
                   (f'{label}: SLA breached', _ratio(r["sla_breached"], r["sla_known"]), pct(r["sla_breached"], r["sla_known"]), tone)]
     body += '<figure><figcaption>Unresolved share (Open, In Process or Escalated) and SLA breach rate (PR-04)</figcaption>' + _bars(rates) + '</figure>'
-    body += (f'<p><b>Escalated unrecognized charges have no outcome dates.</b> In the design window {num(escalated["complaints"])} are escalated, '
-             f'with {num(escalated["first_response_n"])} first responses, {num(escalated["to_resolution_n"])} resolutions and {num(escalated["to_closing_n"])} closings. '
-             f'Their time open is the only measure: at the data end ({esc(esc_age["data_end"])}, <b>full period</b>) the {num(esc_age["escalated"])} escalated '
-             f'complaints had been open {_fmt(esc_age["age_since_creation_d_p50"], 0)} days at p50 and {_fmt(esc_age["age_since_creation_d_p90"], 0)} at p90 '
-             f'since creation. That is a lower bound, not a closing time (PR-05).</p>')
-    body += (f'<p class="muted">Kept and labelled: {num(target["outcome_after_window"])} unrecognized-charge complaints created in the window have an outcome date '
-             f'in 2026. Counted and left out of the duration quantiles: {num(target["negative_intervals"])} with a resolution date before the first response.</p>')
+    body += (f'<div class="callout"><b>{_fmt(esc_age["age_since_creation_d_p50"], 0)} days</b><p><b>How long escalated unrecognized charges '
+             f'have stayed open, at the median</b> ({_fmt(esc_age["age_since_creation_d_p90"], 0)} at p90; {num(esc_age["escalated"])} cases at '
+             f'the data end, {esc(esc_age["data_end"])}, <b>full period</b>). None of the {num(escalated["complaints"])} escalated in the design window has '
+             f'a first response, resolution or closing date, so this is a lower bound, not a closing time (PR-05).</p></div>')
+    rp = s["repeat"]
+    body += (f'<h3>Repeat complaints, the re-open proxy</h3><p>{num(rp["repeat_customers"])} of {num(rp["customers"])} customers '
+             f'({pct(rp["repeat_customers"], rp["customers"])}) complained more than once. The source has no re-opened status, so these '
+             f'follow-up complaints stand in for it (PR-10):</p><div class="steps">'
+             f'<div><b>{num(rp["follow_up_complaints"])}</b><small>of {num(rp["complaints"])} complaints follow an earlier one by the same customer</small></div>'
+             f'<div><b>{num(rp["within_90_days"])}</b><small>of those within 90 days</small></div>'
+             f'<div><b>{num(rp["within_30_days"])}</b><small>within 30 days</small></div></div>'
+             f'<p class="muted">{num(rp["after_prior_outcome"])} follow an earlier complaint that already had a resolution or closing date. '
+             f'The source\'s <code>is_repeat_complainer</code> flag is set on {num(rp["source_flag_repeat"])} complaints, more than repeats explain, '
+             'so it is not used. In the product, "not resolved" on a closed report starts a new one that cites it (#90): the live '
+             're-open signal, not yet exported.</p>')
+    body += (f'<p class="muted">Kept and labelled: {num(uc["outcome_after_window"])} unrecognized-charge complaints created in the window have an outcome date '
+             f'in 2026. Counted and left out of the duration quantiles: {num(uc["negative_intervals"])} with a resolution date before the first response.</p>')
 
-    cc = s["closed_case_satisfaction"]
+    cc, nps = s["closed_case_satisfaction"], s["nps"]
     body += '<h3>Satisfaction: three surveys, three populations, three scales</h3><div class="cards">'
     body += card("Closed-case satisfaction, unrecognized charges (scale 1–5)", f'{_fmt(cc["mean"], 2)} / 5',
                  f'{num(cc["scored_closed"])} scored cases closed in the window, {pct(cc["scored_closed"], cc["cohort"])} of {num(cc["cohort"])}: a selected subset (PR-06, F5)')
-    nps = s["nps"]
     body += card("Contact NPS answers that are detractors (0–6)", pct(nps["detractors"], nps["answers"]),
                  f'{num(nps["detractors"])} of {num(nps["answers"])} answers; promoters (9–10): {num(nps["promoters"])}; highest answer {esc(nps["max_score"])} (PR-07)')
     body += '</div>'
@@ -361,12 +478,17 @@ def render(report: dict, manifest: dict) -> str:
         body += _range_plot(title, "", [(names[g][0], names[g][1], csat[g][part]["mean"], None,
                                          f'mean {_fmt(csat[g][part]["mean"], 2)} · n = {num(csat[g][part]["n"])}') for g in names if g in csat], lo=1, hi=4)
     body += '</figure>'
+    ces_gap = _mirrors(s["satisfaction"], "CES", "CSAT")
+    shown = ("CSAT", "NPS") if ces_gap is not None else ("CSAT", "CES", "NPS")
     body += ('<figure><figcaption>How complaint contacts score against other contacts (PR-07)</figcaption>'
-             '<p class="muted">Share of answers at each score; the bar length compares cells within one survey. '
-             'Contact-centre surveys, not complaint surveys.</p>')
-    body += _distributions(s["satisfaction"])
-    body += ('<p class="muted">Observed scales: CSAT 1-4, CES 1-4, NPS 2-7, all inside the documented scales. A CSAT of 4 is the observed '
-             'maximum. In-app thumbs up or down is not CSAT.</p></figure>')
+             '<p class="muted">Share of answers at each score; the bar length compares cells within one survey.</p>')
+    body += _distributions({k: v for k, v in s["satisfaction"].items() if k in shown})
+    if ces_gap is not None:
+        ces = s["satisfaction"]["CES"]
+        body += (f'<p class="muted">CES is not drawn: its answers match CSAT\'s to within {ces_gap:.1f} points at every score '
+                 f'(n = {num(ces["Queja"]["all"]["n"])} complaint contacts, {num(ces["other reasons"]["all"]["n"])} other).</p>')
+    body += ('<p class="muted">Observed scales: CSAT 1-4, CES 1-4, NPS 2-7, all inside the documented scales. In-app thumbs up or down is '
+             'not CSAT.</p></figure>')
     body += '<figure><figcaption>Mean CSAT against the share of contacts resolved, by contact reason (PR-03, PR-07; #86 F3, F4)</figcaption>'
     by_reason = [r for r in s["csat_by_reason"] if r["csat"]["n"] and r["resolved_rate"] is not None]
     if by_reason:
@@ -385,45 +507,74 @@ def render(report: dict, manifest: dict) -> str:
     body += ('<p class="muted">Every reason scores about the same within each resolution outcome; the reasons with lower average CSAT are '
              'the ones resolved less often. A descriptive association, not evidence that resolution causes satisfaction.</p></figure></section>')
 
-    seg_rows, seg_bars = [], []
-    for r in s["segments"]:
-        if r["too_few"]:
-            seg_rows.append({"segment": r["segment"], "complaints": num(r["complaints"]), "unresolved": "too few to compare"})
-            continue
-        seg_rows.append({"segment": r["segment"], "complaints": num(r["complaints"]), "customers": num(r["customers"]),
-                         "unresolved": pct(r["unresolved"], r["complaints"]), "sla": pct(r["sla_breached"], r["sla_known"]),
-                         "escalated": pct(r["escalated"], r["complaints"]),
-                         "closed": f'{_fmt(r["closed_mean"], 2)} (n={num(r["closed_scored"])})' if r["closed_mean"] is not None else f'too few (n={num(r["closed_scored"])})'})
-        seg_bars.append((r["segment"], r["unresolved_share"], pct(r["unresolved"], r["complaints"]), UC))
-    body += '<section><h2>3. The required cut: by customer segment</h2>'
-    body += '<p>Segment is today\'s snapshot (<code>dim_customers.segment</code>), joined on each complaint\'s or survey\'s own customer. '
-    body += f'Cells under {MIN_CELL} are shown as "too few to compare".</p>'
-    body += table(seg_rows, [("segment", "Segment"), ("complaints", "Unrecognized-charge complaints"), ("customers", "Customers"), ("unresolved", "Unresolved"),
-                             ("sla", "SLA breached"), ("escalated", "Escalated"), ("closed", "Closed-case satisfaction")])
-    body += '<figure><figcaption>Unresolved share by segment (PR-08)</figcaption>' + _bars(seg_bars) + '</figure>'
-    body += table([{"segment": r["segment"], "group": r["reason_group"], "n": num(r["surveys"]),
-                    "mean": "too few to compare" if r["too_few"] else _fmt(r["mean"], 2),
-                    "top": "" if r["too_few"] else pct(r["top_score"], r["surveys"])} for r in s["segment_csat"]],
-                  [("segment", "Segment"), ("group", "Contact reason"), ("n", "CSAT answers"), ("mean", "Mean CSAT"), ("top", "Share scoring 4")])
-    body += ('<p class="muted">By language: measured only on our live episodes, which are 5 team episodes so far, too few for any rate. '
-             'The held-out comparison of the learned component against the baseline is reported separately and is not yet run.</p></section>')
+    # --- 3. the cuts
+    cuts = [("Segment", s["segments"], "segment", "PR-08"), ("Country", s["by_country"], "country", "PR-11"),
+            ("Channel", s["by_channel"], "channel", "PR-12")]
+    dot_rows, outliers = [], []
+    for title, rows, key, _ in cuts:
+        dot_rows.append({"label": title, "heading": True})
+        for r in sorted(rows, key=lambda r: -r["complaints"]):
+            label = f'{r[key]} · {num(r["complaints"])}'
+            if r["too_few"]:
+                dot_rows.append({"label": label, "dots": [], "note": "too few to compare"})
+                continue
+            unres, sla = _rate(r["unresolved"], r["complaints"]), _rate(r["sla_breached"], r["sla_known"])
+            dot_rows.append({"label": label, "note": f'{unres:.1f}% · {sla:.1f}%', "dots": [
+                (unres, "", f'{r[key]}: unresolved {unres:.2f}% ({num(r["unresolved"])} of {num(r["complaints"])} complaints)'),
+                (sla, UC, f'{r[key]}: SLA breached {sla:.2f}% ({num(r["sla_breached"])} of {num(r["sla_known"])} complaints)')]})
+            for name, value, overall in (("unresolved", unres, uc_unres), ("SLA breaches", sla, uc_sla)):
+                if value is not None and abs(value - overall) > MAX_GAP_PTS:
+                    outliers.append(f'{r[key]} ({name} {value:.1f}%)')
+    lead = ('Every segment, country and channel sits within '
+            f'{MAX_GAP_PTS:g} points of the overall rates'
+            + (f', except {", ".join(outliers[:-1]) + " and " + outliers[-1] if len(outliers) > 1 else outliers[0]}.' if outliers else '.'))
+    body += (f'<section id="s3"><h2>3. The cuts: segment, country, channel and language</h2><p>{esc(lead)}</p>'
+             '<figure><figcaption>Unresolved share and SLA breach rate of unrecognized-charge complaints, by group (PR-08, PR-11, PR-12)</figcaption>'
+             f'<p class="muted">Each dot is one group\'s rate; the dotted lines mark all {num(uc["complaints"])} unrecognized-charge '
+             'complaints. Segment and country are today\'s customer snapshot; the channel is where the complaint was received. '
+             f'Groups under {MIN_CELL} complaints are shown as "too few to compare".</p>'
+             # Every row here is an unrecognized-charge group, so the page's group colours don't apply: this chart's
+             # colours name the two rates instead, with their own key.
+             '<p class="legend"><span><i class="sw"></i>Unresolved (open, in process or escalated)</span>'
+             '<span><i class="sw uc"></i>SLA breached</span></p>')
+    body += _dot_plot(dot_rows, 0, 100, [0, 25, 50, 75, 100],
+                      refs=[(uc_sla, f'All: {uc_sla:.1f}%', "uc"), (uc_unres, f'All: {uc_unres:.1f}%', "acc")],
+                      fmt=lambda v: f'{v:g}%') + '</figure>'
 
-    body += '<section><h2>4. Data trust and limits</h2>'
+    pairs: dict[str, dict] = {}
+    for r in s["segment_csat"]:
+        pairs.setdefault(r["segment"], {})[r["reason_group"]] = r
+    csat_rows = []
+    for segment, p in sorted(pairs.items(), key=lambda item: -sum(r["surveys"] for r in item[1].values())):
+        q_, o_ = p.get("Queja"), p.get("other reasons")
+        if not q_ or not o_ or q_["too_few"] or o_["too_few"]:
+            csat_rows.append({"label": segment, "dots": [], "note": "too few to compare"})
+            continue
+        csat_rows.append({"label": f'{segment} · {num(q_["surveys"])} / {num(o_["surveys"])}', "join": True,
+                          "dots": [(o_["mean"], ""), (q_["mean"], UC)], "note": f'{q_["mean"]:.2f} against {o_["mean"]:.2f}'})
+    body += ('<figure><figcaption>Contact-centre CSAT by segment: complaint contacts against other reasons (PR-09)</figcaption>'
+             '<p class="muted">Mean on the observed 1–4 scale; the counts are CSAT answers for complaint contacts / other reasons.</p>'
+             + LEGEND + _dot_plot(csat_rows, 1, 4, [1, 2, 3, 4]) + '</figure>')
+    for title, rows, key, qid in cuts:
+        body += f'<h3>By {esc(title.lower())} ({qid})</h3>' + _cut_table(title, rows, key)
+    body += ('<h3>By language</h3><p>Language exists only in our live service. Its first export (2026-10-02, 5 team and reviewer '
+             'episodes on the flow that calls no model) has 1 Spanish and 4 Portuguese reports, 4 accepted as complete handoffs and 1 routed, '
+             '0 recorded unsafe: counts, not rates. See <a href="../../Docs/deliverables/EVALUATION.md#9-live-service-as-measured">EVALUATION.md §9</a> '
+             'for the table and its method.</p><p class="muted">The held-out comparison of the learned component against the baseline is '
+             'reported separately and is not yet run.</p></section>')
+
+    # --- 4. data trust and limits, appendix
+    body += '<section id="s4"><h2>4. Data trust and limits</h2>'
     body += (f'<p>Silver database <code>{esc(manifest.get("database"))}</code>, quality run <code>{esc(manifest.get("quality_run"))}</code>: '
              f'{num(manifest.get("quality_checks"))} checks, {num(manifest.get("quality_errors"))} errors, {num(manifest.get("quality_warnings"))} warnings. '
              f'Contact reason fields that differ: {num(k3["reason_fields_differ"])} (<code>contact_reason</code> equals <code>reason_category</code>, '
              'and neither identifies unrecognized charges). Wait time exists only for Phone contacts (DF-027).</p>')
     body += '<h3>What not to claim</h3><ul>' + "".join(f"<li>{esc(x)}</li>" for x in NOT_TO_CLAIM) + '</ul></section>'
+    body += ('<section id="appendix"><h2>Appendix: queries</h2><p class="muted">SQL files in <code>data_foundation/queries/product/</code>.</p>'
+             + table([{"id": k, "title": v["title"], "scope": v["scope"], "query": v["query"].rsplit("/", 1)[-1].replace("-", "‑")} for k, v in q.items()],
+                     [("id", "ID"), ("title", "What it measures"), ("scope", "Window"), ("query", "SQL file")]) + '</section>')
 
-    body += '<section><h2>Appendix: queries</h2>' + table(
-        [{"id": k, "title": v["title"], "scope": v["scope"], "query": v["query"]} for k, v in q.items()],
-        [("id", "ID"), ("title", "What it measures"), ("scope", "Window"), ("query", "SQL file")]) + '</section>'
-
-    links = ('<p class="muted">Data: <a href="product-report.json">aggregate JSON</a> · '
-             '<a href="product-manifest.json">quality manifest</a></p>')
-    return shell("Unrecognized-charge intake: the baseline",
-                 "Problem-sizing KPIs, how disputes are handled today, satisfaction with its populations, and the segment cut, "
-                 "from one verified synthetic Silver snapshot.", body, "product-report.html", links)
+    return shell("Unrecognized-charge intake: the baseline", headline, body, "product-report.html", intro, lead=True)
 
 
 def write_report(report: dict, manifest: dict, destination: Path) -> None:

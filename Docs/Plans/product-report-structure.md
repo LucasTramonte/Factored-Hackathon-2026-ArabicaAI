@@ -60,7 +60,7 @@ The evaluators asked for the problem explained "using KPIs and values", with lim
   - their **SLA breach rate against other complaint types**;
   - time to first response;
   - customers served;
-  - verification p95 against the 4 s target;
+  - report-request p95 against the 2,000 ms target ([EVALUATION.md §10](../deliverables/EVALUATION.md#10-report-request-latency-evidence-still-incomplete));
   - recorded unsafe outcomes.
 - **Charts for KPIs 1–3:**
   - daily unrecognized-charge complaints with a p50/p95 band, plus their share of complaints per year (stable at 18.2–18.4%, DF-010);
@@ -181,7 +181,7 @@ Survey answers and comments are never charted as evidence of wait or quality (F1
 | Escalated cases: time open (substitute, since there is no closing date) | Status age of escalated complaints (section 4) | Lower | Product: in review → closed for reports a person escalates. Same metric, live |
 | CSAT holds | Contact-centre CSAT for complaint contacts (`Queja`), by resolution (F3, F4); closed-case complaint satisfaction (F5) | Hold | Not measurable until real users take part (the user test in the customer contract). In-app thumbs up/down is not CSAT |
 | **NPS holds** | Contact-centre NPS answers for complaint contacts against other reasons: the **distribution and mean** (63,668 NPS surveys overall). **The standard NPS score is degenerate here:** answers stop at 7 on the 0–10 scale, so no one is a promoter (9–10) and the score is almost entirely detractors. Report the distribution, and the formal NPS only with that caveat | Hold | Same as CSAT: needs real users |
-| **Verification answered in under 4 s, 95% of the time** | Not in the data | **p95 < 4 s** | Server time of `GET /transactions`, `POST /intake/start` and `POST /intake/confirm`. Known so far: about 1.4 s for one earlier episode, and confirm projected at about 1.2 s of D1 waiting (ADR-004). **Tool:** [`scripts/summarize_worker_latency.py`](../../scripts/summarize_worker_latency.py) (#91) summarizes exported Worker logs without headers, bodies or customer data. **To do:** a scripted run against the deployed Worker recording p50/p95 per request. The extractor is off the path (its own p95 is 3.58 s) |
+| **Report requests answered in under 2,000 ms, 95% of the time** (the project target, [EVALUATION.md §10](../deliverables/EVALUATION.md#10-report-request-latency-evidence-still-incomplete); it replaces an earlier 4 s) | Not in the data | **p95 < 2,000 ms** | Server time of `GET /transactions`, `POST /intake/start` and `POST /intake/confirm`. Known so far: about 1.4 s for one earlier episode, and confirm projected at about 1.2 s of D1 waiting (ADR-004). **Tool:** [`scripts/summarize_worker_latency.py`](../../scripts/summarize_worker_latency.py) (#91) summarizes exported Worker logs without headers, bodies or customer data. **To do:** a scripted run against the deployed Worker recording p50/p95 per request. The extractor is off the path (its own p95 is 3.58 s) |
 | Safe accepted intake | — | High, with 0 unsafe | Event export |
 
 **Chart:** one row per success metric, a "baseline → target → current" bullet chart, with "not yet measured" shown as an empty marker rather than a zero.
@@ -231,7 +231,7 @@ Survey answers and comments are never charted as evidence of wait or quality (F1
 
      each with its population, and none labelled as CSAT for unrecognized charges;
   4. **segment cuts:** escalated against not, and Premium against other segments. "Amount large for this customer" is shown only from the live product;
-  5. **the success table** (section 8), with the 4 s target.
+  5. **the success table** (section 8), with the 2,000 ms report-request target.
 - **Each number carries** its population, denominator, window and limit underneath, as in the report.
 - **Owners:** the JSON contract is Manoella's; the route and charts are Roberto's.
 
@@ -262,4 +262,4 @@ The metric dictionary grows with each step: a metric is added to it when its que
 ## Open decisions
 1. **Report format:** the `make report` HTML hub only, or also a Markdown deliverable (`Docs/deliverables/PRODUCT_REPORT.md`) with static charts.
 2. **Whether the critical-customer and priority definitions** stay report-only, or are proposed for the product.
-3. **Who runs the latency measurement** for the 4 s target (the summarizer exists since #91; the run and log export need a person with the Cloudflare account), and who exports the D1 status history.
+3. **Who runs the latency measurement** for the 2,000 ms target (the summarizer exists since #91; the run and log export need a person with the Cloudflare account), and who exports the D1 status history.

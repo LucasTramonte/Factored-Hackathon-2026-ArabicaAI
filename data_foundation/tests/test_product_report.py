@@ -8,7 +8,8 @@ import duckdb
 import pytest
 
 from data_foundation.scripts import run_product_report
-from data_foundation.src.product_report import _scores, build, render, suppress_small_cells, write_report
+from data_foundation.src.marketing_product_report import table
+from data_foundation.src.product_report import _mirrors, _scores, build, render, suppress_small_cells, write_report
 
 IDS = ('CUST-1', 'CUST-2', 'CUST-3', 'CMP-1', 'CMP-2', 'CMP-3', 'CMP-4', 'CMP-5', 'CMP-6', 'INT-1', 'INT-2', 'INT-3', 'SRV-1', 'SRV-2', 'SRV-3')
 
@@ -24,10 +25,15 @@ def _fixture(con):
       ('CMP-5','CUST-2','Cobro indebido',TIMESTAMP '2024-03-01',NULL,NULL,'Open',NULL,NULL,NULL,NULL,FALSE,NULL,NULL),
       ('CMP-6','CUST-1','Cargo no reconocido',TIMESTAMP '2024-05-01',20.0,'USD','Closed',TIMESTAMP '2024-05-01',TIMESTAMP '2024-05-02',TIMESTAMP '2024-05-03',TIMESTAMP '2024-05-10',FALSE,2.0,5.0))
       t(complaint_id,customer_id,subcategory,creation_date,claimed_amount,currency,status,assignment_date,first_response_date,resolution_date,closing_date,sla_breached,resolution_days,resolution_satisfaction)""")
+    # Channel and the source's repeat flag; CMP-4 (holdout) is flagged too, so a window leak would show.
+    con.execute("""ALTER TABLE silver.fact_complaints ADD COLUMN reception_channel VARCHAR;
+      ALTER TABLE silver.fact_complaints ADD COLUMN is_repeat_complainer BOOLEAN;
+      UPDATE silver.fact_complaints SET reception_channel = CASE WHEN complaint_id IN ('CMP-2','CMP-4') THEN 'App' ELSE 'Call Center' END,
+        is_repeat_complainer = complaint_id IN ('CMP-6','CMP-4')""")
     con.execute("""CREATE TABLE silver.dim_fx_rates AS SELECT * FROM (VALUES (DATE '2025-12-20','MXN','USD',0.05))
       t(rate_date,source_currency,target_currency,exchange_rate)""")
-    con.execute("""CREATE TABLE silver.dim_customers AS SELECT * FROM (VALUES ('CUST-1','Basic'),('CUST-2','Premium'),('CUST-3','Basic'))
-      t(customer_id,segment)""")
+    con.execute("""CREATE TABLE silver.dim_customers AS SELECT * FROM (VALUES ('CUST-1','Basic','México'),('CUST-2','Premium','Colombia'),('CUST-3','Basic','México'))
+      t(customer_id,segment,country)""")
     con.execute("""CREATE TABLE silver.fact_call_center_interactions AS SELECT * FROM (VALUES
       ('INT-1',TIMESTAMP '2024-01-01','Queja','Queja',600.0,TRUE,FALSE),
       ('INT-2',TIMESTAMP '2024-01-01','Producto','Producto',NULL,FALSE,FALSE),
@@ -128,6 +134,27 @@ def test_small_cells_publish_no_numerator_a_hidden_value_could_be_rebuilt_from(r
     assert all(r['unresolved_share'] is None and r['closed_mean'] is None for r in report['summary']['segments'])
 
 
+def test_repeat_complaints_and_reopen_proxies_stay_in_the_window(report):
+    """CUST-1 files three design-window complaints (22 and 90 days apart); CUST-3's holdout complaint never counts."""
+    rp = report['summary']['repeat']
+    assert (rp['customers'], rp['repeat_customers'], rp['complaints'], rp['complaints_from_repeat_customers']) == (2, 1, 4, 3)
+    # Follow-ups: 2024-02-01 (22 days after a resolved complaint) and 2024-05-01 (90 days after an escalated one, no outcome date).
+    assert (rp['follow_up_complaints'], rp['within_30_days'], rp['within_90_days'], rp['after_prior_outcome']) == (2, 1, 2, 1)
+    assert rp['source_flag_repeat'] == 1 and rp['repeat_customer_share'] == 0.5
+
+
+def test_country_and_channel_cuts_count_the_window_and_suppress_small_cells(report):
+    """Each cut counts design-window complaints only; every fixture cell is under 30, so no rate or sum is published."""
+    s = report['summary']
+    assert {r['country']: r['complaints'] for r in s['by_country']} == {'México': 3, 'Colombia': 1}
+    assert {r['channel']: r['complaints'] for r in s['by_channel']} == {'Call Center': 3, 'App': 1}
+    for rows in (s['by_country'], s['by_channel'], report['queries']['PR-11']['rows'], report['queries']['PR-12']['rows']):
+        for r in rows:
+            assert [r[k] for k in ('unresolved', 'sla_breached', 'closed_score_sum', 'first_response_h_p50')] == [None] * 4
+    html = render(report, {'database': 'x', 'quality_run': 'y'})
+    assert 'By channel (PR-12)' in html and 'EVALUATION.md#9-live-service-as-measured' in html
+
+
 def test_a_large_segment_still_hides_a_small_closed_case_mean():
     """A segment with enough complaints keeps its rates, but under 30 scored closings loses only the score sum."""
     results = {"PR-08": {"rows": [{"complaints": 539, "unresolved": 399, "escalated": 20, "sla_known": 539, "sla_breached": 82,
@@ -136,6 +163,60 @@ def test_a_large_segment_still_hides_a_small_closed_case_mean():
     row = suppress_small_cells(results)["PR-08"]["rows"][0]
     assert (row["unresolved"], row["closed_scored"], row["closed_score_sum"]) == (399, 21, None)
     assert results["PR-09"]["rows"][0]["score_sum"] == 2237
+
+
+def _committed():
+    published = Path(__file__).resolve().parents[1] / 'reports'
+    return (json.loads((published / 'product-report.json').read_text(encoding='utf-8')),
+            json.loads((published / 'product-manifest.json').read_text(encoding='utf-8')))
+
+
+def test_headline_says_no_different_only_while_the_gap_is_small():
+    """The generated headline drops "handled no differently" once other complaints differ by more than MAX_GAP_PTS."""
+    report, manifest = _committed()
+    assert 'handled no differently from other complaints' in render(report, manifest)
+    other = report['summary']['before']['other complaint / all']
+    other['open'] = other['complaints'] - other['in_process'] - other['escalated_status']  # every other complaint unresolved
+    html = render(report, manifest)
+    assert 'handled no differently' not in html and 'other complaints: 100.0% unresolved' in html
+
+
+def test_ces_is_folded_into_a_sentence_only_when_it_mirrors_csat():
+    """CES is drawn again as soon as its score shares stop matching CSAT's."""
+    report, manifest = _committed()
+    assert _mirrors(report['summary']['satisfaction'], 'CES', 'CSAT') is not None
+    assert 'CES is not drawn' in render(report, manifest)
+    ces = report['summary']['satisfaction']['CES']['Queja']['all']
+    first, last = sorted(ces['distribution'])[0], sorted(ces['distribution'])[-1]
+    moved = ces['distribution'][first] // 2
+    ces['distribution'][first] -= moved
+    ces['distribution'][last] += moved
+    assert _mirrors(report['summary']['satisfaction'], 'CES', 'CSAT') is None
+    html = render(report, manifest)
+    assert 'CES is not drawn' not in html and '<h4>CES' in html
+
+
+def test_amounts_without_a_currency_get_no_total_or_median(report):
+    """A claim with no currency may be in any currency, so PR-02 never sums or takes the median of those amounts."""
+    rows = {r['currency']: r for r in report['summary']['kpi2_claimed']['by_currency']}
+    assert rows['(none)']['source_amount_sum'] is None and rows['(none)']['source_amount_p50'] is None
+
+
+def test_tables_right_align_only_numeric_columns():
+    """Numbers align right; text, including placeholders such as "too few to compare", aligns left and may wrap."""
+    html = table([{'name': 'Call Center', 'n': '5,210', 'rate': ('25.0 h', 'n = 3,017'), 'note': 'FX estimate'},
+                  {'name': 'Branch', 'n': '402', 'rate': 'too few', 'note': 'source USD'}],
+                 [('name', 'Channel'), ('n', 'Complaints'), ('rate', 'First response'), ('note', 'Basis')])
+    assert re.findall(r'<th class="(\w)">', html) == ['t', 'n', 'n', 't']
+    assert '25.0 h<small class="sub">n = 3,017</small>' in html
+
+
+def test_contents_line_links_every_section(report):
+    """The contents line under the headline points at every section id that exists on the page."""
+    html = render(report, {})
+    for anchor in re.findall(r'<a href="#(\w+)">', html):
+        assert f'id="{anchor}"' in html
+    assert len(re.findall(r'<a href="#(\w+)">', html)) == 5
 
 
 def test_committed_outputs_carry_no_real_identifier():
