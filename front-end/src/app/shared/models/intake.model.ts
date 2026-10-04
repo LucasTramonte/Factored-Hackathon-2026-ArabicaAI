@@ -228,3 +228,9 @@ export interface ReportList {
   items: Report[];
   has_more: boolean;
 }
+
+/** GET /auth/me (ADR-013, phase 0): the browser's live sessions, restored after a reload. */
+export interface SessionState {
+  customer: { customer_id: string; roles: Role[]; context_card: ContextCard | null } | null;
+  agent: boolean;
+}

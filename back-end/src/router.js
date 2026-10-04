@@ -4,7 +4,7 @@
  */
 import { fail, json } from './http.js';
 import { GRANTED } from './auth/cognito.js';
-import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession } from './modules/customer/routes.js';
+import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession, whoAmI } from './modules/customer/routes.js';
 import { startIntake, confirmIntake, handoffIntake, listReports, recordFeedback, requestUpdate } from './modules/intake/routes.js';
 import { listAgentIntakes, getAgentIntakeDetail, startAgentSession, transitionIntake } from './modules/agent/routes.js';
 import { listAuditEvents } from './modules/audit/routes.js';
@@ -14,6 +14,7 @@ export const API_ROUTES = {
   '/demo/identities': { GET: listIdentities },
   '/demo/session': { POST: startCustomerSession },
   '/auth/session': { POST: startEmailSession },
+  '/auth/me': { GET: whoAmI },
   '/auth/logout': { POST: logout },
   '/transactions': { GET: listTransactions },
   '/transactions/displayed': { POST: acknowledgeDisplay },
@@ -42,6 +43,7 @@ export const ROUTE_ROLES = {
   '/demo/identities': 'public',
   '/demo/session': 'public',
   '/auth/session': 'public',
+  '/auth/me': 'public',
   '/auth/logout': 'public',
   '/transactions': 'customer',
   '/transactions/displayed': 'customer',
