@@ -295,3 +295,17 @@ export interface ServiceTimes {
   population: { subcategory: string; window_start: string; window_end_exclusive: string; complaints: number; source: string };
   metrics: ServiceTimeMetric[];
 }
+
+/** One message on a report (contract ``reportMessage``, ADR-015). */
+export interface ReportMessage {
+  message_id: string;
+  author: 'agent' | 'customer';
+  body: string;
+  created_at: string;
+}
+/** A report's messages (contract ``messageThread``): ``can_post`` is false once the report is closed or the thread is full. */
+export interface MessageThread {
+  status: HandoffStatus;
+  can_post: boolean;
+  items: ReportMessage[];
+}

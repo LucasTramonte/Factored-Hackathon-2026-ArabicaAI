@@ -65,6 +65,29 @@ describe('ApiService', () => {
     }
   });
 
+  it('preserves allowlisted conflict reasons without retaining server text', async () => {
+    const cases = [
+      ['This report is closed; messages are read-only', 'closed-thread'],
+      ['This report already has 50 messages', 'full-thread'],
+      ['This idempotency_key was used for another message', 'key-conflict'],
+      ['untrusted detail', 'unknown']
+    ];
+    for (const [detail, reason] of cases) {
+      fetchSpy.and.returnValue(reply(409, { detail }));
+      const e = await api.request('/messages', {}).then(() => { throw new Error('expected failure'); }, (e: ApiError) => e);
+      expect(e.reason).toBe(reason);
+      expect(e.message).toBe('HTTP 409');
+    }
+    for (const body of [null, {}, { detail: 42 }]) {
+      fetchSpy.and.returnValue(reply(409, body));
+      const e = await api.request('/messages', {}).then(() => { throw new Error('expected failure'); }, (e: ApiError) => e);
+      expect(e.reason).toBe('unknown');
+    }
+    fetchSpy.and.returnValue(reply(503, { detail: cases[0][0] }));
+    const e = await api.request('/messages', {}).then(() => { throw new Error('expected failure'); }, (e: ApiError) => e);
+    expect(e.reason).toBe('unknown');
+  });
+
   it('treats a network failure as unconfirmed, like a 503', async () => {
     fetchSpy.and.returnValue(Promise.reject(new TypeError('Failed to fetch')));
     const e = await api.request('/cases', {}).then(() => null, (x: unknown) => x);

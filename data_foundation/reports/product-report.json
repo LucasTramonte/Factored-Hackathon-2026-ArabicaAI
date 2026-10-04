@@ -40,8 +40,8 @@
           "currency": "(none)",
           "complaints": 6929,
           "amount_present": 155,
-          "source_amount_sum": 424881.76999999996,
-          "source_amount_p50": 2861.15,
+          "source_amount_sum": null,
+          "source_amount_p50": null,
           "usd_convertible": 0,
           "usd_amount_sum": null,
           "usd_is_estimated": true
@@ -1220,6 +1220,8 @@
           "escalated": 314,
           "sla_known": 6221,
           "sla_breached": 1238,
+          "first_response_n": 3609,
+          "first_response_h_p50": 25.0,
           "closed_scored": 205,
           "closed_score_sum": 617.0
         },
@@ -1231,6 +1233,8 @@
           "escalated": 135,
           "sla_known": 2557,
           "sla_breached": 549,
+          "first_response_n": 1500,
+          "first_response_h_p50": 25.0,
           "closed_scored": 100,
           "closed_score_sum": 328.0
         },
@@ -1242,6 +1246,8 @@
           "escalated": 45,
           "sla_known": 1053,
           "sla_breached": 216,
+          "first_response_n": 623,
+          "first_response_h_p50": 25.0,
           "closed_scored": 45,
           "closed_score_sum": 135.0
         },
@@ -1253,6 +1259,8 @@
           "escalated": 20,
           "sla_known": 539,
           "sla_breached": 82,
+          "first_response_n": 313,
+          "first_response_h_p50": 24.0,
           "closed_scored": 21,
           "closed_score_sum": null
         }
@@ -1328,6 +1336,155 @@
           "resolved": 3830
         }
       ]
+    },
+    "PR-10": {
+      "title": "Repeat complainers: unrecognized-charge complaints that follow an earlier one by the same customer (as many as chance predicts; not re-opened disputes)",
+      "scope": "design",
+      "query": "data_foundation/queries/product/PR-10_repeat_complaints.sql",
+      "rows": [
+        {
+          "customers": 10013,
+          "repeat_customers": 350,
+          "complaints": 10370,
+          "complaints_from_repeat_customers": 707,
+          "follow_up_complaints": 357,
+          "within_30_days": 27,
+          "within_90_days": 64,
+          "after_prior_outcome": 92,
+          "source_flag_repeat": 1517
+        }
+      ]
+    },
+    "PR-11": {
+      "title": "Unrecognized-charge complaints by the customer's country (a snapshot): volume, unresolved, SLA, first response, closed-case satisfaction",
+      "scope": "design",
+      "query": "data_foundation/queries/product/PR-11_by_country.sql",
+      "rows": [
+        {
+          "country": "México",
+          "complaints": 5188,
+          "customers": 5001,
+          "unresolved": 3875,
+          "escalated": 264,
+          "sla_known": 5188,
+          "sla_breached": 1052,
+          "first_response_n": 3015,
+          "first_response_h_p50": 25.0,
+          "closed_scored": 181,
+          "closed_score_sum": 556.0
+        },
+        {
+          "country": "Colombia",
+          "complaints": 3129,
+          "customers": 3031,
+          "unresolved": 2346,
+          "escalated": 140,
+          "sla_known": 3129,
+          "sla_breached": 616,
+          "first_response_n": 1812,
+          "first_response_h_p50": 25.0,
+          "closed_scored": 120,
+          "closed_score_sum": 365.0
+        },
+        {
+          "country": "Argentina",
+          "complaints": 2053,
+          "customers": 1981,
+          "unresolved": 1512,
+          "escalated": 110,
+          "sla_known": 2053,
+          "sla_breached": 417,
+          "first_response_n": 1218,
+          "first_response_h_p50": 25.0,
+          "closed_scored": 70,
+          "closed_score_sum": 217.0
+        }
+      ]
+    },
+    "PR-12": {
+      "title": "Unrecognized-charge complaints by reception channel: volume, unresolved, SLA, first response, closed-case satisfaction",
+      "scope": "design",
+      "query": "data_foundation/queries/product/PR-12_by_channel.sql",
+      "rows": [
+        {
+          "channel": "Call Center",
+          "complaints": 5210,
+          "customers": 5113,
+          "unresolved": 3889,
+          "escalated": 260,
+          "sla_known": 5210,
+          "sla_breached": 1039,
+          "first_response_n": 3017,
+          "first_response_h_p50": 25.0,
+          "closed_scored": 190,
+          "closed_score_sum": 600.0
+        },
+        {
+          "channel": "Email",
+          "complaints": 2013,
+          "customers": 2003,
+          "unresolved": 1512,
+          "escalated": 93,
+          "sla_known": 2013,
+          "sla_breached": 395,
+          "first_response_n": 1169,
+          "first_response_h_p50": 25.0,
+          "closed_scored": 83,
+          "closed_score_sum": 254.0
+        },
+        {
+          "channel": "Web",
+          "complaints": 1524,
+          "customers": 1514,
+          "unresolved": 1138,
+          "escalated": 79,
+          "sla_known": 1524,
+          "sla_breached": 301,
+          "first_response_n": 895,
+          "first_response_h_p50": 24.0,
+          "closed_scored": 43,
+          "closed_score_sum": 134.0
+        },
+        {
+          "channel": "App",
+          "complaints": 1103,
+          "customers": 1097,
+          "unresolved": 816,
+          "escalated": 57,
+          "sla_known": 1103,
+          "sla_breached": 239,
+          "first_response_n": 647,
+          "first_response_h_p50": 24.0,
+          "closed_scored": 39,
+          "closed_score_sum": 112.0
+        },
+        {
+          "channel": "Branch",
+          "complaints": 402,
+          "customers": 401,
+          "unresolved": 289,
+          "escalated": 19,
+          "sla_known": 402,
+          "sla_breached": 86,
+          "first_response_n": 249,
+          "first_response_h_p50": 24.0,
+          "closed_scored": 13,
+          "closed_score_sum": null
+        },
+        {
+          "channel": "Regulator",
+          "complaints": 118,
+          "customers": 118,
+          "unresolved": 89,
+          "escalated": 6,
+          "sla_known": 118,
+          "sla_breached": 25,
+          "first_response_n": 68,
+          "first_response_h_p50": 26.5,
+          "closed_scored": 3,
+          "closed_score_sum": null
+        }
+      ]
     }
   },
   "summary": {
@@ -1381,8 +1538,8 @@
           "currency": "(none)",
           "complaints": 6929,
           "amount_present": 155,
-          "source_amount_sum": 424881.76999999996,
-          "source_amount_p50": 2861.15,
+          "source_amount_sum": null,
+          "source_amount_p50": null,
           "usd_convertible": 0,
           "usd_amount_sum": null,
           "usd_is_estimated": true
@@ -2073,6 +2230,8 @@
         "escalated": 314,
         "sla_known": 6221,
         "sla_breached": 1238,
+        "first_response_n": 3609,
+        "first_response_h_p50": 25.0,
         "closed_scored": 205,
         "closed_score_sum": 617.0,
         "too_few": false,
@@ -2088,6 +2247,8 @@
         "escalated": 135,
         "sla_known": 2557,
         "sla_breached": 549,
+        "first_response_n": 1500,
+        "first_response_h_p50": 25.0,
         "closed_scored": 100,
         "closed_score_sum": 328.0,
         "too_few": false,
@@ -2103,6 +2264,8 @@
         "escalated": 45,
         "sla_known": 1053,
         "sla_breached": 216,
+        "first_response_n": 623,
+        "first_response_h_p50": 25.0,
         "closed_scored": 45,
         "closed_score_sum": 135.0,
         "too_few": false,
@@ -2118,6 +2281,8 @@
         "escalated": 20,
         "sla_known": 539,
         "sla_breached": 82,
+        "first_response_n": 313,
+        "first_response_h_p50": 24.0,
         "closed_scored": 21,
         "closed_score_sum": null,
         "too_few": false,
@@ -2216,6 +2381,176 @@
         "top_score_share": 0.1246
       }
     ],
-    "min_cell": 30
+    "min_cell": 30,
+    "repeat": {
+      "customers": 10013,
+      "repeat_customers": 350,
+      "complaints": 10370,
+      "complaints_from_repeat_customers": 707,
+      "follow_up_complaints": 357,
+      "within_30_days": 27,
+      "within_90_days": 64,
+      "after_prior_outcome": 92,
+      "source_flag_repeat": 1517,
+      "repeat_customer_share": 0.035,
+      "follow_up_share": 0.0344
+    },
+    "by_country": [
+      {
+        "country": "México",
+        "complaints": 5188,
+        "customers": 5001,
+        "unresolved": 3875,
+        "escalated": 264,
+        "sla_known": 5188,
+        "sla_breached": 1052,
+        "first_response_n": 3015,
+        "first_response_h_p50": 25.0,
+        "closed_scored": 181,
+        "closed_score_sum": 556.0,
+        "too_few": false,
+        "unresolved_share": 0.7469,
+        "sla_breach_rate": 0.2028,
+        "closed_mean": 3.072
+      },
+      {
+        "country": "Colombia",
+        "complaints": 3129,
+        "customers": 3031,
+        "unresolved": 2346,
+        "escalated": 140,
+        "sla_known": 3129,
+        "sla_breached": 616,
+        "first_response_n": 1812,
+        "first_response_h_p50": 25.0,
+        "closed_scored": 120,
+        "closed_score_sum": 365.0,
+        "too_few": false,
+        "unresolved_share": 0.7498,
+        "sla_breach_rate": 0.1969,
+        "closed_mean": 3.042
+      },
+      {
+        "country": "Argentina",
+        "complaints": 2053,
+        "customers": 1981,
+        "unresolved": 1512,
+        "escalated": 110,
+        "sla_known": 2053,
+        "sla_breached": 417,
+        "first_response_n": 1218,
+        "first_response_h_p50": 25.0,
+        "closed_scored": 70,
+        "closed_score_sum": 217.0,
+        "too_few": false,
+        "unresolved_share": 0.7365,
+        "sla_breach_rate": 0.2031,
+        "closed_mean": 3.1
+      }
+    ],
+    "by_channel": [
+      {
+        "channel": "Call Center",
+        "complaints": 5210,
+        "customers": 5113,
+        "unresolved": 3889,
+        "escalated": 260,
+        "sla_known": 5210,
+        "sla_breached": 1039,
+        "first_response_n": 3017,
+        "first_response_h_p50": 25.0,
+        "closed_scored": 190,
+        "closed_score_sum": 600.0,
+        "too_few": false,
+        "unresolved_share": 0.7464,
+        "sla_breach_rate": 0.1994,
+        "closed_mean": 3.158
+      },
+      {
+        "channel": "Email",
+        "complaints": 2013,
+        "customers": 2003,
+        "unresolved": 1512,
+        "escalated": 93,
+        "sla_known": 2013,
+        "sla_breached": 395,
+        "first_response_n": 1169,
+        "first_response_h_p50": 25.0,
+        "closed_scored": 83,
+        "closed_score_sum": 254.0,
+        "too_few": false,
+        "unresolved_share": 0.7511,
+        "sla_breach_rate": 0.1962,
+        "closed_mean": 3.06
+      },
+      {
+        "channel": "Web",
+        "complaints": 1524,
+        "customers": 1514,
+        "unresolved": 1138,
+        "escalated": 79,
+        "sla_known": 1524,
+        "sla_breached": 301,
+        "first_response_n": 895,
+        "first_response_h_p50": 24.0,
+        "closed_scored": 43,
+        "closed_score_sum": 134.0,
+        "too_few": false,
+        "unresolved_share": 0.7467,
+        "sla_breach_rate": 0.1975,
+        "closed_mean": 3.116
+      },
+      {
+        "channel": "App",
+        "complaints": 1103,
+        "customers": 1097,
+        "unresolved": 816,
+        "escalated": 57,
+        "sla_known": 1103,
+        "sla_breached": 239,
+        "first_response_n": 647,
+        "first_response_h_p50": 24.0,
+        "closed_scored": 39,
+        "closed_score_sum": 112.0,
+        "too_few": false,
+        "unresolved_share": 0.7398,
+        "sla_breach_rate": 0.2167,
+        "closed_mean": 2.872
+      },
+      {
+        "channel": "Branch",
+        "complaints": 402,
+        "customers": 401,
+        "unresolved": 289,
+        "escalated": 19,
+        "sla_known": 402,
+        "sla_breached": 86,
+        "first_response_n": 249,
+        "first_response_h_p50": 24.0,
+        "closed_scored": 13,
+        "closed_score_sum": null,
+        "too_few": false,
+        "unresolved_share": 0.7189,
+        "sla_breach_rate": 0.2139,
+        "closed_mean": null
+      },
+      {
+        "channel": "Regulator",
+        "complaints": 118,
+        "customers": 118,
+        "unresolved": 89,
+        "escalated": 6,
+        "sla_known": 118,
+        "sla_breached": 25,
+        "first_response_n": 68,
+        "first_response_h_p50": 26.5,
+        "closed_scored": 3,
+        "closed_score_sum": null,
+        "too_few": false,
+        "unresolved_share": 0.7542,
+        "sla_breach_rate": 0.2119,
+        "closed_mean": null
+      }
+    ]
   }
 }

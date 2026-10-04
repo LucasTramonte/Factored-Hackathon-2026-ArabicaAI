@@ -41,3 +41,14 @@ def test_latency_needs_a_p95_over_5_seconds_and_at_least_three_calls():
     assert 'latency_type = "total"' in slow["filter"] and slow["aggregations"][0]["crossSeriesReducer"] == "REDUCE_PERCENTILE_95"
     assert (slow["comparison"], slow["thresholdValue"]) == ("COMPARISON_GT", 5000)
     assert "model_invocation_count" in volume["filter"] and (volume["comparison"], volume["thresholdValue"]) == ("COMPARISON_GT", 2)
+
+
+def test_healthz_policy_watches_the_live_worker_host_from_several_regions_for_five_minutes():
+    p = json.loads((HERE / "worker-healthz-down.json").read_text(encoding="utf-8"))
+    (c,) = p["conditions"]
+    t = c["conditionThreshold"]
+    assert 'resource.labels.host = "factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev"' in t["filter"]
+    assert "uptime_check/check_passed" in t["filter"] and "notificationChannels" not in p
+    assert (t["aggregations"][0]["crossSeriesReducer"], t["comparison"], t["thresholdValue"], t["duration"]) == ("REDUCE_COUNT_FALSE", "COMPARISON_GT", 1, "300s")
+    apply = (HERE / "apply.sh").read_text(encoding="utf-8")
+    assert "--path=/healthz" in apply and "--matcher-content='\"status\":\"ok\"'" in apply and "--period=5" in apply

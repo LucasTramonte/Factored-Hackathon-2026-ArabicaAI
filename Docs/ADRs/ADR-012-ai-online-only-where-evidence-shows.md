@@ -122,6 +122,7 @@ No step needs the service to understand free text in order to act: the charge co
   - The customer's reply doesn't get faster: the reference is already returned at once, without a model.
   - Satisfaction doesn't rise: Context, point 3, found no reliable effect of speed on satisfaction.
   - Resolution doesn't get shorter: that is a hypothesis this run starts to measure, through the share of suggestions confirmed and the agents' correct/wrong marks.
+  - That a suggestion is the disputed charge, or any end-to-end accuracy. The evidence supports bounded candidate assistance, not automatic matching. There is no transaction-level ground truth, and `claimed_amount` matches no transaction exactly (0 of 3,907) ([what the evidence supports](../Plans/ai-suggestion-plan.md#what-the-evidence-supports-layer-by-layer)).
 
 **Guardrails, unchanged.**
 - Every failure falls back to today's incomplete handoff.
