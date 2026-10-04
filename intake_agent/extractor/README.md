@@ -57,7 +57,7 @@ Amendment 2 lowers the reasoning level only when the latency trigger fires. **On
 
 A human reviews `extractor-v1.md` and tags `extractor-v1`. Then the frozen run happens **once** ([runbook](../../evals/intake/README.md)). The result is reported on all 60 cases and on the 52 that were not exposed (amendment 5). Manoella approves amendment 7 first.
 
-**Planned evaluation date: 2026-10-05 UTC**, after those approvals, the human tag and the custodian's verified publication of the frozen corpus. The registered `openai/gpt-oss-20b-maas` endpoint [retires on 2026-10-21](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/openai/gpt-oss-20b) (ADR-006 amendment 8), so the batch must finish before that date. If the prerequisites delay the run, choose another date before retirement; a different model or host requires a new registration. This is a planned run, not a completed evaluation.
+**Done 2026-10-04 UTC.** The frozen run happened once, on the tagged extractor v1: 53/60 correct against the checklist's 23/60, 0 unsafe ([results](../../Docs/deliverables/EVALUATION.md#1-the-result)). It is not repeated. The registered `openai/gpt-oss-20b-maas` endpoint [retires on 2026-10-21](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/openai/gpt-oss-20b) (ADR-006 amendment 8); a different model or host is a new version with a new registration.
 
 Run from the repository root, keeping the registered Vertex target and model (the model id is fixed in `vertex.py`):
 

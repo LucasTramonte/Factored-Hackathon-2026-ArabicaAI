@@ -1,14 +1,14 @@
 # ArabicaAI — Factored Hackathon 2026
 
-A customer reports a card charge they don't recognize, confirms which of their own transactions they mean, and gets a reference once the case is stored for human review. That is the V1 workflow ([ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). It is intake with a human handoff: no fraud verdicts, refunds or card blocks. The deployed flow is deterministic. A learned extractor is built for offline comparison, with its frozen evaluation still pending.
+A customer reports a card charge they don't recognize, confirms which of their own transactions they mean, and gets a reference once the case is stored for human review. That is the V1 workflow ([ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). It is intake with a human handoff: no fraud verdicts, refunds or card blocks. The deployed flow is deterministic. A learned extractor was compared offline with hand-written rules on 60 held-out Spanish and Portuguese cases we wrote: it got 53 right against the rules' 23, with no unsafe answer ([evaluation](Docs/deliverables/EVALUATION.md)). Whether and where it goes online is [ADR-012](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md), and how is the [AI suggestion plan](Docs/Plans/ai-suggestion-plan.md).
 
 The data is a synthetic LATAM banking dataset. Descriptive counts from it are not measured bank outcomes.
 
 **Evaluators: start with [`SYSTEM_DESIGN.md`](Docs/deliverables/SYSTEM_DESIGN.md).** It tells the whole story in one narrative: the customer and the problem, what we built, how it works, how we know it works, what it costs, and what is missing. The [reading guide](Docs/README.md) then maps each point of the brief to the document that answers it.
 
-![Deployed architecture: Angular, Cloudflare Worker and D1 with Cognito email sign-in and SES sandbox notifications, deployed from GitHub Actions after CI; a read-only S3, Bronze, Silver, quality and Gold batch produces a reviewed D1 seed. The offline evaluation calls Vertex AI and has not run on the frozen set; the online extractor is off. The Lambda and PostgreSQL AWS target was never deployed.](Docs/Evidence/diagrams/current-workflow.png)
+![Deployed architecture: Angular, Cloudflare Worker and D1 with Cognito email sign-in and SES sandbox notifications, deployed from GitHub Actions after CI; a read-only S3, Bronze, Silver, quality and Gold batch produces a reviewed D1 seed. The offline evaluation calls Vertex AI and ran once on the frozen set; the online extractor is off. The Lambda and PostgreSQL AWS target was never deployed.](Docs/Evidence/diagrams/current-workflow.png)
 
-*Deployed state: main `a47b2e1`, Worker `d8da20c6`, deployed 2026-10-04 by the GitHub Actions deploy workflow, D1 migrations 0001–0023, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0); #87–#106 and #110 are deployed but not yet tagged. Solid paths are deployed; dashed paths are the offline evaluation, not run on the frozen set.*
+*Deployed state: main `a47b2e1`, Worker `d8da20c6`, deployed 2026-10-04 by the GitHub Actions deploy workflow, D1 migrations 0001–0023, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0); #87–#106 and #110 are deployed but not yet tagged. Solid paths are deployed; dashed paths are the offline evaluation, which ran once on the frozen set on 2026-10-04 (the diagram's label predates that run).*
 
 ## Contents
 
@@ -67,7 +67,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 
 The Worker and D1 remain the single runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito proves who signs in, and the Worker issues its own session from the verified token. SES only delivers email; cases stay in D1. These integrations are deployed, with Cognito replacing the former shared gates ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). SES remains in the sandbox, so only verified recipients receive email.
 
-Everything merged through #106 and #110 is deployed, including the in-app alert when the bank flags a charge (ADR-011) and session restore on reload. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan). Extractor v1 is registered; the frozen comparison waits for Manoella's review of that registration and a person's `extractor-v1` tag ([evaluation status](Docs/deliverables/EVALUATION.md)).
+Everything merged through #106 and #110 is deployed, including the in-app alert when the bank flags a charge (ADR-011) and session restore on reload. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan). Extractor v1 was registered, tagged and run once on the frozen set on 2026-10-04: 88% correct against 38% for the rules, 0 unsafe, p95 2,048 ms ([results and limits](Docs/deliverables/EVALUATION.md#1-the-result)).
 
 | Component | Path | What it does |
 |---|---|---|

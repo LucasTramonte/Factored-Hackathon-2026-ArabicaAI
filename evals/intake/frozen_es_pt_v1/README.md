@@ -2,6 +2,8 @@
 
 This is the blind, held-out set on which the checklist baseline and the learned extractor are compared, once each. It has 60 single-turn decision points (30 per session language), 30 paired ES/PT situations, 4 synthetic customers and 32 approved card purchases. It is a coverage set, not a prevalence sample. The protocol is [ADR-005](../../../Docs/ADRs/ADR-005-evaluation-data-protocol.md), and the data facts behind the fixture come from the design window of the [data quality register](../../../Docs/deliverables/DATA_ENGINEERING.md).
 
+**Status (2026-10-04):** used once, for extractor v1 (53/60 against the checklist's 23/60; [results](../../../Docs/deliverables/EVALUATION.md#1-the-result)). A later system version is reported here as post-exposure, or evaluated on a new held-out set.
+
 **Status (2026-09-29):**
 - Built and verified.
 - Portuguese and Spanish human reviews are done: 0 label errors in 18 random audit cases, with a 95% upper bound of 15.3%.

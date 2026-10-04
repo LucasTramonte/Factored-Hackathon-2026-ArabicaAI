@@ -142,9 +142,9 @@ The brief asks where AI is appropriate and where deterministic logic is preferab
 
 **Where it runs.** Development started on Workers AI. Bedrock inference is blocked on the project's AWS Free plan, so amendment 7 moved the offline evaluation to Google Vertex AI (`openai/gpt-oss-20b-maas`, the same weights, the same prompt and parsing; only the transport differs).
 
-**Where it stands.** At the provider's default reasoning level the model was accurate but slow. On Workers AI its p95 was 3.58 s; on Vertex it got 180 of 180 calls correct with 0 unsafe, but a p95 of 2.64 s with an interval upper bound of 3.08 s. Both fired the 3 s trigger. The isolated builder then set `reasoning_effort: "low"`, verified on Vertex only (amendments 8 and 9). At low, development scored 18 of 18 by majority with 0 unsafe, 158 of 160 calls schema-valid, and a p95 upper bound of about 2,340 ms. Instability passes under a ruling Manoella made after the result was seen (the model changed its reading on 1 of 18 cases; two provider failures count as errors); amendment 9 records every other reading. Every development trigger passes. Extractor v1 is registered on commit `3ad34b5`, waiting for Manoella's review and the `extractor-v1` tag a person adds; until then the frozen comparison cannot run. Online, the shadow switch is off (`INTAKE_AI_ENABLED`, `APPROVED_EXTRACTOR = null`).
+**Where it stands.** At the provider's default reasoning level the model was accurate but slow. On Workers AI its p95 was 3.58 s; on Vertex it got 180 of 180 calls correct with 0 unsafe, but a p95 of 2.64 s with an interval upper bound of 3.08 s. Both fired the 3 s trigger. The isolated builder then set `reasoning_effort: "low"`, verified on Vertex only (amendments 8 and 9). At low, development scored 18 of 18 by majority with 0 unsafe, 158 of 160 calls schema-valid, and a p95 upper bound of about 2,340 ms. Instability passes under a ruling Manoella made after the result was seen (the model changed its reading on 1 of 18 cases; two provider failures count as errors); amendment 9 records every other reading. Every development trigger passes. On the one frozen run (2026-10-04, tag `extractor-v1`), the model got 53 of 60 held-out cases right against the checklist's 23, and 46 of 52 on the cases that never leaked, with 0 unsafe ([`EVALUATION.md`](EVALUATION.md#1-the-result)). Online, the shadow switch is off (`INTAKE_AI_ENABLED`, `APPROVED_EXTRACTOR = null`).
 
-**Why it stays offline ([ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md), Proposed).** We asked, path by path, whether the evidence shows the deterministic flow falling short. The checklist's one measured weakness, reading free text, sits on a step the guided flow doesn't need. The one path where a model could help, matching an "I can't find it" description to the customer's own charges, has one live occurrence in five episodes. And the model adds about 1.6 s at p50 to any step it joins, against a 2,000 ms report-request target. So ADR-012 names that path in advance and sets the bar for switching it on:
+**Why it stays offline ([ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md), Proposed).** We asked, path by path, whether the evidence shows the deterministic flow falling short. The checklist's one measured weakness, reading free text, sits on a step the guided flow doesn't need. The one path where a model could help, matching an "I can't find it" description to the customer's own charges, has one live occurrence in five episodes. And the model adds about 1.6 s at p50 to any step it joins, against a 2,000 ms report-request target. So ADR-012 names that path in advance and sets the bar for switching it on. The first two conditions now hold; the last two don't yet:
 - the frozen comparison has run, and the extractor is at least as correct as the checklist on held-out cases, with 0 unsafe;
 - every development trigger passes, including instability;
 - "I can't find it" is at least 15% of started reports over at least 30 live episodes;
@@ -170,9 +170,9 @@ We compare three systems on the same cases: everything to a person, the rule-bas
 
 - The checklist gets 15 of 25 on phrases written without knowledge of its rules. It misses currency words, non-ISO and relative dates, and paraphrases.
 - On 18 development cases, two labels contradicted the written policy and were corrected (the correction needs the unexposed reviewer's approval). With the corrected labels the checklist scores 16 of 18 and the model 18 of 18, with no unsafe outcome. Before the correction the figures were 18 of 18 and 16 of 18.
-- The frozen comparison runs once, on the registered extractor, and is reported on all 60 cases and on the 52 whose content never reached the repository.
-- The recent-charges view (ADR-009, Proposed) served and displayed the customer's own charges in 10 of 12 authored cases. The other two were written to fail (expired session, tool failure), and none was unsafe ([`EVALUATION.md` §8](EVALUATION.md#8-normal-resolution-path-provisional-adr-009-proposed)).
-- On the live service, 5 report episodes since the last demo reset (1 Spanish, 4 Portuguese, 0 English) reached 4 accepted handoffs and 1 incomplete handoff, with no model calls. Production doesn't assess safety, so none counts as safe accepted and none was recorded unsafe ([`EVALUATION.md` §9](EVALUATION.md#9-live-service-as-measured)).
+- The frozen comparison ran once, on 2026-10-04: the model got 53 of 60 right (88%), the checklist 23 (38%), always-handoff 14, with 0 unsafe. On the 52 cases that never leaked it was 46 against 20, so the leak didn't inflate the result. Pooled p95 latency was 2,048 ms ([`EVALUATION.md`](EVALUATION.md#1-the-result)).
+- The recent-charges view (ADR-009, Proposed) served and displayed the customer's own charges in 10 of 12 authored cases. The other two were written to fail (expired session, tool failure), and none was unsafe ([`EVALUATION.md` §11](EVALUATION.md#11-other-measurements)).
+- On the live service, 5 report episodes since the last demo reset (1 Spanish, 4 Portuguese, 0 English) reached 4 accepted handoffs and 1 incomplete handoff, with no model calls. Production doesn't assess safety, so none counts as safe accepted and none was recorded unsafe ([`EVALUATION.md` §11](EVALUATION.md#11-other-measurements)).
 
 Intake always ends with a person, so its automated-resolution rate is `not defined`; a live page load of recent charges is not a resolution. How the sets were built, every leakage control, what 60 cases can and can't show, and the options we rejected are in [`EVALUATION.md`](EVALUATION.md).
 
@@ -189,9 +189,9 @@ The open question is speed, not cost. Each layer's choice, the priced alternativ
 ## Risks, and what we don't claim
 
 - **The data is synthetic.** Every rate describes a generated dataset. Real volume, peaks and phrasing could all differ.
-- **The test set is small.** It can show a large improvement over the rules, not a small one.
+- **The test set is small and authored.** It showed a large improvement over the rules, but the model's rate is known only within about 77–94%, on messages a model wrote from our specs, not on real customers.
 - **Some test content leaked.** Content of 8 frozen cases was reachable during the model build. We report results with and without them, and the next build uses a checkout with no history.
-- **The evaluated model endpoint is short-lived.** It retires on 2026-10-21, and the frozen run has to happen before then.
+- **The evaluated model endpoint is short-lived.** It retires on 2026-10-21. Its successor needs its own registration and fresh held-out cases, because the frozen set is now spent.
 - **Friendly fraud can't be measured.** A customer may dispute a charge they made. Complaints don't link to transactions and outcomes are templates ([DF-025](DATA_ENGINEERING.md#df-025-dispute-outcomes-cant-show-friendly-fraud)), so we can't size it. Deciding it is out of scope. Intake reduces it by showing the merchant and time before the report and asking for explicit confirmation.
 - **The alert's flags are authored.** Until `fraud_score`'s provenance is confirmed, the alert demonstrates the experience, not a detection rate. Even confirmed, about half of fraud would not be flagged.
 - **New data doesn't reach the demo on its own.** The pipeline handles new and late days, but refreshing the served cohort is manual and stops in three known places ([`DATA_ENGINEERING.md` section 8](DATA_ENGINEERING.md#8-if-new-data-arrives-tomorrow)).
@@ -204,8 +204,7 @@ The deployed state is [above](#the-solution-and-what-exists-today); the extracto
 
 **Before submission on 2026-10-05:**
 1. Tag v0.3.0 for the deployed follow-ups, after a person's go-ahead.
-2. Run the one frozen comparison on the registered extractor once a person has tagged it, and report all 60 and the unexposed 52 cases.
-3. Confirm submission access and repository visibility with a person; agents don't change permissions.
+2. Confirm submission access and repository visibility with a person; agents don't change permissions.
 
 **After submission:**
 - the rest of ADR-013 phase 0 (sliding sessions), then Google sign-in for staff;

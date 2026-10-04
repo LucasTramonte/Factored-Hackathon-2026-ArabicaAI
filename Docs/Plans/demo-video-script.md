@@ -23,7 +23,7 @@ We also follow Y Combinator's "A Guide to Demo Day Presentations" (Geoff Ralston
 1. **"I don't recognize this charge" is the most anxious moment in banking, and today it waits in line.** In the challenge's synthetic bank data, 11 such complaints a day are handled exactly like any other complaint: a first answer after about a day, and three in four recorded as Open, In Process or Escalated.
 2. **ArabicaAI aims to turn that moment into one minute** (a design target, not a measured average). The customer picks the charge from their own list, confirms it, and gets a reference before they close the app. A person reviews every report.
 3. **The bank speaks first.** When the bank's fraud system flags a charge, the customer is asked before they have to go looking (in the demo the flag is an illustration we set on demo customers). We tested the obvious trigger, "big amount", and the data showed it doesn't work.
-4. **AI where it earns its place, and nowhere else.** A model passed every gate we set in advance on development cases; its comparison on held-out cases is pending. Every result is published, including the ones that didn't go our way.
+4. **AI where it earns its place, and nowhere else.** On 60 held-out test cases the model read customers' messages right 88% of the time, against 38% for hand-written rules, with no unsafe answer. Every result is published, including the ones that didn't go our way.
 
 Answers to YC's four questions:
 
@@ -50,7 +50,7 @@ Production rules:
 | 4 | 0:45–1:10 | **What** (the bank speaks first) | Phone mockup: sign in, then the home. The banner slides in: "Notamos un cargo inusual…" over a **19,90 BRL** charge, while the 3.150 BRL charge sits untouched above it. | "Before you even look, the bank asks you: do you recognize this? Not the biggest charge: the one the bank's fraud system flagged. We tested 'flag big amounts', and the data said no." On-screen caption: "Demo: illustrative flag". | #105 and #106 merged and deployed; the fictitious seed reloaded on remote D1 (#106's human step) |
 | 5 | 1:10–1:40 | **What** (the report in a minute) | Tap "No lo reconozco": one-tap reason, a short sentence, pick the charge from your own list, confirm, then the **reference** animates in. Switch the language to Portuguese for one shot. | "Pick the reason. Pick the charge from your own purchases. Confirm. You get a reference right away, in Spanish or Portuguese, and the status by email. Nothing is refunded or blocked by a machine: a person reviews every report." | #99 and #103 merged and deployed |
 | 6 | 1:40–2:00 | **What** (the agent side) | Laptop mockup: the agent queue, the flagged report at the top in red, the detail with what was verified and what's still open; click "In review". | "On the bank's side, urgent reports come first, already verified: which charge, which customer, what's still open. No re-asking." | Agent view deployed |
-| 7 | 2:00–2:20 | **How** (the 10% technical) | One animated architecture line: data lake → quality gate → reviewed slice → one secure service → customer and agent. The model sits in a box to the side marked "tested, not trusted blindly". | "Under the hood: a quality-gated data pipeline, one secure service where each customer only ever sees their own data, and an AI model that passed every gate we set in advance on development cases; its test on cases it has never seen is next, and we publish all of it." | If the frozen comparison has run by recording time (#98 merged, tag, run), replace the last clause with its result |
+| 7 | 2:00–2:20 | **How** (the 10% technical) | One animated architecture line: data lake → quality gate → reviewed slice → one secure service → customer and agent. The model sits in a box to the side marked "tested, not trusted blindly". | "Under the hood: a quality-gated data pipeline, one secure service where each customer only ever sees their own data, and an AI model we tested on cases it had never seen: it read 88% of them right, against 38% for rules, and never gave an unsafe answer." | Frozen comparison done (2026-10-04); use exactly these figures |
 | 8 | 2:20–2:35 | **Close** (the bang) | The four points, one by one, three words each: "Seconds, not days." "The bank speaks first." "AI, tested." "A person decides." Then the logo and the link. | "Seconds, not days. The bank speaks first. AI that is tested, not trusted blindly. And a person always decides. ArabicaAI." | Final link and name |
 
 ## Slides: 5 slides, 60% product, 40% technical
@@ -62,7 +62,7 @@ One point per slide, at most about 7 words of text, large type, a picture doing 
 | 1 | "A strange charge waits in line." | The three numbers from beat 2, huge | The problem and who has it; the data source |
 | 2 | "Built to report it in a minute." (target) | Phone mockup of the flow, three frames | The product and the customer; the proactive alert |
 | 3 | "One service. Each customer sees only theirs." | The one-line architecture from beat 7 | Security and data engineering: the reviewed slice, the quality gate, the isolation tests |
-| 4 | "AI where it earns its place." | Our rules against the model, side by side, held-out cases | ML practice: the pre-registered gates, what passed, what's pending; why the live flow stays deterministic (ADR-012) |
+| 4 | "AI where it earns its place." | Our rules against the model, side by side, held-out cases | ML practice: the pre-registered gates, the held-out result (88% against 38%, 0 unsafe) and its limits; why the live flow stays deterministic (ADR-012) |
 | 5 | "Seconds, not days. A person decides." | Logo, link, team | Next steps and the four points again |
 
 ## What we can and cannot claim (YC: "Exaggerating the truth is a fatal error")
@@ -70,10 +70,10 @@ One point per slide, at most about 7 words of text, large type, a picture doing 
 | Claim | Status | Source |
 |---|---|---|
 | 11 unrecognized-charge complaints a day; three in four recorded as Open, In Process or Escalated; first response after about a day (25 h at p50) | Yes, as figures from the challenge's **synthetic** bank data. Never "unresolved forever" or "real customers" | `BUSINESS_OUTCOMES.md` |
-| "A reference in seconds" / "one minute" | **Target only.** Five team episodes (four accepted, one routed incomplete) support no rate, so never "on average" or "customers do it in" | `EVALUATION.md` §9 |
+| "A reference in seconds" / "one minute" | **Target only.** Five team episodes (four accepted, one routed incomplete) support no rate, so never "on average" or "customers do it in" | `EVALUATION.md` §11 |
 | "Big amounts don't mean fraud" | Yes, in this data, in every period | ADR-011 |
 | "The bank's fraud flag" in the demo | It's an authored flag on demo customers. Say "when the bank's fraud system flags a charge", not "we detect fraud" | ADR-011 |
-| "Tested on cases it never saw" / "AI is X% better" | **No**, until the frozen comparison runs. Today: "passed every pre-registered development gate; held-out comparison pending" | ADR-006 amendments 7–9 |
+| "Tested on cases it never saw" / "AI is X% better" | **Yes, worded exactly:** "on 60 held-out test cases we wrote, 88% against 38% for rules, 0 unsafe". Never "real customers", never a percentage of fraud or of reports | ADR-006 amendments 7–9 |
 | Money saved, customers retained, satisfaction raised | **No.** No measured product effect exists | `BUSINESS_OUTCOMES.md`: "every figure is descriptive" |
 | Market size in dollars | **No** dollar TAM. Bottom-up per bank: about 4,000 such complaints a year in a bank like the challenge's synthetic one (11.16 × 365). Say exactly that | `BUSINESS_OUTCOMES.md` |
 | Traction | Pre-traction: a working, deployed product with tests. Lean on the story and the rigor, as YC advises | — |
@@ -82,6 +82,6 @@ One point per slide, at most about 7 words of text, large type, a picture doing 
 
 1. **Name.** Keep **ArabicaAI**, the team name already on the app, the repository and the URL? A name that suggests factoring (for example "BrewFactor") would mislead: the product is dispute intake. Decide before the logo animation.
 2. **Narrator.** One voice, in English, with the product shown in Spanish and Portuguese. Pick whoever sounds the most natural; YC says the best presenter, not the most senior.
-3. **Scene 7's wording** depends on whether the frozen comparison has run (#98 merged, tag, run) before recording.
+3. **Scene 7's wording** uses the frozen result (2026-10-04). Say "test cases we wrote", never "real customers".
 4. **Tooling.** Keynote or Figma for the mockups and transitions is the fastest route to "launch event" polish. Budget for two or three takes of the voice.
 5. **Practice.** Run the 2½ minutes aloud at least five times before recording, and watch one recording back.
