@@ -20,7 +20,7 @@ describe('CustomerPage', () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
       'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed', 'sendFeedback', 'suggestions', 'answerSuggestions'],
       { client: signal(''), card: signal(null), roles: signal([]) });
-    service.suggestions.and.resolveTo({ status: 'none', items: [], choice: null, chosen_transaction_id: null });
+    service.suggestions.and.resolveTo({ status: 'none', items: [], choice: null, chosen_transaction_id: null, answerable: false });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null, roles: ['customer'] });
@@ -668,8 +668,8 @@ describe('CustomerPage', () => {
       const charge: Transaction = { transaction_id: 'demo-tx-001', merchant_name: 'Mercado Demo', occurred_at: '2026-09-25T14:00:00+00:00', source_occurred_at: null, amount: '125.50', currency: 'BRL' };
       const other: Transaction = { transaction_id: 'demo-tx-004', merchant_name: '', occurred_at: null, source_occurred_at: '2026-09-27T10:30:00', amount: '47.30', currency: 'BRL' };
       const incomplete: IntakeReceipt = { ...intakeReceipt, kind: 'incomplete', actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'] };
-      const pending = { status: 'pending' as const, items: [], choice: null, chosen_transaction_id: null };
-      const shown = { status: 'suggested' as const, items: [charge, other], choice: null, chosen_transaction_id: null };
+      const pending = { status: 'pending' as const, items: [], choice: null, chosen_transaction_id: null, answerable: false };
+      const shown = { status: 'suggested' as const, items: [charge, other], choice: null, chosen_transaction_id: null, answerable: true };
       const settle = () => new Promise(r => setTimeout(r, 20));
 
       beforeEach(() => { page.suggestionPollMs = 1; });
@@ -739,10 +739,39 @@ describe('CustomerPage', () => {
         service.answerSuggestions.and.rejectWith(new ApiError(503, 'x'));
         await page.answerSuggestion(null);
         expect([page.suggestionAnswer(), page.suggestionFailed()]).toEqual([null, true]);
+        // 409: the server already holds an answer (here from another tab); the client shows that one, not its own attempt.
         service.answerSuggestions.and.rejectWith(new ApiError(409, 'x'));
+        service.suggestions.and.resolveTo({ ...shown, choice: 'confirmed', chosen_transaction_id: 'demo-tx-001', answerable: false });
         await page.answerSuggestion(null);
-        expect([page.suggestionAnswer(), page.suggestionFailed()]).toEqual(['none', false]);
+        expect([page.suggestionAnswer(), page.suggestionFailed()]).toEqual(['confirmed', false]);
+        expect(page.suggestionList()?.chosen_transaction_id).toBe('demo-tx-001');
         expect(service.answerSuggestions.calls.mostRecent().args).toEqual([incomplete.protocol, null]);
+      });
+
+      it('once an agent has opened the report (409 already_in_review), the buttons go and the customer is told a person is on it', async () => {
+        service.suggestions.and.resolveTo(shown);
+        service.handoffIntake.and.resolveTo(incomplete);
+        const fixture = TestBed.createComponent(CustomerPage);
+        const p = fixture.componentInstance;
+        p.suggestionPollMs = 1;
+        p.identity = 'demo-ana'; await p.login(); p.openChat();
+        service.startIntake.and.resolveTo(started);
+        p.chatStatement = 'No reconozco este cargo.'; p.reason.set('not_mine'); await p.send();
+        p.cannotFind(); p.chatDetails = 'Lembro só do mercado, uns 125 reais.'; await p.handoff();
+        await settle(); fixture.detectChanges();
+        const el = fixture.nativeElement as HTMLElement;
+        expect(el.querySelectorAll('#suggestions .suggestion-pick').length).toBe(2);
+        service.answerSuggestions.and.rejectWith(new ApiError(409, 'already_in_review'));
+        service.suggestions.and.resolveTo({ ...shown, answerable: false });
+        el.querySelector<HTMLButtonElement>('.suggestion-pick')!.click();
+        await fixture.whenStable(); fixture.detectChanges(); await fixture.whenStable();
+        expect(p.suggestionAnswer()).toBeNull();
+        expect(el.querySelectorAll('#suggestions button').length).toBe(0);
+        const status = el.querySelector<HTMLElement>('.suggestion-thanks')!;
+        expect(status.textContent!.trim()).toBe(p.t().suggestInReview);
+        expect(document.activeElement).toBe(status);
+        await p.answerSuggestion(null);
+        expect(service.answerSuggestions).toHaveBeenCalledTimes(1);
       });
 
       it('renders each charge with its own named pick button and "none of these", announces them politely, then thanks with focus', async () => {

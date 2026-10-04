@@ -807,10 +807,13 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
-  /** The customer's one answer: a suggested charge, or none of them (null). A 409 means an answer is already stored. */
+  /**
+   * The customer's one answer: a suggested charge, or none of them (null). On 409 (an answer is already stored, or an agent
+   * has started the review) the client reads the suggestions again and shows what the server holds, never its own attempt.
+   */
   async answerSuggestion(transactionId: string | null): Promise<void> {
     const receipt = this.intakeReceipt();
-    if (!receipt || !this.suggestionList() || this.suggestionAnswer() || this.suggestionSending()) return;
+    if (!receipt || !this.suggestionList()?.answerable || this.suggestionAnswer() || this.suggestionSending()) return;
     this.suggestionSending.set(true);
     this.suggestionFailed.set(false);
     try {
@@ -819,13 +822,19 @@ export class CustomerPage implements OnInit, OnDestroy {
       this.suggestionAnswer.set(stored.choice);
     } catch (e) {
       if (this.intakeReceipt() !== receipt) return;
-      if (e instanceof ApiError && e.status === 409) this.suggestionAnswer.set(transactionId ? 'confirmed' : 'none');
-      else this.suggestionFailed.set(true);
+      if (e instanceof ApiError && e.status === 409) {
+        try {
+          const fresh = await this.service.suggestions(receipt.protocol);
+          if (this.intakeReceipt() !== receipt) return;
+          if (fresh.status === 'suggested') this.suggestionList.set(fresh);
+          this.suggestionAnswer.set(fresh.choice);
+        } catch { this.suggestionFailed.set(true); }
+      } else this.suggestionFailed.set(true);
     } finally {
       if (this.intakeReceipt() === receipt) {
         this.suggestionSending.set(false);
         // The buttons are gone once answered: keep keyboard and screen-reader users on the confirmation.
-        if (this.suggestionAnswer()) afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('.suggestion-thanks')?.focus(), { injector: this.injector });
+        if (this.suggestionAnswer() || !this.suggestionList()?.answerable) afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('.suggestion-thanks')?.focus(), { injector: this.injector });
       }
     }
   }

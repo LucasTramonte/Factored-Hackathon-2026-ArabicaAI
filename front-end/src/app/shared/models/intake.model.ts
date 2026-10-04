@@ -147,6 +147,8 @@ export interface SuggestionList {
   items: SuggestedCharge[];
   choice: SuggestionAnswer | null;
   chosen_transaction_id: string | null;
+  /** Unanswered and no agent has opened the report yet; after that an answer is 409 ``already_in_review``. */
+  answerable: boolean;
 }
 /** POST /intake/handoff/{reference}/suggestions/confirm (contract ``suggestionChoice``). */
 export interface SuggestionChoice {

@@ -297,7 +297,7 @@
                 @if (suggestionList(); as s) {
                   <section class="ar-panel suggestions" id="suggestions" aria-labelledby="suggestions-title">
                     <h4 id="suggestions-title">{{ t().suggestTitle }}</h4>
-                    @if (!suggestionAnswer()) {
+                    @if (!suggestionAnswer() && s.answerable) {
                       <p class="ar-small">{{ t().suggestIntro }}</p>
                       <ul class="suggestion-list">
                         @for (c of s.items; track c.transaction_id) {
@@ -311,10 +311,10 @@
                       <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm suggestion-none" (click)="answerSuggestion(null)" [attr.aria-disabled]="suggestionSending()">{{ t().suggestNone }}</button>
                       @if (suggestionFailed()) { <p class="ar-small" role="alert">{{ t().suggestFailed }}</p> }
                     }
-                    <p class="suggestion-thanks" role="status" tabindex="-1">{{ suggestionAnswer() === 'confirmed' ? t().suggestThanksConfirmed : suggestionAnswer() === 'none' ? t().suggestThanksNone : '' }}</p>
+                    <p class="suggestion-thanks" role="status" tabindex="-1">{{ suggestionAnswer() === 'confirmed' ? t().suggestThanksConfirmed : suggestionAnswer() === 'none' ? t().suggestThanksNone : !s.answerable ? t().suggestInReview : '' }}</p>
                   </section>
                 }
-                <p class="sr-only suggestion-announce" aria-live="polite">{{ suggestionList() && !suggestionAnswer() ? t().suggestFound : '' }}</p>
+                <p class="sr-only suggestion-announce" aria-live="polite">{{ suggestionList()?.answerable && !suggestionAnswer() ? t().suggestFound : '' }}</p>
                 <div class="report-actions chat-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="newReport()">{{ t().chatNew }}</button></div>
               }
               @case ('ended') {
