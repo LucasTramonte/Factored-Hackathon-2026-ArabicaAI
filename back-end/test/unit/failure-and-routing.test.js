@@ -85,7 +85,7 @@ test('no path has a Basic gate: documents are served and every API path reaches 
   for (const [method, path, status] of [['GET', '/', 200], ['GET', '/index.html', 200], ['GET', '/agent', 200], ['GET', '/transactions', 401],
     ['POST', '/intake/start', 401], ['POST', '/auth/logout', 204], ['POST', '/auth/session', 422], ['GET', '/cases/nope', 404], ['GET', '/intake', 404],
     ['DELETE', '/transactions', 405], ['GET', '/agent/intakes', 401], ['GET', '/agent/cases', 404], ['GET', '/agent/intake-detail', 401], ['GET', '/audit/events', 422],
-    ['POST', '/agent/intake-status', 401], ['OPTIONS', '/agent/intakes', 405], ['POST', '/audit/events', 405], ['POST', '/agent', 405], ['GET', '/demo/identities', 200],
+    ['POST', '/agent/intake-status', 401], ['OPTIONS', '/agent/intakes', 405], ['POST', '/audit/events', 405], ['POST', '/agent', 405], ['GET', '/demo/identities', 200], ['POST', '/auth/me', 405], ['GET', '/auth/me/x', 404],
     ['GET', '/admin/customers', 401], ['POST', '/admin/act-as', 401], ['POST', '/admin/customers', 405], ['GET', '/admin/act-as', 405],
     ['GET', '/admin', 404], ['GET', '/admin/customers/x', 404]]) {
     const res = await anon(path, method);

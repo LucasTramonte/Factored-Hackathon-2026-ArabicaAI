@@ -15,10 +15,18 @@ test('an email sign-in upserts the target, and an outbox row is queued, marked a
     const messageId = crypto.randomUUID();
     await store.enqueueEmail({ messageId, now, customerId: 'demo-ana', template: 'received', language: 'es', reference });
     await store.markEmail(messageId, 'skipped', null);
-    assert.equal((await store.enqueueEmail({ messageId: crypto.randomUUID(), now: now - 120000, customerId: 'demo-ana', template: 'update', language: 'es', reference })).length, 1);
+    const failedId = crypto.randomUUID();
+    assert.equal((await store.enqueueEmail({ messageId: failedId, now: now - 120000, customerId: 'demo-ana', template: 'update', language: 'es', reference })).length, 1);
     assert.deepEqual(await store.enqueueEmail({ messageId: crypto.randomUUID(), now, customerId: 'demo-ana', template: 'update', language: 'es', reference }), [], 'inside the window');
-    assert.deepEqual(await store.recentEmails('demo-ana', reference, now - 60000, 'update'), { count: 0, latest: null });
-    assert.deepEqual(await store.recentEmails('demo-ana', reference, now - 600000, 'update'), { count: 1, latest: now - 120000 });
+    await store.markEmail(failedId, 'failed', null);
+    const retryId = crypto.randomUUID();
+    assert.equal((await store.enqueueEmail({ messageId: retryId, now, customerId: 'demo-ana', template: 'update', language: 'es', reference })).length, 1,
+      'a recorded failure never suppresses a retry');
+    await store.markEmail(retryId, 'sent', 'ses-accepted');
+    assert.deepEqual(await store.enqueueEmail({ messageId: crypto.randomUUID(), now: now + 1, customerId: 'demo-ana', template: 'update', language: 'es', reference }), [],
+      'an SES-accepted request keeps the suppression window');
+    assert.deepEqual(await store.recentEmails('demo-ana', reference, now - 60000, 'update'), { count: 1, latest: now });
+    assert.deepEqual(await store.recentEmails('demo-ana', reference, now - 600000, 'update'), { count: 2, latest: now });
     assert.deepEqual(await store.recentEmails('demo-ana', reference, now - 600000, 'received'), { count: 1, latest: now });
     assert.equal((await store.recentEmails('demo-bruno', reference, 0, 'update')).count, 0);
     await assert.rejects(store.markEmail(messageId, 'delivered', null));
@@ -70,7 +78,7 @@ test('POST /reports/update: the owner gets one "update" email per report per 5 m
   const first = await ana.call('/reports/update', { protocol: receipt.protocol.toUpperCase() });
   assert.equal(first.status, 202); assert.deepEqual(first.body, { queued: true }); assertContract('updateQueued', first.body);
   const again = await ana.call('/reports/update', { protocol: receipt.protocol });
-  assert.equal(again.status, 429); assert.deepEqual(again.body, { detail: 'An update was sent recently' });
+  assert.equal(again.status, 429); assert.deepEqual(again.body, { detail: 'An update request is already in progress or was accepted recently' });
   const wait = Number(again.headers.get('Retry-After'));
   assert.ok(wait > 0 && wait <= 300, String(wait));
   await withIntakeStore({ config: resolve(process.cwd(), 'wrangler.jsonc') }, async store => {

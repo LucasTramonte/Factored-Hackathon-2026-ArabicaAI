@@ -136,3 +136,10 @@ Bedrock inference is blocked on the project's AWS Free plan, so the 2026-10-03 B
 3. **The run:** a person supplies `VERTEX_ACCESS_TOKEN`, `VERTEX_PROJECT` and `VERTEX_LOCATION=global` in the environment. There is no UTC-reset constraint.
    `python -m evals.intake.run --split development --repetitions 10 --system extractor-v1=intake_agent.extractor.vertex:extract --output data_foundation/runs/latency-v1-low-vertex/results.json`
 4. **Pre-registration:** record the model as `openai/gpt-oss-20b-maas`, the target as `intake_agent.extractor.vertex:extract`, and both implementation files (`vertex.py`, `workers_ai.py`).
+
+---
+
+## Revision 2026-10-03 (latest): the documented sources for the Vertex reasoning level (ADR-006 amendment 8)
+
+Your stop at step 1 of the Vertex revision was correct. Amendment 8 now supplies what that step asked for; read it in full. In short: the field is `reasoning_effort` (Google's "Thinking for open models" page); the levels are low, medium and high, and the default is medium (OpenAI's gpt-oss model card and Harmony format guide); a content-free probe on `openai/gpt-oss-20b-maas` showed that omitting the field behaves exactly as `medium` and that `low` is accepted. Record these in `DEV_LOG.md` with your own reading of the pages, then continue the Vertex revision from step 2 (send `low` explicitly; assert it in `test_workers_ai.py` and `test_vertex.py`) through step 4. Everything else stands, including: stop and report if any trigger fails.
+
