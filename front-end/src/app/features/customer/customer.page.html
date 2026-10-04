@@ -245,7 +245,7 @@
                       @if (threadFailed()) { <p class="ar-caption" role="status">{{ t().refreshFailed }}</p> }
                       @if (threadChecked(); as checked) { <p class="ar-caption">{{ t().lastChecked }}: {{ checked | date:'HH:mm:ss' }}</p> }
                       <app-message-thread viewer="customer" idPrefix="customer-messages" [scope]="r.protocol" [thread]="thread()" [sending]="messageSending() === r.protocol"
-                        [failed]="messageFailed() || (threadFailed() ? t().refreshFailed : '')" [sent]="messagesSent()" (send)="sendMessage($event)" />
+                        [failed]="messageFailed() || threadRefreshError()" [sent]="messagesSent()" (send)="sendMessage($event)" />
                     }</li>
                 }</ul>
                 @if (reports()!.has_more) { <span class="ar-caption">{{ t().moreReports }}</span> }

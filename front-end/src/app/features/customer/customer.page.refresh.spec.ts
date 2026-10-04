@@ -5,7 +5,7 @@ import { CustomerPage } from './customer.page';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { ApiError } from '../../core/http/api.service';
-import { Report, MessageThread } from '../../shared/models/intake.model';
+import { Report, MessageThread, IntakeReceipt, IntakeStart } from '../../shared/models/intake.model';
 const report: Report = { protocol: 'P', reference_short: 'AR-AAAA-BBBB', status: 'received', kind: 'incomplete', transaction_id: null, accepted_at: '2026-10-04T12:00:00Z', closing_note: null, next_step: 'review_pending' };
 describe('Customer bounded refresh', () => {
   let visible: DocumentVisibilityState, online: boolean;
@@ -15,7 +15,7 @@ describe('Customer bounded refresh', () => {
     visible = 'visible'; online = true;
     spyOnProperty(document, 'visibilityState', 'get').and.callFake(() => visible);
     spyOnProperty(navigator, 'onLine', 'get').and.callFake(() => online);
-    service = jasmine.createSpyObj<CustomerService>('CustomerService', ['signIn', 'transactions', 'reports', 'alert', 'identities', 'displayed', 'messages', 'postMessage', 'logout'],
+    service = jasmine.createSpyObj<CustomerService>('CustomerService', ['signIn', 'transactions', 'reports', 'alert', 'identities', 'displayed', 'messages', 'postMessage', 'logout', 'startIntake', 'confirmIntake', 'handoffIntake', 'suggestions'],
       { client: signal(''), card: signal(null), roles: signal([]) });
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', roles: ['customer'], mode: 'simulated_login' });
     service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
@@ -191,5 +191,86 @@ describe('Customer bounded refresh', () => {
     service.messages.and.callFake(() => { expect(outstanding).toBe(0); return Promise.resolve({ status: 'received', can_post: true, items: [stored] }); });
     let finished = false; void page.sendMessage(stored.body).then(() => finished = true); flushMicrotasks(); expect(finished).toBeFalse(); expect(service.messages.calls.count()).toBe(2);
     beforePost({ status: 'received', can_post: true, items: [] }); flushMicrotasks(); expect(finished).toBeTrue(); expect(page.thread()?.items).toEqual([stored]); expect(service.messages.calls.count()).toBe(3); fixture.destroy();
+  }));
+
+  for (const resource of ['reports', 'messages'] as const) it(`keeps passive events inside ${resource}60/120s backoff and permits explicit recovery`, fakeAsync(() => {
+    const { fixture, page } = home(); void page.toggleMessages('P'); flushMicrotasks(); service[resource].and.rejectWith(new ApiError(503)); tick(30000); flushMicrotasks();
+    const count = service[resource].calls.count();
+    for (const elapsed of [1000, 29000, 29999]) {
+      tick(elapsed); window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('online')); flushMicrotasks();
+      expect(service[resource].calls.count()).toBe(count);
+    }
+    tick(1); flushMicrotasks(); expect(service[resource].calls.count()).toBe(count + 1);
+    for (const elapsed of [1000, 59000, 59999]) {
+      tick(elapsed); window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('online')); flushMicrotasks();
+      expect(service[resource].calls.count()).toBe(count + 1);
+    }
+    tick(1); flushMicrotasks(); expect(service[resource].calls.count()).toBe(count + 2);
+    tick(1000); if (resource === 'reports') service.reports.and.resolveTo({ items: [report], has_more: false });
+    else service.messages.and.resolveTo({ status: 'received', can_post: true, items: [] }); page.refreshReports(); flushMicrotasks();
+    expect(service[resource].calls.count()).toBe(count + 3); expect(resource === 'reports' ? page.reportsFailed() : page.threadFailed()).toBeFalse();
+    tick(30000); flushMicrotasks(); expect(service[resource].calls.count()).toBe(count + 4); fixture.destroy();
+  }));
+
+  it('shows a terminal session error instead of Loading when an empty thread opens during401 pause', fakeAsync(() => {
+    const { fixture, page, el } = home(); service.reports.and.rejectWith(new ApiError(401)); tick(30000); flushMicrotasks(); const count = service.messages.calls.count();
+    for (const protocol of ['P', 'P', 'P']) { void page.toggleMessages(protocol); flushMicrotasks(); fixture.detectChanges(); }
+    expect(service.messages.calls.count()).toBe(count); expect(page.threadFailed()).toBeTrue(); expect(el.querySelector('app-message-thread')?.textContent).not.toContain(page.t().messagesLoading);
+    expect(el.querySelector('app-message-thread')?.textContent).toContain(page.t().err401);
+    const q = { ...report, protocol: 'Q' }; page.reports.set({ items: [report, q], has_more: false }); void page.toggleMessages('Q'); flushMicrotasks(); fixture.detectChanges();
+    expect(el.querySelector('app-message-thread')?.textContent).toContain(page.t().err401); expect(service.messages.calls.count()).toBe(count); fixture.destroy();
+  }));
+
+  const receipt: IntakeReceipt = { episode_id: 'E', protocol: 'P', reference_short: 'AR-AAAA-BBBB', kind: 'incomplete', accepted_at: '2026-10-04T12:00:00Z', replayed: false, actions_taken: [], unresolved_questions: [], next_step_code: 'await_human_review', urgency: 'normal' };
+  function freeze(page: CustomerPage, path: 'start' | 'confirm' | 'handoff') {
+    if (path === 'start') page.frozen.set({ path, body: { customer_statement: 'Synthetic statement', idempotency_key: 'K', language: 'es', mode: 'guided', reason: 'not_mine', report_type: 'unrecognized_charge' } });
+    else if (path === 'confirm') page.frozen.set({ path, body: { episode_id: 'E', idempotency_key: 'K', transaction_id: 'T', customer_confirmed: true } });
+    else page.frozen.set({ path, body: { episode_id: 'E', idempotency_key: 'K', kind: 'incomplete', details: 'Synthetic charge details' } });
+  }
+  for (const path of ['start', 'confirm', 'handoff'] as const) for (const failed of [false, true]) it(`discards late intake ${path} ${failed ? 'failure' : 'success'} after destruction`, fakeAsync(() => {
+    const { fixture, page } = home(); let settle!: () => void; const result: IntakeStart | IntakeReceipt = path === 'start' ? { episode_id: 'E', state: 'selection_required', language: 'es', mode: 'guided', replayed: false } : receipt;
+    const call = path === 'start' ? service.startIntake : path === 'confirm' ? service.confirmIntake : service.handoffIntake;
+    call.and.returnValue(new Promise((resolve, reject) => settle = () => failed ? reject(new ApiError(503)) : resolve(result)) as never);
+    freeze(page, path); void page.run(); const counts = [service.reports.calls.count(), service.alert.calls.count()]; const log = page.log(); fixture.destroy(); settle(); flushMicrotasks(); tick(60000); flushMicrotasks();
+    expect(page.intakeReceipt()).toBeNull(); expect(page.episode()).toBeNull(); expect(page.chatError()).toBe(''); expect(page.log()).toEqual(log);
+    expect([service.reports.calls.count(), service.alert.calls.count()]).toEqual(counts); expect(service.suggestions).not.toHaveBeenCalled();
+  }));
+
+  it('does not continue intake into alert reads after destruction during receipt list refresh', fakeAsync(() => {
+    const { fixture, page } = home(); service.confirmIntake.and.resolveTo(receipt); service.reports.and.returnValue(new Promise(() => undefined)); freeze(page, 'confirm'); void page.run(); flushMicrotasks();
+    const count = service.alert.calls.count(); fixture.destroy(); flushMicrotasks(); tick(60000); flushMicrotasks(); expect(service.alert.calls.count()).toBe(count);
+  }));
+
+  it('discards late intake renewal without retrying or changing the card after destruction', fakeAsync(() => {
+    const { fixture, page } = home(); let renew!: (value: Awaited<ReturnType<CustomerService['signIn']>>) => void;
+    service.startIntake.and.rejectWith(new ApiError(401)); service.signIn.and.returnValue(new Promise(resolve => renew = resolve)); freeze(page, 'start'); void page.run(); flushMicrotasks();
+    const card = page.card(); fixture.destroy(); renew({ customer_id: 'demo-ana', roles: ['customer'], mode: 'simulated_login', context_card: { version: 1, snapshot_at: '2026-10-04', first_name: 'Late renewal', locale_hint: 'es', products: [] } }); flushMicrotasks();
+    expect(service.startIntake.calls.count()).toBe(1); expect(page.card()).toBe(card); expect(page.log().some(line => 'key' in line && line.key === 'sessionRenewed')).toBeFalse();
+  }));
+
+  it('refuses act-as while intake is pending and discards its answer after an owned reset', fakeAsync(() => {
+    const { fixture, page } = home(); let complete!: (value: IntakeReceipt) => void; service.confirmIntake.and.returnValue(new Promise(resolve => complete = resolve));
+    Object.assign(service, { actAs: jasmine.createSpy('actAs').and.resolveTo({ customer_id: 'demo-bruno', roles: ['admin'], mode: 'admin_act_as' }) });
+    page.actAsIdentities.set([{ customer_id: 'demo-bruno', display_name: 'Bruno' }]); page.actAsChoice = 'demo-bruno'; freeze(page, 'confirm'); void page.run(); void page.actAs(); flushMicrotasks();
+    expect(service.actAs).not.toHaveBeenCalled(); const count = service.reports.calls.count(); page['reset'](); page.client.set('demo-bruno'); complete(receipt); flushMicrotasks();
+    expect(page.intakeReceipt()).toBeNull(); expect(page.episode()).toBeNull(); expect(service.reports.calls.count()).toBe(count); fixture.destroy();
+  }));
+
+  it('resumes refresh after a successful current-customer silent intake renewal', fakeAsync(() => {
+    const { fixture, page } = home(); service.reports.and.rejectWith(new ApiError(401)); tick(30000); flushMicrotasks();
+    service.reports.and.resolveTo({ items: [report], has_more: false }); service.startIntake.and.returnValues(Promise.reject(new ApiError(401)), Promise.resolve({ episode_id: 'E', state: 'selection_required', language: 'es', mode: 'guided', replayed: false }));
+    const count = service.reports.calls.count(); freeze(page, 'start'); void page.run(); flushMicrotasks(); tick(60000); flushMicrotasks();
+    expect(service.reports.calls.count()).toBeGreaterThan(count); expect(page.reportsFailed()).toBeFalse(); fixture.destroy();
+  }));
+
+  it('refuses new refresh reads on a destroyed page even while shared session state remains populated', fakeAsync(() => {
+    const { fixture, page } = home(); const reports = service.reports.calls.count(); fixture.destroy(); page.openThread.set('P'); void page['loadReports'](); void page['loadThread'](); page.refreshReports(); flushMicrotasks(); tick(60000); flushMicrotasks();
+    expect(service.reports.calls.count()).toBe(reports); expect(service.messages).not.toHaveBeenCalled();
+  }));
+
+  it('does not mark a loaded thread failed merely because an additional paused read is skipped', fakeAsync(() => {
+    const { fixture, page } = home(); void page.toggleMessages('P'); flushMicrotasks(); service.reports.and.rejectWith(new ApiError(401)); tick(30000); flushMicrotasks();
+    const stored = page.thread(); const failed = page.threadFailed(); const count = service.messages.calls.count(); void page['loadThread'](); flushMicrotasks();
+    expect(page.thread()).toBe(stored); expect(page.threadFailed()).toBe(failed); expect(service.messages.calls.count()).toBe(count); fixture.destroy();
   }));
 });
