@@ -817,6 +817,28 @@ describe('CustomerPage', () => {
       expect(products[1]).toContain(TestBed.inject(LangService).t().notListed);
     });
 
+    it('"can\'t find the charge" clears the selected charge and its confirmation', async () => {
+      const { fixture, p, el } = await home();
+      p.openChat();
+      service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
+      p.chatStatement = 'No reconozco este cargo.';
+      p.reason.set('not_mine');
+      await p.send();
+      fixture.detectChanges(); await fixture.whenStable();
+      el.querySelector<HTMLInputElement>('input[name="chat-choice"]')!.click();
+      p.chatConfirmed = true;
+      fixture.detectChanges(); await fixture.whenStable();
+      expect(p.choice).toBe('demo-tx-001');
+      p.cannotFind();
+      fixture.detectChanges(); await fixture.whenStable();
+      expect(p.choice).toBe('');
+      expect(p.chatConfirmed).toBeFalse();
+      p.openChat('demo-tx-001'); // found it after all: back to choosing, that charge selected
+      fixture.detectChanges(); await fixture.whenStable();
+      expect(p.choice).toBe('demo-tx-001');
+      expect(el.querySelectorAll('input[name="chat-choice"]:checked').length).toBe(1); // the only charge, checked again
+    });
+
     it('falls back to the display name without a context card', async () => {
       const { el } = await home(null);
       expect(el.querySelector('h1')?.textContent).toContain('Ana (demo)');
