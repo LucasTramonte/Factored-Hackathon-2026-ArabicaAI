@@ -169,6 +169,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** Each watch gets a number; a newer receipt, a new report or leaving the page stops the older one. */
   private suggestionWatch = 0;
   private suggestionTimer: ReturnType<typeof setTimeout> | undefined;
+  private suggestionDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
   readonly ended = signal(false);
   readonly chatError = signal('');
   readonly log = signal<ChatLine[]>([{ from: 'bot', key: 'chatHello' }]);
@@ -324,6 +325,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.cognito.forget();
     this.suggestionWatch++;
     clearTimeout(this.suggestionTimer);
+    clearTimeout(this.suggestionDeadlineTimer);
   }
 
   start(): void {
@@ -908,6 +910,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.feedbackSending.set(false);
     this.feedbackFailed.set(false);
     this.suggestionWatch++;
+    clearTimeout(this.suggestionDeadlineTimer);
     this.suggestionReport.set(null);
     this.suggestionTimedOut.set(false);
     this.suggestionList.set(null);
@@ -1050,20 +1053,33 @@ export class CustomerPage implements OnInit, OnDestroy {
     const current = () => generation === this.generation && watch === this.suggestionWatch && this.suggestionContext() === receipt;
     this.suggestionTimedOut.set(false);
     this.suggestionList.set({ status: 'pending', items: [], choice: null, chosen_transaction_id: null, answerable: false });
-    for (;;) {
-      let list: SuggestionList;
-      try { list = await this.service.suggestions(receipt.protocol); }
-      catch {
-        if (current()) this.suggestionList.set({ status: 'none', reason: 'unavailable', items: [], choice: null, chosen_transaction_id: null, answerable: false });
-        return;
+    // Transport has no timeout: this independent UI deadline also invalidates any outstanding read.
+    const deadline = this.suggestionDeadlineTimer = setTimeout(() => {
+      if (current()) { this.suggestionTimedOut.set(true); this.suggestionWatch++; }
+    }, SUGGESTION_WAIT_MS);
+    const expired = () => {
+      if (Date.now() < until) return false;
+      this.suggestionTimedOut.set(true);
+      return true;
+    };
+    try {
+      for (;;) {
+        // A background tab can resume its poll timer after the wall-clock deadline.
+        if (!current() || expired()) return;
+        let list: SuggestionList;
+        try { list = await this.service.suggestions(receipt.protocol); }
+        catch {
+          if (current() && !expired()) this.suggestionList.set({ status: 'none', reason: 'unavailable', items: [], choice: null, chosen_transaction_id: null, answerable: false });
+          return;
+        }
+        if (!current() || expired()) return;
+        this.suggestionList.set(list);
+        this.suggestionAnswer.set(list.choice);
+        if (list.status !== 'pending' || list.reason === 'review_started') return;
+        await new Promise(done => { this.suggestionTimer = setTimeout(done, Math.min(this.suggestionPollMs, Math.max(0, until - Date.now()))); });
       }
-      if (!current()) return;
-      this.suggestionList.set(list);
-      this.suggestionAnswer.set(list.choice);
-      if (list.status !== 'pending' || list.reason === 'review_started') return;
-      if (Date.now() + this.suggestionPollMs > until) { this.suggestionTimedOut.set(true); return; }
-      await new Promise(done => { this.suggestionTimer = setTimeout(done, this.suggestionPollMs); });
-      if (!current()) return;
+    } finally {
+      clearTimeout(deadline);
     }
   }
 

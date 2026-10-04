@@ -1,5 +1,5 @@
 import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { TestBed, fakeAsync, flushMicrotasks, tick } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerPage, initialsOf } from './customer.page';
@@ -900,6 +900,35 @@ describe('CustomerPage', () => {
         answer(shown); await settle();
         expect(page.suggestionList()).toBeNull();
       });
+
+      it('ends the UI wait at 15 seconds even while its GET is unresolved, and ignores its late result', fakeAsync(() => {
+        const saved: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete', status: 'received',
+          next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+        page.reports.set({ items: [saved], has_more: false });
+        let finish!: (list: typeof shown) => void;
+        service.suggestions.and.returnValue(new Promise(resolve => finish = resolve));
+        page.reopenSuggestions(saved);
+        tick(14999); expect(page.suggestionTimedOut()).toBeFalse();
+        tick(1); expect(page.suggestionTimedOut()).toBeTrue();
+        expect(page.suggestionMessage()).toBe(page.t().suggestStillPending);
+        finish(shown); flushMicrotasks();
+        expect(page.suggestionList()?.status).toBe('pending');
+        expect(service.suggestions).toHaveBeenCalledTimes(1);
+        page.newReport();
+      }));
+
+      it('does not start a new GET when a delayed poll timer resumes beyond the deadline', fakeAsync(() => {
+        const saved: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete', status: 'received',
+          next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+        page.reports.set({ items: [saved], has_more: false }); page.suggestionPollMs = 1500;
+        let now = 0; spyOn(Date, 'now').and.callFake(() => now);
+        service.suggestions.and.resolveTo(pending);
+        page.reopenSuggestions(saved); flushMicrotasks();
+        now = 20000; tick(1500); flushMicrotasks();
+        expect(service.suggestions).toHaveBeenCalledTimes(1);
+        expect(page.suggestionTimedOut()).toBeTrue();
+        page.newReport(); tick(15000);
+      }));
 
       it('shows recorded no-match, unavailable, pending and legacy states in every language', async () => {
         const fixture = TestBed.createComponent(CustomerPage), p = fixture.componentInstance;
