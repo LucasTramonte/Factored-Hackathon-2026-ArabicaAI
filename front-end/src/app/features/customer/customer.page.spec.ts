@@ -796,10 +796,39 @@ describe('CustomerPage', () => {
       expect(page.reportOf('demo-tx-001')).toBeUndefined();
     });
 
-    it('answers FAQs from fixed translated text only', () => {
+    it('answers FAQs from fixed translated text only, apart from the report conversation', () => {
+      const before = page.log();
       page.ask('faqTimeQ');
-      expect(page.log().slice(-2)).toEqual([{ from: 'me', key: 'faqTimeQ' }, { from: 'bot', key: 'faqTimeA' }]);
+      expect(page.faqLog()).toEqual([{ from: 'me', key: 'faqTimeQ' }, { from: 'bot', key: 'faqTimeA' }]);
+      expect(page.log()).toEqual(before, 'a FAQ never becomes the prompt for the current step');
       expect(() => page.ask('nope' as never)).toThrow();
+    });
+
+    it('shows a new FAQ answer right above the FAQ buttons and scrolls it into view, even below a long charge list', async () => {
+      const fixture = TestBed.createComponent(CustomerPage);
+      const p = fixture.componentInstance;
+      const el = fixture.nativeElement as HTMLElement;
+      document.body.appendChild(el);
+      p.identity = 'demo-ana';
+      await p.login();
+      p.openChat();
+      fixture.detectChanges();
+      const scrolled = spyOn(Element.prototype, 'scrollIntoView');
+      const button = el.querySelector<HTMLButtonElement>('.chat-faq button')!;
+      button.focus();
+      expect(document.activeElement).toBe(button);
+      button.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const answer = el.querySelector('.chat-faq-log li:last-child')!;
+      expect(answer.textContent).toContain(p.t().faqNextA);
+      expect(answer.closest('.chat-faq-log')!.nextElementSibling!.classList).toContain('chat-faq');
+      expect(scrolled.calls.mostRecent().object).toBe(answer);
+      expect(document.activeElement).toBe(button, 'scrolling the answer never moves keyboard focus');
+      p.newReport();
+      fixture.detectChanges();
+      expect(el.querySelectorAll('.chat-faq-log li').length).toBe(0, 'a new report starts without old answers');
+      el.remove();
     });
 
     it('titles the receipt by the server kind', async () => {
@@ -832,6 +861,28 @@ describe('CustomerPage', () => {
       const products = [...el.querySelectorAll('.products li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim());
       expect(products[0]).toContain('1234');
       expect(products[1]).toContain(TestBed.inject(LangService).t().notListed);
+    });
+
+    it('"can\'t find the charge" clears the selected charge and its confirmation', async () => {
+      const { fixture, p, el } = await home();
+      p.openChat();
+      service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
+      p.chatStatement = 'No reconozco este cargo.';
+      p.reason.set('not_mine');
+      await p.send();
+      fixture.detectChanges(); await fixture.whenStable();
+      el.querySelector<HTMLInputElement>('input[name="chat-choice"]')!.click();
+      p.chatConfirmed = true;
+      fixture.detectChanges(); await fixture.whenStable();
+      expect(p.choice).toBe('demo-tx-001');
+      p.cannotFind();
+      fixture.detectChanges(); await fixture.whenStable();
+      expect(p.choice).toBe('');
+      expect(p.chatConfirmed).toBeFalse();
+      p.openChat('demo-tx-001'); // found it after all: back to choosing, that charge selected
+      fixture.detectChanges(); await fixture.whenStable();
+      expect(p.choice).toBe('demo-tx-001');
+      expect(el.querySelectorAll('input[name="chat-choice"]:checked').length).toBe(1); // the only charge, checked again
     });
 
     it('falls back to the display name without a context card', async () => {
@@ -1636,4 +1687,3 @@ describe('CustomerPage', () => {
     });
   });
 });
-
