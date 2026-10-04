@@ -6,6 +6,7 @@ import { fail, json, readCookies, readJsonBody } from '../../http.js';
 import { COOKIE, requireSession, startSession, tokenHash } from '../../auth/session.js';
 import { bearerClaims, hasRole, rolesOf, verifyIdToken } from '../../auth/cognito.js';
 import { UUID } from '../intake/validation.js';
+import { postOutcome, threadJson, validateMessage } from '../intake/messages.js';
 import { createStore } from '../../store/d1.js';
 import { deliver } from '../../notify/dispatch.js';
 
@@ -128,4 +129,35 @@ export async function markSuggestion(request, env, store) {
   if (!stored) return fail(404, 'No confirmed suggestion for this report');
   if (stored.mark !== value.mark) return fail(409, 'A different mark is already recorded');
   return json({ protocol, mark: stored.mark, marked_at: new Date(stored.marked_at).toISOString() });
+}
+
+/**
+ * GET /agent/intake-messages?protocol=…: the message thread of one acknowledged report (ADR-015), oldest first. The
+ * agent reads every report in the approved queue, as with the detail.
+ */
+export async function getAgentMessages(request, env, store) {
+  if (!await requireSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');
+  const params = new URL(request.url).searchParams;
+  const protocol = params.get('protocol');
+  if ([...params.keys()].join() !== 'protocol' || !UUID.test(protocol ?? '')) return fail(422, 'Provide exactly one valid protocol');
+  const found = await store.listMessages({ protocol: protocol.toLowerCase() });
+  return found ? json(threadJson(found)) : fail(404, 'Intake handoff not found');
+}
+
+/**
+ * POST /agent/intake-messages ``{ protocol, body, idempotency_key }``: the agent writes to the customer on a report that
+ * isn't closed. The agent session is recorded as a 12-hex reference, never served. Nothing is refunded or decided.
+ */
+export async function postAgentMessage(request, env, store) {
+  if (!await requireSession(request, store, 'agent')) return fail(401, 'Start a demo agent session first');
+  if (new URL(request.url).search) return fail(422, 'Unexpected parameters');
+  const parsed = await readJsonBody(request);
+  if (parsed.error) return parsed.error;
+  const checked = validateMessage(parsed.value, { withProtocol: true });
+  if (checked.error) return checked.error;
+  const agentSessionRef = (await tokenHash(readCookies(request)[COOKIE.agent])).slice(0, 12);
+  const messageId = crypto.randomUUID();
+  const found = await store.postMessage({ protocol: checked.value.protocol, author: 'agent', body: checked.value.body,
+    key: checked.value.key, now: Date.now(), agentSessionRef, messageId });
+  return postOutcome(found, messageId, checked.value.body);
 }

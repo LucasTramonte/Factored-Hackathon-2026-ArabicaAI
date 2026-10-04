@@ -68,7 +68,11 @@ const es = {
     // Agent intake console
     intakeQueue: 'Cola de reportes guiados', intakeDetail: 'Detalle del reporte', noIntakes: 'No se devolvieron reportes guiados.',
     queueMore: 'Solo se muestran los 50 más recientes.', historyMore: 'Solo se muestran los primeros 100 eventos.',
-    kindComplete: 'Completo', kindTechnical: 'Falla técnica', kindIncomplete: 'Incompleto',
+    kindComplete: 'Cargo confirmado', kindTechnical: 'Falla técnica', kindIncomplete: 'Sin cargo confirmado', statusPrefix: 'Estado',
+    messagesTitle: 'Mensajes', messagesNone: 'Todavía no hay mensajes.', messagesLoading: 'Cargando mensajes…', messageLabel: 'Escribe un mensaje',
+    messageSend: 'Enviar mensaje', messageYou: 'Tú', messageAgent: 'Equipo del banco', messageCustomer: 'Cliente', messageEmpty: 'Escribe algo antes de enviar.',
+    messagesClosed: 'Este reporte está cerrado: los mensajes son de solo lectura.', messagesFull: 'Este reporte alcanzó el límite de mensajes.',
+    messagesConflict: 'Este intento de envío ya se usó para otro mensaje. Revisa el texto y vuelve a enviarlo.',
     transactionId: 'ID de transacción', evidence: 'Evidencia verificada', noEvidence: 'Sin transacción verificada.',
     openQuestions: 'Preguntas abiertas', history: 'Historial',
     modelOff: 'Lectura del modelo: apagada.', modelSuggestion: 'Lectura del modelo: leyó los detalles para sugerir cargos, {n} {calls}, versión {v}. El modelo no decide nada.', callOne: 'llamada', callMany: 'llamadas',
@@ -198,7 +202,11 @@ const STRINGS: Record<Lang, Strings> = {
     // Agent intake console
     intakeQueue: 'Fila de relatos guiados', intakeDetail: 'Detalhe do relato', noIntakes: 'Nenhum relato guiado retornado.',
     queueMore: 'Apenas os 50 mais recentes são exibidos.', historyMore: 'Apenas os primeiros 100 eventos são exibidos.',
-    kindComplete: 'Completo', kindTechnical: 'Falha técnica', kindIncomplete: 'Incompleto',
+    kindComplete: 'Cobrança confirmada', kindTechnical: 'Falha técnica', kindIncomplete: 'Sem cobrança confirmada', statusPrefix: 'Status',
+    messagesTitle: 'Mensagens', messagesNone: 'Ainda não há mensagens.', messagesLoading: 'Carregando mensagens…', messageLabel: 'Escreva uma mensagem',
+    messageSend: 'Enviar mensagem', messageYou: 'Você', messageAgent: 'Equipe do banco', messageCustomer: 'Cliente', messageEmpty: 'Escreva algo antes de enviar.',
+    messagesClosed: 'Este relato está encerrado: as mensagens são somente leitura.', messagesFull: 'Este relato atingiu o limite de mensagens.',
+    messagesConflict: 'Esta tentativa de envio já foi usada para outra mensagem. Revise o texto e envie novamente.',
     transactionId: 'ID da transação', evidence: 'Evidência verificada', noEvidence: 'Sem transação verificada.',
     openQuestions: 'Perguntas em aberto', history: 'Histórico',
     modelOff: 'Leitura do modelo: desligada.', modelSuggestion: 'Leitura do modelo: leu os detalhes para sugerir cobranças, {n} {calls}, versão {v}. O modelo não decide nada.', callOne: 'chamada', callMany: 'chamadas',
@@ -322,7 +330,11 @@ const STRINGS: Record<Lang, Strings> = {
     // Agent intake console
     intakeQueue: 'Guided report queue', intakeDetail: 'Report detail', noIntakes: 'No guided reports returned.',
     queueMore: 'Only the newest 50 are shown.', historyMore: 'Only the first 100 events are shown.',
-    kindComplete: 'Complete', kindTechnical: 'Technical failure', kindIncomplete: 'Incomplete',
+    kindComplete: 'Charge confirmed', kindTechnical: 'Technical failure', kindIncomplete: 'No charge confirmed', statusPrefix: 'Status',
+    messagesTitle: 'Messages', messagesNone: 'No messages yet.', messagesLoading: 'Loading messages…', messageLabel: 'Write a message',
+    messageSend: 'Send message', messageYou: 'You', messageAgent: 'Bank team', messageCustomer: 'Customer', messageEmpty: 'Write something before sending.',
+    messagesClosed: 'This report is closed: messages are read-only.', messagesFull: 'This report reached the message limit.',
+    messagesConflict: 'This send attempt was already used for another message. Check the text and send again.',
     transactionId: 'Transaction ID', evidence: 'Verified evidence', noEvidence: 'No verified transaction.',
     openQuestions: 'Open questions', history: 'History',
     modelOff: 'Model reading: off.', modelSuggestion: 'Model reading: read the details to suggest charges, {n} {calls}, version {v}. The model decides nothing.', callOne: 'call', callMany: 'calls',
@@ -424,6 +436,18 @@ export function errorText(t: Strings, e: unknown): string {
   if (!(e instanceof ApiError)) return t.errOther;
   const key = ERROR_KEYS[e.status];
   return key ? t[key] : `${t.errOther} (HTTP ${e.status})`;
+}
+
+/** A message post conflict in the interface language, with the usual fallback for other failures. */
+export function messageErrorText(t: Strings, e: unknown): string {
+  if (e instanceof ApiError && e.status === 409) {
+    switch (e.reason) {
+      case 'closed-thread': return t.messagesClosed;
+      case 'full-thread': return t.messagesFull;
+      case 'key-conflict': return t.messagesConflict;
+    }
+  }
+  return errorText(t, e);
 }
 
 /** A server check or open-question code in the interface language; a code without a label is shown as is. */

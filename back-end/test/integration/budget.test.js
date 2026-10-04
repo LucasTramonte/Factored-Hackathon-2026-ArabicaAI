@@ -80,6 +80,11 @@ const CEILING = {
   // Session, then the newest reviewed timing baseline (migration 0027): one statement over two rows, no write.
   // Measured 2026-10-04: 2 queries, 7 rows read, 0 written, 2 round trips.
   serviceTimes: [2, 7, 0, 2],
+  // ADR-015: the session, then one batch. A post inserts guarded by the report's state and count, then reads back the
+  // key; both statements revalidate the live customer session (12–13 rows read; ceiling 13). A read returns the report status and at
+  // most 51 messages through handoff_messages_thread (7/8 rows read alone/in the full suite; ceiling 8).
+  messagePost: [3, 13, 4, 2],
+  messageThread: [3, 8, 0, 2],
   // Session, owned report with its target flag, the outbox insert that checks the 5-minute window itself (row, primary
   // key, email_outbox_recent); the send marks the row from its own store after the response (Task 3.3).
   reportsUpdate: [3, 14, 3, 3],
@@ -275,6 +280,12 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   measured.reports = within('reports', reports.metrics);
   const times = await cohort.call('/intake/service-times'); assert.equal(times.status, 200); assertContract('serviceTimes', times.body);
   measured.serviceTimes = within('serviceTimes', times.metrics);
+  const posted = await cohort.call(`/intake/handoff/${cohortReceipt.body.protocol}/messages`, { body: 'Fue el martes.', idempotency_key: crypto.randomUUID() });
+  assert.equal(posted.status, 201); assertContract('reportMessage', posted.body);
+  measured.messagePost = within('messagePost', posted.metrics);
+  const thread = await cohort.call(`/intake/handoff/${cohortReceipt.body.protocol}/messages`); assert.equal(thread.status, 200);
+  assertContract('messageThread', thread.body);
+  measured.messageThread = within('messageThread', thread.metrics);
   const update = await cohort.call('/reports/update', { protocol: cohortReceipt.body.protocol });
   assert.equal(update.status, 202); assertContract('updateQueued', update.body);
   measured.reportsUpdate = within('reportsUpdate', update.metrics);

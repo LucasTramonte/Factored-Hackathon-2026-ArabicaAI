@@ -261,6 +261,18 @@ test('zero or invalid daily caps stop extraction after authentication', async t 
   }
 });
 
+test('each run writes one suggestion_run log line with kinds and counts, never the details or the charges', async t => {
+  const lines = [];
+  t.mock.method(console, 'log', line => lines.push(JSON.parse(line)));
+  const r = await run(t, { ...ON, VERTEX_LOCATION: 'us' }, google());
+  const logged = lines.filter(l => l.event === 'suggestion_run');
+  assert.equal(logged.length, 1);
+  assert.deepEqual({ ...logged[0], ms: 0 }, { event: 'suggestion_run', outcome: r.outcome, arm: 'B', llm_calls: 1, ms: 0, breaker: false,
+    suggested: r.suggested.length, location: 'us' });
+  const text = JSON.stringify(lines);
+  assert.ok(!text.includes(DETAILS) && !r.suggested.some(id => text.includes(id)), 'no details text or charge id');
+});
+
 test('circuit breaker: 3 of the last 5 model-calling runs failing in 5 minutes skips the call until they age out', async t => {
   const ctx = await setup(t);
   const t0 = Date.now();

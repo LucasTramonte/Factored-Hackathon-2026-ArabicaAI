@@ -23,6 +23,21 @@ What we don't know is how often customers take this path. In the dataset nothing
 
 The model can't pick a charge, write to the store, change the action the policy takes, or reach another customer's data. Its worst case is a wrong suggestion that the customer then rejects.
 
+### How a suggestion is found, as implemented (checked against the code, 2026-10-04)
+
+The available evidence supports a **bounded candidate-assistance workflow**, not automatic transaction matching. There are three separate steps, and only the first is learned.
+
+1. **AI extraction.** The model reads the customer's description and returns structured facts in a closed vocabulary: merchant, category, amount (exact or "about"), currency, date or date range, card, country, abroad. It sees no transaction and is never asked to choose one (`ai-transport.js`).
+2. **Deterministic matching** (`suggestions.js` `suggestionFor`, `matcher.js`, the evaluation's `label_rules` policy, ported with parity tests):
+   - **Retrieval.** At most `SUGGESTION_PURCHASES = 200` of the customer's newest charges: `WHERE customer_id=? ORDER BY occurred_at DESC, source_occurred_at DESC, transaction_id LIMIT 200` (`d1.js` `listSuggestionPurchases`). There is no date window and no status filter in that query. D1's `transactions` table holds only approved card purchases, because the Gold and cohort publishers load only `Purchase`/`Approved` rows and the table has no status column. In the deployed demo the cap doesn't bind: remote D1 holds at most 10 charges per customer (3.65 on average, 803 customers; read-only query, 2026-10-04).
+   - **Fields compared.** Merchant (with a few aliases), category (from the vocabulary's merchant → category map), amount (exact, or within 10% when the customer said "about"), currency (which must be one the customer has purchases in), and the transaction date against the extracted date range. Every stated fact must fit.
+   - **Facts D1 can't check.** D1 holds no card type, last four digits or transaction country, so `record()` leaves them null. An extracted card, last four, country or `abroad` fact therefore fits **no** online purchase, and the outcome is `no_match` even when the charge is in the list. `test/unit/suggestion-contract.test.js` pins this. Serving those fields, or dropping such facts from the match, is a behavioural change for a later version.
+   - **Outcome.** 0 fits → `no_match`; 1–3 → `suggested`; **more than 3 → `ambiguous`, and no suggestion is shown**. A description with no usable fact is `no_match`.
+   - **Order.** Suggested charges are listed in `transaction_id` order, a stable display order. The stored `rank` (1–3) is that position. **Nothing is ranked by likelihood**, and no fraud field is read: `is_fraud` and `fraud_score` aren't in D1, and `bank_flagged` only feeds urgency (ADR-011).
+3. **Customer confirmation.** A suggestion is only a candidate. The customer confirms one or answers "none of these". A confirmation doesn't show the charge is fraudulent or the complaint valid, and the agent sees it marked "not verified by the bank". **Human review remains the final control.** Nothing refunds, blocks a card, rules on fraud or closes the case.
+
+In one sentence: the system searches up to 200 of the customer's newest transactions and presents only deterministic matches that satisfy the extracted facts. The customer confirms whether a suggested charge is theirs, and human review remains the final control.
+
 ## Which model, host and credential
 
 ### What the GCP project offers (checked 2026-10-04)
@@ -153,7 +168,39 @@ Every failure leaves the customer exactly where they are today: an incomplete ha
 6. **Measure from the Worker** (synthetic, ≥72 calls). This remains owed; the switch is already on in the demo under ADR-012 amendment 1.
 7. **Complete v2 evaluation.** Gemini Flash-Lite is already in the demo, measured on development and safety splits. A new held-out set, pre-registration, tag, one run and publication remain owed. Review the model before its configured 2027-01-31 cutoff.
 
+## What the evidence supports, layer by layer
+
+| Layer | Evidence in the repository | What it does not show |
+|---|---|---|
+| **Extraction correctness** | v1: frozen held-out set, 53/60 against the checklist's 23/60 ([EVALUATION §1](../deliverables/EVALUATION.md#1-the-result)). v2: development 18/18 by majority, 179/180 runs ([ADR-006 amendment 10](../ADRs/ADR-006-learned-extractor-workers-ai.md#post-freeze-amendment-2026-10-04)) | v2 has no held-out result; development shaped the prompt |
+| **Prompt injection / red team** | v2: 22/22 safety cases, 66/66 runs, 0 unsafe ([EVALUATION §11](../deliverables/EVALUATION.md#11-other-measurements)) | Not a substitute for accuracy; the cases are authored, not held out |
+| **Latency and provider reliability** | v2 offline p95 1.83 s (upper bound 2.07 s); 15-call samples per location through the Worker's transport; the circuit breaker, the 429 retry and the alerts | **The p95 from the deployed Worker is still owed** (step 6) |
+| **Deterministic matcher** | Parity with the Python policy on 753/753 cases (`ai-parity.test.js`); the contract above (`suggestion-contract.test.js`) | That the facts a customer gives single out the right charge |
+| **End-to-end suggestion accuracy** | **None.** No dataset links a complaint to the transaction it disputes | Any recall, precision or coverage of suggestions |
+
+**Why there is no end-to-end number.** The dataset has no transaction-level ground truth. The complaint's `claimed_amount` doesn't identify a transaction either. Reproduced on the full Silver file (read-only DuckDB, 2026-10-04):
+- of 12,297 `Cargo no reconocido` complaints, 3,907 have a claimed amount and a currency;
+- **0 of those 3,907** have a transaction of the same customer with the same amount and currency, at any time, and 0 within ±7 days of the complaint.
+
+A looser candidate count depends on its window. With "any same-currency transaction in the 90 days before the complaint" we count 765 of the 3,907 complaints (19.6%). That is not a match rate and not suggestion coverage: production uses no 90-day window. **Any measure of recent-transaction availability describes the data, not what the suggestions find, and must not be quoted as suggestion coverage.**
+
+**What would measure it.** The pilot's own labels: the customer's confirmation and, above all, the agent's correct/wrong mark on each confirmed suggestion ([measurement](#while-it-runs-demo-and-planned-pilot)). Together with the share of runs that end `ambiguous` or `no_match`, those are the first trustworthy transaction-level labels this workflow will have.
+
+### Would a learned ranker or classifier ("JEV") help now? No.
+
+- **The limit is missing ground truth, not model complexity.** A ranker needs examples of "this complaint was about this transaction". The dataset has none (0/3,907 even on the amount), so a model trained on it would learn from labels that don't exist, and nothing could evaluate it.
+- **The current design already abstains.** More than 3 fits shows nothing, and 0 fits shows nothing. A model ranking a long list would remove that abstention, which is a safety property.
+- **Where one might help later, as a hypothesis to evaluate, not a feature:**
+  1. ordering 2–3 deterministic candidates by likelihood;
+  2. a calibrated abstention when the facts are weak.
+
+  Both need a labelled set built from the pilot's agent marks (confirmed and marked correct or wrong), split by time, with the deterministic guardrails kept in front: a learned score may reorder or withhold candidates the rules already admitted, never add one.
+- **Decision:** no ML/JEV component is added. Reopen when there are at least a few hundred agent-marked confirmations.
+
 ## What this plan does not claim
+
+- It doesn't claim that the model identifies the disputed transaction, or any recall, precision or coverage for suggestions. There is no transaction-level ground truth yet (above).
+- It doesn't claim that `claimed_amount` identifies a transaction (0 of 3,907 exact matches), or that fraud fields could rank suggestions. Neither is used.
 
 - It doesn't claim the path will be used often. That is what the pilot measures.
 - It doesn't claim agents will save time. The design can show it only with more volume than a demo has.

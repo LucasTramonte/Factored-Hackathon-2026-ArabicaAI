@@ -17,6 +17,7 @@
 import { VOCABULARY, extract, registeredVersion, vertexUrl } from './ai-transport.js';
 import { accessToken, credentialConfig } from './vertex-auth.js';
 import { suggest } from './matcher.js';
+import { logEvent } from '../../log.js';
 
 /**
  * The last day (UTC, exclusive) the Worker calls ``google/gemini-3.5-flash-lite`` without a fresh review. Google has
@@ -96,15 +97,23 @@ function dailyCap(env) {
   return Number.isSafeInteger(cap) && cap >= 0 ? cap : 0;
 }
 
-/** The suggestion rule's view of one D1 purchase: the date as served, and only fields D1 holds (the rest never fit). */
+/**
+ * The suggestion rule's view of one D1 purchase: the date as served, and only fields D1 holds. D1 has no card type, last
+ * four digits or transaction country, so those stay null, and an extracted card, country or ``abroad`` fact matches no
+ * online purchase (outcome ``no_match``; Docs/Plans/ai-suggestion-plan.md, "How a suggestion is found").
+ */
 function record(t) {
   return { transaction_id: t.transaction_id, merchant_name: t.merchant_name, merchant_category: VOCABULARY.merchants[t.merchant_name] ?? null,
     amount: t.amount, currency: t.currency, transaction_date: (t.source_occurred_at ?? t.occurred_at ?? '').slice(0, 10),
     product_type: null, last4: null, transaction_country: null };
 }
 
-/** The outcome and suggested ids for ``extracted`` against the customer's own purchases, with the ``as_of`` sent to the model. */
-function suggestionFor(extracted, { country, purchases }, asOf = null) {
+/**
+ * The outcome and suggested ids for ``extracted`` against the customer's own purchases, with the ``as_of`` sent to the
+ * model: ``suggested`` (1–3 ids in ``transaction_id`` order, a stable display order, not a relevance ranking), ``ambiguous``
+ * (more than 3 fit; nothing is shown) or ``no_match``. Exported for tests (``suggestion-contract.test.js``).
+ */
+export function suggestionFor(extracted, { country, purchases }, asOf = null) {
   const records = purchases.map(record);
   // systems.customers_from: without card data, the customer's cards are the currencies of their own purchases.
   const cards = [...new Set(records.map(t => t.currency))].map(currency => ({ product_type: null, last4: null, currency }));
@@ -122,18 +131,24 @@ function suggestionFor(extracted, { country, purchases }, asOf = null) {
  * ``fetcher`` and ``now`` are test seams.
  */
 export async function runSuggestion(env, store, { handoffId, customerId, details, language }, { fetcher = fetch, now = Date.now } = {}) {
-  const finish = async (outcome, { usage = ZERO, producer = null, ids = [], injectionFlagged = null } = {}) => {
+  const started = now();
+  let arm = null;
+  const finish = async (outcome, { usage = ZERO, producer = null, ids = [], injectionFlagged = null, breaker = false } = {}) => {
     await store.recordSuggestionOutcome({ handoffId, outcome, producer, usage, transactionIds: ids, injectionFlagged, now: now() });
+    // Kinds and counts only: never the details text, the facts or the charges (log.js).
+    logEvent('suggestion_run', { outcome, arm, llm_calls: usage.llm_calls, ms: now() - started, breaker, suggested: ids.length,
+      location: env.VERTEX_LOCATION ?? 'global' });
     return outcome;
   };
   try {
     const claimed = await store.claimSuggestionRun({ handoffId, now: now() });
     if (!claimed) return null;
+    arm = claimed.arm ?? null;
     if (!switchOn(env) || claimed.arm !== 'B') return await finish('off');
     if (retired(env, now())) return await finish('retired');
     const config = credentialConfig(env);
     if (!config) return await finish('off');
-    if (await breakerOpen(store, now())) return await finish('provider_error');
+    if (await breakerOpen(store, now())) return await finish('provider_error', { breaker: true });
     const origin = testOrigin(env);
     const token = await accessToken(config, { fetcher, now, origin });
     if (!token) return await finish('auth_error');

@@ -96,3 +96,12 @@ Prices are list prices from the Cloud Billing Catalog API, read 2026-10-04. "Per
   - created by a person: the service account `arabica-worker-vertex` (Vertex AI User only), the pool `arabica-worker`, and the OIDC provider `cloudflare-worker` (condition `assertion.sub == 'arabica-intake-worker'`, the Worker's JWKS uploaded, no Google key);
   - the provider's configuration was checked read-only;
   - the Worker's signing key is a Worker secret. The end-to-end token exchange is not verified yet, because it needs the implementation deployed.
+
+**Implementation note (2026-10-04): how "deterministic code picks" works, checked against the code** ([details](../Plans/ai-suggestion-plan.md#how-a-suggestion-is-found-as-implemented-checked-against-the-code-2026-10-04)).
+- The code takes at most 200 of the customer's newest approved purchases from D1, with no date window.
+- Every fact the model extracted must fit: merchant, category, amount (exact, or within 10% if "about"), currency and date.
+- 1–3 fits are shown in `transaction_id` order. That is not a ranking: nothing is scored by likelihood, and no fraud field is read.
+- More than 3 is `ambiguous` and shows nothing; 0 is `no_match`.
+- D1 has no card, last-four or country data, so a description that states one of those matches nothing online. This is a known gap, pinned by a test.
+- No end-to-end accuracy is claimed: no dataset links a complaint to its transaction. The pilot's agent marks are the first such labels.
+- A learned ranker is not justified until those labels exist.
