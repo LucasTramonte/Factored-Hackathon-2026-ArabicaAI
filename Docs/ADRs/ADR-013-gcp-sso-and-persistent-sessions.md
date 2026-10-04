@@ -33,7 +33,7 @@ The team now has a Google Cloud project with trial credits (ADR-006, amendment 7
    - **Staff (agent, admin, auditor):** "Sign in with Google" through Google Identity Services in the browser. The resulting Google ID token is sent once to the Worker (`Authorization: Bearer`, as today), which verifies it:
      - JWKS from Google, issuer `accounts.google.com`, audience equal to our OAuth client id, `email_verified`, expiry, and a nonce the Worker issued;
      - then the Worker mints its own session and drops the Google token.
-   - **Customers:** keep the email one-time code. Phase 2 may move it from Cognito to Google Identity Platform's email-link or email-code sign-in, but only if SES production access stays denied (decision 6).
+   - **Customers:** keep the email one-time code. Phase 2 may move it from Cognito to Google Identity Platform's email-link sign-in, but only if SES production access stays denied (decision 6). Identity Platform has no numeric email code: the one-time code travels inside a link, and a typed numeric code exists only by SMS (corrected 2026-10-04; [feasibility check](../Plans/gcp-identity-domain-email.md)).
 3. **Authentication and authorization stay separate.**
    - The Google token proves only *who* signed in.
    - *What* they may do comes from a D1 table of staff (`staff_members`: verified email, role, active). The Worker **re-reads it on every authenticated request**, so revoking a role or deactivating a person takes effect on their next request, not at session expiry.
