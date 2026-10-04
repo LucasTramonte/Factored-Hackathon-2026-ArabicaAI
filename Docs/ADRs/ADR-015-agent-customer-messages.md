@@ -10,7 +10,7 @@
 The agent could move a report received → in review → closed, and the customer saw that status and was emailed at each step. Neither could write to the other. In a live test (2026-10-04), the product owner, acting as the agent, could not ask the customer for the merchant or explain what happens next. That is the most common thing an agent needs to do with a report that has no confirmed charge.
 
 Email isn't a substitute today:
-- SES is in the sandbox, so only verified addresses receive mail.
+- SES left the sandbox on 2026-10-04 (50,000 messages a day, 14 a second, us-east-2), but the sender still needs a domain that passes DMARC (#120).
 - The email outbox's `template` column has a `CHECK` that admits only the four status templates (migration 0009). Adding a message template means rebuilding that table, a non-additive migration that would stop the automatic deploy.
 
 ## Decision
@@ -40,7 +40,7 @@ Email isn't a substitute today:
 
 ## Alternatives considered
 
-- **Email the message body.** Rejected: SES sandbox restrictions, the template `CHECK`, and the policy keeping statements and messages out of email bodies prevent this. Reopen only if SES production access is granted, a person applies the template migration, and a superseding ADR explicitly permits message content in email.
+- **Email the message body.** Rejected: the template `CHECK`, a sender that doesn't yet pass DMARC alignment, and the policy keeping statements and messages out of email bodies prevent this. Reopen only if SES production access is granted, a person applies the template migration, and a superseding ADR explicitly permits message content in email.
 - **Fixed message templates only** (closing reasons, "please send the merchant"). Rejected: templates cannot cover the follow-up questions agents need to ask. Reopen if a reviewed agent message promises a refund, card block or fraud decision outside the agent's authority; require approved Spanish and Portuguese templates covering the observed questions before adopting this alternative.
 - **An AI assistant that writes to the customer.** Rejected: there is no evaluated, approved customer-facing generation workflow (ADR-012). Reopen after a separate ADR defines the permitted messages, human approval requirement and evaluation thresholds, and a Spanish/Portuguese pilot meets those thresholds. A model drafting text for a person to edit and send also needs that ADR.
 - **A chat channel per customer instead of per report.** Rejected: a dispute concerns one charge, and ownership and review are enforced per report. Reopen if a documented support workflow requires one conversation across multiple reports and a superseding ADR defines report links, authorization and closure behavior for that conversation.
