@@ -20,7 +20,7 @@ These decided every trade-off below. We would change them only on new evidence.
 
 There are two customers. The **account holder** sees a card charge they don't recognize, describes it in Spanish or Portuguese, and wants to know that the bank understood which charge they mean and what happens next. The **dispute agent** receives the case and needs the right transaction, the customer's own statement and what was already checked. Without those, they call the customer back.
 
-In the data, complaints (`Queja`) are 17.05% of 686,296 call-center interactions. Only 43.60% of them carry a resolved flag, and they account for 41.18% of all unresolved contacts. `Cargo no reconocido` is the largest complaint type: 12,297 of 67,095, stable at 18.2–18.4% a year. The full sizing, today's handling and satisfaction are in [`BUSINESS_OUTCOMES.md`](BUSINESS_OUTCOMES.md).
+Over the full dataset (2023-06-17 to 2026-06-18), complaints (`Queja`) are 17.05% of 686,296 call-center interactions. Only 43.60% of them carry a resolved flag, and they account for 41.18% of all unresolved contacts. `Cargo no reconocido` is the largest complaint type: 12,297 of 67,095, stable at 18.2–18.4% a year. [`BUSINESS_OUTCOMES.md`](BUSINESS_OUTCOMES.md) uses the design window only (to 2025-12-31; 10,370 of 56,736), as ADR-005 requires for design decisions. The full sizing, today's handling and satisfaction are in [`BUSINESS_OUTCOMES.md`](BUSINESS_OUTCOMES.md).
 
 The root problem is that nothing ties a complaint to the disputed transaction. No complaint points to a transaction (DF-003). The product a complaint cites belongs to a different customer in every one of 44,570 cases (DF-002). Only 33% of unrecognized-charge complaints record an amount. So today the agent starts each case by working out which charge the customer meant. The findings and their queries are in [`DATA_ENGINEERING.md`](DATA_ENGINEERING.md).
 
@@ -136,18 +136,18 @@ If a bank ran this workflow on its own cloud, the same design becomes one of the
 |---|---|---|
 | Edge | CloudFront + WAF | Global HTTPS load balancer + Cloud Armor + Cloud CDN |
 | API | API Gateway + Lambda (Node 22) | Cloud Run (Node 22), load-balancer ingress only |
-| AI suggestion, after the response | Bedrock gpt-oss-20b, In-Region, through PrivateLink | Vertex AI Gemini 2.5 Flash-Lite in-region, through Cloud Tasks and Private Google Access |
+| AI suggestion, after the response | Bedrock gpt-oss-20b, In-Region, through PrivateLink | Vertex AI Gemini 3.5 Flash-Lite (global endpoint; no regional one exists), through Cloud Tasks and Private Google Access |
 | Database | RDS PostgreSQL Multi-AZ, db.t4g.small | Cloud SQL PostgreSQL regional HA, db-g1-small |
 | Batch | Fargate daily task + EventBridge | Cloud Run job + Cloud Scheduler |
 | Keys and logs | KMS, CloudWatch | Cloud KMS, Cloud Logging |
 | Infrastructure as code | [CloudFormation](../Costs/aws-target/) (`cfn-lint`) | [Terraform](../Costs/gcp-target/main.tf) (`terraform validate`) |
-| List price, same volumes | **$86.36 a month** | **$90.09 a month** |
+| List price, same volumes | **$86.36 a month** | **$95.38 a month** |
 
-On both, about two thirds of the bill is the standby database. The rest is fixed edge or private-network cost: GCP pays for a load-balancer rule and gets private API access free; AWS pays for a private endpoint and gets its edge almost free. Line by line: [ADR-004 section 3](../ADRs/ADR-004-intake-capacity-and-cost.md) for AWS, the [GCP target](../Costs/gcp-target/README.md) for GCP.
+On both, about 60% of the bill is the standby database. The rest is fixed edge or private-network cost: GCP pays for a load-balancer rule and gets private API access free; AWS pays for a private endpoint and gets its edge almost free. Line by line: [ADR-004 section 3](../ADRs/ADR-004-intake-capacity-and-cost.md) for AWS, the [GCP target](../Costs/gcp-target/README.md) for GCP.
 
 ![AWS production target: CloudFront and WAF at the edge, HTTP API and Lambda in a two-AZ VPC with RDS PostgreSQL Multi-AZ and a Bedrock endpoint, a daily Fargate batch into an S3 lake](../Costs/aws-target/architecture.png)
 
-![GCP production target: global HTTPS load balancer with Cloud Armor and Cloud CDN, Cloud Run API with Cloud Tasks for the AI suggestion, Cloud SQL PostgreSQL regional HA on a private IP, Vertex AI in-region, a daily Cloud Run job into a CMEK lake](../Costs/gcp-target/architecture.png)
+![GCP production target: global HTTPS load balancer with Cloud Armor and Cloud CDN, Cloud Run API with Cloud Tasks for the AI suggestion, Cloud SQL PostgreSQL regional HA on a private IP, Vertex AI on the global endpoint, a daily Cloud Run job into a CMEK lake](../Costs/gcp-target/architecture.png)
 
 ## Security and identity
 
@@ -251,7 +251,7 @@ A case is about 367 bytes with a typical statement and 4.3 KB at the 2,000-chara
 
 **The Cloudflare service fits the free plan.** It serves a cohort of 796 customers from the dataset who disputed a charge, not the full slice. It handles about 1,960 complete episodes a day for a customer signed in by email, limited by D1 writes (51 rows each; ADR-004, latest implementation note). The busiest day for unrecognized-charge complaints in 2025 had 23. Writes are the first limit to hit, and $5 a month removes it. Cognito and SES are separate AWS costs. The historical $0.21 exploratory AWS spend is a dated snapshot, and no fresh billing export has been assessed.
 
-**The AWS production target costs $86.36 a month, and the GCP one $90.09,** at list price ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)): about $0.02 per disputed case, or $0.0035 per contact at the front door. On AWS about three quarters is a standby database and private networking, which a bank's requirements dictate, not traffic; at 10× the traffic the bill rises by about 46%. The GCP figure comes from the Cloud Billing Catalog's list prices for the same volumes ([GCP target](../Costs/gcp-target/README.md)).
+**The AWS production target costs $86.36 a month, and the GCP one $95.38,** at list price ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)): about $0.02 per disputed case, or $0.0035 per contact at the front door. On AWS about three quarters is a standby database and private networking, which a bank's requirements dictate, not traffic; at 10× the traffic the bill rises by about 46%. The GCP figure comes from the Cloud Billing Catalog's list prices for the same volumes ([GCP target](../Costs/gcp-target/README.md)).
 
 **Reading one message costs a fraction of a cent.** At the default reasoning level it was about $0.0005 (about 1,900 input and 250 output tokens). At low on Vertex it is about 2,107 input and 130 output tokens, or about US$0.00018 at the price recorded on 2026-10-03 (ADR-012; re-check before production). If every one of the 11 daily reports took the model path, it would cost well under a cent a day.
 

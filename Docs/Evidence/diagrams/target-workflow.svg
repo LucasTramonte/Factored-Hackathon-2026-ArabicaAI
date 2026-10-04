@@ -50,10 +50,11 @@
 <text x="195" y="536" text-anchor="middle" font-size="12.5" font-weight="600" fill="#16191f">switch · daily cap</text>
 <text x="195" y="551" text-anchor="middle" font-size="12.5" font-weight="600" fill="#16191f">model date · token</text>
 <rect x="360" y="480" width="230" height="90" rx="10" fill="#e8f0fe" stroke="#41556b" stroke-width="1.8"/>
-<text x="475.0" y="506.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Vertex AI</text>
-<text x="475.0" y="525.5" text-anchor="middle" font-size="12.5" fill="#414d5c">reads the description only</text>
-<text x="475.0" y="540.5" text-anchor="middle" font-size="12.5" fill="#414d5c">facts in a closed vocabulary</text>
-<text x="475.0" y="555.5" text-anchor="middle" font-size="12.5" fill="#414d5c">10 s deadline · 1 retry</text>
+<text x="475.0" y="499.0" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Vertex AI</text>
+<text x="475.0" y="518.0" text-anchor="middle" font-size="12.5" fill="#414d5c">reads the description only</text>
+<text x="475.0" y="533.0" text-anchor="middle" font-size="12.5" fill="#414d5c">facts in a closed vocabulary</text>
+<text x="475.0" y="548.0" text-anchor="middle" font-size="12.5" fill="#414d5c">10 s deadline · retry only</text>
+<text x="475.0" y="563.0" text-anchor="middle" font-size="12.5" fill="#414d5c">on invalid output</text>
 <rect x="640" y="480" width="220" height="90" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
 <text x="750.0" y="521.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Schema check</text>
 <text x="750.0" y="540.5" text-anchor="middle" font-size="12.5" fill="#414d5c">invalid → no suggestion</text>

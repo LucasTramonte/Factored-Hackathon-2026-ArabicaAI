@@ -29,6 +29,10 @@ Intervals are 95% Wilson. The 60 cases are an authored coverage mix, so the pool
 - **Situations instead of cases.** Each situation appears twice, once per language, so the 60 cases aren't independent. The registered, more conservative analysis counts the 30 situations: the model did better on 20, worse on 2 and the same on 8 (sign test p ≈ 1.2×10⁻⁴).
 - **Same answer in both languages:** the model gave the same answer to both versions of a situation in 27 of 30, the checklist in 15.
 
+![Correct next action with 95% intervals for always-handoff, the checklist and extractor v1 on all 60 and the 52 never-exposed cases, and correct cases per scenario family](../Evidence/evaluation/frozen-v1-comparison.png)
+
+*Generated from the committed aggregates by [`build_frozen_chart.py`](../Evidence/evaluation/build_frozen_chart.py).*
+
 **Where the model missed.** The 7 misses sit in five scenario families:
 - mixed Spanish and Portuguese in one message: 0 of 2;
 - a report that also demands a refund: 2 of 4;
@@ -36,7 +40,7 @@ Intervals are 95% Wilson. The 60 cases are an authored coverage mix, so the pool
 - a single clear match: 3 of 4;
 - an unsupported language: 1 of 2.
 
-Six of the seven were the same wrong answer in all three runs: the model asked the customer to clarify when the policy says to route the case or confirm the charge. That is the safe direction to be wrong in, since the customer is asked again rather than given a wrong charge. Every family has fewer than five cases, so these are counts, not rates.
+Six of the seven were the same wrong answer in all three runs: the model asked the customer to clarify when the policy says to route the case or confirm the charge. That is the safe direction to be wrong in, since the customer is asked again rather than given a wrong charge. The checklist beat the model on 2 cases: one out-of-scope request and one message in an unsupported language, both families where fixed rules are naturally strong. Every family has fewer than five cases, so these are counts, not rates.
 
 **Stability, latency and cost:**
 - **Repetitions:** 52, 53 and 53 correct. One case of 60 changed its answer between repetitions, and there were no provider failures or timeouts.

@@ -88,7 +88,7 @@ lane(385, 330, "2 · AI suggestion, only for “I can't find it”, after the re
      "ctx.waitUntil (Cloud Tasks in the GCP target). The model reads text; code decides; the customer confirms; a person reviews.",
      "#eef3fc", "#a9c1ea")
 diamond(195, 525, 250, 130, "Guards pass?|switch · daily cap|model date · token")
-box(360, 480, 230, 90, "Vertex AI", "reads the description only|facts in a closed vocabulary|10 s deadline · 1 retry", fill="#e8f0fe")
+box(360, 480, 230, 90, "Vertex AI", "reads the description only|facts in a closed vocabulary|10 s deadline · retry only|on invalid output", fill="#e8f0fe")
 box(640, 480, 220, 90, "Schema check", "invalid → no suggestion")
 box(910, 480, 240, 90, "Deterministic matcher", "facts → at most 3 of the|customer's own charges (SQL)")
 box(1200, 480, 180, 90, "Store suggestions", "references only, no text")

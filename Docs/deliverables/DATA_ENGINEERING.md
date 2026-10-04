@@ -57,7 +57,7 @@ The DBML model in `data_profiles/silver_data_model/` is documentation only; `tab
 
 ## 3. The quality gate
 
-On the full data the gate ran 336 aggregate checks: 0 errors, 6 warnings.
+On the full data the latest gate run (`20261002T232200Z`, re-run in the 2026-10-03 review) made 390 aggregate checks: 0 errors, 7 warnings ([new-data rehearsal](../Evidence/new-data-rehearsal.md)).
 
 Errors block readiness: missing tables or columns, duplicate or missing keys, unexplained Bronze-to-Silver row changes, unparseable dates, missing foreign-key parents, a partition that doesn't match its date. Gold refuses to build unless its quality run is ready, is for the same DuckDB file, postdates that file's last change, and checked the watermark Gold serves (`check_quality_gate`).
 

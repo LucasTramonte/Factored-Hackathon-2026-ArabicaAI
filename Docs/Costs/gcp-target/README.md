@@ -5,7 +5,7 @@ The same workflow as the [AWS production target](../aws-target/architecture.yaml
 - [`main.tf`](main.tf): the design as Terraform, the format Google's Infrastructure Manager deploys. Deployment Manager, the closest thing GCP had to CloudFormation, is being retired. `terraform validate` passes; that is the only check run.
 - [`architecture.png`](architecture.png): the diagram, generated from [`build_diagram.py`](build_diagram.py) with the same helpers and layout as the AWS one.
 
-![GCP production target: global HTTPS load balancer with Cloud Armor and Cloud CDN, Cloud Run API with Cloud Tasks for the AI suggestion, Cloud SQL PostgreSQL regional HA on a private IP, Vertex AI Gemini 2.5 Flash-Lite in-region, a daily Cloud Run job into a CMEK Cloud Storage lake](architecture.png)
+![GCP production target: global HTTPS load balancer with Cloud Armor and Cloud CDN, Cloud Run API with Cloud Tasks for the AI suggestion, Cloud SQL PostgreSQL regional HA on a private IP, Vertex AI Gemini 3.5 Flash-Lite on the global endpoint, a daily Cloud Run job into a CMEK Cloud Storage lake](architecture.png)
 
 ## What it costs
 
@@ -20,20 +20,20 @@ The volumes are the AWS target's (ADR-004, section 3): the S3 front door (24,880
 | API | Cloud Tasks | 5,400 dispatches | 0.00 | — (Lambda async invoke) |
 | Data | Cloud SQL for PostgreSQL | db-g1-small, regional HA ($0.07/h), 20 GB SSD HA ($0.34/GB), backups (~2 GB, $0.08/GB) | 58.06 | RDS Multi-AZ 52.05 |
 | Data | Private access to Google APIs | Private Google Access, no endpoint or NAT | 0.00 | PrivateLink 14.60 + public IPv4 0.05 |
-| AI | Vertex AI, Gemini 2.5 Flash-Lite, regional | 5,400 calls × 2,106 input / 266 output tokens ($0.10 / $0.40 per M) | 1.71 | Bedrock gpt-oss-20b 2.57 |
+| AI | Vertex AI, Gemini 3.5 Flash-Lite, global endpoint | 5,400 calls × 2,106 input / 266 output tokens ($0.30 / $2.50 per M) | 7.00 | Bedrock gpt-oss-20b 2.57 |
 | Batch | Cloud Run job + Cloud Scheduler | 1 run a day, 15 min, 2 vCPU, 4 GiB; 1 scheduler job | 1.29 | Fargate 0.60 |
 | Batch | Cloud Storage lake | 13 GB Standard, 15,000 class A and 250,000 class B operations | 0.44 | S3 lake 0.47 |
-| Ops | Cloud Logging | 1.4 GB ingested ($0.50/GB; the first 50 GB a month are free in practice) | 0.70 | CloudWatch 4.76 |
+| Ops | Cloud Logging | 1.4 GB ingested at the $0.50/GB list price. Google's free monthly allotment (50 GB a project) would make this $0, but free allotments are excluded everywhere in this table | 0.70 | CloudWatch 4.76 |
 | Ops | Cloud KMS + Secret Manager | 1 key version, 20,000 operations; 2 secret versions | 0.24 | KMS 1.06 |
-| | **Total** | | **90.09** | **86.36** |
+| | **Total** | | **95.38** | **86.36** |
 
-**What decides the total is the same on both clouds:** a standby database. It is $58 here and $52 on AWS, and it is driven by availability, not by load (see the capacity estimate in [`SYSTEM_DESIGN.md`](../../deliverables/SYSTEM_DESIGN.md#capacity-the-numbers-before-the-boxes)). The fixed costs differ by shape:
+**What decides the total is the same on both clouds:** a standby database. It is $58 here (about 60% of the total) and $52 on AWS (also about 60%), and it is driven by availability, not by load (see the capacity estimate in [`SYSTEM_DESIGN.md`](../../deliverables/SYSTEM_DESIGN.md#capacity-the-numbers-before-the-boxes)). The fixed costs differ by shape:
 - **GCP:** a load-balancer forwarding rule ($18), but private access to Google APIs is free.
 - **AWS:** a private endpoint ($15), but its edge and API are almost free at this volume.
 
 **Two choices worth stating:**
 - **`db-g1-small` is a shared-core machine.** Google doesn't cover shared-core instances with the Cloud SQL SLA. A bank that needs the SLA takes `db-custom-1-3840` (1 dedicated vCPU, 3.75 GB), regional: about $98.60 a month for the instance plus storage, about $137 in total.
-- **The model is `gemini-2.5-flash-lite` in `us-central1`, not the newer `gemini-3.5-flash-lite`.** It was the only Flash-Lite we could call on a regional endpoint, so customer text stays in one region (probe results in the [AI suggestion plan](../../Plans/ai-suggestion-plan.md)). On the global endpoint, 3.5 Flash-Lite would cost about $7.00 a month here ($0.30 / $2.50 per M).
+- **The model is `gemini-3.5-flash-lite` on the global endpoint.** We found no regional endpoint for it in 9 regions (404 on each, 2026-10-04). The regional `gemini-2.5-flash-lite` would cost $1.71 a month here, but a reviewer cites Google's lifecycle page retiring it on 2026-10-20, so it can't be the successor ([AI suggestion plan](../../Plans/ai-suggestion-plan.md)). The global endpoint doesn't pin where text is processed. A bank that requires that would self-deploy open weights on a regional endpoint (a dedicated GPU, roughly $800 a month), which changes this table more than anything else in it.
 
 **Not included, as on AWS:**
 - the bank's identity provider, which replaces the demo's Cognito sign-in;
@@ -42,7 +42,7 @@ The volumes are the AWS target's (ADR-004, section 3): the S3 front door (24,880
 
 ## Which cloud
 
-Neither wins on cost or capacity at this volume; they are within 5%. Choose by what the bank already runs:
+Neither wins on cost or capacity at this volume; they are within 10%. Choose by what the bank already runs:
 - its identity provider and key management;
 - where its audit logs go;
 - whether its data must stay in a given region. Neither cloud offers the evaluated model family in São Paulo today.

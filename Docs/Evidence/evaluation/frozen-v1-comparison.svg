@@ -1,0 +1,229 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="720" viewBox="0 0 1500 720" role="img" aria-labelledby="t d" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+<title id="t">Extractor v1 against the checklist on the frozen set</title>
+<desc id="d">Correct next action with 95% intervals on all 60 and the 52 never-exposed cases, and correct cases per scenario family.</desc>
+<rect width="1500" height="720" fill="#ffffff"/>
+<text x="40" y="44" font-size="24" font-weight="700" fill="#16191f">Frozen comparison, extractor v1 (run once, 2026-10-04)</text>
+<text x="40" y="70" font-size="14" fill="#414d5c">Same cases for every system. Authored Spanish and Portuguese messages, a coverage mix, not real-customer prevalence. Unsafe outcomes: 0 for every system.</text>
+<text x="90" y="106" font-size="16" font-weight="650" fill="#16191f">Correct next action (Wilson 95% interval)</text>
+<line x1="90" y1="600.0" x2="650" y2="600.0" stroke="#e3e7ec"/>
+<text x="80" y="604.0" text-anchor="end" font-size="12" fill="#414d5c">0%</text>
+<line x1="90" y1="504.0" x2="650" y2="504.0" stroke="#e3e7ec"/>
+<text x="80" y="508.0" text-anchor="end" font-size="12" fill="#414d5c">20%</text>
+<line x1="90" y1="408.0" x2="650" y2="408.0" stroke="#e3e7ec"/>
+<text x="80" y="412.0" text-anchor="end" font-size="12" fill="#414d5c">40%</text>
+<line x1="90" y1="312.0" x2="650" y2="312.0" stroke="#e3e7ec"/>
+<text x="80" y="316.0" text-anchor="end" font-size="12" fill="#414d5c">60%</text>
+<line x1="90" y1="216.0" x2="650" y2="216.0" stroke="#e3e7ec"/>
+<text x="80" y="220.0" text-anchor="end" font-size="12" fill="#414d5c">80%</text>
+<line x1="90" y1="120.0" x2="650" y2="120.0" stroke="#e3e7ec"/>
+<text x="80" y="124.0" text-anchor="end" font-size="12" fill="#414d5c">100%</text>
+<rect x="130" y="488.0" width="70" height="112.0" fill="#9aa5b1" rx="3"/>
+<line x1="165.0" y1="530.6901036641144" x2="165.0" y2="429.9059021875106" stroke="#16191f" stroke-width="1.6"/>
+<line x1="157.0" y1="530.6901036641144" x2="173.0" y2="530.6901036641144" stroke="#16191f" stroke-width="1.6"/>
+<line x1="157.0" y1="429.9059021875106" x2="173.0" y2="429.9059021875106" stroke="#16191f" stroke-width="1.6"/>
+<text x="165.0" y="421.9059021875106" text-anchor="middle" font-size="13" font-weight="650" fill="#16191f">14/60</text>
+<rect x="220" y="416.0" width="70" height="184.0" fill="#e8a33d" rx="3"/>
+<line x1="255.0" y1="469.9762926044063" x2="255.0" y2="355.2844599556796" stroke="#16191f" stroke-width="1.6"/>
+<line x1="247.0" y1="469.9762926044063" x2="263.0" y2="469.9762926044063" stroke="#16191f" stroke-width="1.6"/>
+<line x1="247.0" y1="355.2844599556796" x2="263.0" y2="355.2844599556796" stroke="#16191f" stroke-width="1.6"/>
+<text x="255.0" y="347.2844599556796" text-anchor="middle" font-size="13" font-weight="650" fill="#16191f">23/60</text>
+<rect x="310" y="176.0" width="70" height="424.0" fill="#1a73e8" rx="3"/>
+<line x1="345.0" y1="226.45818251602014" x2="345.0" y2="147.68505907226898" stroke="#16191f" stroke-width="1.6"/>
+<line x1="337.0" y1="226.45818251602014" x2="353.0" y2="226.45818251602014" stroke="#16191f" stroke-width="1.6"/>
+<line x1="337.0" y1="147.68505907226898" x2="353.0" y2="147.68505907226898" stroke="#16191f" stroke-width="1.6"/>
+<text x="345.0" y="139.68505907226898" text-anchor="middle" font-size="13" font-weight="650" fill="#16191f">53/60</text>
+<text x="255.0" y="626" text-anchor="middle" font-size="14" fill="#16191f">All 60 cases</text>
+<rect x="460" y="489.2307692307692" width="70" height="110.76923076923077" fill="#9aa5b1" rx="3"/>
+<line x1="495.0" y1="534.1235475576348" x2="495.0" y2="426.5578437211208" stroke="#16191f" stroke-width="1.6"/>
+<line x1="487.0" y1="534.1235475576348" x2="503.0" y2="534.1235475576348" stroke="#16191f" stroke-width="1.6"/>
+<line x1="487.0" y1="426.5578437211208" x2="503.0" y2="426.5578437211208" stroke="#16191f" stroke-width="1.6"/>
+<text x="495.0" y="418.5578437211208" text-anchor="middle" font-size="13" font-weight="650" fill="#16191f">12/52</text>
+<rect x="550" y="415.38461538461536" width="70" height="184.6153846153846" fill="#e8a33d" rx="3"/>
+<line x1="585.0" y1="472.9417738549622" x2="585.0" y2="350.2073938359331" stroke="#16191f" stroke-width="1.6"/>
+<line x1="577.0" y1="472.9417738549622" x2="593.0" y2="472.9417738549622" stroke="#16191f" stroke-width="1.6"/>
+<line x1="577.0" y1="350.2073938359331" x2="593.0" y2="350.2073938359331" stroke="#16191f" stroke-width="1.6"/>
+<text x="585.0" y="342.2073938359331" text-anchor="middle" font-size="13" font-weight="650" fill="#16191f">20/52</text>
+<rect x="640" y="175.38461538461542" width="70" height="424.6153846153846" fill="#1a73e8" rx="3"/>
+<line x1="675.0" y1="230.26398885553016" x2="675.0" y2="145.90545217481906" stroke="#16191f" stroke-width="1.6"/>
+<line x1="667.0" y1="230.26398885553016" x2="683.0" y2="230.26398885553016" stroke="#16191f" stroke-width="1.6"/>
+<line x1="667.0" y1="145.90545217481906" x2="683.0" y2="145.90545217481906" stroke="#16191f" stroke-width="1.6"/>
+<text x="675.0" y="137.90545217481906" text-anchor="middle" font-size="13" font-weight="650" fill="#16191f">46/52</text>
+<text x="585.0" y="626" text-anchor="middle" font-size="14" fill="#16191f">52 never exposed</text>
+<rect x="90" y="648" width="14" height="14" fill="#9aa5b1" rx="2"/>
+<text x="110" y="660" font-size="13" fill="#16191f">Always hand off</text>
+<rect x="285" y="648" width="14" height="14" fill="#e8a33d" rx="2"/>
+<text x="305" y="660" font-size="13" fill="#16191f">Checklist (rules)</text>
+<rect x="480" y="648" width="14" height="14" fill="#1a73e8" rx="2"/>
+<text x="500" y="660" font-size="13" fill="#16191f">Extractor v1 (majority of 3)</text>
+<text x="820" y="106" font-size="16" font-weight="650" fill="#16191f">Correct cases per scenario family (all 60; counts, not rates)</text>
+<text x="1050" y="149" text-anchor="end" font-size="12.5" fill="#16191f">confirms after ambiguity</text>
+<rect x="1070.0" y="136" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1070.0" y="147" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="136" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1105.0" y="147" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="136" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1140.0" y="147" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1175.0" y="136" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1175.0" y="147" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<text x="1222" y="145" font-size="11.5" fill="#8a5a12">0/4</text>
+<text x="1222" y="157" font-size="11.5" fill="#0b4fb3">4/4</text>
+<text x="1050" y="179" text-anchor="end" font-size="12.5" fill="#16191f">confirms foreign</text>
+<rect x="1070.0" y="166" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1070.0" y="177" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="166" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1105.0" y="177" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="166" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1140.0" y="177" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1175.0" y="166" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1175.0" y="177" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<text x="1222" y="175" font-size="11.5" fill="#8a5a12">2/4</text>
+<text x="1222" y="187" font-size="11.5" fill="#0b4fb3">4/4</text>
+<text x="1050" y="209" text-anchor="end" font-size="12.5" fill="#16191f">confirms own</text>
+<rect x="1070.0" y="196" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1070.0" y="207" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="196" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1105.0" y="207" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="196" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1140.0" y="207" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1175.0" y="196" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1175.0" y="207" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<text x="1222" y="205" font-size="11.5" fill="#8a5a12">0/4</text>
+<text x="1222" y="217" font-size="11.5" fill="#0b4fb3">4/4</text>
+<text x="1050" y="239" text-anchor="end" font-size="12.5" fill="#16191f">expired session confirmation</text>
+<rect x="1070.0" y="226" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1070.0" y="237" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="226" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1105.0" y="237" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="226" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1140.0" y="237" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1175.0" y="226" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1175.0" y="237" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<text x="1222" y="235" font-size="11.5" fill="#8a5a12">4/4</text>
+<text x="1222" y="247" font-size="11.5" fill="#0b4fb3">4/4</text>
+<text x="1050" y="269" text-anchor="end" font-size="12.5" fill="#16191f">injection with report</text>
+<rect x="1070.0" y="256" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1070.0" y="267" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="256" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1105.0" y="267" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="256" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1140.0" y="267" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1175.0" y="256" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1175.0" y="267" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<text x="1222" y="265" font-size="11.5" fill="#8a5a12">1/4</text>
+<text x="1222" y="277" font-size="11.5" fill="#0b4fb3">4/4</text>
+<text x="1050" y="299" text-anchor="end" font-size="12.5" fill="#16191f">invalid detail</text>
+<rect x="1070.0" y="286" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1070.0" y="297" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="286" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1105.0" y="297" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="286" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1140.0" y="297" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1175.0" y="286" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1175.0" y="297" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<text x="1222" y="295" font-size="11.5" fill="#8a5a12">2/4</text>
+<text x="1222" y="307" font-size="11.5" fill="#0b4fb3">4/4</text>
+<text x="1050" y="329" text-anchor="end" font-size="12.5" fill="#16191f">missing detail</text>
+<rect x="1070.0" y="316" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1070.0" y="327" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="316" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1105.0" y="327" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="316" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1140.0" y="327" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1175.0" y="316" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1175.0" y="327" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<text x="1222" y="325" font-size="11.5" fill="#8a5a12">2/4</text>
+<text x="1222" y="337" font-size="11.5" fill="#0b4fb3">4/4</text>
+<text x="1050" y="359" text-anchor="end" font-size="12.5" fill="#16191f">mixed language</text>
+<rect x="1070.0" y="346" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1070.0" y="357" width="31.0" height="9" fill="#d6e4fb" rx="2"/>
+<rect x="1105.0" y="346" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1105.0" y="357" width="31.0" height="9" fill="#d6e4fb" rx="2"/>
+<text x="1222" y="355" font-size="11.5" fill="#8a5a12">0/2</text>
+<text x="1222" y="367" font-size="11.5" fill="#0b4fb3">0/2</text>
+<text x="1050" y="389" text-anchor="end" font-size="12.5" fill="#16191f">multiple plausible</text>
+<rect x="1070.0" y="376" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1070.0" y="387" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="376" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1105.0" y="387" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="376" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1140.0" y="387" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1175.0" y="376" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1175.0" y="387" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<text x="1222" y="385" font-size="11.5" fill="#8a5a12">0/4</text>
+<text x="1222" y="397" font-size="11.5" fill="#0b4fb3">4/4</text>
+<text x="1050" y="419" text-anchor="end" font-size="12.5" fill="#16191f">no match</text>
+<rect x="1070.0" y="406" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1070.0" y="417" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="406" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1105.0" y="417" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="406" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1140.0" y="417" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1175.0" y="406" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1175.0" y="417" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<text x="1222" y="415" font-size="11.5" fill="#8a5a12">2/4</text>
+<text x="1222" y="427" font-size="11.5" fill="#0b4fb3">4/4</text>
+<text x="1050" y="449" text-anchor="end" font-size="12.5" fill="#16191f">not authenticated</text>
+<rect x="1070.0" y="436" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1070.0" y="447" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="436" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1105.0" y="447" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="436" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1140.0" y="447" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1175.0" y="436" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1175.0" y="447" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<text x="1222" y="445" font-size="11.5" fill="#8a5a12">4/4</text>
+<text x="1222" y="457" font-size="11.5" fill="#0b4fb3">4/4</text>
+<text x="1050" y="479" text-anchor="end" font-size="12.5" fill="#16191f">out of scope</text>
+<rect x="1070.0" y="466" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1070.0" y="477" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="466" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1105.0" y="477" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="466" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1140.0" y="477" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1175.0" y="466" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1175.0" y="477" width="31.0" height="9" fill="#d6e4fb" rx="2"/>
+<text x="1222" y="475" font-size="11.5" fill="#8a5a12">4/4</text>
+<text x="1222" y="487" font-size="11.5" fill="#0b4fb3">3/4</text>
+<text x="1050" y="509" text-anchor="end" font-size="12.5" fill="#16191f">report with demand</text>
+<rect x="1070.0" y="496" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1070.0" y="507" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="496" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1105.0" y="507" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="496" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1140.0" y="507" width="31.0" height="9" fill="#d6e4fb" rx="2"/>
+<rect x="1175.0" y="496" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1175.0" y="507" width="31.0" height="9" fill="#d6e4fb" rx="2"/>
+<text x="1222" y="505" font-size="11.5" fill="#8a5a12">0/4</text>
+<text x="1222" y="517" font-size="11.5" fill="#0b4fb3">2/4</text>
+<text x="1050" y="539" text-anchor="end" font-size="12.5" fill="#16191f">single clear match</text>
+<rect x="1070.0" y="526" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1070.0" y="537" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="526" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1105.0" y="537" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="526" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1140.0" y="537" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1175.0" y="526" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1175.0" y="537" width="31.0" height="9" fill="#d6e4fb" rx="2"/>
+<text x="1222" y="535" font-size="11.5" fill="#8a5a12">0/4</text>
+<text x="1222" y="547" font-size="11.5" fill="#0b4fb3">3/4</text>
+<text x="1050" y="569" text-anchor="end" font-size="12.5" fill="#16191f">tool failure</text>
+<rect x="1070.0" y="556" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1070.0" y="567" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="556" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1105.0" y="567" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1140.0" y="556" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1140.0" y="567" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1175.0" y="556" width="31.0" height="9" fill="#f3e6d1" rx="2"/>
+<rect x="1175.0" y="567" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<text x="1222" y="565" font-size="11.5" fill="#8a5a12">0/4</text>
+<text x="1222" y="577" font-size="11.5" fill="#0b4fb3">4/4</text>
+<text x="1050" y="599" text-anchor="end" font-size="12.5" fill="#16191f">unsupported language</text>
+<rect x="1070.0" y="586" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1070.0" y="597" width="31.0" height="9" fill="#1a73e8" rx="2"/>
+<rect x="1105.0" y="586" width="31.0" height="9" fill="#e8a33d" rx="2"/>
+<rect x="1105.0" y="597" width="31.0" height="9" fill="#d6e4fb" rx="2"/>
+<text x="1222" y="595" font-size="11.5" fill="#8a5a12">2/2</text>
+<text x="1222" y="607" font-size="11.5" fill="#0b4fb3">1/2</text>
+<text x="1070" y="630" font-size="12" fill="#414d5c">Top: checklist · bottom: model · filled = correct.</text>
+<text x="40" y="696" font-size="12.5" fill="#414d5c">Source: frozen-v1-cuts-2026-10-04.json (aggregates; raw result SHA-256 9c0bf13100cb…). Paired McNemar on the 52 never-exposed cases: 28 cases only the model got right, 2 only the checklist, p ≈ 8.7×10⁻⁷.</text>
+</svg>

@@ -23,7 +23,7 @@ We also follow Y Combinator's "A Guide to Demo Day Presentations" (Geoff Ralston
 1. **"I don't recognize this charge" is the most anxious moment in banking, and today it waits in line.** In the challenge's synthetic bank data, 11 such complaints a day are handled exactly like any other complaint: a first answer after about a day, and three in four recorded as Open, In Process or Escalated.
 2. **ArabicaAI aims to turn that moment into one minute** (a design target, not a measured average). The customer picks the charge from their own list, confirms it, and gets a reference before they close the app. A person reviews every report.
 3. **The bank speaks first.** When the bank's fraud system flags a charge, the customer is asked before they have to go looking (in the demo the flag is an illustration we set on demo customers). We tested the obvious trigger, "big amount", and the data showed it doesn't work.
-4. **AI where it earns its place, and nowhere else.** On 60 held-out test cases the model read customers' messages right 88% of the time, against 38% for hand-written rules, with no unsafe answer. Every result is published, including the ones that didn't go our way.
+4. **AI where it earns its place, and nowhere else.** On 60 held-out test cases we wrote (8 of them exposed during the build and reported separately), the model, scored by the majority of 3 runs, got 53 right (88%) against 23 (38%) for our rule-based checklist, with no unsafe answer. On the 52 never-exposed cases: 46 against 20. Every result is published, including the ones that didn't go our way.
 
 Answers to YC's four questions:
 
@@ -73,7 +73,7 @@ One point per slide, at most about 7 words of text, large type, a picture doing 
 | "A reference in seconds" / "one minute" | **Target only.** Five team episodes (four accepted, one routed incomplete) support no rate, so never "on average" or "customers do it in" | `EVALUATION.md` §11 |
 | "Big amounts don't mean fraud" | Yes, in this data, in every period | ADR-011 |
 | "The bank's fraud flag" in the demo | It's an authored flag on demo customers. Say "when the bank's fraud system flags a charge", not "we detect fraud" | ADR-011 |
-| "Tested on cases it never saw" / "AI is X% better" | **Yes, worded exactly:** "on 60 held-out test cases we wrote, 88% against 38% for rules, 0 unsafe". Never "real customers", never a percentage of fraud or of reports | ADR-006 amendments 7–9 |
+| "Tested on cases it never saw" / "AI is X% better" | **Yes, worded exactly:** "on 60 held-out test cases we wrote, the model (majority of 3 runs) got 88% against 38% for our checklist, 0 unsafe; 46 of 52 on the never-exposed cases". Never "real customers", never a percentage of fraud or of reports | ADR-006 amendments 7–9 |
 | Money saved, customers retained, satisfaction raised | **No.** No measured product effect exists | `BUSINESS_OUTCOMES.md`: "every figure is descriptive" |
 | Market size in dollars | **No** dollar TAM. Bottom-up per bank: about 4,000 such complaints a year in a bank like the challenge's synthetic one (11.16 × 365). Say exactly that | `BUSINESS_OUTCOMES.md` |
 | Traction | Pre-traction: a working, deployed product with tests. Lean on the story and the rigor, as YC advises | — |

@@ -1,6 +1,6 @@
 # ArabicaAI — Factored Hackathon 2026
 
-A customer reports a card charge they don't recognize, confirms which of their own transactions they mean, and gets a reference once the case is stored for human review. That is the V1 workflow ([ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). It is intake with a human handoff: no fraud verdicts, refunds or card blocks. The deployed flow is deterministic. A learned extractor was compared offline with hand-written rules on 60 held-out Spanish and Portuguese cases we wrote: it got 53 right against the rules' 23, with no unsafe answer ([evaluation](Docs/deliverables/EVALUATION.md)). Whether and where it goes online is [ADR-012](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md), and how is the [AI suggestion plan](Docs/Plans/ai-suggestion-plan.md).
+A customer reports a card charge they don't recognize, confirms which of their own transactions they mean, and gets a reference once the case is stored for human review. That is the V1 workflow ([ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). It is intake with a human handoff: no fraud verdicts, refunds or card blocks. The deployed flow is deterministic. A learned extractor was compared offline with hand-written rules on 60 held-out Spanish and Portuguese cases we wrote: by the majority of 3 runs it got 53 right against the checklist's 23, with no unsafe answer, and 46 of 52 on the cases whose content never leaked during the build ([evaluation](Docs/deliverables/EVALUATION.md)). Whether and where it goes online is [ADR-012](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md), and how is the [AI suggestion plan](Docs/Plans/ai-suggestion-plan.md).
 
 The data is a synthetic LATAM banking dataset. Descriptive counts from it are not measured bank outcomes.
 
@@ -82,7 +82,7 @@ Everything merged through #106 and #110 is deployed, including the in-app alert 
 
 ## Where the AI goes online
 
-The model reads better than our rules on held-out cases (53 of 60 against 23), but the guided flow only needs to read free text in one place: when a customer can't find the charge in their own list. That is where it goes online, behind a switch that is off today ([ADR-012](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md), [plan](Docs/Plans/ai-suggestion-plan.md)).
+The model reads better than our rules on held-out cases (53 of 60 against 23 by majority of 3 runs; 46 of 52 against 20 on the never-exposed cases), but the guided flow only needs to read free text in one place: when a customer can't find the charge in their own list. That is where it goes online, behind a switch that is off today ([ADR-012](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md), [plan](Docs/Plans/ai-suggestion-plan.md)).
 
 ![Target workflow: the customer's request stays deterministic; for "I can't find it", Vertex AI reads the description after the reference, code suggests up to three of the customer's own charges, the customer confirms and a person reviews; every failure falls back to today's handoff; events feed the pilot measures and the offline evaluation](Docs/Evidence/diagrams/target-workflow.png)
 
@@ -188,12 +188,12 @@ Design only, never deployed: what this workflow would run on if a bank required 
 | | AWS ([`aws-target/`](Docs/Costs/aws-target/)) | GCP ([`gcp-target/`](Docs/Costs/gcp-target/)) |
 |---|---|---|
 | Written as | CloudFormation, passes `cfn-lint` | Terraform, passes `terraform validate` |
-| API and model | Lambda; Bedrock gpt-oss-20b through PrivateLink | Cloud Run; Vertex AI Gemini 2.5 Flash-Lite in-region, after the response through Cloud Tasks |
+| API and model | Lambda; Bedrock gpt-oss-20b through PrivateLink | Cloud Run; Vertex AI Gemini 3.5 Flash-Lite (global endpoint), after the response through Cloud Tasks |
 | Database | RDS PostgreSQL Multi-AZ | Cloud SQL PostgreSQL regional HA |
-| Per month | $86.36 ([ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) section 3) | $90.09 ([line by line](Docs/Costs/gcp-target/README.md)) |
+| Per month | $86.36 ([ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) section 3) | $95.38 ([line by line](Docs/Costs/gcp-target/README.md)) |
 
-On both, the standby database is about two thirds of the bill. Load would never require it: at 100× the dataset's busiest day the database sees about 145 writes a second, around 1% of what one PostgreSQL primary handles. The [capacity estimate](Docs/deliverables/SYSTEM_DESIGN.md#capacity-the-numbers-before-the-boxes) shows the arithmetic.
+On both, the standby database is about 60% of the bill. Load would never require it: at 100× the dataset's busiest day the database sees about 145 writes a second, around 1% of what one PostgreSQL primary handles. The [capacity estimate](Docs/deliverables/SYSTEM_DESIGN.md#capacity-the-numbers-before-the-boxes) shows the arithmetic.
 
 ![AWS production target: CloudFront and WAF at the edge, HTTP API and Lambda in a two-AZ VPC with RDS PostgreSQL Multi-AZ and a Bedrock endpoint, a daily Fargate batch into an S3 lake](Docs/Costs/aws-target/architecture.png)
 
-![GCP production target: global HTTPS load balancer with Cloud Armor and Cloud CDN, Cloud Run API with Cloud Tasks for the AI suggestion, Cloud SQL PostgreSQL regional HA on a private IP, Vertex AI in-region, a daily Cloud Run job into a CMEK lake](Docs/Costs/gcp-target/architecture.png)
+![GCP production target: global HTTPS load balancer with Cloud Armor and Cloud CDN, Cloud Run API with Cloud Tasks for the AI suggestion, Cloud SQL PostgreSQL regional HA on a private IP, Vertex AI on the global endpoint, a daily Cloud Run job into a CMEK lake](Docs/Costs/gcp-target/architecture.png)

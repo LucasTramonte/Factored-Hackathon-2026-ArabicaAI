@@ -97,7 +97,7 @@ The definitions are in the [customer and measurement contract](../intake/custome
 | Intake rework within 7 days | Accepted cases needing a correction / accepted cases with a full window | Deferred: complaints lack origin-interaction links |
 | Cost per safe completed episode | Attributable charges / safe completed episodes | Not measured |
 
-A handoff never counts as an automated resolution, so the brief's "safe automated resolution" has no numerator in this workflow. The held-out comparison of the learned component against the checklist baseline hasn't run yet; it will be reported in [`EVALUATION.md`](EVALUATION.md).
+A handoff never counts as an automated resolution, so the brief's "safe automated resolution" has no numerator in this workflow. The learned component was compared with the checklist on held-out cases on 2026-10-04: 53 of 60 against 23, 0 unsafe, and 46 of 52 against 20 on the cases never exposed ([`EVALUATION.md`](EVALUATION.md#1-the-result)). That measures reading on authored messages, not a business outcome.
 
 ## What not to claim
 
