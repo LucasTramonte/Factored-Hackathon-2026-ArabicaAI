@@ -46,9 +46,9 @@ destination="{\"Enabled\": true, \"MatchingEventTypes\": [\"BOUNCE\", \"COMPLAIN
   && "${SES[@]}" update-configuration-set-event-destination --configuration-set-name "$CONFIG_SET" --event-destination-name "$TOPIC" --event-destination "$destination" \
   || "${SES[@]}" create-configuration-set-event-destination --configuration-set-name "$CONFIG_SET" --event-destination-name "$TOPIC" --event-destination "$destination"
 "${SES[@]}" put-email-identity-configuration-set-attributes --email-identity "$IDENTITY" --configuration-set-name "$CONFIG_SET"
-for pair in "Reputation.BounceRate 0.02" "Reputation.ComplaintRate 0.0005"; do
-  set -- $pair
-  "${CW[@]}" put-metric-alarm --alarm-name "arabicaai-ses-$1" --namespace AWS/SES --metric-name "$1" \
+for triple in "bounce-rate Reputation.BounceRate 0.02" "complaint-rate Reputation.ComplaintRate 0.0005"; do
+  set -- $triple; name=$1; shift
+  "${CW[@]}" put-metric-alarm --alarm-name "arabicaai-ses-$name" --namespace AWS/SES --metric-name "$1" \
     --statistic Average --period 3600 --evaluation-periods 1 --threshold "$2" --comparison-operator GreaterThanThreshold \
     --treat-missing-data notBreaching --alarm-actions "$topic_arn" \
     --alarm-description "SES account $1 over $2 (AWS reviews at 5% bounce, 0.1% complaint). Docs/Plans/intake-demo.md"
@@ -56,4 +56,4 @@ done
 
 echo "SES_IDENTITY=$IDENTITY verified=$("${SES[@]}" get-email-identity --email-identity "$IDENTITY" --query VerifiedForSendingStatus) config_set=$CONFIG_SET"
 echo "SES_USER_ARN=$(aws iam get-user "${P[@]}" --user-name "$USER_NAME" --query User.Arn)"
-echo "SES_EVENTS_TOPIC=$topic_arn alarms=arabicaai-ses-Reputation.BounceRate,arabicaai-ses-Reputation.ComplaintRate"
+echo "SES_EVENTS_TOPIC=$topic_arn alarms=arabicaai-ses-bounce-rate,arabicaai-ses-complaint-rate"
