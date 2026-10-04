@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { assertContract } from '../support/contract.js';
 import { base, client, idToken } from '../support/client.js';
-import { tokenHash } from '../../src/auth/session.js';
+import { newToken, tokenHash } from '../../src/auth/session.js';
 
 const store = fn => import('../../scripts/intake-store.mjs')
   .then(({ withIntakeStore }) => withIntakeStore({ config: resolve(process.cwd(), 'wrangler.jsonc') }, fn));
@@ -166,4 +166,20 @@ test("an update an admin asks for while acting is queued to the admin's own addr
       'one update to the original admin identity (kept across two switches), no status email');
     assert.deepEqual(await s.findEmails('CLI-COHORT-3', receipt.reference_short), [], 'the customer has no address, so nothing queues for them');
   });
+});
+
+test('an admin session from before migration 0022 (no recorded admin identity) reads as expired: no act-as, no update, no audit row', async () => {
+  // A pre-0022 act-as session: admin mark set, customer id = the acted customer, no recorded admin identity.
+  const token = newToken();
+  const hash = await tokenHash(token);
+  await store(s => s.rotateSession({ now: Date.now(), oldHash: null, newHash: hash, actor: 'customer', customerId: 'CLI-COHORT-1',
+    expiresAt: Date.now() + 3600000, requestId: 'legacy-fixture', admin: true }));
+  const legacy = client(); legacy.cookie = 'demo_session=' + token;
+  for (const [path, body] of [['/admin/act-as', { customer_id: 'CLI-COHORT-2' }], ['/reports/update', { protocol: crypto.randomUUID() }],
+    ['/admin/customers', undefined], ['/transactions', undefined]]) {
+    const res = await legacy.call(path, body);
+    assert.equal(res.status, 401, path); assertContract('error', res.body);
+  }
+  const rows = await store(s => s.listAdminActions(50));
+  assert.ok(!rows.some(r => r.admin_session_ref === hash.slice(0, 12)), 'the legacy session never acted as anyone');
 });

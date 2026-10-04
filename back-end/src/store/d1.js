@@ -140,10 +140,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      * ``emailEnc`` (an email sign-in), upsert the customer's encrypted address in the same round trip. Records
      * ``session_started`` in the same batch. ``admin`` marks a session an admin opened (migration 0021).
      */
-    rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt, emailEnc, requestId, admin = false }) => batch([
+    rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt, emailEnc, requestId, admin = false, actingAdmin = null }) => batch([
       ['DELETE FROM sessions WHERE expires_at<=?', now],
       ...(oldHash ? [['DELETE FROM sessions WHERE token_hash=?', oldHash]] : []),
-      ['INSERT INTO sessions(token_hash,actor,customer_id,expires_at,admin) VALUES(?,?,?,?,?)', newHash, actor, customerId, expiresAt, admin ? 1 : 0],
+      ['INSERT INTO sessions(token_hash,actor,customer_id,expires_at,admin,acting_admin_customer_id) VALUES(?,?,?,?,?,?)',
+        newHash, actor, customerId, expiresAt, admin ? 1 : 0, actingAdmin],
       ...(emailEnc ? [[UPSERT_TARGET, customerId, emailEnc, now]] : []),
       [AUTH_EVENT, now, actor, 'session_started', newHash.slice(0, 12), requestId]
     ]),
@@ -159,8 +160,8 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       const results = await batch([
         ['DELETE FROM sessions WHERE expires_at<=?', now],
         ["INSERT INTO sessions(token_hash,actor,customer_id,expires_at,admin,acting_admin_customer_id) "
-          + "SELECT ?,'customer',?,?,1,COALESCE(acting_admin_customer_id,customer_id) FROM sessions "
-          + "WHERE token_hash=? AND actor='customer' AND admin=1 AND expires_at>?",
+          + "SELECT ?,'customer',?,?,1,acting_admin_customer_id FROM sessions "
+          + "WHERE token_hash=? AND actor='customer' AND admin=1 AND acting_admin_customer_id IS NOT NULL AND expires_at>?",
           newHash, customerId, expiresAt, oldHash, now],
         ["INSERT INTO auth_events(ts,actor,event,session_ref,request_id) SELECT ?,'customer','session_started',?,? " + created,
           now, newHash.slice(0, 12), requestId, newHash],
@@ -172,10 +173,12 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     },
     /**
      * The live ``actor`` session: ``{ customer_id, expires_at, admin, acting_admin_customer_id }`` (``admin`` is 1 for a
-     * session an admin opened; the last is the admin's own customer id on an act-as session, else null; never returned).
+     * session an admin opened; the last is the admin's own customer id on every admin session, never returned). An admin
+     * session without it predates migration 0022, when an act-as session couldn't be told from the admin's own; it reads
+     * as expired, so its customer id is never taken for the admin's (the admin signs in once more).
      */
     findSession: (hash, actor, now) => first('SELECT customer_id, expires_at, admin, acting_admin_customer_id FROM sessions '
-      + 'WHERE token_hash=? AND actor=? AND expires_at>?', hash, actor, now),
+      + 'WHERE token_hash=? AND actor=? AND expires_at>? AND NOT (admin=1 AND acting_admin_customer_id IS NULL)', hash, actor, now),
     /** Newest act-as rows (references only), for tests and operators. */
     listAdminActions: limit => all('SELECT * FROM admin_actions ORDER BY id DESC LIMIT ?', limit),
 
