@@ -16,8 +16,8 @@ import { createStore } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
 import { EXTRACTION_TIMEOUT_MS, MODEL, VOCABULARY, producers, registeredVersion, vertexUrl } from '../../src/modules/intake/ai-transport.js';
 import { PROMPT } from '../../src/modules/intake/extractor-prompt.js';
-import { DEFAULT_RETIRES, asOfAt, newArm, retired, runSuggestion, testOrigin } from '../../src/modules/intake/suggestions.js';
-import { accessToken, audience, credentialConfig, resetTokenCache, workerJwt } from '../../src/modules/intake/vertex-auth.js';
+import { DEFAULT_RETIRES, OUTCOMES, asOfAt, newArm, retired, runSuggestion, testOrigin } from '../../src/modules/intake/suggestions.js';
+import { EXCHANGE_MS, accessToken, audience, credentialConfig, resetTokenCache, workerJwt } from '../../src/modules/intake/vertex-auth.js';
 import { tokenHash } from '../../src/auth/session.js';
 import { assertContract } from '../support/contract.js';
 import { readWranglerConfig } from '../../scripts/predeploy.mjs';
@@ -526,8 +526,9 @@ test('suggestions are shown once (shown_at), answerable only until an agent open
   await get(opened);
   const agentDetail = await route(req('/agent/intake-detail?protocol=' + opened, { cookie: `demo_agent_session=${AGENT}` }), env, ctx.store());
   assert.equal(agentDetail.status, 200);
-  const late = await get(opened);
-  assert.deepEqual([(await late.json()).answerable], [false]);
+  const late = await (await get(opened)).json();
+  assertContract('suggestionList', late);
+  assert.deepEqual([late.status, late.answerable, late.items, late.choice], ['suggested', false, [], null], 'nothing is served once a review started');
   for (const body of [{ transaction_id: 'tx-a1' }, { none: true }]) {
     const refused = await route(req(`/intake/handoff/${opened}/suggestions/confirm`, { body }), env, ctx.store());
     assert.equal(refused.status, 409);
@@ -538,10 +539,68 @@ test('suggestions are shown once (shown_at), answerable only until an agent open
     'a charge that was not suggested is still 422');
   assert.equal(ctx.one('SELECT count(*) n FROM handoff_suggestion_choices WHERE handoff_id=?', opened).n, 0, 'nothing stored');
   assert.equal(shownAt(unseen), null);
+  // An agent opens the never-shown report first: a later GET serves nothing and does not stamp shown_at.
+  assert.equal((await route(req('/agent/intake-detail?protocol=' + unseen, { cookie: `demo_agent_session=${AGENT}` }), env, ctx.store())).status, 200);
+  const afterOpen = await (await get(unseen)).json();
+  assert.deepEqual([afterOpen.items, afterOpen.answerable], [[], false]);
+  assert.equal(shownAt(unseen), null, 'not shown, so still not_shown');
   const summary = await ctx.store().suggestionPilotSummary({ sinceMs: 0, untilMs: Date.now() + 1000 });
   assert.equal(summary.length, 1);
   const { arm, outcome, runs, shown, not_shown, confirmed, rejected, not_answered, awaiting, llm_calls } = summary[0];
   assert.deepEqual({ arm, outcome, runs, shown, not_shown, confirmed, rejected, not_answered, awaiting, llm_calls },
     { arm: 'B', outcome: 'suggested', runs: 3, shown: 2, not_shown: 1, confirmed: 0, rejected: 1, not_answered: 1, awaiting: 0, llm_calls: 3 });
+  // With the answer given, the charges are served even after the review started.
+  assert.equal((await (await get(answered)).json()).items.length, 1);
   for (const leak of ['tx-a1', 'ana', answered]) assert.ok(!JSON.stringify(summary).includes(leak), leak);
+});
+
+test('the whole token exchange (STS and IAM together) has one 5 s deadline', async t => {
+  resetTokenCache();
+  assert.equal(EXCHANGE_MS, 5000);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let reached;
+  const atIam = new Promise(r => { reached = r; });
+  // STS answers at once; IAM hangs: the deadline covers both calls, not each one.
+  const mocked = google({ iam: () => { reached(); return new Promise(() => {}); } });
+  const pending = accessToken(credentialConfig(ON), { fetcher: mocked.fetcher });
+  await atIam;
+  t.mock.timers.tick(EXCHANGE_MS - 1);
+  let settled = false; pending.then(() => { settled = true; });
+  await new Promise(r => setImmediate(r));
+  assert.equal(settled, false);
+  t.mock.timers.tick(1);
+  assert.equal(await pending, null);
+  assert.equal(mocked.calls.at(-1).init.signal.aborted, true, 'the hung call is aborted');
+});
+
+test('the outcome kinds are the same in the Worker, migration 0024 and the scorer', () => {
+  const sql = readFileSync(new URL('../../migrations/0024_ai_suggestions.sql', import.meta.url), 'utf8');
+  const check = /outcome IN \(([^)]*)\)/.exec(sql)[1].match(/'([a-z_]+)'/g).map(x => x.slice(1, -1));
+  const py = readFileSync(new URL('../../../evals/intake/episodes.py', import.meta.url), 'utf8');
+  const results = /RESULTS = \(([^)]*)\)/.exec(py)[1].match(/'([a-z_]+)'/g).map(x => x.slice(1, -1));
+  assert.deepEqual(check, OUTCOMES);
+  assert.deepEqual(results, OUTCOMES);
+});
+
+test('"none of these", like a pick, needs at least one stored suggestion', async t => {
+  const ctx = await setup(t);
+  const { receipt } = await handoff(ctx, ON_B, { ctx: false });
+  // A suggested run without stored charges (only reachable by hand): nothing to refuse, so nothing is stored.
+  ctx.db.prepare("UPDATE handoff_suggestion_runs SET outcome='suggested',finished_at=1 WHERE handoff_id=?").run(receipt.protocol);
+  const res = await route(req(`/intake/handoff/${receipt.protocol}/suggestions/confirm`, { body: { none: true } }), { DB: ctx.d1 }, ctx.store());
+  assert.equal(res.status, 404);
+  assert.equal(ctx.one('SELECT count(*) n FROM handoff_suggestion_choices').n, 0);
+});
+
+test('the sweep closes only runs of acknowledged handoffs, so each abandoned run gets its event', async t => {
+  const ctx = await setup(t);
+  const acked = await handoff(ctx, ON_B, { ctx: false });
+  const pendingReservation = await handoff(ctx, ON_B, { ctx: false });
+  const old = Date.now() - 700000;
+  ctx.db.prepare('UPDATE handoff_suggestion_runs SET created_at=?').run(old);
+  ctx.db.prepare("UPDATE intake_episodes SET state='handoff_pending' WHERE episode_id=?").run(pendingReservation.episode_id);
+  const closed = await ctx.store().closeStaleSuggestionRuns({ now: Date.now() });
+  assert.deepEqual(closed, [acked.receipt.protocol]);
+  assert.equal(ctx.one('SELECT outcome FROM handoff_suggestion_runs WHERE handoff_id=?', pendingReservation.receipt.protocol).outcome, null);
+  assert.equal(ctx.events(acked.episode_id).at(-1).result, 'abandoned');
 });

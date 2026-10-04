@@ -264,8 +264,11 @@ export async function getSuggestions(request, env, store) {
   const found = ref && await store.findCustomerSuggestions(current.customer_id, ref.protocol, ref.short, { shownAt: Date.now() });
   if (!found) return fail(404, 'Report not found');
   const status = found.outcome === null ? 'pending' : found.outcome === 'suggested' && found.items.length ? 'suggested' : 'none';
-  return json({ status, items: status === 'suggested' ? found.items.map(charge) : [], choice: found.choice,
-    chosen_transaction_id: found.chosen_transaction_id, answerable: status === 'suggested' && found.choice === null && found.answerable });
+  // The charges are served only while they can be answered, or with the answer given: once an agent opened an unanswered
+  // report, the status stays 'suggested' but nothing is shown (and shown_at is not stamped).
+  const answerable = status === 'suggested' && found.choice === null && found.answerable;
+  return json({ status, items: answerable || (status === 'suggested' && found.choice !== null) ? found.items.map(charge) : [], choice: found.choice,
+    chosen_transaction_id: found.chosen_transaction_id, answerable });
 }
 
 const validTransactionId = v => typeof v === 'string' && v.length > 0 && v.length <= 100 && v.isWellFormed() && !v.includes('\u0000');

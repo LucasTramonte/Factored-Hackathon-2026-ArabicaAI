@@ -6,7 +6,8 @@
  *
  * Invariants: the key, the JWT and both tokens are never logged or returned in an error; the access token is cached in
  * the isolate and renewed 5 minutes before it expires; a failed exchange caches nothing, so the next report tries again
- * (never a loop). Every Google call has its own 10 s bound.
+ * (never a loop). The whole exchange (STS and IAM Credentials together) has one 5 s deadline, so with the model call's 10 s
+ * the worst case stays well inside the 30 s ``waitUntil`` window.
  */
 import { SignJWT, importPKCS8 } from 'jose';
 
@@ -16,7 +17,8 @@ export const SUBJECT = 'arabica-intake-worker';
 const SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
 const JWT_SECONDS = 300;
 const RENEW_BEFORE_MS = 5 * 60 * 1000;
-const CALL_MS = 10000;
+/** One deadline for the whole token exchange (STS plus IAM Credentials). */
+export const EXCHANGE_MS = 5000;
 const ORIGINS = { sts: 'https://sts.googleapis.com', iam: 'https://iamcredentials.googleapis.com' };
 
 /** The provider audience the JWT and the exchange name. */
@@ -43,8 +45,8 @@ export async function workerJwt(config, nowMs) {
     .setAudience(audience(config.projectNumber)).setIssuedAt(iat).setExpirationTime(iat + JWT_SECONDS).sign(key);
 }
 
-async function postJson(fetcher, url, body, headers = {}) {
-  const response = await fetcher(url, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(CALL_MS),
+async function postJson(fetcher, url, body, signal, headers = {}) {
+  const response = await fetcher(url, { method: 'POST', redirect: 'manual', signal,
     headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
   if (response.status !== 200) {
     if (response.body) response.body.cancel().catch(() => {});
@@ -62,19 +64,30 @@ export async function accessToken(config, { fetcher = fetch, now = Date.now, ori
   if (cached?.key === key && cached.expiresAt - RENEW_BEFORE_MS > now()) return cached.token;
   // The account and number go into a Google path and audience, so only their documented shapes are accepted.
   if (!/^[a-z0-9-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com$/.test(config.serviceAccount) || !/^\d+$/.test(config.projectNumber)) return null;
+  const controller = new AbortController();
+  let timer;
+  const expired = new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('exchange deadline')); }, EXCHANGE_MS); });
+  expired.catch(() => {});
   try {
-    const sts = await postJson(fetcher, `${origin ?? ORIGINS.sts}/v1/token`, {
-      grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange', audience: audience(config.projectNumber), scope: SCOPE,
-      requested_token_type: 'urn:ietf:params:oauth:token-type:access_token', subject_token: await workerJwt(config, now()),
-      subject_token_type: 'urn:ietf:params:oauth:token-type:jwt' });
-    if (typeof sts?.access_token !== 'string' || !sts.access_token) return null;
-    const iam = await postJson(fetcher, `${origin ?? ORIGINS.iam}/v1/projects/-/serviceAccounts/${config.serviceAccount}:generateAccessToken`,
-      { scope: [SCOPE], lifetime: '3600s' }, { Authorization: `Bearer ${sts.access_token}` });
-    const expiresAt = Date.parse(iam?.expireTime);
-    if (typeof iam?.accessToken !== 'string' || !iam.accessToken || !Number.isFinite(expiresAt)) return null;
-    cached = { key, token: iam.accessToken, expiresAt };
-    return iam.accessToken;
+    return await Promise.race([expired, exchange(config, { fetcher, now, origin, key, signal: controller.signal })]);
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+/** STS, then IAM Credentials; caches and resolves the access token, or null on any refusal. Throws on network or abort. */
+async function exchange(config, { fetcher, now, origin, key, signal }) {
+  const sts = await postJson(fetcher, `${origin ?? ORIGINS.sts}/v1/token`, {
+    grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange', audience: audience(config.projectNumber), scope: SCOPE,
+    requested_token_type: 'urn:ietf:params:oauth:token-type:access_token', subject_token: await workerJwt(config, now()),
+    subject_token_type: 'urn:ietf:params:oauth:token-type:jwt' }, signal);
+  if (typeof sts?.access_token !== 'string' || !sts.access_token) return null;
+  const iam = await postJson(fetcher, `${origin ?? ORIGINS.iam}/v1/projects/-/serviceAccounts/${config.serviceAccount}:generateAccessToken`,
+    { scope: [SCOPE], lifetime: '3600s' }, signal, { Authorization: `Bearer ${sts.access_token}` });
+  const expiresAt = Date.parse(iam?.expireTime);
+  if (typeof iam?.accessToken !== 'string' || !iam.accessToken || !Number.isFinite(expiresAt)) return null;
+  cached = { key, token: iam.accessToken, expiresAt };
+  return iam.accessToken;
 }

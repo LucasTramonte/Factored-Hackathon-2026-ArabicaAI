@@ -92,7 +92,8 @@ export async function route(request, env, store, ctx) {
     await store.ping();
     return json({ status: 'ok' });
   }
-  const methods = (pathname.includes('{') ? undefined : API_ROUTES[pathname]) ?? API_ROUTES[templateOf(pathname)];
+  // A URL path never holds a literal brace (it arrives as %7B), so a template key can only be reached through its pattern.
+  const methods = API_ROUTES[pathname] ?? API_ROUTES[templateOf(pathname)];
   if (methods || API_NAMESPACES.has(pathname) || API_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
     // Public API paths cost a D1 read or a JWKS check per cookie or bearer, so they are limited per IP (ADR-004).
     // A missing binding (unit tests) allows the request.

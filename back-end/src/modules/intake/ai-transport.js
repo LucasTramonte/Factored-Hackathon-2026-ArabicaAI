@@ -129,7 +129,10 @@ function content(payload) {
   return text;
 }
 
-/** A provider number Python reads as ``int`` (an integer literal) stays a number; any other number never counts as one. */
+/**
+ * A provider number Python reads as ``int`` (an integer literal) stays a number; any other number never counts as one. A
+ * runtime without ``context.source`` turns every count into "unavailable": the safe direction, never free.
+ */
 const FLOAT = Symbol('float');
 const providerJson = text => JSON.parse(text, (key, value, context) =>
   typeof value === 'number' && !/^-?\d+$/.test(context?.source ?? '') ? FLOAT : value);
@@ -216,5 +219,4 @@ export async function extract({ url, message, language, asOf = null, token, fetc
       if (attempt + 1 === ATTEMPTS) return { kind: 'invalid_output', usage };
     }
   }
-  return { kind: 'invalid_output', usage }; // unreachable: the loop returns
 }

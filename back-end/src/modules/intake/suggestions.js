@@ -15,12 +15,13 @@
  */
 import { VOCABULARY, extract, registeredVersion, vertexUrl } from './ai-transport.js';
 import { accessToken, credentialConfig } from './vertex-auth.js';
-import { MAX_SUGGESTIONS, suggest } from './matcher.js';
+import { suggest } from './matcher.js';
 
 /** ``openai/gpt-oss-20b-maas`` leaves Vertex AI on this date (UTC); from that day on the Worker never calls it. */
 export const DEFAULT_RETIRES = '2026-10-21';
 /** Extractions per UTC day (each at most two model calls) unless ``INTAKE_AI_DAILY_CAP`` says otherwise. */
 export const DEFAULT_DAILY_CAP = 200;
+/** Every outcome kind a run records; ``ai-suggestions.test.js`` keeps it equal to migration 0024's CHECK and ``episodes.py``. */
 export const OUTCOMES = ['off', 'capped', 'retired', 'auth_error', 'timeout', 'provider_error', 'config_error', 'invalid_output',
   'no_match', 'ambiguous', 'suggested', 'abandoned'];
 const ZERO = { llm_calls: 0, known_input_tokens: 0, known_output_tokens: 0, usage_unavailable_calls: 0 };
@@ -70,13 +71,12 @@ function record(t) {
 }
 
 /** The outcome and suggested ids for ``extracted`` against the customer's own purchases, with the ``as_of`` sent to the model. */
-export function suggestionFor(extracted, { country, purchases }, asOf = null) {
+function suggestionFor(extracted, { country, purchases }, asOf = null) {
   const records = purchases.map(record);
   // systems.customers_from: without card data, the customer's cards are the currencies of their own purchases.
   const cards = [...new Set(records.map(t => t.currency))].map(currency => ({ product_type: null, last4: null, currency }));
   try {
-    const { outcome, ids } = suggest({ ...extracted, as_of: asOf }, { country, cards }, records);
-    return { outcome, ids: ids.slice(0, MAX_SUGGESTIONS) };
+    return suggest({ ...extracted, as_of: asOf }, { country, cards }, records); // at most MAX_SUGGESTIONS ids
   } catch {
     return { outcome: 'no_match', ids: [] }; // a purchase the policy cannot read: suggest nothing
   }

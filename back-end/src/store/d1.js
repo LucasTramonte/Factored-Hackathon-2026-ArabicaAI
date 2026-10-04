@@ -54,21 +54,21 @@ const STILL_OPEN = "oh.status<>'closed' AND (oe.state='complete_handoff' OR (oe.
 /** A report by public protocol (the case id of a complete one, else the handoff id) or by short reference ('' never matches). */
 const REPORT_REF = '(h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?) OR h.reference_short=?)';
 /** A suggestion run still pending this long (ms) is closed as ``abandoned`` by the idle sweep. */
-export const SUGGESTION_STALE_MS = 600000;
+const SUGGESTION_STALE_MS = 600000;
 /**
  * One ``suggestion_recorded`` event per run whose outcome is set, after the episode's ``intake_ended`` (references and
  * counts only); runs are chosen by ``where`` (aliases h, e, r), and an episode that already has the event gets none.
  */
 const SUGGESTION_EVENT_NEXT = '(SELECT COALESCE(MAX(seq),-1)+1 FROM intake_events WHERE episode_id=e.episode_id)';
-const suggestionEvent = where => 'INSERT INTO intake_events(episode_id,seq,event_json) SELECT e.episode_id,' + SUGGESTION_EVENT_NEXT
+const suggestionEvent = (where, result = 'r.outcome') => 'INSERT INTO intake_events(episode_id,seq,event_json) SELECT e.episode_id,' + SUGGESTION_EVENT_NEXT
   + ",json_object('event','suggestion_recorded','version','2','case_id',e.episode_id,'ts',?,'seq'," + SUGGESTION_EVENT_NEXT
   + ",'session_ref',e.session_ref,'language',e.language,'model_version',COALESCE(json_extract(e.usage_json,'$.model_version'),'guided-0.1'),"
-  + "'case_ref',h.handoff_id,'arm',r.arm,'result',r.outcome,'producer',r.producer,'llm_calls',r.llm_calls,'known_input_tokens',r.known_input_tokens,"
+  + "'case_ref',h.handoff_id,'arm',r.arm,'result'," + result + ",'producer',r.producer,'llm_calls',r.llm_calls,'known_input_tokens',r.known_input_tokens,"
   + "'known_output_tokens',r.known_output_tokens,'usage_unavailable_calls',r.usage_unavailable_calls,"
   + "'injection_flagged',json(CASE r.injection_flagged WHEN 1 THEN 'true' WHEN 0 THEN 'false' ELSE 'null' END),"
   + "'suggestions',(SELECT COUNT(*) FROM handoff_suggestions WHERE handoff_id=h.handoff_id)) "
   + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) JOIN handoff_suggestion_runs r ON r.handoff_id=h.handoff_id '
-  + "WHERE " + where + " AND e.state='incomplete_handoff' AND r.outcome IS NOT NULL "
+  + "WHERE " + where + " AND e.state='incomplete_handoff' "
   + "AND NOT EXISTS(SELECT 1 FROM intake_events v WHERE v.episode_id=e.episode_id AND json_extract(v.event_json,'$.event')='suggestion_recorded')";
 /** The suggestion rule reads at most this many of the customer's newest purchases (ADR-004, 2026-10-04 note). */
 export const SUGGESTION_PURCHASES = 200;
@@ -681,10 +681,16 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      */
     closeStaleSuggestionRuns: async ({ now, limit = 100 }) => {
       if (!Number.isSafeInteger(now) || now < 0 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid closure bounds');
-      const [closed] = await batch([
-        ["UPDATE handoff_suggestion_runs SET outcome='abandoned',finished_at=? WHERE handoff_id IN (SELECT handoff_id FROM handoff_suggestion_runs "
-          + 'WHERE outcome IS NULL AND created_at<=? ORDER BY created_at LIMIT ?) RETURNING handoff_id', now, now - SUGGESTION_STALE_MS, limit],
-        [suggestionEvent("r.outcome='abandoned' AND r.finished_at=?"), new Date(now).toISOString(), now]]);
+      // Only runs whose handoff was acknowledged (episode incomplete_handoff), so every abandoned run gets its event; a run
+      // behind a reservation still pending stays pending until the customer's retry acknowledges it. Both statements pick
+      // the same page through the pending-run partial index: the events first (result 'abandoned'), then the update.
+      const stale = 'r.handoff_id IN (SELECT p.handoff_id FROM handoff_suggestion_runs p JOIN intake_handoffs ph ON ph.handoff_id=p.handoff_id '
+        + "JOIN intake_episodes pe ON pe.episode_id=ph.episode_id WHERE p.outcome IS NULL AND p.created_at<=? AND pe.state='incomplete_handoff' "
+        + 'ORDER BY p.created_at LIMIT ?)';
+      const [, closed] = await batch([
+        [suggestionEvent(stale, "'abandoned'"), new Date(now).toISOString(), now - SUGGESTION_STALE_MS, limit],
+        ["UPDATE handoff_suggestion_runs AS r SET outcome='abandoned',finished_at=? WHERE " + stale + ' RETURNING handoff_id',
+          now, now - SUGGESTION_STALE_MS, limit]]);
       return closed.results.map(r => r.handoff_id);
     },
     /**
@@ -714,7 +720,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) JOIN handoff_suggestion_runs r ON r.handoff_id=h.handoff_id '
           + "JOIN transactions t ON t.customer_id=e.customer_id AND t.transaction_id=? WHERE h.handoff_id=? AND r.outcome='suggested' "
           + 'AND r.finished_at=? ON CONFLICT DO NOTHING', index + 1, now, transactionId, handoffId, now]),
-      [suggestionEvent('h.handoff_id=?'), new Date(now).toISOString(), handoffId]
+      [suggestionEvent('h.handoff_id=? AND r.outcome IS NOT NULL'), new Date(now).toISOString(), handoffId]
     ]),
     /**
      * The session customer's suggestions for one own acknowledged report (``protocol`` or ``short`` reference, the other
@@ -736,7 +742,9 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         + 'LEFT JOIN transactions t ON t.transaction_id=s.transaction_id AND t.customer_id=e.customer_id '
         + "WHERE e.customer_id=? AND e.state=h.kind||'_handoff' AND " + REPORT_REF + ' ORDER BY s.rank LIMIT 3', ...params];
       const rows = shownAt === null ? await all(...read) : (await batch([
-        ["UPDATE handoff_suggestion_runs SET shown_at=? WHERE handoff_id=(SELECT h.handoff_id " + own + ") AND outcome='suggested' AND shown_at IS NULL "
+        // Stamped only while the charges are actually served: suggested, and the report still answerable.
+        ["UPDATE handoff_suggestion_runs SET shown_at=? WHERE handoff_id=(SELECT h.handoff_id " + own + " AND h.first_opened_at IS NULL AND h.status='received') "
+          + "AND outcome='suggested' AND shown_at IS NULL "
           + 'AND EXISTS(SELECT 1 FROM handoff_suggestions WHERE handoff_id=handoff_suggestion_runs.handoff_id)', shownAt, ...params],
         read]))[1].results;
       if (!rows.length) return null;
@@ -761,7 +769,8 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       const [, stored] = await batch([
         ['INSERT INTO handoff_suggestion_choices(handoff_id,choice,transaction_id,chosen_at) SELECT r.handoff_id,?,?,? FROM handoff_suggestion_runs r '
           + "WHERE r.handoff_id=" + own(true) + " AND r.outcome='suggested' "
-          + 'AND (? IS NULL OR EXISTS(SELECT 1 FROM handoff_suggestions s WHERE s.handoff_id=r.handoff_id AND s.transaction_id=?)) '
+          // A pick must be one of the suggested charges; "none of these" needs at least one suggestion to refuse.
+          + 'AND EXISTS(SELECT 1 FROM handoff_suggestions s WHERE s.handoff_id=r.handoff_id AND (? IS NULL OR s.transaction_id=?)) '
           + 'ON CONFLICT(handoff_id) DO NOTHING', transactionId ? 'confirmed' : 'none', transactionId, now, ...ownParams, transactionId, transactionId],
         ['SELECT choice,transaction_id,chosen_at FROM handoff_suggestion_choices WHERE handoff_id=' + own(false), ...ownParams]]);
       return stored.results[0] ?? null;

@@ -115,6 +115,12 @@ const CEILING = {
   suggestionDetail: [5, 83, 1, 3],
   suggestionMark: [3, 7, 2, 2],
   suggestionRun: [8, 31, 9, 5],
+  // The idle sweep's suggestion part (ADR-012): one atomic batch per page of at most 100 stale runs of acknowledged
+  // handoffs, both statements picking the page through the pending-run partial index: one event per run (its episode's
+  // next seq and a check that it has none yet: about 23 reads a run), then the update. Nothing due reads 7 rows.
+  // Measured on 100 fixture runs, no margin (ADR-004, 2026-10-04 note).
+  suggestionSweepPage: [2, 2300, 300, 1],
+  suggestionSweepNoop: [2, 7, 0, 1],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
   idleSweepPage: [2, 1210, 300, 1],
   idleSweepNoop: [2, 10, 0, 1],
@@ -434,4 +440,32 @@ test('AI suggestion routes and the after-response run stay within their D1 budge
     await close(store, reserved.handoff_id);
   });
   console.log('D1_AI_SUGGESTIONS ' + JSON.stringify(measured));
+});
+
+test('the idle sweep closes a page of 100 stale suggestion runs, and a sweep with nothing due, within their budgets', async () => {
+  const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
+  // Bounded fixture: 100 acknowledged incomplete handoffs with details whose runs were never started, 11 minutes old.
+  const now = Date.now(); const old = now - 660000; const sessionHash = await tokenHash('suggestion-sweep-' + crypto.randomUUID());
+  const details = 'Não lembro de nada, só que foi cobrado.';
+  const payloadHash = await tokenHash(JSON.stringify(['incomplete', null, details]));
+  const measured = {};
+  await withIntakeStore({ config: config() }, async store => {
+    await store.rotateSession({ now, oldHash: null, newHash: sessionHash, actor: 'customer', customerId: 'demo-bruno', expiresAt: now + 3600000, requestId: 'suggestion-sweep' });
+    const reserve = async () => {
+      const { episode } = await store.startIntake({ customerId: 'demo-bruno', language: 'pt', statement: 'Não reconheço esta cobrança.', reason: 'not_mine', key: crypto.randomUUID(), now: old, expiresAt: now + 3600000 });
+      await store.persistIntakeHandoff({ customerId: 'demo-bruno', episodeId: episode.episode_id, turnKey: crypto.randomUUID(), payloadHash, sessionHash, details,
+        completeCase: null, kind: 'incomplete', evidence: { transaction: null, tool_status: 'ok' }, actions: [], questions: ['matching_transaction', 'customer_confirmation'],
+        usage: { tool_calls: 0, operation_duration_ms: 0 }, now: old, suggestionArm: 'B' });
+      const receipt = await store.readIntakeReceipt('demo-bruno', episode.episode_id, { sessionHash, now });
+      assert.equal((await store.finishIntakeHandoff({ customerId: 'demo-bruno', episode, receipt, sessionHash, now, operationDuration: 0, toolCalls: 0 })).acknowledged, true);
+    };
+    for (let i = 0; i < 100; i += 20) await Promise.all(Array.from({ length: 20 }, reserve));
+    const page = await storeCall(store, () => store.closeStaleSuggestionRuns({ now, limit: 100 }));
+    assert.equal(page.result.length, 100, 'exactly the fixture page was due');
+    measured.page = within('suggestionSweepPage', page.metrics);
+    const noop = await storeCall(store, () => store.closeStaleSuggestionRuns({ now, limit: 100 }));
+    assert.equal(noop.result.length, 0);
+    measured.noop = within('suggestionSweepNoop', noop.metrics);
+  });
+  console.log('D1_SUGGESTION_SWEEP ' + JSON.stringify(measured));
 });
