@@ -40,6 +40,9 @@ const CEILING = {
   // session, then the new one twice), which adds 4 reads over a plain rotation. Measured, no margin (ADR-004).
   adminCustomers: [2, 17, 0, 2],
   adminActAs: [8, 9, 8, 4],
+  // GET /auth/me (ADR-013 phase 0), one customer cookie: its session read and the context-card read (none for this
+  // cohort customer); no write. A second (agent) cookie adds one session read. Measured, no margin.
+  authMe: [2, 1, 0, 2],
   // The CHECK on intake_episodes.reason (migration 0016, ADR-010) adds one counted read to each statement that writes an
   // episode row, as 0004's CHECKs did: start 8 -> 9 and replay 6 -> 7 rows read, measured with and without it (ADR-004).
   // Migration 0018's index intake_episodes_owner_recent adds one write to the episode insert (11 -> 12).
@@ -144,6 +147,9 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
   assert.equal(customers.status, 200); measured.adminCustomers = within('adminCustomers', customers.metrics);
   const actAs = await admin.call('/admin/act-as', { customer_id: 'demo-ana' });
   assert.equal(actAs.status, 200); measured.adminActAs = within('adminActAs', actAs.metrics);
+  // ADR-013 phase 0: a reload with a live customer session (the acting admin's) restores it.
+  const restored = await admin.call('/auth/me');
+  assert.equal(restored.status, 200); measured.authMe = within('authMe', restored.metrics);
   const episode = sum(measured, ['login', 'list', 'create']);
   console.log('D1_BUDGET ' + JSON.stringify({ per_request: measured, customer_episode: episode }));
 });

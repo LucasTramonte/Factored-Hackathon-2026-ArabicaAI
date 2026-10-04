@@ -36,6 +36,23 @@ describe('CustomerPage', () => {
     page = TestBed.createComponent(CustomerPage).componentInstance;
   });
 
+  it('a reload restores a live customer session from the cookie and goes home; without one the sign-in stays (ADR-013)', async () => {
+    const me = jasmine.createSpy('me').and.resolveTo({ customer: { customer_id: 'demo-ana', roles: ['admin'], context_card: null }, agent: false });
+    Object.assign(service, { me });
+    const p = TestBed.createComponent(CustomerPage).componentInstance;
+    await p.ngOnInit();
+    await new Promise(r => setTimeout(r));
+    expect(me).toHaveBeenCalledTimes(1);
+    expect([p.client(), p.step(), p.roles()]).toEqual(['demo-ana', 'home', ['admin']]);
+    expect(service.signIn).not.toHaveBeenCalled();
+    service.client.set(''); service.roles.set([]);
+    me.and.resolveTo({ customer: null, agent: false });
+    const fresh = TestBed.createComponent(CustomerPage).componentInstance;
+    await fresh.ngOnInit();
+    await new Promise(r => setTimeout(r));
+    expect([fresh.client(), fresh.step()]).toEqual(['', 'intro']);
+  });
+
   it('starts on the intro, moves to sign-in on start, and to the home once charges are loaded', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     const p = fixture.componentInstance;

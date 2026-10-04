@@ -196,6 +196,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     // Outside the zone so the app (and tests) can be stable while it waits; the signal still schedules the render.
     this.introTimer = this.zone.runOutsideAngular(() => setTimeout(() => this.introDone.set(true), 6800)); // must outlast the intro word animation delays in styles.css
     if (this.client()) void this.resume();
+    else void this.restore();
     if (!this.demoPicker) return;
     this.identitiesLoading.set(true);
     try {
@@ -368,6 +369,24 @@ export class CustomerPage implements OnInit, OnDestroy {
     const status = e instanceof ApiError ? e.status : -1;
     const key = status === 401 ? on401 : status === 403 ? 'errNotEnrolled' : status === 429 ? 'errTooMany' : null;
     return key ? this.t()[key] : errorText(this.t(), e);
+  }
+
+  /**
+   * After a reload the tab has no state, but the session cookie may still be live (ADR-013, phase 0): restore it and go
+   * home, as a sign-in would. Nothing happens without a live session, or if a sign-in started meanwhile.
+   */
+  private async restore(): Promise<void> {
+    let state;
+    try {
+      state = await this.service.me();
+    } catch {
+      return; // no session information: the sign-in screen stays
+    }
+    if (!state?.customer || this.client() || this.busy()) return;
+    this.card.set(state.customer.context_card ?? null);
+    this.client.set(state.customer.customer_id);
+    this.roles.set(state.customer.roles);
+    await this.resume();
   }
 
   /** Back from another in-app view in this tab: show the same customer's home again; the cookie still decides access. */

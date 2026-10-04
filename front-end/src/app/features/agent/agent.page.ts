@@ -63,6 +63,17 @@ export class AgentPage {
     effect(() => title.setTitle(`ArabicaAI · ${this.t().agentTitle}`));
     // An agent session is already open in this tab (an admin signed in on the customer view, or came back here): load the queue.
     if (this.roles().length) void this.refresh();
+    else void this.restore();
+  }
+
+  /** After a reload, a live agent cookie restores the queue (ADR-013, phase 0); otherwise the sign-in stays. */
+  private async restore(): Promise<void> {
+    try {
+      const state = await this.customer.me();
+      if (!state?.agent || this.roles().length || this.busy()) return;
+      this.roles.set(state.customer?.roles.includes('admin') ? ['admin'] : ['agent']);
+      await this.refresh();
+    } catch { /* no session information: the sign-in stays */ }
   }
 
   /** A server check or open-question code in the interface language; the raw code stays visible beside it. */
