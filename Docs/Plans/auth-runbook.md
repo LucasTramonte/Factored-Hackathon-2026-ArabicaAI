@@ -58,7 +58,7 @@ Idempotent. It creates or finds the pool `arabicaai-demo`, the immutable attribu
 | `COGNITO_REGION`, `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` | `vars` in `back-end/wrangler.jsonc` (the values `setup.sh` printed) | Public: they identify the pool and client and grant nothing |
 | `SES_REGION` | `vars` | Public |
 | `SES_FROM` (`ArabicaAI demo <address>`) | `npx wrangler secret put SES_FROM` | Secret, because it is a person's address; the deploy guard refuses it in `vars`. Its domain must not publish DMARC `p=reject` unless the domain itself is verified in SES with DKIM |
-| `APP_URL` | `vars` | Public: the deployed origin, used by the notification emails for the logo image and the "see my reports" button |
+| `APP_URL` | `vars` | Public: the deployed origin, the target of the notification emails' "see my reports" button (the logo is embedded in the message, not fetched) |
 | `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | `npx wrangler secret put …` | Secret ([SES runbook](intake-demo.md#notification-email-ses)) |
 | `EMAIL_KEY` | `npx wrangler secret put EMAIL_KEY` (`openssl rand -base64 32`) | Secret: encrypts stored notification addresses |
 | `DEMO_PICKER`, `COGNITO_TEST_JWKS` | `back-end/.dev.vars` only | Local only; the deploy guard refuses them in `vars` |

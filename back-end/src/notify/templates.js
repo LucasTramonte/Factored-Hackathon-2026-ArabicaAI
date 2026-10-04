@@ -60,6 +60,8 @@ export const STATUS_TEXT = {
     en: 'Review finished; the bank will contact you through its usual channel' }
 };
 
+import { LOGO_CID } from './logo.js';
+
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 /** Design-system tokens (light theme, `front-end/src/styles.css`); email clients need them inline. */
@@ -70,12 +72,13 @@ const MONO = "'Geist Mono', SFMono-Regular, Menlo, Consolas, monospace";
 /**
  * The HTML version of a rendered email: logo header, body paragraphs, the reference in a mono box, the urgent note in a
  * warning box, a button to the app and the demo disclaimer. Table layout and inline styles only, so every client renders
- * it; no ``<style>`` block, so the markup carries no braces. ``appUrl`` (optional) hosts the logo and the button target;
- * without it the header is the wordmark alone and there is no button.
+ * it; no ``<style>`` block, so the markup carries no braces. The logo is the inline attachment ``cid:arabicaai-logo``
+ * (``logo.js``), so it shows without any hosted file; ``appUrl`` (optional) is only the button target, and without it
+ * there is no button.
  */
 function html({ lang, subject, paragraphs, reference, urgent, appUrl }) {
   const base = appUrl ? appUrl.replace(/\/+$/, '') : null;
-  const logo = base ? `<img src="${esc(base)}/arabicaai-logo.png" width="32" height="32" alt="" style="display:block;width:32px;height:32px;border-radius:16px">` : '';
+  const logo = `<img src="cid:${LOGO_CID}" width="32" height="32" alt="" style="display:block;width:32px;height:32px;border-radius:16px">`;
   const p = text => `<p style="margin:0 0 14px;font:16px/24px ${FONT};color:${C.ink}">${esc(text)}</p>`;
   const refBox = `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 20px"><tr><td style="padding:12px 16px;border:1px solid ${C.line};border-radius:12px;background:${C.surface}">`
     + `<div style="font:12px/16px ${FONT};color:${C.muted};text-transform:uppercase;letter-spacing:.04em">${REFERENCE_LABEL[lang]}</div>`
@@ -87,7 +90,7 @@ function html({ lang, subject, paragraphs, reference, urgent, appUrl }) {
     + `<body style="margin:0;padding:0;background:${C.surface}">`
     + `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${C.surface}"><tr><td align="center" style="padding:32px 16px">`
     + `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;background:${C.card};border:1px solid ${C.line};border-radius:16px">`
-    + `<tr><td style="padding:24px 28px 8px"><table role="presentation" cellpadding="0" cellspacing="0"><tr>${logo ? `<td style="padding-right:10px">${logo}</td>` : ''}<td style="font:600 18px/24px ${FONT};color:${C.ink}">Arabica<span style="font-weight:400">AI</span></td></tr></table></td></tr>`
+    + `<tr><td style="padding:24px 28px 8px"><table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="padding-right:10px">${logo}</td><td style="font:600 18px/24px ${FONT};color:${C.ink}">Arabica<span style="font-weight:400">AI</span></td></tr></table></td></tr>`
     + `<tr><td style="padding:12px 28px 4px"><h1 style="margin:0 0 16px;font:600 22px/30px ${FONT};color:${C.ink}">${esc(subject)}</h1>${paragraphs.map(p).join('')}${refBox}${urgentBox}${button}`
     + `<p style="margin:0 0 20px;font:600 14px/22px ${FONT};color:${C.ink}">${esc(noRefund)}</p></td></tr>`
     + `<tr><td style="padding:16px 28px 24px;border-top:1px solid ${C.line};font:12px/18px ${FONT};color:${C.muted}">${esc(disclaimer)}</td></tr>`
