@@ -1,6 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/http/api.service';
 import { LangService } from '../../shared/i18n/lang.service';
+import type { SessionState } from '../../shared/models/intake.model';
 import { ContextCard, CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeReceipt, IntakeStart, IntakeStartBody,
   ReportList, Role, TransactionList } from '../../shared/models/intake.model';
 
@@ -26,6 +27,11 @@ export class CustomerService {
   /** Exchange a verified Cognito ID token for the session cookie. POST with an empty JSON body: the token travels only in the header. */
   signInWithToken(idToken: string): Promise<CustomerSession> {
     return this.api.request<CustomerSession>('/auth/session', {}, { Authorization: 'Bearer ' + idToken });
+  }
+
+  /** The browser's live sessions (ADR-013, phase 0): a reload restores the signed-in state from the cookies. */
+  me(): Promise<SessionState> {
+    return this.api.request<SessionState>('/auth/me');
   }
 
   /** Admins only (ADR-007, decision 10): every customer an admin may act as; the server checks the session's admin mark. */
@@ -62,7 +68,7 @@ export class CustomerService {
     return this.api.request('/reports/feedback', { protocol, easy });
   }
 
-  /** Ask for a status email about one of the customer's reports (202; 409 no email on file; 429 sent recently). */
+  /** Queue a status email for one own report (202; 409 no email; 429 another request is queued or recently accepted). */
   requestUpdate(protocol: string): Promise<{ queued: true }> {
     return this.api.request<{ queued: true }>('/reports/update', { protocol });
   }

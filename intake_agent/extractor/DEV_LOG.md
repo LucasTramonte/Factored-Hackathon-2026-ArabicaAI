@@ -126,3 +126,84 @@ The same command as attempt 1, from `main` at `3ca23e9`, started 3 h 21 min afte
 - **Tokens:** 337,010 input and 43,719 output over 160 calls, 2,106 and 273 per call, in line with iteration 4. At the published rates that is about $0.0005 per call.
 - **Recomputed independently** from the per-execution `latency_ms` with `evals.intake.stats.quantile_interval`; the values match the runner's pooled `repetition: "all"` row.
 
+## Vertex AI reasoning-level research (2026-10-03): stopped, no documented default
+
+Per the 2026-10-03 (later) revision (ADR-006 amendment 7), the orchestrator reports the latency trigger fired on Vertex AI at the provider default (`openai/gpt-oss-20b-maas`, pooled p95 interval upper bound 3,079 ms, quality 180/180, 0 unsafe). That revision says the fix is to lower the documented `reasoning` level, and step 1 is to read Google's current documentation and record the exact request field and its documented default, "don't guess; if it isn't documented, stop and report."
+
+Pages read on 2026-10-03:
+- https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/capabilities/thinking ("Thinking for open models", last-updated banner not shown but fetched this date). Its "GPT OSS" section: *"For GPT OSS models, thinking text is in the `reasoning_content` field, and normal response text is in the `content` field. These models also support the `reasoning_effort` parameter."* Its one example request sets `"reasoning_effort": "high"` against `model: "openai/gpt-oss-120b-maas"` (the 120B model, not the 20B one this project uses). The page documents no list of accepted values and no default for GPT OSS; it does state defaults for other model families on the same page (for example DeepSeek-V3.1/V3.2: "By default, reasoning is off").
+- https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/openai/gpt-oss-20b ("OpenAI gpt-oss 20B", Last updated 2026-10-01 UTC). Its Managed API (MaaS) specifications table lists **`Thinking: Not supported`** for `gpt-oss-20b-maas`. The same table on the gpt-oss-120b page (https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/openai/gpt-oss-120b) also lists `Thinking: Not supported`, even though that is the model the thinking-page example uses. This page also carries a deprecation notice: *"As of July 21, 2026, the `gpt-oss-20b-maas` endpoint is deprecated and will be retired on October 21, 2026."*
+- https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/openai and https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/use-open-models (model catalogue/overview pages): no mention of `reasoning_effort`, accepted values or a default for either gpt-oss size.
+- https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/openai (general OpenAI-compatibility page): documents `reasoning_effort` with three levels ("low", "medium", "high") and "not specifying a reasoning effort at all is equivalent to not specifying a thinking budget" — but this is written against Gemini models (`google/gemini-3.5-flash` in its example), not gpt-oss, and the page does not say the same default applies to gpt-oss.
+
+**Finding:** the request field name is documented (`reasoning_effort`), but no page documents its default for `gpt-oss-20b-maas`, and the model's own capability table says `Thinking: Not supported` for this exact model id, which conflicts with the generic "Thinking for open models" guide that demonstrates the parameter only on the 120B id. I can't tell from the documentation whether `reasoning_effort` is honoured by `gpt-oss-20b-maas` at all, and I won't guess a default or treat the 120B example as authoritative for the 20B id that this project calls. Per the revision's own rule ("don't guess; if it isn't documented, stop and report"), **I stop here**: no change was made to `workers_ai.build_body`, no `reasoning_effort` assertion was added to `test_workers_ai.py` / `test_vertex.py`, and the 10-repetition development run was not executed, since amendment 7 only authorises a reasoning-level change once this is documented. Resolving this needs the orchestrator to either point to a page that states the default (and confirms it applies to the 20B id), or decide this model doesn't support the knob and choose another path.
+
+
+## Vertex AI reasoning level `low`, development protocol (2026-10-03): the instability trigger fires
+
+Per the 2026-10-03 (latest) revision and ADR-006 amendment 8, which supplies the sources that my earlier stop asked for.
+
+### Sources, read again by me on 2026-10-03
+
+- **Request field:** `reasoning_effort` in the OpenAI-compatible Chat Completions body. Google's "Thinking for open models" page (https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/capabilities/thinking, which now redirects to https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/capabilities/thinking; "Last updated 2026-10-01 UTC"), GPT OSS section: *"For GPT OSS models, thinking text is in the `reasoning_content` field, and normal response text is in the `content` field. These models also support the `reasoning_effort` parameter."* Its example sets `"reasoning_effort": "high"` on `openai/gpt-oss-120b-maas`.
+- **Levels:** OpenAI's gpt-oss-20b model card (https://huggingface.co/openai/gpt-oss-20b, read 2026-10-03) lists low ("Fast responses for general dialogue"), medium ("Balanced speed and detail") and high ("Deep and detailed analysis"). The card itself states no default.
+- **Default:** OpenAI's Harmony format guide (https://developers.openai.com/cookbook/articles/openai-harmony, read 2026-10-03): *"By default, the model will do medium level reasoning."*
+- **On this endpoint:** amendment 8's content-free probe (Lucas's session) showed that omitting the field behaves as `medium` and that `low` is accepted. I didn't repeat the probe.
+
+### Change
+
+`workers_ai.build_body` now sends `"reasoning_effort": "low"` (`REASONING_EFFORT`), the lowest documented level, explicitly. `vertex.build_body` reuses it. `MAX_TOKENS` (2048), temperature 0, the 10 s deadline and the single retry are unchanged. The prompt and parsing are unchanged. Asserted in `test_workers_ai.py` (`test_request_body_contains_only_the_allowed_inputs`) and `test_vertex.py` (`test_same_body_as_workers_ai_plus_the_model_id_and_a_bearer_key`). `.venv/bin/python -m unittest intake_agent.extractor.test_workers_ai intake_agent.extractor.test_vertex intake_agent.extractor.test_bedrock`: 52 tests, OK. Bedrock reuses the same body; its offline tests still pass.
+
+### Run
+
+One run, 2026-10-03 22:04:41–22:08:22 UTC, from `b564411` plus this change, `VERTEX_LOCATION=global`:
+
+```sh
+python -m evals.intake.run --split development --repetitions 10 \
+  --system extractor-v1=intake_agent.extractor.vertex:extract \
+  --output data_foundation/runs/latency-v1-low-vertex/results.json
+```
+
+Raw results stay in the ignored `data_foundation/runs/latency-v1-low-vertex/`. Corpus SHA-256 `3c2a2832…`, runner code SHA-256 `4f2d5f0c…` (from the file's provenance).
+
+| Repetition | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | Majority | Pooled |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| extractor-v1 correct (of 18) | 18 | 18 | 17 | 18 | 18 | 18 | 18 | 17 | 17 | 18 | **18/18** | 177/180 |
+| Errors | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 1 | 0 | | 2 |
+
+The checklist gets 16/18 and the always-handoff reference 4/18, both with 0 unsafe.
+
+The three wrong executions:
+- `missing_currency-es`, repetition 3: **clarify** instead of confirm `EVAL-A1`. The call returned a schema-valid extraction on its first attempt, so this is a reading that differed from the other 9 repetitions. The other 9 confirmed.
+- `confirmed_single-pt`, repetition 8, and `no_match-pt`, repetition 9: **technical handoff** after a service failure (`ConnectionError`, in 846 ms and 670 ms, with no usage returned). These are not timeouts or invalid output. The harness doesn't keep the HTTP status, so I can't say if they were a 429, a 5xx or an error envelope.
+
+Latency, decided on the 160 model-calling executions (amendment 1):
+
+| Measure | The 160 model calls (decision sample) | All 180 executions (supplemental, runner's pooled row) |
+|---|---|---|
+| p50 | 1,392 ms | 1,293 ms |
+| p95 | 1,890 ms | 1,887 ms |
+| 95% interval for p95 | 1,822–2,342 ms | 1,800–2,244 ms |
+| Slowest | 2,408 ms | |
+| Over 3 s / 10 s | 0 / 0 | |
+
+Tokens: 332,952 input and 20,570 output over 158 returned calls, about 2,107 and 130 per call (273 at `medium` in Workers AI attempt 2). Input tokens are identical in every repetition (33,717 each, 31,608 in the two with a service failure), so no call needed the retry. At Vertex's published $0.07 / M input and $0.25 / M output for gpt-oss-20b (https://cloud.google.com/vertex-ai/generative-ai/pricing, which now redirects to https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing, read 2026-10-03), that is about $0.00018 per call and $0.029 for the run. The run's 2 calls without usage are unmeasured, not free.
+
+### ADR-006 triggers
+
+| Trigger | Result | Status |
+|---|---|---|
+| < 16/18 correct (majority) | 18/18 | ok |
+| Any unsafe outcome | 0 of 180 | ok |
+| < 95% schema-valid outputs | 158/158 returned calls (100%), 158/160 counting the two service failures (98.8%) | ok |
+| p95 interval upper bound > 3,000 ms | 2,342 ms on the 160 model calls (2,244 ms pooled) | ok |
+| > 10% of cases changing answer | **3/18 (16.7%)** across the 10 repetitions: `missing_currency-es` (the model's reading), `confirmed_single-pt` and `no_match-pt` (service failures) | **FIRES** |
+
+The instability trigger is written for 3 repetitions, and this protocol ran 10. ADR-006 doesn't say how to apply it to 10, so I apply the conservative reading, as I did for the p95 in iteration 4. Every other reading I checked also fires or depends on a choice that isn't mine to make:
+- Over the 10 repetitions: 3/18 (16.7%), fires.
+- In the back-to-back 3-repetition windows 1–3, 4–6 and 7–9: 1/18, 0/18 and **2/18 (11.1%)**. The 7–9 window fires.
+- Counting only answers the model gave, without the two service failures: 1/18 (5.6%), which passes. But nothing in ADR-006 or the revision says that service failures are excluded, and the harness scores them as answers (technical handoff).
+
+**I stop here, as the revision says.** I didn't change the prompt, didn't try another level, didn't run anything again and didn't fill `extractor-v1.md`. Before going on, the orchestrator has to decide how the instability trigger applies to 10 repetitions, and whether a service failure counts as a changed answer. With `medium`, on Vertex, the trigger didn't fire (180/180, so 0/18 changed).
+
+Model calls in this session: 158 returned plus 2 failed. There was no probe.

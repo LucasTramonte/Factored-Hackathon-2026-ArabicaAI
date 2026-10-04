@@ -183,8 +183,10 @@ class ExtractTests(unittest.TestCase):
     def test_request_body_contains_only_the_allowed_inputs(self):
         _, calls = self.run_with(json.dumps(GOOD))
         body = json.loads(calls[0][0].data.decode())
-        self.assertEqual(set(body), {"messages", "temperature", "max_tokens"})
+        self.assertEqual(set(body), {"messages", "temperature", "max_tokens", "reasoning_effort"})
         self.assertEqual(body["temperature"], 0)
+        self.assertEqual(body["max_tokens"], 2048)
+        self.assertEqual(body["reasoning_effort"], "low", "the lowest documented level, sent explicitly")
         system, user = body["messages"]
         self.assertEqual((system["role"], user["role"]), ("system", "user"))
         self.assertEqual(system["content"], workers_ai.PROMPT_PATH.read_text(encoding="utf-8"))
