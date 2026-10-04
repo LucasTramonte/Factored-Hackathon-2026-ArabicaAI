@@ -2,13 +2,12 @@
 
 The learned component reads one customer message into the fixed vocabulary. The deterministic policy decides the action ([ADR-006](../../Docs/ADRs/ADR-006-learned-extractor-workers-ai.md)).
 
-Evaluation calls go to **Google Vertex AI** (amendment 7), using the managed open-model API `openai/gpt-oss-20b-maas`. That's the same weights as before, with the same prompt, body and parsing as `workers_ai.py`. Amazon Bedrock (amendment 6) is blocked on the project's AWS Free plan, so it isn't used. The online Worker is unchanged, and the extractor stays off online.
+Evaluation calls go to **Google Vertex AI** (amendment 7), using the managed open-model API `openai/gpt-oss-20b-maas`. That's the same weights as before, with the same prompt, body and parsing as `workers_ai.py`. Amazon Bedrock (amendment 6) is blocked on the project's AWS Free plan; its transport was removed after extractor v1 was registered on Vertex. The online Worker is unchanged, and the extractor stays off online.
 
 | File | Role | Who may change it |
 |---|---|---|
 | `prompt.md`, `workers_ai.py` (`build_body`, `parse`) | Behaviour: what the model is asked and how its answer is read | The isolated builder, with Manoella's approval (decision 5) |
 | `vertex.py` | Transport only: URL, Bearer token, the response wrapper | Anyone, including exposed authors |
-| `bedrock.py` | Transport for amendment 6; kept, not used (account blocked) | Anyone, including exposed authors |
 
 ## 1. A person signs in once per run
 

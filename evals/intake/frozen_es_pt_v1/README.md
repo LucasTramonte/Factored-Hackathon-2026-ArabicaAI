@@ -39,10 +39,10 @@ python evals/intake/frozen_es_pt_v1/continue_review.py show              # next 
 python evals/intake/frozen_es_pt_v1/continue_review.py roberto-message   # Spanish review message (local only)
 python evals/intake/frozen_es_pt_v1/continue_review.py roberto-answers "1b 2a ..."
 python evals/intake/frozen_es_pt_v1/rehearse_publication.py       # local: verify hashes, export, validate, draft manifest (no scoring)
-python -m evals.intake.run --cases evals/intake/frozen_es_pt_v1.json --output data_foundation/runs/frozen-v1/checklist.json   # after the freeze, once
-python -m evals.intake.run --cases evals/intake/frozen_es_pt_v1.json --repetitions 3 \
-  --system extractor-v1=intake_agent.extractor.workers_ai:extract \
-  --preregistration extractor-v1=evals/intake/preregistration/extractor-v1.md --output data_foundation/runs/frozen-v1/extractor-v1.json
+# once, after the extractor-v1 tag; scores the checklist and the always-handoff reference alongside the model
+python -m evals.intake.run --cases evals/intake/frozen_es_pt_v1.candidate.json --repetitions 3 \
+  --system extractor-v1=intake_agent.extractor.vertex:extract \
+  --preregistration extractor-v1=evals/intake/preregistration/extractor-v1.md --output data/frozen-run/results.json
 ```
 
 ## Known limitations

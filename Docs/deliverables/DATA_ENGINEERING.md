@@ -348,7 +348,7 @@ The target runs the transcript quality checks first (`make pipeline-with-labels`
 
 ```bash
 .venv/bin/python -m pytest intake_agent/extractor/test_vertex.py \
-  intake_agent/extractor/test_bedrock.py intake_agent/extractor/test_workers_ai.py evals/intake/test_report_cuts.py \
+  intake_agent/extractor/test_workers_ai.py evals/intake/test_report_cuts.py \
   evals/intake/test_frozen_report.py evals/intake/preregistration/test_prereg.py -q
 ```
 
