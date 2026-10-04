@@ -209,17 +209,42 @@ describe('CustomerPage focus', () => {
     fixture.nativeElement.remove();
   });
 
-  it('returns focus to the "?" help button that opened the panel', async () => {
+  it('Help focuses choices without starting intake, and the explicit problem button regains focus after chat closes', async () => {
     const { fixture, page, el } = await home();
     await fixture.whenStable();
     const button = el.querySelector<HTMLButtonElement>('button.help-fab')!;
     button.focus();
     button.click();
     await fixture.whenStable();
+    expect(page.chatOpen()).toBeFalse();
+    expect(document.activeElement).toBe(el.querySelector('#help > summary'));
+    const problem = el.querySelector<HTMLButtonElement>('#report-entry')!;
+    problem.focus(); problem.click();
+    await fixture.whenStable();
     expect(page.chatOpen()).toBeTrue();
     page.closeChat();
     await fixture.whenStable();
-    expect(document.activeElement).toBe(button);
+    expect(document.activeElement).toBe(problem);
+    fixture.nativeElement.remove();
+  });
+
+  for (const listed of [true, false]) it(`receipt navigation focuses ${listed ? 'its saved report' : 'the reports heading when the list is unavailable'}`, async () => {
+    const { fixture, page, el } = await home();
+    const receipt = { kind: 'complete', protocol: 'P-1', reference_short: 'AR-AAAA-BBBB', urgency: 'normal',
+      replayed: false, actions_taken: [], unresolved_questions: [] } as unknown as IntakeReceipt;
+    if (listed) page.reports.set({ items: [{ protocol: 'P-OTHER', reference_short: 'AR-CCCC-DDDD', status: 'received', kind: 'complete', accepted_at: '2026-10-04', transaction_id: null },
+      { protocol: 'P-1', reference_short: receipt.reference_short, status: 'received', kind: 'complete', accepted_at: '2026-10-04', transaction_id: null }] as never, has_more: false });
+    else { page.reports.set(null); page.reportsFailed.set(true); }
+    page.chatOpen.set(true); page.intakeReceipt.set(receipt);
+    await fixture.whenStable();
+    const primary = el.querySelector<HTMLButtonElement>('.chat-actions .ar-btn:not(.ar-btn-secondary)')!;
+    expect(primary.textContent?.trim()).toBe(page.t().viewMyReport);
+    primary.focus(); primary.click();
+    await fixture.whenStable();
+    expect(page.chatOpen()).toBeFalse();
+    expect(page.intakeReceipt()).toBe(receipt);
+    if (!listed) expect(el.querySelector('#reports .saved-receipt')?.textContent).toContain(receipt.reference_short!);
+    expect(document.activeElement).toBe(el.querySelector(listed ? '[data-report-protocol="P-1"]' : '#your-reports-title'));
     fixture.nativeElement.remove();
   });
 

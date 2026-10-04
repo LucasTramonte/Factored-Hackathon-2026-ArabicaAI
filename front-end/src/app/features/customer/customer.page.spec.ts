@@ -1874,7 +1874,7 @@ describe('CustomerPage', () => {
 
     it('reloads the reports after a receipt', async () => {
       const { fixture, p, el } = await home();
-      expect(el.querySelector('.your-reports')).toBeNull();
+      expect(el.querySelector('#reports')?.textContent).toContain(p.t().reportsEmpty);
       service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', mode: 'guided' } as never);
       p.chatStatement = 'No reconozco este cargo.';
       p.reason.set('not_mine');
@@ -1943,7 +1943,7 @@ describe('CustomerPage', () => {
       const { el, p } = await home();
       expect(p.step()).toBe('home');
       expect(el.textContent).toContain(p.t().reportsFailed);
-      expect(el.querySelector('.your-reports')).toBeNull();
+      expect(el.querySelector('#reports')?.textContent).toContain(p.t().reportsEmpty);
       expect(el.querySelectorAll('.td-state .ar-btn').length).toBe(1);
       expect(el.querySelector('.ar-alert')).toBeNull();
     });
@@ -1952,7 +1952,7 @@ describe('CustomerPage', () => {
       const { el } = await home();
       expect(el.querySelector('h1')).not.toBeNull();
       expect(el.querySelector('#cargos')).not.toBeNull();
-      for (const gone of ['.ar-card', '.agent-panel', '.stats', '.chat-toggle', '.home-top', '.your-reports']) expect(el.querySelector(gone)).withContext(gone).toBeNull(); // the hero is .ar-card; there is no .hero class
+      for (const gone of ['.ar-card', '.agent-panel', '.stats', '.chat-toggle', '.home-top']) expect(el.querySelector(gone)).withContext(gone).toBeNull(); // the hero is .ar-card; there is no .hero class
       expect(el.querySelectorAll('.box').length).toBe(1);
       expect(el.querySelectorAll('.td-state .ar-btn').length).toBe(1);
     });
@@ -2157,8 +2157,33 @@ describe('CustomerPage', () => {
       expect(el.querySelectorAll('.td-state .ar-btn').length).toBe(1);
     });
 
-    describe('the "?" help entry', () => {
+    it('shows reports even when empty and explicit Help choices in every language without starting intake', async () => {
+      const { fixture, p, el } = await home();
+      for (const code of ['es', 'pt', 'en'] as const) {
+        p.lang.set(code); fixture.detectChanges();
+        expect(el.querySelector('#charges')?.textContent).toContain(p.t().recent);
+        expect(el.querySelector('#reports')?.textContent).toContain(p.t().reportsEmpty);
+        el.querySelector<HTMLButtonElement>('.help-fab')!.click();
+        expect(el.querySelector<HTMLDetailsElement>('#help')!.open).toBeTrue();
+        expect(el.querySelector('#help-how')?.textContent).toContain(p.t().helpHow);
+        expect(el.querySelector('#report-entry')?.textContent).toContain(p.t().helpProblem);
+        el.querySelector<HTMLDetailsElement>('#help-how')!.open = true;
+        el.querySelector<HTMLButtonElement>('#help .help-faq button')!.click();
+        fixture.detectChanges();
+        expect(el.querySelector('#help .help-faq-log')?.textContent).toContain(p.t().faqNextA);
+        expect(p.chatOpen()).toBeFalse();
+        expect(p.episode()).toBeNull();
+        expect(p.t().reasonLegend).not.toMatch(/no reconoces|não.*reconhece|don't.*recognize/i);
+        expect(p.t().emailSignIn + p.t().err409 + p.t().noMerchant).not.toMatch(/Cognito|clave|request key|fuente|source|fonte/i);
+      }
+      expect(service.startIntake).not.toHaveBeenCalled();
+      expect(service.confirmIntake).not.toHaveBeenCalled();
+      expect(service.handoffIntake).not.toHaveBeenCalled();
+    });
+
+    describe('the explicit Help problem entry', () => {
       const fab = (el: HTMLElement) => el.querySelector<HTMLButtonElement>('button.help-fab')!;
+      const problem = (el: HTMLElement) => { fab(el).click(); return el.querySelector<HTMLButtonElement>('#report-entry')!; };
       const greeting = (p: CustomerPage, name: string) => p.t().chatHelloGeneral.replace('{name}', name);
       const started: IntakeStart = { episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false };
       async function toChoose(p: CustomerPage) {
@@ -2182,7 +2207,7 @@ describe('CustomerPage', () => {
 
       it('opens the chat greeting the customer by first name, with no charge chosen and "I can\'t find it" first', async () => {
         const { fixture, p, el } = await home({ version: 1, snapshot_at: '2026-06-01', first_name: 'Bruno', locale_hint: 'es-CO', products: [] });
-        fab(el).click();
+        problem(el).click();
         fixture.detectChanges();
         expect(p.log()).toEqual([{ from: 'bot', key: 'chatHelloGeneral' }]);
         expect(el.querySelector('.chat-log li')!.textContent).toContain(greeting(p, 'Bruno'));
@@ -2200,7 +2225,7 @@ describe('CustomerPage', () => {
         p.intakeReceipt.set({ episode_id: 'E', protocol: 'P', kind: 'complete', accepted_at: 'x', replayed: false, urgency: 'normal',
           actions_taken: [], unresolved_questions: [], reference_short: 'AR-AAAA-BBBB', next_step_code: 'await_human_review' });
         fixture.detectChanges();
-        fab(el).click();
+        problem(el).click();
         fixture.detectChanges();
         expect(p.chatStep()).toBe('describe');
         expect(p.choice).toBe('');
@@ -2210,7 +2235,7 @@ describe('CustomerPage', () => {
       it('without any known name the greeting has no name, never the customer id', async () => {
         const { fixture, p, el } = await home();
         p.client.set('CLI-UNKNOWN');
-        fab(el).click();
+        problem(el).click();
         fixture.detectChanges();
         const text = el.querySelector('.chat-log li')!.textContent!;
         expect(text).toContain(p.t().chatHelloGeneralNoName);
@@ -2219,7 +2244,7 @@ describe('CustomerPage', () => {
 
       it('a charge row after a general chat greets as usual and keeps the usual button order', async () => {
         const { fixture, p, el } = await home();
-        fab(el).click();
+        problem(el).click();
         p.intakeReceipt.set({ episode_id: 'E', protocol: 'P', kind: 'incomplete', accepted_at: 'x', replayed: false, urgency: 'normal',
           actions_taken: [], unresolved_questions: [], reference_short: 'AR-AAAA-BBBB', next_step_code: 'await_human_review' });
         fixture.detectChanges();
@@ -2235,7 +2260,7 @@ describe('CustomerPage', () => {
 
       it('a charge row on an untouched general chat switches to the usual greeting and button order', async () => {
         const { fixture, p, el } = await home();
-        fab(el).click();
+        problem(el).click();
         fixture.detectChanges();
         p.openChat('demo-tx-001');
         fixture.detectChanges();
@@ -2251,7 +2276,7 @@ describe('CustomerPage', () => {
         const { fixture, p, el } = await home();
         el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!.click();
         expect(p.choice).toBe('demo-tx-001');
-        fab(el).click();
+        problem(el).click();
         fixture.detectChanges();
         expect(p.choice).toBe('');
         expect(p.chatConfirmed).toBeFalse();
@@ -2260,7 +2285,7 @@ describe('CustomerPage', () => {
 
       it('a new report keeps the general greeting; a reset ends general mode', async () => {
         const { p, el } = await home();
-        fab(el).click();
+        problem(el).click();
         p.newReport();
         expect(p.log()).toEqual([{ from: 'bot', key: 'chatHelloGeneral' }]);
         p['reset']();

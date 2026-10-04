@@ -97,6 +97,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly previousProtocol = signal<string | null>(null);
   readonly frozen = signal<Frozen | null>(null);
   readonly intakeReceipt = signal<IntakeReceipt | null>(null);
+  /** The saved receipt's report, when the latest list includes it. */
+  readonly receiptReport = computed(() => this.reports()?.items.find(r => r.protocol === this.intakeReceipt()?.protocol));
   /** The receipt's stored answer, or null when unanswered or the server only confirmed an existing answer (409). */
   readonly feedback = signal<boolean | null>(null);
   readonly feedbackRecorded = signal(false);
@@ -212,6 +214,29 @@ export class CustomerPage implements OnInit, OnDestroy {
   closeChat(): void {
     this.chatOpen.set(false);
     afterNextRender(() => (this.opener?.isConnected ? this.opener : this.host.nativeElement.querySelector<HTMLElement>('.step h1'))?.focus(), { injector: this.injector });
+  }
+  /** Open the explicit Help choices without starting or clearing a report. */
+  showHelp(): void {
+    const help = this.host.nativeElement.querySelector<HTMLDetailsElement>('#help');
+    if (!help) return;
+    help.open = true;
+    help.querySelector<HTMLElement>('summary')?.focus();
+    help.scrollIntoView({ block: 'nearest' });
+  }
+
+  /** Leave the receipt for its saved report; a failed list load falls back to the reports heading. */
+  viewMyReport(): void {
+    const receipt = this.intakeReceipt();
+    if (!receipt || this.busy() || this.frozen()) return;
+    this.chatOpen.set(false);
+    afterNextRender(() => {
+      if (this.intakeReceipt() !== receipt || this.step() !== 'home' || this.chatOpen()) return;
+      const report = [...this.host.nativeElement.querySelectorAll<HTMLElement>('[data-report-protocol]')]
+        .find(el => el.dataset['reportProtocol'] === receipt.protocol);
+      const target = report ?? this.host.nativeElement.querySelector<HTMLElement>('#your-reports-title');
+      target?.focus();
+      target?.scrollIntoView({ block: 'nearest' });
+    }, { injector: this.injector });
   }
   private readonly chooseStep = viewChild<ElementRef<HTMLElement>>('chooseStep');
   private readonly detailsField = viewChild<ElementRef<HTMLElement>>('detailsField');
@@ -893,7 +918,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
     this.faqLog.update(l => [...l, { from: 'me', key: question }, { from: 'bot', key: answer }]);
     // The charge list can push the panel's top out of view: bring the new answer into view, without moving focus.
-    afterNextRender(() => this.host.nativeElement.querySelector('.chat-faq-log li:last-child')?.scrollIntoView({ block: 'nearest' }),
+    afterNextRender(() => this.host.nativeElement.querySelector('.chat-faq-log li:last-child, .help-faq-log li:last-child')?.scrollIntoView({ block: 'nearest' }),
       { injector: this.injector });
   }
 

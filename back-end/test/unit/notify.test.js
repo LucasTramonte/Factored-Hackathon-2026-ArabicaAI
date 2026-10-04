@@ -59,6 +59,13 @@ test('every template in every language names the reference, says no refund start
   assert.equal(STATUS_TEXT.in_review.en, 'In review by a person'); // the client shows "in review" + "by a person"
 });
 
+test('received emails describe a charge problem without narrowing every report to an unrecognized purchase', () => {
+  for (const lang of ['es', 'pt', 'en']) {
+    const { text, html } = render('received', lang, { reference: 'AR-AAAA-BBBB' });
+    assert.doesNotMatch(text + html, /cargo no reconocido|cobrança não reconhecida|unrecognized charge/i);
+  }
+});
+
 test('a send is one signed SES v2 POST with the specified body', async () => {
   const calls = [];
   const result = await sendEmail({ ...env, ...ses }, mail, async req => { calls.push(req); return Response.json({ MessageId: 'm-1' }); });

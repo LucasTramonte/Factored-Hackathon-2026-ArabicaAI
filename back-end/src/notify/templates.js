@@ -21,7 +21,7 @@ const REFERENCE_LABEL = { es: 'Referencia', pt: 'Referência', en: 'Reference' }
 export const TEMPLATES = {
   es: {
     received: { subject: 'Recibimos tu reporte {reference}',
-      body: 'Recibimos tu reporte de un cargo no reconocido. Tu referencia es {reference}.\n\nUna persona lo revisará; te avisaremos cuando cambie su estado.\n\n{urgent}' },
+      body: 'Recibimos tu reporte sobre un cargo. Tu referencia es {reference}.\n\nUna persona lo revisará; te avisaremos cuando cambie su estado.\n\n{urgent}' },
     in_review: { subject: 'Tu reporte {reference} está en revisión',
       body: 'Una persona está revisando tu reporte {reference}.\n\nTe avisaremos cuando termine la revisión.\n\n{urgent}' },
     closed: { subject: 'Terminó la revisión de tu reporte {reference}',
@@ -31,7 +31,7 @@ export const TEMPLATES = {
   },
   pt: {
     received: { subject: 'Recebemos seu relato {reference}',
-      body: 'Recebemos seu relato de uma cobrança não reconhecida. Sua referência é {reference}.\n\nUma pessoa vai analisá-lo; avisaremos quando o status mudar.\n\n{urgent}' },
+      body: 'Recebemos seu relato sobre uma cobrança. Sua referência é {reference}.\n\nUma pessoa vai analisá-lo; avisaremos quando o status mudar.\n\n{urgent}' },
     in_review: { subject: 'Seu relato {reference} está em análise',
       body: 'Uma pessoa está analisando seu relato {reference}.\n\nAvisaremos quando a análise terminar.\n\n{urgent}' },
     closed: { subject: 'A análise do seu relato {reference} terminou',
@@ -41,7 +41,7 @@ export const TEMPLATES = {
   },
   en: {
     received: { subject: 'We received your report {reference}',
-      body: 'We received your report of an unrecognized charge. Your reference is {reference}.\n\nA person will review it; we will let you know when its status changes.\n\n{urgent}' },
+      body: 'We received your report about a charge. Your reference is {reference}.\n\nA person will review it; we will let you know when its status changes.\n\n{urgent}' },
     in_review: { subject: 'Your report {reference} is in review',
       body: 'A person is reviewing your report {reference}.\n\nWe will let you know when the review ends.\n\n{urgent}' },
     closed: { subject: 'The review of your report {reference} has ended',

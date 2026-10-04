@@ -12,10 +12,10 @@ describe('LangService', () => {
     const lang = TestBed.inject(LangService);
     expect(lang.all).toEqual(['es', 'pt', 'en']);
     lang.set('pt');
-    expect(lang.t().whoAreYou).toBe('Quem é você?');
+    expect(lang.t().whoAreYou).toBe('Entre para revisar suas cobranças');
     expect(document.documentElement.lang).toBe('pt');
     lang.set('es');
-    expect(lang.t().whoAreYou).toBe('¿Quién eres?');
+    expect(lang.t().whoAreYou).toBe('Entra para revisar tus cargos');
   });
 
   it('never leaves a string untranslated', () => {
