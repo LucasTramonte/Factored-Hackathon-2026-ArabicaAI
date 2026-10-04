@@ -1,4 +1,5 @@
 import { Component, ElementRef, Injector, NgZone, OnDestroy, OnInit, Signal, afterNextRender, afterRenderEffect, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { GuidedTour, TourStep } from '../../shared/guided-tour/guided-tour.component';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -46,7 +47,7 @@ const REASON_FILL = { not_mine: 'reasonFillNotMine', duplicate: 'reasonFillDupli
 
 @Component({
   selector: 'app-customer-page',
-  imports: [DatePipe, FormsModule, RouterLink, LangSwitch, CustomerPicker, MessageThreadView],
+  imports: [DatePipe, FormsModule, RouterLink, LangSwitch, CustomerPicker, MessageThreadView, GuidedTour],
   templateUrl: './customer.page.html',
   styleUrl: './customer.page.css'
 })
@@ -70,6 +71,48 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** "Your reports" from GET /reports, so it survives the tab; null until loaded. */
   readonly reports = signal<ReportList | null>(null);
   readonly reportsFailed = signal(false);
+  readonly tour = signal<'welcome' | 'steps' | null>(null);
+  private tourOffered = false;
+  private readonly tourTarget = signal('report-entry');
+  readonly tourSteps = computed<TourStep[]>(() => {
+    const t = this.t();
+    return [{ targetId: 'charges', title: t.recent, body: t.tourCharges },
+      { targetId: this.tourTarget(), title: this.tourTarget() === 'report-entry' ? t.chatCannotFind : t.reportCharge,
+        body: this.tourTarget() === 'report-entry' ? t.tourMissing : t.tourReport },
+      { targetId: 'reports', title: t.yourReports, body: t.tourReports },
+      { targetId: 'help', title: t.help, body: t.tourHelp }];
+  });
+
+  /** Offer once after owned reads; an urgent bank alert leaves the tour in Help. */
+  private offerTour(): void {
+    if (this.tourOffered || this.step() !== 'home') return;
+    this.tourOffered = true;
+    try { if (['dismissed', 'complete'].includes(localStorage.getItem('arabica.customer-tour.v1') ?? '')) return; }
+    catch { /* Storage is optional; this page still offers only once. */ }
+    if (!this.alert() && !this.chatOpen()) { this.prepareTourTarget(); this.tour.set('welcome'); }
+  }
+
+  /** Replay from Help without changing a report or the browser preference. */
+  startTour(): void {
+    if (this.busy() || this.frozen() || this.step() !== 'home') return;
+    this.prepareTourTarget();
+    this.tour.set('steps');
+  }
+
+  private prepareTourTarget(): void {
+    const row = this.host.nativeElement.querySelector<HTMLButtonElement>('.td-state button:not(:disabled)');
+    if (row) row.id = 'tour-report-charge';
+    this.tourTarget.set(row ? 'tour-report-charge' : 'report-entry');
+  }
+
+  /** Store a generic browser preference; failure never blocks entry or replay. */
+  endTour(complete = false): void {
+    this.tour.set(null);
+    this.tourOffered = true;
+    try { localStorage.setItem('arabica.customer-tour.v1', complete ? 'complete' : 'dismissed'); }
+    catch { /* Current page session already suppresses another automatic offer. */ }
+  }
+
   /** The report whose update request is in flight (one at a time: every row's button waits), and the last answer shown under its row. */
   readonly updating = signal<string | null>(null);
   readonly updateNote = signal<{ protocol: string; text: string } | null>(null);
@@ -262,6 +305,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.generation++;
+    this.tour.set(null);
     clearTimeout(this.bootTimer);
     clearTimeout(this.introTimer);
     if (this.narrowQuery) this.narrowQuery.onchange = null;
@@ -488,8 +533,11 @@ export class CustomerPage implements OnInit, OnDestroy {
       this.code = '';
       await this.loadTransactions();
       await this.loadReports();
-      void this.loadAlert();
       this.step.set('home');
+      const g = this.generation;
+      void this.loadAlert().then(() => {
+        if (g === this.generation) afterNextRender(() => { if (g === this.generation) this.offerTour(); }, { injector: this.injector });
+      });
     } catch (e) {
       onError(e);
     } finally {
@@ -527,10 +575,10 @@ export class CustomerPage implements OnInit, OnDestroy {
   private async resume(): Promise<void> {
     this.booted.set(true);
     this.step.set('home');
-    void this.loadReports();
-    void this.loadAlert();
+    const g = this.generation;
     try {
-      await this.loadTransactions();
+      await Promise.all([this.loadTransactions(), this.loadReports(), this.loadAlert()]);
+      if (g === this.generation) afterNextRender(() => { if (g === this.generation) this.offerTour(); }, { injector: this.injector });
     } catch (e) {
       this.fail(e);
     }
@@ -1050,6 +1098,7 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   private reset(): void {
     this.generation++;
+    this.tour.set(null);
     this.alert.set(null);
     this.alertNote.set('');
     this.client.set('');

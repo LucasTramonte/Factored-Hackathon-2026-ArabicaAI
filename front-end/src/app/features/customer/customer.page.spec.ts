@@ -16,6 +16,15 @@ const TIMES: ServiceTimes = { basis: 'bank_history', version: '4e2a1b33eac4812d'
     { metric: 'first_response', unit: 'hours', p50: 25, p90: 44, n: 6045, missing: 4325, negative: 0, covers: 'responded' }] };
 
 describe('CustomerPage', () => {
+  let previousTourPreference: string | null;
+  beforeEach(() => {
+    previousTourPreference = localStorage.getItem('arabica.customer-tour.v1');
+    localStorage.setItem('arabica.customer-tour.v1', 'dismissed'); // These existing flow checks represent a returning browser.
+  });
+  afterEach(() => {
+    if (previousTourPreference === null) localStorage.removeItem('arabica.customer-tour.v1');
+    else localStorage.setItem('arabica.customer-tour.v1', previousTourPreference);
+  });
   let service: jasmine.SpyObj<CustomerService>;
   let page: CustomerPage;
   let cognito: jasmine.SpyObj<CognitoService>;

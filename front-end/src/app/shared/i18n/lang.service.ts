@@ -5,6 +5,7 @@ export type Lang = 'es' | 'pt' | 'en';
 
 /** Every interface string, in the three required languages. Evidence (amounts, IDs, timestamps) is never translated. */
 const es = {
+    tourWelcome: "Conoce ArabicaAI en cuatro pasos", tourWelcomeBody: "Un recorrido opcional para revisar cargos, reportar y seguir la revisión.", tourStart: "Mostrarme cómo", tourLater: "Ahora no", tourPrevious: "Anterior", tourNext: "Siguiente", tourDone: "Listo", tourSkip: "Omitir recorrido", tourReplay: "Repetir recorrido", tourProgress: "Paso {n} de {total}", tourCharges: "Revisa el comercio, la fecha y el monto de tus cargos.", tourReport: "Si hay un problema, selecciona Reportar. Te pediremos los detalles y tu confirmación antes de enviarlo.", tourReports: "Consulta el estado de cada reporte y abre sus mensajes para leer la respuesta del equipo.", tourHelp: "Si no encuentras un cargo o necesitas orientación, empieza aquí. También puedes repetir este recorrido.", tourMissing: "No encuentro el cargo: empieza desde Ayuda y cuéntanos lo que recuerdas. Una persona revisará tu reporte.",
     greeting: 'Hola', tagline: "Te ayudamos a identificarlo, reportarlo y seguir su revisión.",
     promiseLine: "¿Hay un problema con uno de tus cargos?", start: "Revisar mis cargos",
     promise1: "Encuentra el cargo.", promise2: "Cuéntanos el problema.", promise3: "Sigue la revisión desde aquí.",
@@ -141,6 +142,7 @@ export type Strings = { [K in keyof typeof es]: string };
 const STRINGS: Record<Lang, Strings> = {
   es,
   pt: {
+    tourWelcome: "Conheça ArabicaAI em quatro passos", tourWelcomeBody: "Um passeio opcional para revisar cobranças, relatar e acompanhar a análise.", tourStart: "Mostre como", tourLater: "Agora não", tourPrevious: "Anterior", tourNext: "Próximo", tourDone: "Pronto", tourSkip: "Pular passeio", tourReplay: "Repetir passeio", tourProgress: "Passo {n} de {total}", tourCharges: "Confira o estabelecimento, a data e o valor das suas cobranças.", tourReport: "Se houver um problema, selecione Reportar. Pediremos os detalhes e sua confirmação antes de enviar.", tourReports: "Consulte o status de cada relato e abra as mensagens para ler a resposta da equipe.", tourHelp: "Se não encontrar uma cobrança ou precisar de orientação, comece aqui. Você também pode repetir este passeio.", tourMissing: "Não encontro a cobrança: comece pela Ajuda e conte o que lembra. Uma pessoa analisará seu relato.",
     greeting: 'Olá', tagline: "Ajudamos você a identificar, relatar e acompanhar a análise.",
     promiseLine: "Há um problema com uma das suas cobranças?", start: "Revisar minhas cobranças",
     promise1: "Encontre a cobrança.", promise2: "Conte o problema.", promise3: "Acompanhe a análise por aqui.",
@@ -271,6 +273,7 @@ const STRINGS: Record<Lang, Strings> = {
     reportsEmpty: "Aqui você verá o status e as mensagens dos seus relatos.", viewMyReport: "Ver meu relato", helpHow: "Como usar ArabicaAI", helpProblem: "Tenho um problema com uma cobrança", helpInstructions: "Revise suas cobranças, escolha a que quer relatar e conte o problema. Confirme a cobrança para enviar o relato. Depois acompanhe o status e as mensagens em Seus relatos."
   },
   en: {
+    tourWelcome: "Meet ArabicaAI in four steps", tourWelcomeBody: "An optional tour to review charges, report and follow the review.", tourStart: "Show me how", tourLater: "Not now", tourPrevious: "Previous", tourNext: "Next", tourDone: "Done", tourSkip: "Skip tour", tourReplay: "Replay tour", tourProgress: "Step {n} of {total}", tourCharges: "Check the merchant, date and amount of your charges.", tourReport: "If there is a problem, select Report. We will ask for details and your confirmation before sending it.", tourReports: "Check each report’s status and open its messages to read the team’s response.", tourHelp: "If you cannot find a charge or need guidance, start here. You can also replay this tour.", tourMissing: "I cannot find the charge: start in Help and tell us what you remember. A person will review your report.",
     greeting: 'Hello', tagline: "We help you identify it, report it and follow its review.",
     promiseLine: "Is there a problem with one of your charges?", start: "Review my charges",
     promise1: "Find the charge.", promise2: "Tell us the problem.", promise3: "Follow the review here.",

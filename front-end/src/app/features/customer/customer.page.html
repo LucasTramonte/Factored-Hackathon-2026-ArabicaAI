@@ -232,6 +232,7 @@
               </section>
               <details id="help" class="help-section">
                 <summary>{{ t().help }}</summary>
+                <button type="button" id="tour-replay" class="ar-btn ar-btn-secondary" (click)="startTour()" [disabled]="busy() || !!frozen()">{{ t().tourReplay }}</button>
                 <details id="help-how"><summary>{{ t().helpHow }}</summary><p>{{ t().helpInstructions }}</p></details>
                 <button type="button" id="report-entry" class="ar-btn ar-btn-secondary" (click)="openChat(undefined, true)" [disabled]="busy() || !!frozen()">{{ t().helpProblem }}</button>
                 <div class="help-faq" role="group" [attr.aria-label]="t().chatFaq">
@@ -380,3 +381,7 @@
     }
   }
 </div>
+
+@if (tour() && step() === 'home') {
+  <app-guided-tour [steps]="tourSteps()" [welcome]="tour() === 'welcome'" (finished)="endTour(true)" (skipped)="endTour()" />
+}

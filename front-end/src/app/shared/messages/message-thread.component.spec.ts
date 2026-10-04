@@ -54,7 +54,7 @@ describe('MessageThreadView', () => {
   it('is read-only once the report is closed or the thread is full, and says which', () => {
     let { el } = render({ ...THREAD, status: 'closed', can_post: false });
     expect(el.querySelector('textarea')).toBeNull();
-    expect(el.querySelector('.messages-readonly')?.textContent).toContain('This report is closed');
+    expect(el.querySelector('.messages-readonly')?.textContent).toBe(TestBed.inject(LangService).t().messagesClosed);
     ({ el } = render({ ...THREAD, can_post: false }));
     expect(el.querySelector('.messages-readonly')?.textContent).toContain('message limit');
     ({ el } = render({ status: 'received', can_post: true, items: [] }));
