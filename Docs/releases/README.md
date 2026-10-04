@@ -8,6 +8,7 @@ To trace a change, go from the release to its PRs, then from each PR to the ADR,
 |---|---|---|---|---|---|---|---|---|
 | `v0.1.0` Factored checkpoint baseline | 2026-10-01 | `518fe3c` | — (before milestones) | #1–#55 | ADR-002 to ADR-006 | [v0.1.0](#v010-factored-checkpoint-baseline) | Worker `77f72eb4`; D1 0001–0007; cohort `c32369c464eec13a`; extractor off | [v0.1.0](#v010-factored-checkpoint-baseline) |
 | `v0.2.0` Customer reporting and team access | 2026-10-03 | `64ae03a` | [`v0.2.0`](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/milestone/1?closed=1) | #56–#84 | ADR-007 to ADR-010; ADR-004 notes | [v0.2.0](#v020-customer-reporting-and-team-access) | Worker `f76c7f7b` (`main-64ae03a`); D1 0001–0017; extractor off | [v0.2.0](#v020-customer-reporting-and-team-access) |
+| `v0.3.0` Admin, alerts and the measured extractor | (at tag) | `3669b00` (planned) | [`v0.3.0`](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/milestone/2) | #85–#110 | ADR-011 to ADR-013; ADR-006 amendments 6–9 | [v0.3.0](#v030-admin-alerts-and-the-measured-extractor) | Worker `c8f83379` (code `main-3669b00`); D1 0001–0023 | Extractor off online; demo alert flags are authored; SES sandbox |
 
 `v1.0.0` is the final hackathon submission ([`CONTRIBUTING.md`](../../CONTRIBUTING.md#versioning)).
 
@@ -67,4 +68,53 @@ Tagged on `64ae03a` (#84) on 2026-10-03; [GitHub Release](https://github.com/Luc
 - Worker version `f76c7f7b-765d-4952-a22a-13263a8e060b`, tag `main-64ae03a`, deployed 2026-10-03 15:16 UTC by the GitHub Actions `deploy` workflow.
 - D1 migrations 0001–0017 on remote `arabica-intake-demo`.
 - Cohort: 796 dataset customers, `slice_version` `c32369c464eec13a` (one part, `4fe90381be8d8fef`), from the cohort manifest (`data/gold_cohort/2026-06-17/manifest.json`); remote `seed_loads` was not re-read at tag time. Fictitious seed: six identities.
+- Cohort: 796 dataset customers, `slice_version` `c32369c464eec13a` (one part, `4fe90381be8d8fef`), from the cohort manifest (`data/gold_cohort/2026-06-17/manifest.json`). Remote `seed_loads` holds that part, `4fe90381be8d8fef`, loaded 2026-10-01 12:45:10 (a person's read-only query, 2026-10-04).
+- Demo alert flags (#106): the fictitious seed's three `bank_flagged` updates (`demo-tx-015`, `-020`, `-025` for Diego, Elena and Marco) were missing on remote D1 and were applied by a person on 2026-10-04; a read-back shows all three set.
 - Extractor switch: off.
+
+## `v0.3.0`: Admin, alerts and the measured extractor
+
+Prepared 2026-10-04 from what merged after `v0.2.0` (#85–#110). The tag goes on `3669b00`, the deployed `main`, after a person's go-ahead; the date and the GitHub Release link are filled in then. Check #111's state just before tagging (`gh pr view 111 --json state,mergedAt,mergeCommit`). If it has merged and been deployed, tag its squash commit instead and move the frozen-comparison line below from "not part of this release" to Evaluation; if not, tag `3669b00` as written.
+
+### Highlights
+
+- **The bank speaks first.** When the bank's own fraud flag marks a charge, the customer sees one in-app alert at sign-in and can report it in two taps; the report joins the urgent lane (#106, ADR-011). The data ruled out the charge amount as a trigger, and the demo's flags are authored on fictitious customers.
+- **Admins work as any customer.** One sign-in code opens the customer and agent views; an admin lists the demo customers and acts as any of them from the banner, with updates emailed to the admin, never to the customer (#95–#97, #101).
+- **Agents see more, customers lose less.** The agent detail shows the customer's other reports and when the case was first opened (#88); a receipt asks one thumbs question (#89); "Not resolved" on a closed report starts a new one citing it (#90); a reload keeps the session (#110).
+
+### Engineering
+
+- One open report per charge now holds under concurrent confirmations (#87).
+- Email: an update the customer asks for is reported as requested, and a failed send can be retried (#104); an admin's update goes to the admin (#101).
+- Client fixes: the sign-in code step names the sender (#92); FAQ answers scroll into view (#99); "I can't find the charge" clears an earlier pick (#103); demo identities are named on screen (#85).
+- D1 migrations 0018–0023, applied by the deploy.
+
+### Evaluation
+
+- The offline evaluation moved to Google Vertex AI after Bedrock proved blocked on the AWS Free plan (#91, #93, ADR-006 amendments 6–7).
+- At `reasoning_effort: "low"`, extractor v1 passes every development trigger: 18/18 by majority, 0 unsafe, p95 upper bound about 2,340 ms (#98, amendments 8–9).
+- Extractor v1 was pre-registered (#107) and tagged `extractor-v1` (`3ad34b5`). **The frozen comparison ran once on 2026-10-04, after #107 merged; its result is published in #111, which is not part of this release.**
+- The unrecognized-charge baseline report and DF-027 (#94).
+
+### Documentation
+
+- ADR-011 (proactive alert), ADR-012 (AI online only where the evidence shows it), ADR-013 (sessions and staff sign-in), the launch-pitch script (#105, #107).
+- The v0.2.0 release record and the KPI ideas (#86).
+
+### Known limitations
+
+- The extractor is off online; every live path is deterministic.
+- The alert's flags are authored; `fraud_score`'s provenance is unconfirmed, so no detection rate is claimed.
+- SES stays in the sandbox: only verified recipients receive email.
+- Five team episodes are the only live record; they support no rate.
+- The data is synthetic.
+
+### Deployed state
+
+- **Code deployment:** Worker version `d4266792-8eb7-4f33-ac28-ab7b87f02d5a`, tag `main-3669b00`, activated at 100% on 2026-10-04 02:39:10 UTC by the GitHub Actions `deploy` workflow (run on `3669b00`, success).
+- **Later secret change, same code:** version `c8f83379-ff1a-4a7b-9a60-8de3021f94bc`, created and activated at 100% on 2026-10-04 04:40:49 UTC by `wrangler secret put VERTEX_WIF_SIGNING_KEY`. It is the live version; it changes no code. (Both from a read-only `npx wrangler deployments list`.)
+- D1 migrations 0001–0023 on remote `arabica-intake-demo`, applied by the deploy (not re-listed at preparation; agents don't run `--remote`).
+- Cohort: 796 dataset customers, `slice_version` `c32369c464eec13a` (one part, `4fe90381be8d8fef`), from the cohort manifest (`data/gold_cohort/2026-06-17/manifest.json`). Remote `seed_loads` holds that part, `4fe90381be8d8fef`, loaded 2026-10-01 12:45:10 (a person's read-only query, 2026-10-04).
+- Demo alert flags (#106): the fictitious seed's three `bank_flagged` updates (`demo-tx-015`, `-020`, `-025` for Diego, Elena and Marco) were missing on remote D1 and were applied by a person on 2026-10-04; a read-back shows all three set.
+- Extractor switch: off. The new `VERTEX_WIF_SIGNING_KEY` secret is unused until the AI suggestion path ships.
+
