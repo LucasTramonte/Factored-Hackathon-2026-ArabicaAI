@@ -122,7 +122,8 @@ try {
     if (!group.length) continue;
     const tested = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...group.map(name => join(project, 'test/integration', name))], {
       cwd: temp, env: { ...env, ...testEnv, WORKER_TEST_URL: `http://127.0.0.1:${port}`, EXPIRED_TOKEN: 'e'.repeat(64) },
-      encoding: 'utf8', timeout: 120_000
+      // The suites' group takes about 82 s since the KPI journeys (2026-10-04); 300 s leaves room. Budgets alone stay at 120 s.
+      encoding: 'utf8', timeout: group.includes('budget.test.js') ? 120_000 : 300_000
     });
     process.stdout.write(tested.stdout ?? '');
     process.stderr.write(tested.stderr ?? '');

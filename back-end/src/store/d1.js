@@ -112,8 +112,11 @@ const ranked = (keys, order, ranks, withAll = true) => {
 const QUARTILE_RANKS = ['(25*n+99)/100', '(50*n+99)/100', '(75*n+99)/100'];
 /** The median's one or two middle ranks and the nearest-rank p95, as ``evals/intake/episodes.py`` computes latency. */
 const SPAN_RANKS = ['(n+1)/2', 'n/2+1', '(95*n+99)/100'];
-/** Charge amounts of alert answers given in [since, until) by the customer, each with whether a complete report on that charge started after the answer, before ``until``. */
-const ALERT_ANSWERS = "WITH x AS (SELECT p.answer,t.currency,t.amount,EXISTS(SELECT 1 FROM cases c JOIN intake_handoffs h ON h.complete_case_id=c.case_id "
+/**
+ * Charge amounts of alert answers given in [since, until) by the customer, each with whether a complete report on that charge
+ * started after the answer, before ``until``. Materialized, so the correlated EXISTS runs once per answer, not once per reader.
+ */
+const ALERT_ANSWERS = "WITH x AS MATERIALIZED (SELECT p.answer,t.currency,t.amount,EXISTS(SELECT 1 FROM cases c JOIN intake_handoffs h ON h.complete_case_id=c.case_id "
   + "JOIN intake_episodes e ON e.episode_id=h.episode_id WHERE c.customer_id=p.customer_id AND c.transaction_id=p.transaction_id "
   + "AND e.state='complete_handoff' AND e.created_at>=p.answered_at AND e.created_at<?) AS reported "
   + "FROM proactive_answers p JOIN transactions t ON t.customer_id=p.customer_id AND t.transaction_id=p.transaction_id "
@@ -121,6 +124,7 @@ const ALERT_ANSWERS = "WITH x AS (SELECT p.answer,t.currency,t.amount,EXISTS(SEL
 /** ``{ numerator, denominator, rate }``; the rate is null, never 0, when the denominator is empty. */
 const share = (numerator, denominator) => ({ numerator, denominator, rate: denominator ? numerator / denominator : null });
 /** ``{ currency: { n, p25, p50, p75 } }`` from ``ranked`` rows of one language. */
+// The JS ranks below mirror QUARTILE_RANKS and SPAN_RANKS: ceil(q*n) is Math.floor((q*n+99)/100), as SQL integer division.
 function quartiles(rows) {
   const out = {};
   for (const row of rows) {

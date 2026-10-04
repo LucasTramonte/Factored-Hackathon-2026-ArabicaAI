@@ -128,13 +128,13 @@ const CEILING = {
   idleSweepNoop: [2, 10, 0, 1],
   idleDueProbe: [1, 3, 0, 1],
   // The dispute managers' KPI read (intakeKpis, scripts/intake-kpis.mjs): one batch of seven reads, one round trip, no
-  // write. The window is found through migration 0025's indexes, so an empty one costs a constant 30 rows (index probes and
-  // the empty intermediate results of the ranking statements), whatever the store holds. KPI_FIXTURE acknowledged handoffs
-  // cost 927 (about 46 an episode: each of five statements reads the episode's index entry, row, handoff and events, and
-  // the span and repeat statements count their materialized and ranked rows again; the 3-in-90-days proxy's second LAG
-  // adds 2 an episode, 887 -> 927). Measured, no margin (ADR-004).
-  kpisEmpty: [7, 30, 0, 1],
-  kpisFixture: [7, 927, 0, 1]
+  // write. The window is found through migration 0025's indexes, so an empty one costs a constant 32 rows (index probes and
+  // the empty intermediate results of the ranking and alert statements), whatever the store holds. KPI_FIXTURE acknowledged
+  // handoffs, one complete report and three alert answers cost 1,034 (about 46 an episode: each of five statements reads the
+  // episode's index entry, row, handoff and events, and the span and repeat statements count their materialized and ranked
+  // rows again; the alert statements read each answer, its charge and its charge's reports). Measured, no margin (ADR-004).
+  kpisEmpty: [7, 32, 0, 1],
+  kpisFixture: [7, 1034, 0, 1]
 };
 const KPI_FIXTURE = 20;
 // An export page reads about 2 rows per episode (its page entry and the look-ahead that ends its event range) plus
@@ -484,8 +484,10 @@ test('the idle sweep closes a page of 100 stale suggestion runs, and a sweep wit
 
 test("the dispute managers' KPI read stays bounded by its window: a constant for an empty one, a fixed cost per episode in it", async () => {
   const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
-  // Bounded fixture: 20 acknowledged incomplete handoffs started two years ago, a window no other suite writes to. Runs
-  // last in this file, so its starts never meet the idle sweeps above (they are acknowledged, never due anyway).
+  // Bounded fixture: 20 acknowledged incomplete handoffs started two years ago, a window no other suite writes to, then three
+  // alert answers by demo-carla on kpi_seed.sql's budget charges ("mine" later reported, "mine", "not mine") and that one
+  // complete report, so the alert statements are costed too. Runs last in this file, so its starts never meet the idle
+  // sweeps above (they are acknowledged, never due anyway).
   const old = Date.now() - 2 * 365 * 86400000; const sessionHash = await tokenHash('kpi-budget-' + crypto.randomUUID());
   const payloadHash = await tokenHash(JSON.stringify(['incomplete', null]));
   const measured = {};
@@ -500,12 +502,25 @@ test("the dispute managers' KPI read stays bounded by its window: a constant for
       const receipt = await store.readIntakeReceipt('demo-bruno', episode.episode_id, { sessionHash, now: at });
       assert.equal((await store.finishIntakeHandoff({ customerId: 'demo-bruno', episode, receipt, sessionHash, now: at, operationDuration: 0, toolCalls: 0 })).acknowledged, true);
     }
+    const carlaHash = await tokenHash('kpi-budget-carla-' + crypto.randomUUID());
+    await store.rotateSession({ now: Date.now(), oldHash: null, newHash: carlaHash, actor: 'customer', customerId: 'demo-carla', expiresAt: Date.now() + 3600000, requestId: 'kpi-budget' });
+    for (const [i, transactionId, answer] of [[0, 'kpi-tx-04', 'mine'], [1, 'kpi-tx-05', 'mine'], [2, 'kpi-tx-06', 'report']])
+      assert.ok(await store.answerProactiveAlert({ customerId: 'demo-carla', transactionId, answeredBy: 'customer', answer, now: old + KPI_FIXTURE + i }));
+    const at = old + KPI_FIXTURE + 3;
+    const { episode } = await store.startIntake({ customerId: 'demo-carla', language: 'es', statement: 'No reconozco este cargo.', reason: 'not_mine', key: crypto.randomUUID(), now: at, expiresAt: at + 3600000 });
+    await store.persistIntakeHandoff({ customerId: 'demo-carla', episodeId: episode.episode_id, turnKey: crypto.randomUUID(), payloadHash: await tokenHash(JSON.stringify(['complete', 'kpi-tx-04'])),
+      sessionHash: carlaHash, completeCase: { transaction_id: 'kpi-tx-04' }, kind: 'complete', evidence: { transaction: null, tool_status: 'ok' }, actions: [], questions: [],
+      usage: { tool_calls: 0, operation_duration_ms: 0 }, now: at });
+    const receipt = await store.readIntakeReceipt('demo-carla', episode.episode_id, { sessionHash: carlaHash, now: at });
+    assert.equal((await store.finishIntakeHandoff({ customerId: 'demo-carla', episode, receipt, sessionHash: carlaHash, now: at, operationDuration: 0, toolCalls: 0 })).acknowledged, true);
     const empty = await storeCall(store, () => store.intakeKpis({ sinceMs: old - 86400000, untilMs: old - 1 }));
     assert.equal(empty.result.by_language.all.reports.started, 0);
     measured.empty = within('kpisEmpty', empty.metrics);
-    const fixture = await storeCall(store, () => store.intakeKpis({ sinceMs: old, untilMs: old + KPI_FIXTURE }));
-    assert.equal(fixture.result.by_language.all.reports.started, KPI_FIXTURE, 'exactly the fixture is in the window');
+    const fixture = await storeCall(store, () => store.intakeKpis({ sinceMs: old, untilMs: at + 1 }));
+    assert.equal(fixture.result.by_language.all.reports.started, KPI_FIXTURE + 1, 'exactly the fixture is in the window');
+    assert.deepEqual([fixture.result.alerts.answered, fixture.result.alerts.recognized_then_reported, fixture.result.alerts.deflected], [3, 1, 1]);
+    await close(store, receipt.complete_case_id);
     measured.fixture = within('kpisFixture', fixture.metrics);
   });
-  console.log('D1_INTAKE_KPIS ' + JSON.stringify({ episodes: KPI_FIXTURE, ...measured }));
+  console.log('D1_INTAKE_KPIS ' + JSON.stringify({ episodes: KPI_FIXTURE + 1, answers: 3, ...measured }));
 });

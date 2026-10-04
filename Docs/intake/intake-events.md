@@ -188,7 +188,7 @@ node scripts/intake-kpis.mjs [--since 2026-10-01] [--until 2026-10-08T00:00:00Z]
 
 **Proof before use.** `back-end/test/integration/kpi-instrumentation.test.js` drives the authored journeys in `back-end/test/fixtures/kpi-journeys.json` over HTTP on local D1 and requires every value above to equal the hand-counted one. It also scores the same episodes' exported events with `evals/intake/episodes.py` and requires both paths to agree on started, outcomes, clarifications, spans and suggestion results by arm. `back-end/test/unit/intake-kpis.test.js` proves the boundaries real time can't place: 90 days between reports and 24 h to the first open, both inclusive.
 
-**Cost.** One batch of seven reads, no write: a constant 30 rows for an empty window, and about 46 rows per episode in it (ADR-004, 2026-10-04 KPI note).
+**Cost.** One batch of seven reads, no write: a constant 32 rows for an empty window, and about 46 rows per episode in it (ADR-004, 2026-10-04 KPI note).
 
 ## Open questions for Lucas and Manoella
 

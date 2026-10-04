@@ -33,13 +33,14 @@ async function withStore(work) {
 }
 
 /** Drive one journey; returns ``{ episodeId, protocol, status }`` (null fields where the journey made none). */
-async function drive(journey, sessions, agent) {
+async function drive(journey, sessions, agent, done) {
   const c = sessions[journey.customer] ??= await (async () => {
     const browser = client();
     assert.equal((await browser.call('/demo/session', { customer_id: journey.customer })).status, 200, journey.customer);
     return browser;
   })();
   const out = { episodeId: null, protocol: null, status: 'received' };
+  done.push(out); // before any step, so the cleanup closes even a journey that fails halfway
   for (const step of journey.steps) {
     const label = `${journey.id} ${step.do}`;
     if (step.do === 'start') {
@@ -115,8 +116,10 @@ test('authored journeys: intakeKpis reproduces every hand-counted KPI, and the s
   const sessions = {};
   const agent = client(); assert.equal((await agent.call('/demo/agent-session', {})).status, 200);
   const done = [];
+  // Registered first, so a failing step can't leave open reports in the shared D1 for the suites after this one.
+  t.after(async () => { for (const { protocol, status } of done) if (protocol && status !== 'closed') await closeReport(protocol); });
   for (const phase of [1, 2]) {
-    for (const journey of fixture.journeys.filter(j => j.phase === phase)) done.push(await drive(journey, sessions, agent));
+    for (const journey of fixture.journeys.filter(j => j.phase === phase)) await drive(journey, sessions, agent, done);
     if (phase === 1) {
       // The idle-close path, 11 minutes ahead (``maxNow`` is the store's fake-clock seam): every start left open is due.
       const now = Date.now() + 11 * 60 * 1000;
@@ -125,7 +128,6 @@ test('authored journeys: intakeKpis reproduces every hand-counted KPI, and the s
   }
   const untilMs = Date.now() + 1;
   const kpis = await withStore(store => store.intakeKpis({ sinceMs, untilMs }));
-  t.after(async () => { for (const { protocol, status } of done) if (protocol && status !== 'closed') await closeReport(protocol); });
 
   // Path 2: export every episode, keep this test's, and score them with the episode scorer.
   const { exportIntakeEvents } = await import('../../scripts/export-intake-events.mjs');
