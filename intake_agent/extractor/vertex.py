@@ -60,7 +60,7 @@ def _credentials() -> tuple[str, str]:
 
 
 def build_body(message: str, session_language, as_of, vocabulary: dict) -> dict:
-    """``workers_ai``'s body (committed prompt, four inputs, temperature, max_tokens) plus Vertex's model id."""
+    """``workers_ai``'s body (committed prompt, four inputs, temperature, max_tokens, reasoning_effort) plus Vertex's model id."""
     return {**w.build_body(message, session_language, as_of, vocabulary), "model": MODEL}
 
 

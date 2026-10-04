@@ -3,7 +3,7 @@ import { SESSION_MS, requireSession, tokenHash } from '../../auth/session.js';
 import { fail, json, readJsonBody, readCookies } from '../../http.js';
 import { UUID, validateStartRequest, validateHandoffRequest } from './validation.js';
 import { APPROVED_EXTRACTOR, UNKNOWN, extractShadow, readyExtractor } from './ai-transport.js';
-import { UPDATE_EVERY_MS, createStore } from '../../store/d1.js';
+import { EMAIL_FAILURE_RETRY_MS, UPDATE_EVERY_MS, createStore } from '../../store/d1.js';
 import { deliver } from '../../notify/dispatch.js';
 import { STATUS_TEXT } from '../../notify/templates.js';
 import { urgencyOf } from './urgency.js';
@@ -111,8 +111,11 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
   // lost card reported without a listed charge still heads the queue; otherwise only a confirmed charge is ranked, by the
   // p95 of the customer's most recent 21 served purchases (newest first), without the chosen one. A failed read leaves
   // only the fixed amount; the report is still accepted.
-  if (!prior) urgency = URGENCY.high_reasons.includes(episode.reason) ? 'high' : kind !== 'complete' ? 'normal'
+  // A charge the bank itself flagged (ADR-011: the bank's input, not an inference of ours) is high too.
+  if (!prior) urgency = URGENCY.high_reasons.includes(episode.reason) || evidence?.bank_flagged === 1 ? 'high' : kind !== 'complete' ? 'normal'
     : urgencyOf(evidence, (await store.listTransactions(customerId, 21).catch(() => [])).filter(t => t.transaction_id !== transactionId), URGENCY);
+  // The flag decides urgency only; the stored evidence keeps the charge's own fields, as before.
+  if (evidence) delete evidence.bank_flagged;
   const live = await requireSession(request, store, 'customer');
   if (!live || live.customer_id !== customerId) return fail(401, 'Start a demo session first');
   const sessionHash = await tokenHash(readCookies(request).demo_session);
@@ -226,7 +229,9 @@ export async function listReports(request, env, store) {
 
 /**
  * POST /reports/update ``{ protocol }``: email the session customer the status of one of their acknowledged reports.
- * Foreign and missing reports get the same 404; no target 409; one ``update`` email per report per 5 minutes (429).
+ * Foreign and missing reports get the same 404; no target 409; one queued or SES-accepted ``update`` email per report
+ * per 5 minutes (429). A failed or skipped attempt stays auditable in the outbox and can be retried after 10 seconds.
+ * On an act-as session the email (and its outbox row and window) is the signed-in admin's own, never the customer's.
  */
 export async function requestUpdate(request, env, store, ctx) {
   const current = await requireSession(request, store, 'customer');
@@ -236,8 +241,9 @@ export async function requestUpdate(request, env, store, ctx) {
   const value = body.value;
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).join() !== 'protocol'
     || typeof value.protocol !== 'string' || !UUID.test(value.protocol)) return fail(422, 'Invalid protocol');
-  const customerId = current.customer_id;
-  const report = await store.findCustomerReport(customerId, value.protocol.toLowerCase());
+  // An admin acting as a customer asked for this update, so it goes to the admin's own address (ADR-007, decision 10).
+  const customerId = current.acting_admin_customer_id ?? current.customer_id;
+  const report = await store.findCustomerReport(current.customer_id, value.protocol.toLowerCase(), customerId);
   if (!report) return fail(404, 'Report not found');
   if (!report.has_target) return fail(409, 'No email on file for this sign-in');
   const reference = report.reference_short ?? report.protocol;
@@ -245,8 +251,9 @@ export async function requestUpdate(request, env, store, ctx) {
   const messageId = crypto.randomUUID();
   // The window is checked inside the insert, so concurrent requests queue one; only a refusal reads the newest row.
   if (!(await store.enqueueEmail({ messageId, now, customerId, template: 'update', language: report.language, reference })).length) {
-    const { latest } = await store.recentEmails(customerId, reference, now - UPDATE_EVERY_MS, 'update');
-    return fail(429, 'An update was sent recently', { 'Retry-After': String(Math.max(1, Math.ceil(((latest ?? now) + UPDATE_EVERY_MS - now) / 1000))) });
+    const retryAt = await store.recentEmailRetryAt(customerId, reference, now - UPDATE_EVERY_MS);
+    return fail(429, 'An update request is already in progress or was accepted recently',
+      { 'Retry-After': String(Math.max(1, Math.ceil(((retryAt ?? now + EMAIL_FAILURE_RETRY_MS) - now) / 1000))) });
   }
   ctx?.waitUntil?.(deliver(env, createStore(env.DB), { messageId, customerId, language: report.language, reference,
     template: 'update', status: STATUS_TEXT[report.status][report.language] }));

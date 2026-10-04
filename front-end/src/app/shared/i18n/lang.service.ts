@@ -24,6 +24,8 @@ const es = {
     hello: 'Hola', charges: 'Cargos', agentView: 'Vista de agente', customerView: 'Vista de cliente',
     adminChip: 'administración · evaluación',
     adminOnCustomer: 'Eres administrador/a de la demo. Esta es la experiencia del cliente; en la vista de agente revisas los reportes que llegan.',
+    alertTitle: 'Notamos un cargo inusual en tu cuenta', alertBody: '¿Lo reconoces? Si no, repórtalo aquí: una persona revisa cada reporte y te avisamos por correo en cada paso.',
+    alertReport: 'No lo reconozco, reportar', alertMine: 'Sí, es mío', alertThanks: 'Gracias, lo anotamos. No te volveremos a preguntar por este cargo.',
     actAsTitle: 'Ver como otro cliente',
     actAsButton: 'Ver como este cliente',
     actAsLocked: 'Termina el reporte abierto antes de cambiar de cliente.',
@@ -111,8 +113,8 @@ const es = {
     inReview: 'En revisión', takeCase: 'Tomar el caso', closeReview: 'Cerrar la revisión',
     agentErr409: 'Otra persona ya cambió este caso.',
     moreReports: 'Hay más reportes que no se muestran aquí.', reportsFailed: 'No se pudieron cargar tus reportes.',
-    updateMe: 'Enviarme una actualización por correo', updateSent: 'Te enviamos un correo con el estado.',
-    updateRecent: 'Ya te enviamos una actualización hace poco.', updateNoEmail: 'No hay un correo asociado a este inicio de sesión.',
+    updateMe: 'Enviarme una actualización por correo', updateSent: 'Pedimos el correo con el estado. Si no llega en unos minutos, revisa la carpeta de spam o inténtalo de nuevo.',
+    updateRecent: 'Ya pediste una actualización hace poco.', updateNoEmail: 'No hay un correo asociado a este inicio de sesión. El estado de cada reporte se muestra aquí, en «Tus reportes».',
     sessionRenewed: 'Tu sesión había expirado. La renovamos con la misma identidad y reenviamos la misma solicitud.'
 };
 
@@ -141,6 +143,8 @@ const STRINGS: Record<Lang, Strings> = {
     hello: 'Olá', charges: 'Cobranças', agentView: 'Visão do agente', customerView: 'Visão do cliente',
     adminChip: 'administração · avaliação',
     adminOnCustomer: 'Você é administrador/a da demo. Esta é a experiência do cliente; na visão do agente você analisa os relatos que chegam.',
+    alertTitle: 'Notamos uma cobrança incomum na sua conta', alertBody: 'Você a reconhece? Se não, relate aqui: uma pessoa analisa cada relato e avisamos por e-mail a cada etapa.',
+    alertReport: 'Não reconheço, relatar', alertMine: 'Sim, é minha', alertThanks: 'Obrigado, anotamos. Não perguntaremos de novo sobre esta cobrança.',
     actAsTitle: 'Ver como outro cliente',
     actAsButton: 'Ver como este cliente',
     actAsLocked: 'Termine o relato aberto antes de trocar de cliente.',
@@ -228,8 +232,8 @@ const STRINGS: Record<Lang, Strings> = {
     inReview: 'Em análise', takeCase: 'Assumir o caso', closeReview: 'Encerrar a análise',
     agentErr409: 'Outra pessoa já mudou este caso.',
     moreReports: 'Há mais relatos que não aparecem aqui.', reportsFailed: 'Não foi possível carregar seus relatos.',
-    updateMe: 'Receber atualização por e-mail', updateSent: 'Enviamos um e-mail com o status.',
-    updateRecent: 'Já enviamos uma atualização há pouco.', updateNoEmail: 'Não há um e-mail associado a este login.',
+    updateMe: 'Receber atualização por e-mail', updateSent: 'Pedimos o e-mail com o status. Se não chegar em alguns minutos, confira o spam ou tente de novo.',
+    updateRecent: 'Você já pediu uma atualização há pouco.', updateNoEmail: 'Não há um e-mail associado a este login. O status de cada relato aparece aqui, em «Seus relatos».',
     sessionRenewed: 'Sua sessão tinha expirado. Nós a renovamos com a mesma identidade e reenviamos o mesmo pedido.'
   },
   en: {
@@ -252,6 +256,8 @@ const STRINGS: Record<Lang, Strings> = {
     hello: 'Hi', charges: 'Charges', agentView: 'Agent view', customerView: 'Customer view',
     adminChip: 'admin · evaluation',
     adminOnCustomer: 'You are a demo administrator. This is the customer experience; the agent view is where incoming reports are reviewed.',
+    alertTitle: 'We noticed an unusual charge on your account', alertBody: 'Do you recognize it? If not, report it here: a person reviews every report, and we email you at each step.',
+    alertReport: "I don't recognize it, report it", alertMine: "Yes, it's mine", alertThanks: "Thanks, noted. We won't ask about this charge again.",
     actAsTitle: 'View as another customer',
     actAsButton: 'View as this customer',
     actAsLocked: 'Finish the open report before switching customers.',
@@ -339,8 +345,8 @@ const STRINGS: Record<Lang, Strings> = {
     inReview: 'In review', takeCase: 'Take the case', closeReview: 'Close the review',
     agentErr409: 'Someone else already changed this case.',
     moreReports: 'There are more reports that are not shown here.', reportsFailed: 'Your reports could not be loaded.',
-    updateMe: 'Email me an update', updateSent: 'We emailed you the status.',
-    updateRecent: 'We sent you an update a moment ago.', updateNoEmail: 'There is no email linked to this sign-in.',
+    updateMe: 'Email me an update', updateSent: 'We requested the status email. If it has not arrived in a few minutes, check your spam folder or try again.',
+    updateRecent: 'You asked for an update a moment ago.', updateNoEmail: 'There is no email linked to this sign-in. Each report\'s status is shown here, under "Your reports".',
     sessionRenewed: 'Your session had expired. We renewed it with the same identity and resent the same request.'
   }
 };

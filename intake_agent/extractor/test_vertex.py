@@ -59,8 +59,9 @@ class VertexTransportTests(unittest.TestCase):
         self.assertEqual(request.get_header("Authorization"), "Bearer vertex-token-test")
         sent = json.loads(request.data)
         expected = workers_ai.build_body(MESSAGE, "es", "2026-06-12T10:00:00", VOCABULARY)
-        self.assertEqual({k: v for k, v in sent.items() if k != "model"}, expected, "prompt, inputs, temperature and max_tokens unchanged")
+        self.assertEqual({k: v for k, v in sent.items() if k != "model"}, expected, "prompt, inputs, temperature, max_tokens and reasoning_effort unchanged")
         self.assertEqual(sent["model"], "openai/gpt-oss-20b-maas")
+        self.assertEqual(sent["reasoning_effort"], "low", "the reasoning level reaches Vertex explicitly")
         self.assertEqual(out["extracted"]["intent"], "report")
         self.assertEqual(out["usage"], {"input_tokens": 100, "output_tokens": 20})
 

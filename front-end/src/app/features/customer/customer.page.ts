@@ -101,6 +101,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly ended = signal(false);
   readonly chatError = signal('');
   readonly log = signal<ChatLine[]>([{ from: 'bot', key: 'chatHello' }]);
+  /** FAQ questions and answers, kept apart from the report conversation and shown right above the FAQ buttons, so a new
+   *  answer appears where the customer clicked, and never becomes the guide's prompt for the current step. */
+  readonly faqLog = signal<ChatLine[]>([]);
   /** The guide spoke last, so its line (id `chat-prompt`) describes the step that just took focus. */
   readonly promptLast = computed(() => this.log().at(-1)?.from === 'bot');
   /** "I can't find it" was pressed: the guide asks once what the customer remembers before anything is sent. */
@@ -196,6 +199,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     // Outside the zone so the app (and tests) can be stable while it waits; the signal still schedules the render.
     this.introTimer = this.zone.runOutsideAngular(() => setTimeout(() => this.introDone.set(true), 6800)); // must outlast the intro word animation delays in styles.css
     if (this.client()) void this.resume();
+    else void this.restore();
     if (!this.demoPicker) return;
     this.identitiesLoading.set(true);
     try {
@@ -304,6 +308,37 @@ export class CustomerPage implements OnInit, OnDestroy {
     return this.enter(() => this.service.actAs(customerId), e => this.fail(e));
   }
 
+  /** The bank-flagged charge to ask about (ADR-011), or null; a failed read just shows no alert. */
+  readonly alert = signal<Transaction | null>(null);
+  /** The short thanks after "it's mine", announced where the alert was. */
+  readonly alertNote = signal('');
+
+  private async loadAlert(): Promise<void> {
+    try {
+      this.alert.set((await this.service.alert()).alert);
+    } catch {
+      this.alert.set(null); // the alert is optional: the home works without it
+    }
+  }
+
+  /**
+   * Answer the alert. "It's mine" records it and thanks the customer; "I don't recognize it" records it and opens the
+   * guided report on that charge, the normal confirmation path. The banner goes either way; a failed record keeps it.
+   */
+  async answerAlert(answer: 'mine' | 'report'): Promise<void> {
+    const tx = this.alert();
+    if (!tx || this.busy()) return;
+    try {
+      await this.service.answerAlert(tx.transaction_id, answer);
+    } catch (e) {
+      this.fail(e);
+      return;
+    }
+    this.alert.set(null);
+    if (answer === 'mine') this.alertNote.set(this.t().alertThanks);
+    else this.openChat(tx.transaction_id);
+  }
+
   /** "Use another email". */
   anotherEmail(): void {
     this.error.set('');
@@ -355,6 +390,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       this.code = '';
       await this.loadTransactions();
       await this.loadReports();
+      void this.loadAlert();
       this.step.set('home');
     } catch (e) {
       onError(e);
@@ -370,11 +406,31 @@ export class CustomerPage implements OnInit, OnDestroy {
     return key ? this.t()[key] : errorText(this.t(), e);
   }
 
+  /**
+   * After a reload the tab has no state, but the session cookie may still be live (ADR-013, phase 0): restore it and go
+   * home, as a sign-in would. Nothing happens without a live session, or if a sign-in started meanwhile.
+   */
+  private async restore(): Promise<void> {
+    let state;
+    try {
+      state = await this.service.me();
+    } catch {
+      return; // no session information: the sign-in screen stays
+    }
+    // Never over a sign-in the person has started (the login step, a pending or sent code), even if it is not busy now.
+    if (!state?.customer || this.client() || this.busy() || this.step() !== 'intro' || this.codeSent()) return;
+    this.card.set(state.customer.context_card ?? null);
+    this.client.set(state.customer.customer_id);
+    this.roles.set(state.customer.roles);
+    await this.resume();
+  }
+
   /** Back from another in-app view in this tab: show the same customer's home again; the cookie still decides access. */
   private async resume(): Promise<void> {
     this.booted.set(true);
     this.step.set('home');
     void this.loadReports();
+    void this.loadAlert();
     try {
       await this.loadTransactions();
     } catch (e) {
@@ -399,7 +455,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
-  /** "Email me an update" on a report row; the button keeps focus and the answer is announced under the row. */
+  /** Queue "Email me an update" on a report row; never claim background delivery, and keep focus on the button. */
   async requestUpdate(protocol: string): Promise<void> {
     if (this.updating()) return;
     this.updating.set(protocol);
@@ -533,9 +589,14 @@ export class CustomerPage implements OnInit, OnDestroy {
     return STATEMENT_MAX - 1 - [...this.chatStatement.trim()].length;
   }
 
-  /** "I can't find it": nothing is sent yet; the guide asks once what the customer remembers (one extra turn, no more). */
+  /**
+   * "I can't find it": nothing is sent yet; the guide asks once what the customer remembers (one extra turn, no more).
+   * A charge picked before is dropped, so it never looks chosen beside the review without one.
+   */
   cannotFind(): Promise<void> | void {
     if (this.busy() || this.chatStep() !== 'choose' || this.frozen()) return;
+    this.choice = '';
+    this.chatConfirmed = false;
     if (this.room < 10) return this.handoff(); // no room for an answer: the statement already carries the detail
     this.asking.set(true);
     this.log.update(l => [...l, { from: 'me', key: 'chatCannotFind' }, { from: 'bot', key: 'chatDetailsPrompt' }]);
@@ -638,6 +699,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.choice = '';
     this.chatConfirmed = false;
     this.log.set([{ from: 'bot', key: this.general() ? 'chatHelloGeneral' : 'chatHello' }]);
+    this.faqLog.set([]);
   }
 
   /** Guide lines are i18n keys; the greeting carries the customer's first name. */
@@ -650,7 +712,10 @@ export class CustomerPage implements OnInit, OnDestroy {
   ask(question: keyof typeof FAQ): void {
     const answer = FAQ[question];
     if (!answer) throw new Error('Unknown FAQ');
-    this.log.update(l => [...l, { from: 'me', key: question }, { from: 'bot', key: answer }]);
+    this.faqLog.update(l => [...l, { from: 'me', key: question }, { from: 'bot', key: answer }]);
+    // The charge list can push the panel's top out of view: bring the new answer into view, without moving focus.
+    afterNextRender(() => this.host.nativeElement.querySelector('.chat-faq-log li:last-child')?.scrollIntoView({ block: 'nearest' }),
+      { injector: this.injector });
   }
 
   /** Send the frozen request. One 401 renews the same customer and retries the same body; after that the manual Renew/Retry stays. */
@@ -683,6 +748,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       } else {
         this.intakeReceipt.set(result as IntakeReceipt);
         await this.loadReports();
+        void this.loadAlert(); // a report on the flagged charge ends its alert
       }
     } catch (e) {
       if (e instanceof ApiError && DEFINITIVE.has(e.status)) {
@@ -707,6 +773,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   private reset(): void {
+    this.alert.set(null);
+    this.alertNote.set('');
     this.client.set('');
     this.roles.set([]);
     this.transactions.set([]);

@@ -34,12 +34,20 @@ const CEILING = {
   agentLogin: [3, 6, 6, 1],
   // GET /audit/events (issue #69): no session read; one batch of two reads by primary key/rowid, at most limit + 1 rows each.
   audit: [2, 102, 0, 1],
+  // GET /auth/me (ADR-013 phase 0), one customer cookie: its session read and the context-card read; no write. A second
+  // (agent) cookie adds one session read. Measured, no margin.
+  authMe: [2, 1, 0, 2],
   // GET /admin/customers (ADR-007, decision 10): the session read, then the identities query above (every customers row:
   // 16 measured here, about 800 with the cohort loaded). POST /admin/act-as: session, customerSource and context card
   // reads, then actAsSession's single-use batch: its inserts each check a session by primary key (the presented admin
   // session, then the new one twice), which adds 4 reads over a plain rotation. Measured, no margin (ADR-004).
   adminCustomers: [2, 17, 0, 2],
   adminActAs: [8, 9, 8, 4],
+  // ADR-011. GET /alerts: the session read, then one read over the customer's own flagged charges (each checked against
+  // proactive_answers and cases by key). POST /alerts/answer: session, then one batch (a guarded insert and its read-back);
+  // the row and its primary key are the two writes, none on a replay. Measured, no margin.
+  alert: [2, 3, 0, 2],
+  alertAnswer: [3, 3, 2, 2],
   // The CHECK on intake_episodes.reason (migration 0016, ADR-010) adds one counted read to each statement that writes an
   // episode row, as 0004's CHECKs did: start 8 -> 9 and replay 6 -> 7 rows read, measured with and without it (ADR-004).
   // Migration 0018's index intake_episodes_owner_recent adds one write to the episode insert (11 -> 12).
@@ -76,7 +84,10 @@ const CEILING = {
   // intake_handoffs_urgent; closing it writes what a normal close writes, since D1 counts no write for leaving that index.
   // The confirm batch repeats the one-open-report check atomically (NOT EXISTS over cases_customer_transaction): +1 read.
   // Its earlier closed same-charge report makes those seven guards cost +42 reads (ADR-004).
-  intakeConfirmHigh: [21, 120, 28, 10],
+  // 120 -> 129 rows read (ADR-011): the proactive suite leaves one more closed high-urgency report in the shared store, and the
+  // urgent partial index grows with it. Measured on the same code with and without that suite (120 / 129); queries, writes
+  // and round trips are unchanged (ADR-004, 2026-10-04 note).
+  intakeConfirmHigh: [21, 129, 28, 10],
   agentTransitionHigh: [5, 26, 6, 2],
   // The detail batch (migration 0018): stamp the first open (1 write, once), the row, and the customer's newest 21
   // episodes (index intake_episodes_owner_recent) with at most 20 other reports, so reads are bounded by window size.
@@ -138,12 +149,23 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
     .call('/demo/agent-session', {})).metrics);
   const audit = await client({ authorization: 'Bearer ' + await idToken('auditor@test', { groups: ['auditor'] }) }).call('/audit/events');
   assert.equal(audit.status, 200); measured.audit = within('audit', audit.metrics);
+  // ADR-013 phase 0: a reload with a live customer session restores it.
+  const reloaded = client(); assert.equal((await reloaded.call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
+  const restored = await reloaded.call('/auth/me');
+  assert.equal(restored.status, 200); measured.authMe = within('authMe', restored.metrics);
   const admin = client({ authorization: 'Bearer ' + await idToken('demo-diego', { groups: ['admin'] }) });
   assert.equal((await admin.call('/auth/session', {})).status, 200);
   const customers = await admin.call('/admin/customers');
   assert.equal(customers.status, 200); measured.adminCustomers = within('adminCustomers', customers.metrics);
   const actAs = await admin.call('/admin/act-as', { customer_id: 'demo-ana' });
   assert.equal(actAs.status, 200); measured.adminActAs = within('adminActAs', actAs.metrics);
+  // ADR-011: Elena's flagged charge (the proactive suite answers it only as an admin, so it is still shown to her).
+  const elena = client({ authorization: 'Bearer ' + await idToken('demo-elena') });
+  assert.equal((await elena.call('/auth/session', {})).status, 200);
+  const alert = await elena.call('/alerts');
+  assert.equal(alert.status, 200); measured.alert = within('alert', alert.metrics);
+  const answer = await elena.call('/alerts/answer', { transaction_id: 'demo-tx-020', answer: 'mine' });
+  assert.equal(answer.status, 200); measured.alertAnswer = within('alertAnswer', answer.metrics);
   const episode = sum(measured, ['login', 'list', 'create']);
   console.log('D1_BUDGET ' + JSON.stringify({ per_request: measured, customer_episode: episode }));
 });
@@ -211,6 +233,12 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   const update = await cohort.call('/reports/update', { protocol: cohortReceipt.body.protocol });
   assert.equal(update.status, 202); assertContract('updateQueued', update.body);
   measured.reportsUpdate = within('reportsUpdate', update.metrics);
+  // An admin acting as that customer asks too: same three statements, the target read is the admin's own (ADR-007, decision 10).
+  const admin = client({ authorization: 'Bearer ' + await idToken('demo-diego', { groups: ['admin'] }) });
+  assert.equal((await admin.call('/auth/session', {})).status, 200);
+  assert.equal((await admin.call('/admin/act-as', { customer_id: 'CLI-COHORT-2' })).status, 200);
+  const acting = await admin.call('/reports/update', { protocol: cohortReceipt.body.protocol });
+  assert.equal(acting.status, 202); measured.reportsUpdateActing = within('reportsUpdate', acting.metrics);
   const transition = await agent.call('/agent/intake-status', { protocol: cohortReceipt.body.protocol, status: 'in_review' });
   assert.equal(transition.status, 200); assertContract('intakeTransition', transition.body);
   measured.agentTransition = within('agentTransition', transition.metrics);
