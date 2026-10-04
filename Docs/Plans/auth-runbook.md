@@ -49,13 +49,16 @@ back-end/scripts/cognito/setup.sh
 
 Idempotent. It creates or finds the pool `arabicaai-demo`, the immutable attribute `custom:customer_id`, the public app client `arabicaai-web` (no secret, `USER_AUTH` with `EMAIL_OTP`, user-existence errors hidden) and the four groups, then prints three values.
 
+**The sign-in code email.** The pool sends through SES (`EmailSendingAccount` `DEVELOPER`, sender `Arabica AI <a team member's verified address>`, set by hand on 2026-10-04 after production access; the address itself is not committed, issue #70). The code email itself is branded with `back-end/scripts/cognito/otp-email.html` (logo, the code large in a monospace box, Spanish, Portuguese and English): a person applies it once with `back-end/scripts/cognito/otp-email.sh <pool id>`. Cognito uses the MFA message template for passwordless codes, so the script sets MFA to `OPTIONAL` with that template; nobody has an MFA preference, so sign-in keeps its single code. Email clients run no scripts, so there is no copy button: the code is large and selectable, and Apple Mail and Safari autofill it from the message.
+
 ## 5. Configure the Worker
 
 | Name | Where | Kind |
 |---|---|---|
 | `COGNITO_REGION`, `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` | `vars` in `back-end/wrangler.jsonc` (the values `setup.sh` printed) | Public: they identify the pool and client and grant nothing |
 | `SES_REGION` | `vars` | Public |
-| `SES_FROM` (`ArabicaAI demo <address>`) | `npx wrangler secret put SES_FROM` | Secret, because it is a person's address; the deploy guard refuses it in `vars` |
+| `SES_FROM` (`ArabicaAI demo <address>`) | `npx wrangler secret put SES_FROM` | Secret, because it is a person's address; the deploy guard refuses it in `vars`. Its domain must not publish DMARC `p=reject` unless the domain itself is verified in SES with DKIM |
+| `APP_URL` | `vars` | Public: the deployed origin, the target of the notification emails' "see my reports" button (the logo is embedded in the message, not fetched) |
 | `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | `npx wrangler secret put …` | Secret ([SES runbook](intake-demo.md#notification-email-ses)) |
 | `EMAIL_KEY` | `npx wrangler secret put EMAIL_KEY` (`openssl rand -base64 32`) | Secret: encrypts stored notification addresses |
 | `DEMO_PICKER`, `COGNITO_TEST_JWKS` | `back-end/.dev.vars` only | Local only; the deploy guard refuses them in `vars` |
@@ -73,7 +76,7 @@ sh back-end/scripts/cognito/enroll.sh <email> <customer_id> admin     # team or 
 - `custom:customer_id` is immutable. Rerunning with a different id refuses; to re-map, remove the user (section 9) and enrol again.
 - Groups only add up: enrolling an existing user in `admin` keeps `customer` and `agent`.
 - The customer id must already be loaded in remote D1 (the fictitious seed or the cohort), or sign-in answers 403.
-- Report emails reach an address only after it is verified in SES while the account is in the sandbox: `aws sesv2 create-email-identity --email-identity <email> --profile arabica --region us-east-2`, then the owner clicks AWS's email.
+- Report emails may be sent to any address: SES production access was granted (checked 2026-10-04, `ProductionAccessEnabled` true, 50,000 a day), so recipients no longer need SES verification. Delivery still depends on the sender (section 5) and on the recipient's spam filter.
 
 **Fictitious identities.** `demo-ana` (Roberto), `demo-bruno` (Lucas), `demo-carla` (Manoella), and `demo-diego`, `demo-elena`, `demo-marco` (evaluators), each with charges shaped for every report reason and the urgency lane. Load them with `npx wrangler d1 execute arabica-intake-demo --remote --file seeds/seed_fictitious.sql` from `back-end/` (idempotent upserts).
 
@@ -133,7 +136,7 @@ A Worker session already open lasts at most one hour. To end it at once, a perso
 | "This account is not enrolled" (403) at `/` | Not in `customer` or `admin`, or the customer id isn't loaded in remote D1 | Add the group; load the seed or cohort part |
 | "This account is not an agent" (403) at `/agent` | Not in `agent` or `admin` | `enroll.sh <email> - agent`, or `admin` |
 | `enroll.sh` refuses with a different customer id | `custom:customer_id` is immutable | Delete the user (section 9), then enrol again |
-| Signed in, but no report email | The address isn't a verified SES identity (sandbox) | Section 6, last bullet |
+| Signed in, but no report email | The sender's domain rejects SES mail (DMARC), or the email landed in spam | Section 5: send from an address whose domain allows it, or verify the domain in SES with DKIM; check spam |
 | Banner gone after a reload | The banner lives in the tab, like the sign-in | Sign in again |
 
 ## 11. Evaluator access
@@ -154,5 +157,5 @@ Evaluator admins can open individual reports in the approved agent queue (statem
 - **The auditor sees references only:** no customer id, email, statement or token, by design ([`intake-events.md`](../intake/intake-events.md)).
 - **No RLS on D1;** isolation rests on Worker predicates and their tests.
 - **Sessions last one hour** and survive a Cognito disable until they expire, unless a person deletes them (section 9).
-- **SES sandbox:** only verified recipients get email.
+- **Sender domain:** SES signs nothing for a bare address identity, so a sender whose domain publishes DMARC `p=reject` (a company domain, typically) gets bounced. Send from a verified domain with DKIM, or from an address whose domain does not reject.
 - **Email is attempted once,** after the response; a failure is not retried, and "sent" means SES accepted the request, not that it was delivered.

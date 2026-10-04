@@ -66,7 +66,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
             (email code → ID token)  evals/intake (checklist baseline, episode scorer) over HTTP
 ```
 
-The Worker and D1 remain the single runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito proves who signs in, and the Worker issues its own session from the verified token. SES only delivers email; cases stay in D1. These integrations are deployed, with Cognito replacing the former shared gates ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). SES remains in the sandbox, so only verified recipients receive email.
+The Worker and D1 remain the single runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito proves who signs in, and the Worker issues its own session from the verified token. SES only delivers email; cases stay in D1. These integrations are deployed, with Cognito replacing the former shared gates ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). SES has production access, so recipients need no verification; delivery still depends on the sender's domain policy.
 
 Everything merged through #106 and #110 is deployed, including the in-app alert when the bank flags a charge (ADR-011) and session restore on reload. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan). Extractor v1 was registered, tagged and run once on the frozen set on 2026-10-04: 88% correct against 38% for the rules, 0 unsafe, p95 2,048 ms ([results and limits](Docs/deliverables/EVALUATION.md#1-the-result)).
 

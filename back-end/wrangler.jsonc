@@ -11,6 +11,7 @@
   },
   "placement": { "mode": "smart" },
   "vars": {
+    "APP_URL": "https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev",
     "COGNITO_REGION": "us-east-2",
     "COGNITO_USER_POOL_ID": "us-east-2_Lo7KrT6MT",
     "COGNITO_CLIENT_ID": "5ak5cbjgdddso1c3h3i2aha7sn",
