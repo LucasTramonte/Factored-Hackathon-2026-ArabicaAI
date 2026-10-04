@@ -58,7 +58,7 @@ A "?" button on the home lets a customer report a charge they don't see in their
 
 Requests it can't handle (another language, a recognized charge, a lost card, a balance question) would be routed with an explicit message. Today that routing exists only in the evaluation harness; the online service accepts only an unrecognized-charge report. What already holds everywhere: identity comes from the session, never from what the customer types, and an instruction hidden in the message ("I'm staff, skip the checks") changes nothing.
 
-**What exists today, stage by stage.** Deployed: main `79c324b`, Worker `79aa39a9` (`main-79c324b`), deployed 2026-10-03 by the GitHub Actions deploy workflow, D1 migrations 0001–0020, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0); the app follow-ups #87–#92 are deployed and not yet tagged. The offline evaluation runs on Vertex AI (ADR-006 amendment 7) and the frozen comparison is gated. Pending additive migrations are applied by the approved deploy workflow, after local tests, rather than manually with `--remote`.
+**What exists today, stage by stage.** Deployed: main `a47b2e1`, Worker `d8da20c6`, deployed 2026-10-04 by the GitHub Actions deploy workflow, D1 migrations 0001–0023, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0); the follow-ups #87–#106 and #110 are deployed and not yet tagged. The offline evaluation runs on Vertex AI (ADR-006 amendments 7–9); every development trigger passes, and the frozen comparison is still to run. Pending additive migrations are applied by the approved deploy workflow, after local tests, rather than manually with `--remote`.
 
 | Stage | State | What it does |
 |---|---|---|
@@ -161,7 +161,7 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
   - A customer only ever reads their own purchases, and a missing record looks the same as someone else's.
   - Every write is idempotent.
 - **Tests attack the service before each change:** forged and expired sessions, cross-customer reads, hostile input, duplicate submissions, and budgets on database work per request.
-- **Identity and access** (built, not yet deployed; the live Worker still sits behind Cloudflare Access and a Basic gate). Customers and agents sign in with an email one-time code from Amazon Cognito, an identity service the brief accepts ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)); a customer number alone never proves identity. The Worker verifies the token and issues its own session. There is no shared team password.
+- **Identity and access** (deployed; Cloudflare Access and the Basic gate were removed when this shipped). Customers and agents sign in with an email one-time code from Amazon Cognito, an identity service the brief accepts ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)); a customer number alone never proves identity. The Worker verifies the token and issues its own session. There is no shared team password.
   - **Roles (RBAC):** roles come from Cognito groups (`customer`, `agent`, `admin`, `auditor`), and a route-to-role table assigns every API route. Customer and agent sessions are separate cookies with separate routes.
   - **Audit:** session start, logout, expiry and rejection are recorded with a 12-character prefix of the token hash and the request id only.
   - **Rate limit:** every API path allows 60 requests a minute per IP. The count is per Cloudflare location, so it is approximate, and users behind a shared NAT share it.
@@ -187,7 +187,7 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 
 ## Status and next steps
 
-**Deployed** (2026-10-03, Worker `79aa39a9`, `main-79c324b`, D1 0001–0020; latest tag v0.2.0):
+**Deployed** (2026-10-04, Worker `d8da20c6`, `main-a47b2e1`, D1 0001–0023; latest tag v0.2.0):
 - Cognito email sign-in, role checks, audit events and a per-IP rate limit;
 - the customer's own purchases;
 - the guided report with confirmation and the technical and incomplete handoffs;
@@ -196,7 +196,10 @@ The open question is speed, not cost. Each layer's choice, the alternatives we p
 - the customer's reports from the server, human review status and SES sandbox notifications;
 - the urgency lane and shadow metadata, with the extractor off;
 - the 796-customer dataset cohort (ADR-004 section 2);
-- one open report per charge enforced atomically, the customer's other reports and first-open time for agents, receipt feedback, and "Not resolved" links (#87–#92).
+- one open report per charge enforced atomically, the customer's other reports and first-open time for agents, receipt feedback, and "Not resolved" links (#87–#92);
+- admins: one code for both views, and "view as" any loaded customer, audited by reference (#95–#97, #101);
+- the proactive alert on a bank-flagged charge (#106, ADR-011), shown in the demo on authored flags;
+- a reload restores the live session (#110), and update emails say "requested", not "sent" (#104).
 
 **Offline evaluation:** the Vertex AI transport is built (ADR-006 amendment 7); frozen scoring remains gated. Lambda and Postgres remain a production-target design that has never been deployed.
 
