@@ -8,7 +8,7 @@ no transactions, no customer identifiers. It returns the five extraction fields 
 Invariants:
 - Credentials come from ``CLOUDFLARE_ACCOUNT_ID`` / ``CLOUDFLARE_API_TOKEN`` and are never logged.
 - The message text is never printed, logged or put in an exception message.
-- Temperature 0, ``reasoning_effort: "low"``; a 10 s overall deadline raises ``TimeoutError``; one retry on invalid JSON or
+- Temperature 0, ``reasoning_effort: "low"`` (verified on the Vertex AI host only, ADR-006 amendments 8-9; not checked on Workers AI); a 10 s overall deadline raises ``TimeoutError``; one retry on invalid JSON or
   schema-invalid output, then ``ValueError``.
 - A service or network failure (HTTP 429/5xx, connection reset, truncated or non-JSON body) raises
   ``ConnectionError``, which the harness turns into a technical handoff. Any other HTTP 4xx is a
