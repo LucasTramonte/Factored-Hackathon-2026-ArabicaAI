@@ -218,6 +218,12 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   const update = await cohort.call('/reports/update', { protocol: cohortReceipt.body.protocol });
   assert.equal(update.status, 202); assertContract('updateQueued', update.body);
   measured.reportsUpdate = within('reportsUpdate', update.metrics);
+  // An admin acting as that customer asks too: same three statements, the target read is the admin's own (ADR-007, decision 10).
+  const admin = client({ authorization: 'Bearer ' + await idToken('demo-diego', { groups: ['admin'] }) });
+  assert.equal((await admin.call('/auth/session', {})).status, 200);
+  assert.equal((await admin.call('/admin/act-as', { customer_id: 'CLI-COHORT-2' })).status, 200);
+  const acting = await admin.call('/reports/update', { protocol: cohortReceipt.body.protocol });
+  assert.equal(acting.status, 202); measured.reportsUpdateActing = within('reportsUpdate', acting.metrics);
   const transition = await agent.call('/agent/intake-status', { protocol: cohortReceipt.body.protocol, status: 'in_review' });
   assert.equal(transition.status, 200); assertContract('intakeTransition', transition.body);
   measured.agentTransition = within('agentTransition', transition.metrics);

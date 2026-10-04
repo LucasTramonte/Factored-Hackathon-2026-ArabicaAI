@@ -227,6 +227,7 @@ export async function listReports(request, env, store) {
 /**
  * POST /reports/update ``{ protocol }``: email the session customer the status of one of their acknowledged reports.
  * Foreign and missing reports get the same 404; no target 409; one ``update`` email per report per 5 minutes (429).
+ * On an act-as session the email (and its outbox row and window) is the signed-in admin's own, never the customer's.
  */
 export async function requestUpdate(request, env, store, ctx) {
   const current = await requireSession(request, store, 'customer');
@@ -236,8 +237,9 @@ export async function requestUpdate(request, env, store, ctx) {
   const value = body.value;
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).join() !== 'protocol'
     || typeof value.protocol !== 'string' || !UUID.test(value.protocol)) return fail(422, 'Invalid protocol');
-  const customerId = current.customer_id;
-  const report = await store.findCustomerReport(customerId, value.protocol.toLowerCase());
+  // An admin acting as a customer asked for this update, so it goes to the admin's own address (ADR-007, decision 10).
+  const customerId = current.acting_admin_customer_id ?? current.customer_id;
+  const report = await store.findCustomerReport(current.customer_id, value.protocol.toLowerCase(), customerId);
   if (!report) return fail(404, 'Report not found');
   if (!report.has_target) return fail(409, 'No email on file for this sign-in');
   const reference = report.reference_short ?? report.protocol;

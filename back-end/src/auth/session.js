@@ -51,8 +51,9 @@ export async function startSession(request, store, actor, customerId = null, ema
   const previous = readCookies(request)[COOKIE[actor]];
   const oldHash = previous && TOKEN.test(previous) ? await tokenHash(previous) : null;
   const token = newToken();
+  // An admin session records the admin's own customer id (migration 0022), which act-as carries forward.
   await store.rotateSession({ now, oldHash, newHash: await tokenHash(token), actor, customerId, expiresAt: now + SESSION_MS, emailEnc,
-    requestId: requestId(request), admin });
+    requestId: requestId(request), admin, actingAdmin: admin ? customerId : null });
   return cookieHeader(COOKIE[actor], token, request, SESSION_MS / 1000);
 }
 
