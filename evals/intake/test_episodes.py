@@ -273,7 +273,7 @@ INCOMPLETE = [_v2(ev('intake_started', 'g', 0)), _v2(ev('handoff_created', 'g', 
 
 def suggestion(seq=3, case_id='g', **fields):
     run = dict(case_ref='REF-G', arm='B', result='suggested', producer='extractor-v1@a270773600cf', llm_calls=1,
-               known_input_tokens=1840, known_output_tokens=84, usage_unavailable_calls=0, suggestions=2)
+               known_input_tokens=1840, known_output_tokens=84, usage_unavailable_calls=0, injection_flagged=False, suggestions=2)
     run.update(fields)
     return _v2(ev('suggestion_recorded', case_id, seq, **run))
 
@@ -292,18 +292,24 @@ class SuggestionEventTests(unittest.TestCase):
 
     def test_unknown_usage_keeps_suggestion_token_totals_null(self):
         s = summarize(INCOMPLETE + [suggestion(result='timeout', suggestions=0, known_input_tokens=0, known_output_tokens=0,
-                                               usage_unavailable_calls=1)])['all']['suggestions']
+                                               usage_unavailable_calls=1, injection_flagged=None)])['all']['suggestions']
         self.assertIsNone(s['input_tokens'])
         self.assertEqual(s['usage_unavailable_calls'], 1)
         off = summarize(INCOMPLETE + [suggestion(arm=None, result='off', producer=None, llm_calls=0, known_input_tokens=0,
-                                                 known_output_tokens=0, suggestions=0)])['all']['suggestions']
+                                                 known_output_tokens=0, suggestions=0, injection_flagged=None)])['all']['suggestions']
         self.assertEqual(off['by_arm'], {'None': {'off': 1}})
+        swept = summarize(INCOMPLETE + [suggestion(result='abandoned', suggestions=0, known_input_tokens=0, known_output_tokens=0,
+                                                   usage_unavailable_calls=1, injection_flagged=None)])['all']['suggestions']
+        self.assertEqual((swept['by_arm'], swept['input_tokens']), ({'B': {'abandoned': 1}}, None))
+        flagged = summarize(INCOMPLETE + [suggestion(injection_flagged=True)])['all']['suggestions']
+        self.assertEqual(flagged['injection_flagged'], 1)
 
     def test_inconsistent_or_misplaced_runs_reject_the_log(self):
         bad = [suggestion(arm='A'), suggestion(result='no_match'), suggestion(suggestions=4), suggestion(llm_calls=3),
                suggestion(producer=None), suggestion(usage_unavailable_calls=2), suggestion(result='capped', suggestions=0),
                suggestion(arm='C'), suggestion(result='decided'), suggestion(llm_calls=True), suggestion(seq=2),
-               suggestion(case_ref='OTHER'), dict(suggestion(), version='1'), dict(suggestion(), merchant='Uber'),
+               suggestion(case_ref='OTHER'), suggestion(injection_flagged=1), suggestion(result='timeout', suggestions=0, injection_flagged=True),
+               suggestion(arm='A', result='abandoned', suggestions=0), dict(suggestion(), injection_flagged=None) | {'result': 'off', 'arm': 'A', 'llm_calls': 1}, dict(suggestion(), version='1'), dict(suggestion(), merchant='Uber'),
                dict(suggestion(), language='pt')]
         for event in bad:
             with self.assertRaises(ValueError, msg=json.dumps(event)):

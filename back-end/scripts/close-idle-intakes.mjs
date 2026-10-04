@@ -25,6 +25,8 @@ export function sweepOptions(values, clock = Date.now()) {
  * Close due unreserved starts at one fixed cutoff, one atomic page of at most ``limit`` (<=100) at a time, for at
  * most ``maxPages`` pages. ``complete`` comes from a final probe: false while any unreserved start is still due at
  * the cutoff. Repeated sweeps cannot duplicate end events, and reserved (pending) episodes are never closed.
+ * The same sweep closes AI suggestion runs still pending 10 minutes after their handoff (ADR-012) as ``abandoned``, at
+ * most ``limit`` per page, with their ``suggestion_recorded`` event (``suggestions_abandoned``).
  * ``maxNow`` overrides the store's clock-skew guard for fake-clock tests.
  */
 export async function closeIdleIntakes(store, { now = Date.now(), limit = 100, maxPages = 1, maxNow } = {}) {
@@ -38,7 +40,13 @@ export async function closeIdleIntakes(store, { now = Date.now(), limit = 100, m
     if (page.length < limit) break;
   }
   const remaining = await store.hasDueIdleIntakes({ now });
-  return { closed, pages, complete: !remaining, cutoff: new Date(now).toISOString(), metrics: store.metrics() };
+  let suggestionsAbandoned = 0;
+  for (let page = 0; page < maxPages; page++) {
+    const runs = await store.closeStaleSuggestionRuns({ now, limit });
+    suggestionsAbandoned += runs.length;
+    if (runs.length < limit) break;
+  }
+  return { closed, pages, complete: !remaining, cutoff: new Date(now).toISOString(), suggestions_abandoned: suggestionsAbandoned, metrics: store.metrics() };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

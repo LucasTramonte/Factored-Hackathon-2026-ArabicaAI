@@ -103,16 +103,18 @@ const CEILING = {
   incompleteDetail: [5, 80, 1, 3],
   // AI suggestions (ADR-012, migration 0024); measured, no margin (ADR-004, 2026-10-04 note). An incomplete handoff with
   // details inserts its suggestion run (row and primary key) in the reservation batch: one more query, no round trip,
-  // whatever the switch. GET suggestions: the session, then one owner-scoped read of the run, answer and at most three
-  // charges. Confirm and mark: the session, then one batch (a guarded insert and its read-back); a replay writes nothing.
-  // The after-response run (ctx.waitUntil, its own store): the cap slot, the pre-recorded call, the customer's purchases
-  // (one batch of two reads, at most 200 charges) and the outcome batch (run, at most three suggestions, one event).
-  intakeIncompleteDetails: [16, 52, 20, 7],
-  suggestions: [2, 10, 0, 2],
+  // whatever the switch, plus its entry in the pending-run partial index (20 -> 21 writes). GET suggestions: the session,
+  // then one batch: the first read that serves suggested charges stamps shown_at (1 write, once), and one owner-scoped read
+  // of the run, answer and at most three charges. Confirm and mark: the session, then one batch (a guarded insert and its
+  // read-back); a replay writes nothing. The after-response run (ctx.waitUntil, its own store): the atomic claim, the cap
+  // slot, the pre-recorded call, the customer's purchases (one batch of two reads, at most 200 charges) and the outcome
+  // batch (run, at most three suggestions, one event). Review fixes, 2026-10-04: claim and shown_at (ADR-004 note).
+  intakeIncompleteDetails: [16, 52, 21, 7],
+  suggestions: [3, 14, 1, 2],
   suggestionConfirm: [3, 10, 2, 2],
   suggestionDetail: [5, 83, 1, 3],
   suggestionMark: [3, 7, 2, 2],
-  suggestionRun: [7, 29, 8, 4],
+  suggestionRun: [8, 31, 9, 5],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
   idleSweepPage: [2, 1210, 300, 1],
   idleSweepNoop: [2, 10, 0, 1],

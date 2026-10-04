@@ -16,7 +16,7 @@ import { createStore } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
 import { EXTRACTION_TIMEOUT_MS, MODEL, VOCABULARY, producers, registeredVersion, vertexUrl } from '../../src/modules/intake/ai-transport.js';
 import { PROMPT } from '../../src/modules/intake/extractor-prompt.js';
-import { DEFAULT_RETIRES, newArm, retired, runSuggestion, testOrigin } from '../../src/modules/intake/suggestions.js';
+import { DEFAULT_RETIRES, asOfAt, newArm, retired, runSuggestion, testOrigin } from '../../src/modules/intake/suggestions.js';
 import { accessToken, audience, credentialConfig, resetTokenCache, workerJwt } from '../../src/modules/intake/vertex-auth.js';
 import { tokenHash } from '../../src/auth/session.js';
 import { assertContract } from '../support/contract.js';
@@ -168,7 +168,9 @@ test("on: the same response and request D1 work; after it, one extraction sugges
   assert.deepEqual([body.model, body.temperature, body.max_tokens, body.reasoning_effort], [MODEL, 0, 2048, 'low']);
   assert.equal(body.messages[0].content, PROMPT);
   const user = JSON.parse(body.messages[1].content);
-  assert.deepEqual(user, { message: DETAILS, session_language: 'es', as_of: null, vocabulary: VOCABULARY }, 'only the details, language, as_of and vocabulary');
+  assert.match(user.as_of, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/, 'the harness form: UTC wall time, no offset');
+  assert.ok(Math.abs(Date.parse(user.as_of + 'Z') - Date.now()) < 60000, 'the Worker\'s current UTC time');
+  assert.deepEqual(user, { message: DETAILS, session_language: 'es', as_of: user.as_of, vocabulary: VOCABULARY }, 'only the details, language, as_of and vocabulary');
   for (const secret of ['"ana"', 'tx-a1', 'tx-bruno', on.episode_id, on.receipt.protocol, ANA, 'No reconozco este cargo']) assert.ok(!vertex.body.includes(secret), secret);
   assert.deepEqual(ctx.rows('SELECT rank,transaction_id,producer FROM handoff_suggestions WHERE handoff_id=?', on.receipt.protocol).map(r => ({ ...r })),
     [{ rank: 1, transaction_id: 'tx-a1', producer: VERSION }], "Bruno's identical charge is never suggested to Ana");
@@ -177,14 +179,14 @@ test("on: the same response and request D1 work; after it, one extraction sugges
   const recorded = ctx.events(on.episode_id).at(-1);
   assert.deepEqual(recorded, { event: 'suggestion_recorded', version: '2', case_id: on.episode_id, ts: recorded.ts, seq: 3, session_ref: recorded.session_ref,
     language: 'es', model_version: 'guided-0.1', case_ref: on.receipt.protocol, arm: 'B', result: 'suggested', producer: VERSION, llm_calls: 1,
-    known_input_tokens: 1840, known_output_tokens: 84, usage_unavailable_calls: 0, suggestions: 1 });
+    known_input_tokens: 1840, known_output_tokens: 84, usage_unavailable_calls: 0, injection_flagged: false, suggestions: 1 });
   assert.ok(!JSON.stringify(ctx.events(on.episode_id)).includes('Farmacia'), 'events carry references and counts, never text');
   // The customer sees the suggestion and confirms it; the agent sees it as a suggestion, never as bank-verified, and marks it.
   const env = { ...ON_B, DB: ctx.d1 };
   const shown = await route(req(`/intake/handoff/${on.receipt.protocol}/suggestions`), env, ctx.store());
   assert.equal(shown.status, 200);
   const list = await shown.json(); assertContract('suggestionList', list);
-  assert.deepEqual(list, { status: 'suggested', choice: null, chosen_transaction_id: null, items: [{ transaction_id: 'tx-a1', merchant_name: 'Farmacia Salud',
+  assert.deepEqual(list, { status: 'suggested', choice: null, chosen_transaction_id: null, answerable: true, items: [{ transaction_id: 'tx-a1', merchant_name: 'Farmacia Salud',
     amount: '32.00', currency: 'ARS', occurred_at: null, source_occurred_at: '2026-06-10T12:00:00' }] });
   const byShort = await route(req(`/intake/handoff/${on.receipt.reference_short}/suggestions`), env, ctx.store());
   assert.deepEqual(await byShort.json(), list, 'the short reference names the same report');
@@ -215,8 +217,8 @@ test("on: the same response and request D1 work; after it, one extraction sugges
 /** A pending run for Ana (switch on, nothing scheduled), then ``runSuggestion`` with ``env`` and a mocked Google. */
 async function run(t, env, mocked = google(), { arm = 'B', now } = {}) {
   const ctx = await setup(t);
-  const { receipt, episode_id } = await handoff(ctx, ON_B, { ctx: false });
-  const outcome = await runSuggestion(env, ctx.store(), { handoffId: receipt.protocol, customerId: 'ana', arm, details: DETAILS, language: 'es' },
+  const { receipt, episode_id } = await handoff(ctx, { ...ON_B, INTAKE_AI_TEST_ARM: arm }, { ctx: false });
+  const outcome = await runSuggestion(env, ctx.store(), { handoffId: receipt.protocol, customerId: 'ana', details: DETAILS, language: 'es' },
     { fetcher: mocked.fetcher, ...(now && { now }) });
   const row = ctx.one('SELECT * FROM handoff_suggestion_runs WHERE handoff_id=?', receipt.protocol);
   const suggested = ctx.rows('SELECT transaction_id FROM handoff_suggestions WHERE handoff_id=? ORDER BY rank', receipt.protocol).map(r => r.transaction_id);
@@ -249,17 +251,21 @@ test('the daily cap is kept in D1 per UTC day and counts each extraction once', 
   const outcomes = [];
   for (let i = 0; i < 2; i++) {
     const { receipt } = await handoff(ctx, ON_B, { ctx: false });
-    outcomes.push(await runSuggestion(env, ctx.store(), { handoffId: receipt.protocol, customerId: 'ana', arm: 'B', details: DETAILS, language: 'es' }, { fetcher: google().fetcher }));
+    outcomes.push(await runSuggestion(env, ctx.store(), { handoffId: receipt.protocol, customerId: 'ana', details: DETAILS, language: 'es' }, { fetcher: google().fetcher }));
   }
   assert.deepEqual(outcomes, ['suggested', 'capped']);
   assert.deepEqual(ctx.rows('SELECT day,calls FROM ai_daily_calls').map(r => ({ ...r })), [{ day: new Date().toISOString().slice(0, 10), calls: 1 }]);
 });
 
-test('the retirement guard uses the configured date, and 2026-10-21 by default', () => {
+test('the retirement guard can only move earlier than 2026-10-21, the built-in date for the model', async t => {
   assert.equal(DEFAULT_RETIRES, '2026-10-21');
   assert.equal(retired({}, Date.parse('2026-10-20T23:59:59Z')), false);
   assert.equal(retired({}, Date.parse('2026-10-21T00:00:00Z')), true);
-  assert.equal(retired({ VERTEX_MODEL_RETIRES: '2027-01-01' }, Date.parse('2026-12-31T00:00:00Z')), false);
+  assert.equal(retired({ VERTEX_MODEL_RETIRES: '2026-10-10' }, Date.parse('2026-10-10T00:00:00Z')), true, 'an earlier date applies');
+  for (const at of ['2026-10-21T00:00:00Z', '2026-12-31T00:00:00Z']) assert.equal(retired({ VERTEX_MODEL_RETIRES: '2099-01-01' }, Date.parse(at)), true, at);
+  const late = await run(t, ON, { fetcher: noFetch, calls: [], vertexCalls: () => [] }, { now: () => Date.parse('2026-10-22T09:00:00Z') });
+  assert.equal(late.outcome, 'retired', 'ON says 2099, the Worker still refuses after 2026-10-21');
+  assert.equal(asOfAt(Date.parse('2026-10-05T23:30:12.345Z')), '2026-10-05T23:30:12');
 });
 
 test('token exchange failures are auth_error, with no model call and nothing cached', async t => {
@@ -319,7 +325,7 @@ test('timeout: the 10 s deadline abandons a hung call; the call was counted as u
   let reached;
   const called = new Promise(r => { reached = r; });
   const mocked = google({ vertex: () => { reached(); return new Promise(() => {}); } });
-  const pending = runSuggestion(ON, ctx.store(), { handoffId: receipt.protocol, customerId: 'ana', arm: 'B', details: DETAILS, language: 'es' }, { fetcher: mocked.fetcher });
+  const pending = runSuggestion(ON, ctx.store(), { handoffId: receipt.protocol, customerId: 'ana', details: DETAILS, language: 'es' }, { fetcher: mocked.fetcher });
   await called;
   assert.deepEqual({ ...ctx.one('SELECT outcome,producer,llm_calls,usage_unavailable_calls FROM handoff_suggestion_runs WHERE handoff_id=?', receipt.protocol) },
     { outcome: null, producer: VERSION, llm_calls: 1, usage_unavailable_calls: 1 }, 'pre-recorded: a Worker stopped now leaves it unknown, never free');
@@ -337,7 +343,7 @@ test('timeout: the 10 s deadline abandons a hung call; the call was counted as u
 test('a run is recorded once; a second run or a storage failure changes nothing and never throws', async t => {
   const ctx = await setup(t);
   const { receipt, episode_id } = await handoff(ctx, ON_B, { ctx: false });
-  const args = { handoffId: receipt.protocol, customerId: 'ana', arm: 'B', details: DETAILS, language: 'es' };
+  const args = { handoffId: receipt.protocol, customerId: 'ana', details: DETAILS, language: 'es' };
   assert.equal(await runSuggestion(ON, ctx.store(), args, { fetcher: google().fetcher }), 'suggested');
   await runSuggestion(ON, ctx.store(), args, { fetcher: google({ vertex: () => answer(report({ merchant: 'Uber' })) }).fetcher });
   assert.equal(ctx.one('SELECT outcome FROM handoff_suggestion_runs WHERE handoff_id=?', receipt.protocol).outcome, 'suggested');
@@ -443,4 +449,99 @@ test("agent detail: model_reading and customer_suggestion carry versions, counts
   assert.throws(() => assertContract('agentIntakeDetail', { ...body, model_reading: { ...body.model_reading, stated_facts: {} } }), /violated/);
   assert.throws(() => assertContract('agentIntakeDetail', { ...body, model_reading: { ...body.model_reading, mode: 'decided' } }), /violated/);
   assert.throws(() => assertContract('agentIntakeDetail', { ...body, customer_suggestion: { choice: 'confirmed', verified_by_bank: true, mark: null, transaction: null } }), /violated/);
+});
+
+test('one runner per run: concurrent runs and a replay call the model once; an unclaimed run is finished by its replay', async t => {
+  const ctx = await setup(t);
+  const { receipt } = await handoff(ctx, ON_B, { ctx: false });
+  const mocked = google();
+  const args = { handoffId: receipt.protocol, customerId: 'ana', details: DETAILS, language: 'es' };
+  const outcomes = await Promise.all(Array.from({ length: 4 }, () => runSuggestion(ON, ctx.store(), args, { fetcher: mocked.fetcher })));
+  assert.deepEqual(outcomes.sort(), [null, null, null, 'suggested']);
+  assert.equal(mocked.vertexCalls().length, 1);
+  // A first request whose run never started (no ctx here): its same-key replay schedules it, and only once.
+  t.mock.method(globalThis, 'fetch', google().fetcher);
+  const env = { ...ON_B, DB: ctx.d1 };
+  const started = await route(req('/intake/start', { body: startBody() }), env, ctx.store());
+  const { episode_id } = await started.json();
+  const body = { episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID(), details: DETAILS };
+  const first = await route(req('/intake/handoff', { body }), env, ctx.store());
+  const protocol = (await first.json()).protocol;
+  assert.equal(ctx.one('SELECT outcome,claimed_at FROM handoff_suggestion_runs WHERE handoff_id=?', protocol).claimed_at, null);
+  const pending = [];
+  const replay = await route(req('/intake/handoff', { body }), env, ctx.store(), { waitUntil: w => pending.push(w) });
+  assert.equal(replay.status, 200);
+  assert.deepEqual(await Promise.all(pending), ['suggested']);
+  const again = [];
+  await route(req('/intake/handoff', { body }), env, ctx.store(), { waitUntil: w => again.push(w) });
+  assert.deepEqual(await Promise.all(again), [null], 'a finished run is never read again');
+  assert.equal(ctx.events(episode_id).filter(e => e.event === 'suggestion_recorded').length, 1);
+});
+
+test('the idle sweep closes runs pending over 10 minutes as abandoned, keeping a pre-recorded call unknown', async t => {
+  const ctx = await setup(t);
+  const fresh = await handoff(ctx, ON_B, { ctx: false });
+  const stale = await handoff(ctx, ON_B, { ctx: false });
+  const started = await handoff(ctx, ON_B, { ctx: false });
+  const now = Date.now();
+  ctx.db.prepare('UPDATE handoff_suggestion_runs SET created_at=? WHERE handoff_id IN (?,?)').run(now - 700000, stale.receipt.protocol, started.receipt.protocol);
+  ctx.db.prepare('UPDATE handoff_suggestion_runs SET claimed_at=?,producer=?,llm_calls=1,usage_unavailable_calls=1 WHERE handoff_id=?').run(now - 690000, VERSION, started.receipt.protocol);
+  const { closeIdleIntakes } = await import('../../scripts/close-idle-intakes.mjs');
+  const swept = await closeIdleIntakes(ctx.store(), { now });
+  assert.equal(swept.suggestions_abandoned, 2);
+  const row = id => ({ ...ctx.one('SELECT outcome,llm_calls,usage_unavailable_calls FROM handoff_suggestion_runs WHERE handoff_id=?', id) });
+  assert.deepEqual(row(fresh.receipt.protocol), { outcome: null, llm_calls: 0, usage_unavailable_calls: 0 });
+  assert.deepEqual(row(stale.receipt.protocol), { outcome: 'abandoned', llm_calls: 0, usage_unavailable_calls: 0 });
+  assert.deepEqual(row(started.receipt.protocol), { outcome: 'abandoned', llm_calls: 1, usage_unavailable_calls: 1 });
+  const recorded = ctx.events(started.episode_id).at(-1);
+  assert.deepEqual([recorded.event, recorded.result, recorded.llm_calls, recorded.usage_unavailable_calls, recorded.injection_flagged], ['suggestion_recorded', 'abandoned', 1, 1, null]);
+  assert.equal((await closeIdleIntakes(ctx.store(), { now })).suggestions_abandoned, 0, 'once only');
+  assert.equal(await runSuggestion(ON, ctx.store(), { handoffId: stale.receipt.protocol, customerId: 'ana', details: DETAILS, language: 'es' }, { fetcher: noFetch }), null,
+    'a closed run is never read later');
+});
+
+test('the injection flag is recorded, and changes no outcome', async t => {
+  for (const injection of [true, false]) {
+    const r = await run(t, ON, google({ vertex: () => answer({ ...FARMACIA, injection }) }));
+    assert.equal(r.outcome, 'suggested');
+    assert.equal(r.row.injection_flagged, injection ? 1 : 0);
+    assert.equal(r.recorded.injection_flagged, injection);
+  }
+  const failed = await run(t, ON, google({ vertex: () => json({}, 500) }));
+  assert.deepEqual([failed.row.injection_flagged, failed.recorded.injection_flagged], [null, null], 'unknown when the model did not answer');
+});
+
+test('suggestions are shown once (shown_at), answerable only until an agent opens the report, and summarised for the pilot', async t => {
+  const ctx = await setup(t);
+  t.mock.method(globalThis, 'fetch', google().fetcher);
+  const env = { ...ON_B, DB: ctx.d1 };
+  const reports = [];
+  for (let i = 0; i < 3; i++) { const h = await handoff(ctx, ON_B); await Promise.all(h.pending); reports.push(h.receipt.protocol); }
+  const [answered, opened, unseen] = reports;
+  const get = protocol => route(req(`/intake/handoff/${protocol}/suggestions`), env, ctx.store());
+  const shownAt = protocol => ctx.one('SELECT shown_at FROM handoff_suggestion_runs WHERE handoff_id=?', protocol).shown_at;
+  await get(answered); const first = shownAt(answered); await get(answered);
+  assert.ok(first > 0); assert.equal(shownAt(answered), first, 'stamped once');
+  assert.equal((await route(req(`/intake/handoff/${answered}/suggestions/confirm`, { body: { none: true } }), env, ctx.store())).status, 200);
+  await get(opened);
+  const agentDetail = await route(req('/agent/intake-detail?protocol=' + opened, { cookie: `demo_agent_session=${AGENT}` }), env, ctx.store());
+  assert.equal(agentDetail.status, 200);
+  const late = await get(opened);
+  assert.deepEqual([(await late.json()).answerable], [false]);
+  for (const body of [{ transaction_id: 'tx-a1' }, { none: true }]) {
+    const refused = await route(req(`/intake/handoff/${opened}/suggestions/confirm`, { body }), env, ctx.store());
+    assert.equal(refused.status, 409);
+    const payload = await refused.json(); assertContract('error', payload);
+    assert.equal(payload.code, 'already_in_review');
+  }
+  assert.equal((await route(req(`/intake/handoff/${opened}/suggestions/confirm`, { body: { transaction_id: 'tx-u1' } }), env, ctx.store())).status, 422,
+    'a charge that was not suggested is still 422');
+  assert.equal(ctx.one('SELECT count(*) n FROM handoff_suggestion_choices WHERE handoff_id=?', opened).n, 0, 'nothing stored');
+  assert.equal(shownAt(unseen), null);
+  const summary = await ctx.store().suggestionPilotSummary({ sinceMs: 0, untilMs: Date.now() + 1000 });
+  assert.equal(summary.length, 1);
+  const { arm, outcome, runs, shown, not_shown, confirmed, rejected, not_answered, awaiting, llm_calls } = summary[0];
+  assert.deepEqual({ arm, outcome, runs, shown, not_shown, confirmed, rejected, not_answered, awaiting, llm_calls },
+    { arm: 'B', outcome: 'suggested', runs: 3, shown: 2, not_shown: 1, confirmed: 0, rejected: 1, not_answered: 1, awaiting: 0, llm_calls: 3 });
+  for (const leak of ['tx-a1', 'ana', answered]) assert.ok(!JSON.stringify(summary).includes(leak), leak);
 });

@@ -4,6 +4,9 @@
  * (``ctx.waitUntil``), and deterministic code suggests at most three of the customer's own charges. The customer may then
  * confirm one; nothing closes, resolves or refunds, and the agent still reviews the report.
  *
+ * One runner per run: ``runSuggestion`` first claims the pending run atomically (a replay or a second Worker gets
+ * nothing), and the idle sweep closes a run still pending after 10 minutes as ``abandoned``.
+ *
  * Guards, in order, each recorded as the run's outcome when it stops the call: the switch (``INTAKE_AI_ENABLED`` exactly
  * ``'1'``, else ``off``), the pilot arm (A is the control: ``off``), the model's retirement date (``retired``), the
  * credential vars and secret (missing: ``off``), the daily cap in D1 (``capped``), the token exchange (``auth_error``).
@@ -19,7 +22,7 @@ export const DEFAULT_RETIRES = '2026-10-21';
 /** Extractions per UTC day (each at most two model calls) unless ``INTAKE_AI_DAILY_CAP`` says otherwise. */
 export const DEFAULT_DAILY_CAP = 200;
 export const OUTCOMES = ['off', 'capped', 'retired', 'auth_error', 'timeout', 'provider_error', 'config_error', 'invalid_output',
-  'no_match', 'ambiguous', 'suggested'];
+  'no_match', 'ambiguous', 'suggested', 'abandoned'];
 const ZERO = { llm_calls: 0, known_input_tokens: 0, known_output_tokens: 0, usage_unavailable_calls: 0 };
 const LOOPBACK = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/;
 
@@ -38,12 +41,21 @@ export function newArm(env) {
   return crypto.getRandomValues(new Uint8Array(1))[0] & 1 ? 'B' : 'A';
 }
 
-/** Whether the configured model is past its retirement date at ``nowMs``; an unreadable date counts as retired. */
+/**
+ * Whether the model is past its retirement date at ``nowMs``: the earlier of ``VERTEX_MODEL_RETIRES`` and the built-in
+ * ``DEFAULT_RETIRES`` for ``MODEL``, so configuration can only move retirement earlier. An unreadable date counts as retired.
+ */
 export function retired(env, nowMs) {
   const date = env.VERTEX_MODEL_RETIRES ?? DEFAULT_RETIRES;
   const at = /^\d{4}-\d{2}-\d{2}$/.test(date) ? Date.parse(date + 'T00:00:00Z') : NaN;
-  return !(nowMs < at);
+  return !(nowMs < Math.min(at, Date.parse(DEFAULT_RETIRES + 'T00:00:00Z')));
 }
+
+/**
+ * The ``as_of`` the request carries: the Worker's current UTC time as ``YYYY-MM-DDTHH:MM:SS``, the evaluation harness's
+ * timezone-free form. It can be a day off the customer's local date near midnight; then a relative date matches nothing.
+ */
+export const asOfAt = nowMs => new Date(nowMs).toISOString().slice(0, 19);
 
 function dailyCap(env) {
   const cap = env.INTAKE_AI_DAILY_CAP === undefined ? DEFAULT_DAILY_CAP : Number(env.INTAKE_AI_DAILY_CAP);
@@ -57,13 +69,13 @@ function record(t) {
     product_type: null, last4: null, transaction_country: null };
 }
 
-/** The outcome and suggested ids for ``extracted`` against the customer's own purchases (no ``as_of``: see README). */
-export function suggestionFor(extracted, { country, purchases }) {
+/** The outcome and suggested ids for ``extracted`` against the customer's own purchases, with the ``as_of`` sent to the model. */
+export function suggestionFor(extracted, { country, purchases }, asOf = null) {
   const records = purchases.map(record);
   // systems.customers_from: without card data, the customer's cards are the currencies of their own purchases.
   const cards = [...new Set(records.map(t => t.currency))].map(currency => ({ product_type: null, last4: null, currency }));
   try {
-    const { outcome, ids } = suggest({ ...extracted, as_of: null }, { country, cards }, records);
+    const { outcome, ids } = suggest({ ...extracted, as_of: asOf }, { country, cards }, records);
     return { outcome, ids: ids.slice(0, MAX_SUGGESTIONS) };
   } catch {
     return { outcome: 'no_match', ids: [] }; // a purchase the policy cannot read: suggest nothing
@@ -71,16 +83,20 @@ export function suggestionFor(extracted, { country, purchases }) {
 }
 
 /**
- * Run the guards, the extraction and the rule for one acknowledged handoff, then record the outcome once. Resolves the
- * outcome kind; never throws. ``store`` is a store of its own (never the request's); ``fetcher`` and ``now`` are test seams.
+ * Claim the handoff's pending run, then run the guards, the extraction and the rule, and record the outcome once. Resolves
+ * the outcome kind, or null when the run was already claimed or finished (a replay, a second Worker) or storage failed;
+ * never throws. The arm is the one stored with the handoff. ``store`` is a store of its own (never the request's);
+ * ``fetcher`` and ``now`` are test seams.
  */
-export async function runSuggestion(env, store, { handoffId, customerId, arm, details, language }, { fetcher = fetch, now = Date.now } = {}) {
-  const finish = async (outcome, { usage = ZERO, producer = null, ids = [] } = {}) => {
-    await store.recordSuggestionOutcome({ handoffId, outcome, producer, usage, transactionIds: ids, now: now() });
+export async function runSuggestion(env, store, { handoffId, customerId, details, language }, { fetcher = fetch, now = Date.now } = {}) {
+  const finish = async (outcome, { usage = ZERO, producer = null, ids = [], injectionFlagged = null } = {}) => {
+    await store.recordSuggestionOutcome({ handoffId, outcome, producer, usage, transactionIds: ids, injectionFlagged, now: now() });
     return outcome;
   };
   try {
-    if (!switchOn(env) || arm !== 'B') return await finish('off');
+    const claimed = await store.claimSuggestionRun({ handoffId, now: now() });
+    if (!claimed) return null;
+    if (!switchOn(env) || claimed.arm !== 'B') return await finish('off');
     if (retired(env, now())) return await finish('retired');
     const config = credentialConfig(env);
     if (!config) return await finish('off');
@@ -91,10 +107,12 @@ export async function runSuggestion(env, store, { handoffId, customerId, arm, de
     const producer = await registeredVersion();
     await store.startSuggestionCall({ handoffId, producer });
     const url = vertexUrl(config.project, origin ?? undefined);
-    const result = await extract({ url, message: details, language, asOf: null, token, fetcher, now });
+    const asOf = asOfAt(now());
+    const result = await extract({ url, message: details, language, asOf, token, fetcher, now });
     if (result.kind !== 'extracted') return await finish(result.kind, { usage: result.usage, producer });
-    const { outcome, ids } = suggestionFor(result.extracted, await store.listSuggestionPurchases(customerId));
-    return await finish(outcome, { usage: result.usage, producer, ids });
+    const { outcome, ids } = suggestionFor(result.extracted, await store.listSuggestionPurchases(customerId), asOf);
+    // The injection flag is recorded only; the policy already ignores injected text (label_rules), so it changes nothing.
+    return await finish(outcome, { usage: result.usage, producer, ids, injectionFlagged: result.extracted.injection });
   } catch {
     return null; // storage unavailable: the run stays pending, its pre-recorded call unknown
   }

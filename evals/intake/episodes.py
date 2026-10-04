@@ -20,7 +20,7 @@ V2_USAGE = ('known_input_tokens', 'known_output_tokens', 'usage_unavailable_call
 # One per incomplete handoff with details, after intake_ended (ADR-012): the pilot arm, the outcome kind and usage counts.
 SUGGESTION = 'suggestion_recorded'
 SUGGESTION_FIELDS = {'case_ref', 'arm', 'result', 'producer', 'llm_calls', 'known_input_tokens', 'known_output_tokens',
-                     'usage_unavailable_calls', 'suggestions'}
+                     'usage_unavailable_calls', 'injection_flagged', 'suggestions'}
 REQUIRED = {'intake_started': set(), 'clarification_requested': {'missing'}, 'transaction_confirmed': {'transaction_ref'},
             'handoff_created': {'kind', 'case_ref'}, 'handoff_accepted': {'case_ref', 'accepted_by'},
             'intake_ended': {'outcome', 'safety', *USAGE}, SUGGESTION: SUGGESTION_FIELDS}
@@ -31,9 +31,10 @@ REFS = {'case_id', 'session_ref', 'model_version', 'case_ref', 'transaction_ref'
 OUTCOMES = ('accepted', 'abandoned', 'withdrawn', 'technical_failure', 'routed')
 SAFETY = ('assessed_safe', 'unsafe', 'not_assessed')
 ARMS = (None, 'A', 'B')
-# Outcome kinds of a suggestion run; the first three never call the model, and only 'suggested' shows charges.
+# Outcome kinds of a suggestion run; the first four never call the model, and only 'suggested' shows charges.
+# 'abandoned' is the idle sweep's: a run still pending after 10 minutes, its pre-recorded call kept as unknown.
 RESULTS = ('off', 'capped', 'retired', 'auth_error', 'timeout', 'provider_error', 'config_error', 'invalid_output',
-           'no_match', 'ambiguous', 'suggested')
+           'no_match', 'ambiguous', 'suggested', 'abandoned')
 CHAIN = ('transaction_confirmed', 'handoff_created', 'handoff_accepted')
 TS = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z')
 # Contract vocabulary for clarification_requested.missing (Docs/intake/intake-events.md).
@@ -118,8 +119,10 @@ def _check_suggestion(e):
         raise ValueError('suggestion_recorded shows 1-3 charges exactly when the result is suggested')
     if e['result'] in ('off', 'capped', 'retired', 'auth_error') and e['llm_calls']:
         raise ValueError(f'suggestion_recorded result {e["result"]} makes no model call')
-    if e['arm'] != 'B' and e['result'] != 'off':
+    if e['arm'] != 'B' and (e['result'] not in ('off', 'abandoned') or e['llm_calls']):
         raise ValueError('only arm B is ever read by the model')
+    if e['injection_flagged'] is not None and (type(e['injection_flagged']) is not bool or e['result'] not in ('no_match', 'ambiguous', 'suggested')):
+        raise ValueError('suggestion_recorded.injection_flagged is a boolean, known only when the model answered')
 
 
 def _check_suggestions(groups, suggestions):
@@ -138,7 +141,7 @@ def _check_suggestions(groups, suggestions):
 def _suggestion_summary(suggestions):
     """Runs by arm and result, with usage; unknown usage keeps the token totals null, never zero."""
     unknown = sum(e['usage_unavailable_calls'] for e in suggestions)
-    return dict(runs=len(suggestions),
+    return dict(runs=len(suggestions), injection_flagged=sum(e['injection_flagged'] is True for e in suggestions),
                 by_arm={str(arm): dict(Counter(e['result'] for e in suggestions if e['arm'] == arm)) for arm in ARMS
                         if any(e['arm'] == arm for e in suggestions)},
                 llm_calls=sum(e['llm_calls'] for e in suggestions), usage_unavailable_calls=unknown,

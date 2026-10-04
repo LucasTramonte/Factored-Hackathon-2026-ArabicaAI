@@ -87,7 +87,7 @@ test("waitUntil with mocked Vertex: the customer's own charge is suggested; anot
   const ana = await customer();
   const receipt = await handoff(ana, SUGGEST);
   const shown = await settled(ana, receipt);
-  assert.deepEqual(shown, { status: 'suggested', choice: null, chosen_transaction_id: null, items: [{ transaction_id: 'demo-tx-001',
+  assert.deepEqual(shown, { status: 'suggested', choice: null, chosen_transaction_id: null, answerable: true, items: [{ transaction_id: 'demo-tx-001',
     merchant_name: 'Mercado Demo', amount: '125.50', currency: 'BRL', occurred_at: '2026-09-25T14:00:00+00:00', source_occurred_at: null }] },
     "Carla's Mercado Demo charge is never Ana's suggestion");
   const run = await recorded(receipt.episode_id);
@@ -98,7 +98,9 @@ test("waitUntil with mocked Vertex: the customer's own charge is suggested; anot
   const sent = await (await fetch(process.env.VERTEX_MOCK_URL + '/__vertex')).json();
   const turn = sent.find(u => u.message === SUGGEST);
   assert.deepEqual(Object.keys(turn).sort(), ['as_of', 'message', 'session_language', 'vocabulary']);
-  assert.deepEqual([turn.session_language, turn.as_of], ['pt', null]);
+  assert.equal(turn.session_language, 'pt');
+  assert.match(turn.as_of, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/, "the Worker's UTC time in the harness form");
+  assert.ok(Math.abs(Date.parse(turn.as_of + 'Z') - Date.now()) < 120000);
   for (const leak of ['demo-ana', 'demo-tx', receipt.protocol, receipt.episode_id, 'Não reconheço']) assert.ok(!JSON.stringify(turn).includes(leak), leak);
   // Isolation oracle: Bruno can neither read nor answer Ana's suggestions, by protocol or short reference.
   const bruno = await customer('demo-bruno');
@@ -183,7 +185,7 @@ test('"none of these" is stored once; a report without suggestions has none to c
   assert.equal((await a.call('/agent/suggestion-mark', { protocol: receipt.protocol, mark: 'correct' })).status, 404, 'nothing confirmed to mark');
   const plain = await handoff(ana, null);
   const nothing = await ana.call(path(plain));
-  assert.deepEqual(nothing.body, { status: 'none', items: [], choice: null, chosen_transaction_id: null });
+  assert.deepEqual(nothing.body, { status: 'none', items: [], choice: null, chosen_transaction_id: null, answerable: false });
   assert.equal((await ana.call(path(plain, '/confirm'), { none: true })).status, 404);
   for (const r of [receipt, plain]) await closeReport(r.protocol);
 });
@@ -196,7 +198,7 @@ test('waitUntil with mocked Vertex: timeout, invalid output, provider error and 
   const receipts = await Promise.all(cases.map(([details]) => handoff(ana, details)));
   for (const [i, [details, kind, [calls, unknown]]] of cases.entries()) {
     const shown = await settled(ana, receipts[i]);
-    assert.deepEqual(shown, { status: 'none', items: [], choice: null, chosen_transaction_id: null }, details);
+    assert.deepEqual(shown, { status: 'none', items: [], choice: null, chosen_transaction_id: null, answerable: false }, details);
     const run = await recorded(receipts[i].episode_id);
     assert.deepEqual([run.result, run.llm_calls, run.usage_unavailable_calls, run.suggestions], [kind, calls, unknown, 0], details);
     assert.equal((await ana.call(path(receipts[i], '/confirm'), { none: true })).status, 404, details);
@@ -204,4 +206,23 @@ test('waitUntil with mocked Vertex: timeout, invalid output, provider error and 
     assert.equal(replay.body.status, 'none');
   }
   for (const r of receipts) await closeReport(r.protocol);
+});
+
+test('once an agent opens the report, the customer can no longer answer: 409 already_in_review, nothing stored', async () => {
+  const ana = await customer();
+  const receipt = await handoff(ana, SUGGEST);
+  assert.equal((await settled(ana, receipt)).answerable, true);
+  const a = await agent();
+  assert.equal((await a.call('/agent/intake-detail?protocol=' + receipt.protocol)).status, 200);
+  const late = await ana.call(path(receipt));
+  assert.deepEqual([late.body.status, late.body.answerable, late.body.choice], ['suggested', false, null]);
+  for (const body of [{ transaction_id: 'demo-tx-001' }, { none: true }]) {
+    const res = await ana.call(path(receipt, '/confirm'), body);
+    assert.equal(res.status, 409, JSON.stringify(body)); assertContract('error', res.body);
+    assert.equal(res.body.code, 'already_in_review');
+  }
+  assert.equal((await ana.call(path(receipt))).body.choice, null, 'nothing stored');
+  const detail = await a.call('/agent/intake-detail?protocol=' + receipt.protocol);
+  assert.equal(detail.body.customer_suggestion, null);
+  await closeReport(receipt.protocol);
 });

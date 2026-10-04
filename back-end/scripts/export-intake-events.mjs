@@ -21,7 +21,7 @@ const FIELDS = {
   intake_started: [], clarification_requested: ['missing'], transaction_confirmed: ['transaction_ref'],
   handoff_created: ['kind','case_ref','tool_status'], handoff_accepted: ['case_ref','accepted_by'],
   intake_ended: ['outcome','safety','duration_ms','llm_calls','input_tokens','output_tokens','tool_calls','known_input_tokens','known_output_tokens','usage_unavailable_calls'],
-  suggestion_recorded: ['case_ref','arm','result','producer','llm_calls','known_input_tokens','known_output_tokens','usage_unavailable_calls','suggestions']
+  suggestion_recorded: ['case_ref','arm','result','producer','llm_calls','known_input_tokens','known_output_tokens','usage_unavailable_calls','injection_flagged','suggestions']
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 

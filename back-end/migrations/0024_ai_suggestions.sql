@@ -2,20 +2,28 @@
 -- counts, never the customer's text or the model's answer.
 -- One run per incomplete handoff that carries details, inserted in the handoff's own reservation batch: the pilot arm
 -- (A = control, never called; B = extraction; NULL when the switch was off), then the outcome and usage the Worker records
--- after the response. A NULL outcome is still pending, or a Worker that stopped mid-call: its pre-recorded call stays unknown.
+-- after the response. A NULL outcome is still pending; ``claimed_at`` marks the one run that may call the model (a replay or
+-- a second Worker finds it claimed). The idle sweep records a run still pending after 10 minutes as ``abandoned``, keeping its
+-- pre-recorded unknown call. ``shown_at`` is the first time the customer was served the suggestions (never: ``not_shown``);
+-- ``injection_flagged`` records the model's injection flag (recording only, it changes no outcome).
 CREATE TABLE handoff_suggestion_runs (
   handoff_id TEXT PRIMARY KEY REFERENCES intake_handoffs(handoff_id),
   arm TEXT CHECK (arm IS NULL OR arm IN ('A','B')),
   created_at INTEGER NOT NULL,
   outcome TEXT CHECK (outcome IS NULL OR outcome IN ('off','capped','retired','auth_error','timeout','provider_error','config_error',
-    'invalid_output','no_match','ambiguous','suggested')),
+    'invalid_output','no_match','ambiguous','suggested','abandoned')),
   producer TEXT,
   llm_calls INTEGER NOT NULL DEFAULT 0 CHECK (llm_calls BETWEEN 0 AND 2),
   known_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK (known_input_tokens >= 0),
   known_output_tokens INTEGER NOT NULL DEFAULT 0 CHECK (known_output_tokens >= 0),
   usage_unavailable_calls INTEGER NOT NULL DEFAULT 0 CHECK (usage_unavailable_calls BETWEEN 0 AND llm_calls),
-  finished_at INTEGER
+  finished_at INTEGER,
+  claimed_at INTEGER,
+  shown_at INTEGER,
+  injection_flagged INTEGER CHECK (injection_flagged IS NULL OR injection_flagged IN (0, 1))
 );
+-- The idle sweep finds pending runs by age without scanning finished ones.
+CREATE INDEX handoff_suggestion_runs_pending ON handoff_suggestion_runs(created_at) WHERE outcome IS NULL;
 -- At most three of the customer's own charges per run, in the policy's order; the insert checks ownership in SQL.
 CREATE TABLE handoff_suggestions (
   handoff_id TEXT NOT NULL REFERENCES handoff_suggestion_runs(handoff_id),

@@ -53,6 +53,23 @@ const STILL_OPEN = "oh.status<>'closed' AND (oe.state='complete_handoff' OR (oe.
 
 /** A report by public protocol (the case id of a complete one, else the handoff id) or by short reference ('' never matches). */
 const REPORT_REF = '(h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?) OR h.reference_short=?)';
+/** A suggestion run still pending this long (ms) is closed as ``abandoned`` by the idle sweep. */
+export const SUGGESTION_STALE_MS = 600000;
+/**
+ * One ``suggestion_recorded`` event per run whose outcome is set, after the episode's ``intake_ended`` (references and
+ * counts only); runs are chosen by ``where`` (aliases h, e, r), and an episode that already has the event gets none.
+ */
+const SUGGESTION_EVENT_NEXT = '(SELECT COALESCE(MAX(seq),-1)+1 FROM intake_events WHERE episode_id=e.episode_id)';
+const suggestionEvent = where => 'INSERT INTO intake_events(episode_id,seq,event_json) SELECT e.episode_id,' + SUGGESTION_EVENT_NEXT
+  + ",json_object('event','suggestion_recorded','version','2','case_id',e.episode_id,'ts',?,'seq'," + SUGGESTION_EVENT_NEXT
+  + ",'session_ref',e.session_ref,'language',e.language,'model_version',COALESCE(json_extract(e.usage_json,'$.model_version'),'guided-0.1'),"
+  + "'case_ref',h.handoff_id,'arm',r.arm,'result',r.outcome,'producer',r.producer,'llm_calls',r.llm_calls,'known_input_tokens',r.known_input_tokens,"
+  + "'known_output_tokens',r.known_output_tokens,'usage_unavailable_calls',r.usage_unavailable_calls,"
+  + "'injection_flagged',json(CASE r.injection_flagged WHEN 1 THEN 'true' WHEN 0 THEN 'false' ELSE 'null' END),"
+  + "'suggestions',(SELECT COUNT(*) FROM handoff_suggestions WHERE handoff_id=h.handoff_id)) "
+  + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) JOIN handoff_suggestion_runs r ON r.handoff_id=h.handoff_id '
+  + "WHERE " + where + " AND e.state='incomplete_handoff' AND r.outcome IS NOT NULL "
+  + "AND NOT EXISTS(SELECT 1 FROM intake_events v WHERE v.episode_id=e.episode_id AND json_extract(v.event_json,'$.event')='suggestion_recorded')";
 /** The suggestion rule reads at most this many of the customer's newest purchases (ADR-004, 2026-10-04 note). */
 export const SUGGESTION_PURCHASES = 200;
 
@@ -648,9 +665,28 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      */
     reserveAiCall: async ({ day, cap }) => cap >= 1 && Boolean(await first(
       'INSERT INTO ai_daily_calls(day,calls) VALUES(?,1) ON CONFLICT(day) DO UPDATE SET calls=calls+1 WHERE calls<? RETURNING calls', day, cap)),
+    /**
+     * Claim a pending, unclaimed run for this Worker in one statement; resolves its ``{ arm }``, or null when another
+     * request (a replay, a concurrent Worker) has claimed it or it has finished. Only the claimant runs the guards and the call.
+     */
+    claimSuggestionRun: async ({ handoffId, now }) => first(
+      'UPDATE handoff_suggestion_runs SET claimed_at=? WHERE handoff_id=? AND claimed_at IS NULL AND outcome IS NULL RETURNING arm', now, handoffId),
     /** Count the call before it runs as one call with unknown usage, so a Worker stopped mid-call never makes it free. */
     startSuggestionCall: ({ handoffId, producer }) => all(
       'UPDATE handoff_suggestion_runs SET producer=?,llm_calls=1,usage_unavailable_calls=1 WHERE handoff_id=? AND outcome IS NULL', producer, handoffId),
+    /**
+     * The idle sweep's part for suggestions: at most ``limit`` runs pending since before ``now - SUGGESTION_STALE_MS``
+     * (partial index ``handoff_suggestion_runs_pending``) become ``abandoned``, keeping their usage (a pre-recorded call
+     * stays unknown, never free), each with its ``suggestion_recorded`` event, in one atomic batch. Resolves their ids.
+     */
+    closeStaleSuggestionRuns: async ({ now, limit = 100 }) => {
+      if (!Number.isSafeInteger(now) || now < 0 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid closure bounds');
+      const [closed] = await batch([
+        ["UPDATE handoff_suggestion_runs SET outcome='abandoned',finished_at=? WHERE handoff_id IN (SELECT handoff_id FROM handoff_suggestion_runs "
+          + 'WHERE outcome IS NULL AND created_at<=? ORDER BY created_at LIMIT ?) RETURNING handoff_id', now, now - SUGGESTION_STALE_MS, limit],
+        [suggestionEvent("r.outcome='abandoned' AND r.finished_at=?"), new Date(now).toISOString(), now]]);
+      return closed.results.map(r => r.handoff_id);
+    },
     /**
      * What the suggestion rule reads: the customer's country and at most ``SUGGESTION_PURCHASES`` of their newest charges,
      * by customer id in SQL (index transactions_customer_order); one round trip.
@@ -668,66 +704,87 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      * ``suggestion_recorded`` event after the episode's ``intake_ended`` (references and counts only). A second call
      * changes nothing.
      */
-    recordSuggestionOutcome: ({ handoffId, outcome, producer = null, usage, transactionIds = [], now }) => {
-      const next = '(SELECT COALESCE(MAX(seq),-1)+1 FROM intake_events WHERE episode_id=e.episode_id)';
-      return batch([
-        ['UPDATE handoff_suggestion_runs SET outcome=?,producer=COALESCE(?,producer),llm_calls=?,known_input_tokens=?,known_output_tokens=?,'
-          + 'usage_unavailable_calls=?,finished_at=? WHERE handoff_id=? AND outcome IS NULL',
-          outcome, producer, usage.llm_calls, usage.known_input_tokens, usage.known_output_tokens, usage.usage_unavailable_calls, now, handoffId],
-        ...transactionIds.slice(0, 3).map((transactionId, index) => [
-          'INSERT INTO handoff_suggestions(handoff_id,rank,transaction_id,producer,created_at) SELECT h.handoff_id,?,t.transaction_id,r.producer,? '
-            + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) JOIN handoff_suggestion_runs r ON r.handoff_id=h.handoff_id '
-            + "JOIN transactions t ON t.customer_id=e.customer_id AND t.transaction_id=? WHERE h.handoff_id=? AND r.outcome='suggested' "
-            + 'AND r.finished_at=? ON CONFLICT DO NOTHING', index + 1, now, transactionId, handoffId, now]),
-        ["INSERT INTO intake_events(episode_id,seq,event_json) SELECT e.episode_id," + next + ",json_object('event','suggestion_recorded',"
-          + "'version','2','case_id',e.episode_id,'ts',?,'seq'," + next + ",'session_ref',e.session_ref,'language',e.language,"
-          + "'model_version',COALESCE(json_extract(e.usage_json,'$.model_version'),'guided-0.1'),'case_ref',h.handoff_id,'arm',r.arm,"
-          + "'result',r.outcome,'producer',r.producer,'llm_calls',r.llm_calls,'known_input_tokens',r.known_input_tokens,"
-          + "'known_output_tokens',r.known_output_tokens,'usage_unavailable_calls',r.usage_unavailable_calls,"
-          + "'suggestions',(SELECT COUNT(*) FROM handoff_suggestions WHERE handoff_id=h.handoff_id)) "
+    recordSuggestionOutcome: ({ handoffId, outcome, producer = null, usage, transactionIds = [], injectionFlagged = null, now }) => batch([
+      ['UPDATE handoff_suggestion_runs SET outcome=?,producer=COALESCE(?,producer),llm_calls=?,known_input_tokens=?,known_output_tokens=?,'
+        + 'usage_unavailable_calls=?,injection_flagged=?,finished_at=? WHERE handoff_id=? AND outcome IS NULL',
+        outcome, producer, usage.llm_calls, usage.known_input_tokens, usage.known_output_tokens, usage.usage_unavailable_calls,
+        injectionFlagged === null ? null : injectionFlagged ? 1 : 0, now, handoffId],
+      ...transactionIds.slice(0, 3).map((transactionId, index) => [
+        'INSERT INTO handoff_suggestions(handoff_id,rank,transaction_id,producer,created_at) SELECT h.handoff_id,?,t.transaction_id,r.producer,? '
           + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) JOIN handoff_suggestion_runs r ON r.handoff_id=h.handoff_id '
-          + "WHERE h.handoff_id=? AND e.state='incomplete_handoff' AND r.outcome IS NOT NULL "
-          + "AND NOT EXISTS(SELECT 1 FROM intake_events v WHERE v.episode_id=e.episode_id AND json_extract(v.event_json,'$.event')='suggestion_recorded')",
-          new Date(now).toISOString(), handoffId]
-      ]);
-    },
+          + "JOIN transactions t ON t.customer_id=e.customer_id AND t.transaction_id=? WHERE h.handoff_id=? AND r.outcome='suggested' "
+          + 'AND r.finished_at=? ON CONFLICT DO NOTHING', index + 1, now, transactionId, handoffId, now]),
+      [suggestionEvent('h.handoff_id=?'), new Date(now).toISOString(), handoffId]
+    ]),
     /**
      * The session customer's suggestions for one own acknowledged report (``protocol`` or ``short`` reference, the other
      * ''): ``null`` when the report is missing or another
-     * customer's; else ``{ outcome, choice, chosen_transaction_id, items }`` (``outcome`` undefined without a run, null
-     * while pending). Items are the owned suggested charges in rank order. One query.
+     * customer's; else ``{ outcome, choice, chosen_transaction_id, answerable, items }`` (``outcome`` undefined without a
+     * run, null while pending; ``answerable`` while no agent has opened the report and it is still ``received``). Items are
+     * the owned suggested charges in rank order. With ``shownAt``, the same batch first stamps ``shown_at`` on a suggested
+     * run the customer is served for the first time (one write, once). One round trip.
      */
-    findCustomerSuggestions: async (customerId, protocol, short = '') => {
-      const rows = await all('SELECT h.handoff_id,r.handoff_id AS run,r.outcome,c.choice,c.transaction_id AS chosen,s.rank,'
+    findCustomerSuggestions: async (customerId, protocol, short = '', { shownAt = null } = {}) => {
+      const own = "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' AND " + REPORT_REF;
+      const params = [customerId, protocol, protocol, short];
+      const read = ['SELECT h.handoff_id,r.handoff_id AS run,r.outcome,c.choice,c.transaction_id AS chosen,s.rank,'
+        + "(h.first_opened_at IS NULL AND h.status='received') AS answerable,"
         + 't.transaction_id,t.merchant_name,t.amount,t.currency,t.occurred_at,t.source_occurred_at '
         + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) LEFT JOIN handoff_suggestion_runs r ON r.handoff_id=h.handoff_id '
         + 'LEFT JOIN handoff_suggestion_choices c ON c.handoff_id=h.handoff_id '
         + "LEFT JOIN handoff_suggestions s ON s.handoff_id=h.handoff_id AND r.outcome='suggested' "
         + 'LEFT JOIN transactions t ON t.transaction_id=s.transaction_id AND t.customer_id=e.customer_id '
-        + "WHERE e.customer_id=? AND e.state=h.kind||'_handoff' AND " + REPORT_REF + ' ORDER BY s.rank LIMIT 3', customerId, protocol, protocol, short);
+        + "WHERE e.customer_id=? AND e.state=h.kind||'_handoff' AND " + REPORT_REF + ' ORDER BY s.rank LIMIT 3', ...params];
+      const rows = shownAt === null ? await all(...read) : (await batch([
+        ["UPDATE handoff_suggestion_runs SET shown_at=? WHERE handoff_id=(SELECT h.handoff_id " + own + ") AND outcome='suggested' AND shown_at IS NULL "
+          + 'AND EXISTS(SELECT 1 FROM handoff_suggestions WHERE handoff_id=handoff_suggestion_runs.handoff_id)', shownAt, ...params],
+        read]))[1].results;
       if (!rows.length) return null;
       const [row] = rows;
       return { outcome: row.run ? row.outcome : undefined, choice: row.choice ?? null, chosen_transaction_id: row.chosen ?? null,
+        answerable: Boolean(row.answerable),
         items: rows.filter(r => r.transaction_id).map(({ transaction_id, merchant_name, amount, currency, occurred_at, source_occurred_at }) =>
           ({ transaction_id, merchant_name, amount, currency, occurred_at, source_occurred_at })) };
     },
     /**
      * Store the customer's first answer to a suggestion of one own acknowledged report, in one atomic batch with a live
      * same-customer session check: a suggested charge (``transactionId``) or none (``null``). A charge that was not
-     * suggested for that report inserts nothing (the composite key refers to the suggestion itself). Resolves the stored
-     * ``{ choice, transaction_id, chosen_at }``, or null when nothing is stored.
+     * suggested for that report inserts nothing (the composite key refers to the suggestion itself), and so does any answer
+     * once an agent has opened the report or moved it on (the answer must reach the agent before the review starts).
+     * Resolves the stored ``{ choice, transaction_id, chosen_at }``, or null when nothing is stored.
      */
     confirmSuggestion: async ({ customerId, protocol, short = '', transactionId, now, sessionHash }) => {
-      const own = "(SELECT h.handoff_id FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' AND "
-        + REPORT_REF + " AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=e.customer_id AND expires_at>?))";
+      const own = open => "(SELECT h.handoff_id FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' AND "
+        + REPORT_REF + (open ? " AND h.first_opened_at IS NULL AND h.status='received'" : '')
+        + " AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=e.customer_id AND expires_at>?))";
       const ownParams = [customerId, protocol, protocol, short, sessionHash, now];
       const [, stored] = await batch([
         ['INSERT INTO handoff_suggestion_choices(handoff_id,choice,transaction_id,chosen_at) SELECT r.handoff_id,?,?,? FROM handoff_suggestion_runs r '
-          + "WHERE r.handoff_id=" + own + " AND r.outcome='suggested' "
+          + "WHERE r.handoff_id=" + own(true) + " AND r.outcome='suggested' "
           + 'AND (? IS NULL OR EXISTS(SELECT 1 FROM handoff_suggestions s WHERE s.handoff_id=r.handoff_id AND s.transaction_id=?)) '
           + 'ON CONFLICT(handoff_id) DO NOTHING', transactionId ? 'confirmed' : 'none', transactionId, now, ...ownParams, transactionId, transactionId],
-        ['SELECT choice,transaction_id,chosen_at FROM handoff_suggestion_choices WHERE handoff_id=' + own, ...ownParams]]);
+        ['SELECT choice,transaction_id,chosen_at FROM handoff_suggestion_choices WHERE handoff_id=' + own(false), ...ownParams]]);
       return stored.results[0] ?? null;
+    },
+    /**
+     * The pilot's aggregate (ADR-012; Docs/Plans/ai-suggestion-plan.md, "While it runs") over runs created in
+     * [sinceMs, untilMs), grouped by arm and outcome, with no identifier: runs, how many were shown, ``not_shown``
+     * (suggested, never served to the customer), the customer's answers (``confirmed``, ``rejected`` = none of these,
+     * ``not_answered`` = shown with no answer before an agent opened the report, ``awaiting`` = shown, unanswered and not yet
+     * opened), the agents' marks, injection flags and usage (token totals stay separate from unknown calls).
+     */
+    suggestionPilotSummary: ({ sinceMs, untilMs }) => {
+      if (!Number.isSafeInteger(sinceMs) || sinceMs < 0 || !Number.isSafeInteger(untilMs) || untilMs <= sinceMs) throw new Error('Invalid pilot window');
+      return all('SELECT r.arm,r.outcome,COUNT(*) AS runs,COALESCE(SUM(r.shown_at IS NOT NULL),0) AS shown,'
+        + "COALESCE(SUM(r.outcome='suggested' AND r.shown_at IS NULL),0) AS not_shown,COALESCE(SUM(c.choice='confirmed'),0) AS confirmed,"
+        + "COALESCE(SUM(c.choice='none'),0) AS rejected,COALESCE(SUM(r.shown_at IS NOT NULL AND c.handoff_id IS NULL AND (h.first_opened_at IS NOT NULL OR h.status<>'received')),0) AS not_answered,"
+        + "COALESCE(SUM(r.shown_at IS NOT NULL AND c.handoff_id IS NULL AND h.first_opened_at IS NULL AND h.status='received'),0) AS awaiting,"
+        + "COALESCE(SUM(m.mark='correct'),0) AS marked_correct,COALESCE(SUM(m.mark='wrong'),0) AS marked_wrong,COALESCE(SUM(r.injection_flagged=1),0) AS injection_flagged,"
+        + 'COALESCE(SUM(r.llm_calls),0) AS llm_calls,COALESCE(SUM(r.usage_unavailable_calls),0) AS usage_unavailable_calls,'
+        + 'COALESCE(SUM(r.known_input_tokens),0) AS known_input_tokens,COALESCE(SUM(r.known_output_tokens),0) AS known_output_tokens '
+        + 'FROM handoff_suggestion_runs r JOIN intake_handoffs h ON h.handoff_id=r.handoff_id LEFT JOIN handoff_suggestion_choices c ON c.handoff_id=r.handoff_id '
+        + 'LEFT JOIN handoff_suggestion_marks m ON m.handoff_id=r.handoff_id WHERE r.created_at>=? AND r.created_at<? '
+        + 'GROUP BY r.arm,r.outcome ORDER BY r.arm,r.outcome', sinceMs, untilMs);
     },
     /**
      * An agent's mark on the customer-confirmed suggestion of one acknowledged report (public ``protocol``): the first

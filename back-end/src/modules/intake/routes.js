@@ -129,9 +129,10 @@ async function finishIntake(request, env, store, ctx, complete) {
     }
     const protocol = receipt.complete_case_id ?? receipt.handoff_id;
     // After the response, never in it; a store of its own, so its queries never count in this response's metrics. A replay
-    // schedules nothing.
-    if (suggestionArm !== undefined && !result.replayed && ctx?.waitUntil) ctx.waitUntil(runSuggestion(env, createStore(env.DB),
-      { handoffId: receipt.handoff_id, customerId, arm: suggestionArm, details, language: episode.language }));
+    // schedules it too: the run's atomic claim lets only one runner read a run, so a first request whose Worker stopped
+    // before the run started is finished by its replay, and a run already claimed is left alone.
+    if (suggestionArm !== undefined && ctx?.waitUntil) ctx.waitUntil(runSuggestion(env, createStore(env.DB),
+      { handoffId: receipt.handoff_id, customerId, details, language: episode.language }));
     // A store of its own, so the send's queries never count in this response's metrics; skipped without a ctx.
     if (emailId && ctx?.waitUntil) ctx.waitUntil(deliver(env, createStore(env.DB),
       { messageId: emailId, customerId, language: episode.language, reference: receipt.reference_short ?? protocol, urgent: receipt.urgency === 'high' }));
@@ -259,11 +260,12 @@ export async function getSuggestions(request, env, store) {
   if (!current) return fail(401, 'Start a demo session first');
   if (new URL(request.url).search) return fail(422, 'Unexpected parameters');
   const ref = reportRef(request, '/suggestions');
-  const found = ref && await store.findCustomerSuggestions(current.customer_id, ref.protocol, ref.short);
+  // The first read that serves suggested charges stamps shown_at in the same round trip (``not_shown`` is its absence).
+  const found = ref && await store.findCustomerSuggestions(current.customer_id, ref.protocol, ref.short, { shownAt: Date.now() });
   if (!found) return fail(404, 'Report not found');
   const status = found.outcome === null ? 'pending' : found.outcome === 'suggested' && found.items.length ? 'suggested' : 'none';
   return json({ status, items: status === 'suggested' ? found.items.map(charge) : [], choice: found.choice,
-    chosen_transaction_id: found.chosen_transaction_id });
+    chosen_transaction_id: found.chosen_transaction_id, answerable: status === 'suggested' && found.choice === null && found.answerable });
 }
 
 const validTransactionId = v => typeof v === 'string' && v.length > 0 && v.length <= 100 && v.isWellFormed() && !v.includes('\u0000');
@@ -272,7 +274,9 @@ const validTransactionId = v => typeof v === 'string' && v.length > 0 && v.lengt
  * POST /intake/handoff/{protocol or short reference}/suggestions/confirm with exactly ``{ transaction_id }`` (one of the
  * charges suggested for that report) or ``{ none: true }``. The first answer stands: the same answer again is 200, a
  * different one 409. A charge that was not suggested for it is 422, never stored; a missing or another customer's
- * report, or one without suggestions, is 404. It records the customer's answer only; nothing closes or is decided.
+ * report, or one without suggestions, is 404. Once an agent has opened the report (or moved it on), a first answer is
+ * 409 with ``code: already_in_review`` and stores nothing, so the agent never reviews an answer that arrived mid-review.
+ * It records the customer's answer only; nothing closes or is decided.
  */
 export async function confirmSuggestion(request, env, store) {
   const current = await requireSession(request, store, 'customer');
@@ -296,7 +300,8 @@ export async function confirmSuggestion(request, env, store) {
     const found = await store.findCustomerSuggestions(current.customer_id, ref.protocol, ref.short);
     if (!found) return fail(404, 'Report not found');
     if (found.outcome !== 'suggested' || !found.items.length) return fail(404, 'No suggestions for this report');
-    return fail(422, 'Not one of the suggested charges');
+    if (transactionId !== null && !found.items.some(c => c.transaction_id === transactionId)) return fail(422, 'Not one of the suggested charges');
+    return json({ detail: 'An agent is already reviewing this report; the answer can no longer be added', code: 'already_in_review' }, 409);
   }
   if ((stored.choice === 'none') !== (transactionId === null) || (transactionId !== null && stored.transaction_id !== transactionId)) {
     return fail(409, 'An answer is already recorded for these suggestions');
