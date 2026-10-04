@@ -561,11 +561,11 @@ def render(report: dict, manifest: dict) -> str:
              + LEGEND + _dot_plot(csat_rows, 1, 4, [1, 2, 3, 4]) + '</figure>')
     for title, rows, key, qid in cuts:
         body += f'<h3>By {esc(title.lower())} ({qid})</h3>' + _cut_table(title, rows, key)
-    body += ('<h3>By language</h3><p>Language exists only in our live service. Its first export (2026-10-02, 5 team and reviewer '
-             'episodes on the flow that calls no model) has 1 Spanish and 4 Portuguese reports, 4 accepted as complete handoffs and 1 routed, '
-             '0 recorded unsafe: counts, not rates. See <a href="../../Docs/deliverables/EVALUATION.md#11-other-measurements">EVALUATION.md §11</a> '
-             'for the export and its method.</p><p class="muted">The held-out comparison of the learned component against the baseline is '
-             'reported separately and is not yet run.</p></section>')
+    body += ('<h3>By language</h3><p>Language exists only in our live service, whose 5 team episodes so far are too few to compare by '
+             'language. See <a href="../../Docs/deliverables/EVALUATION.md#11-other-measurements">EVALUATION.md §11</a> for the export and '
+             'its method.</p><p class="muted">The held-out comparison of the learned component against the checklist baseline is in '
+             '<a href="../../Docs/deliverables/EVALUATION.md#1-the-result">EVALUATION.md §1</a>; it measures reading on authored messages, '
+             'not a business outcome.</p></section>')
 
     # --- 4. data trust and limits, appendix
     body += '<section id="s4"><h2>4. Data trust and limits</h2>'

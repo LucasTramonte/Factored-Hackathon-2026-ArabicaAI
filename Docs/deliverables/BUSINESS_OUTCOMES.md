@@ -8,7 +8,7 @@ We chose one workflow because the brief scores depth, not breadth. Unrecognized-
 
 The data is synthetic. Every figure below is descriptive, and none of them is an effect of our product.
 
-The figures come from Silver, quality run `20261002T232200Z` (390 checks, 0 errors, 7 warnings), over the design window 2023-06-17 to 2025-12-31 (929 days, [ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md)) unless a figure says full period. The page with charts is [`product-report.html`](../../data_foundation/reports/product-report.html). Each figure sits next to the query that produced it in [`product-report.json`](../../data_foundation/reports/product-report.json), the quality run behind them is in [`product-manifest.json`](../../data_foundation/reports/product-manifest.json), and the queries are in [`data_foundation/queries/product/`](../../data_foundation/queries/product/). After `make pipeline`, `make product-report QUALITY_REPORT=data/quality_runs/<run-id>/quality_results.json` rebuilds all of it ([`DATA_ENGINEERING.md`](DATA_ENGINEERING.md)).
+The figures come from Silver, quality run `20261002T232200Z` (390 checks, 0 errors, 7 warnings), over the design window 2023-06-17 to 2025-12-31 (929 days, [ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md)) unless a figure says full period. The page with charts is [`product-report.html`](../../data_foundation/reports/product-report.html). Each figure sits next to the query that produced it in [`product-report.json`](../../data_foundation/reports/product-report.json), the quality run behind them is in [`product-manifest.json`](../../data_foundation/reports/product-manifest.json), and the queries are in [`data_foundation/queries/product/`](../../data_foundation/queries/product/). After `make pipeline`, `make product-report QUALITY_REPORT=data/quality_runs/<run-id>/quality_results.json` rebuilds all of it ([`DATA_ENGINEERING.md`](DATA_ENGINEERING.md)). The [decision KPIs](#decision-kpis-for-dispute-managers) come from their own queries and quality run, named in that section.
 
 ## The problem in numbers
 
@@ -33,9 +33,11 @@ About eleven customers a day report a charge they don't recognize, and the conta
 
 The two columns are nearly identical. A customer looking at a large charge they didn't make treats it as urgent ([DF-024](DATA_ENGINEERING.md#df-024-purchase-amounts-are-almost-flat-up-to-usd-509-with-no-high-value-tail)), yet nothing in today's handling sets these complaints apart from any other.
 
-Escalation is where cases disappear. None of the 514 complaints escalated in the window has a first response, resolution or closing date, in any year. Their age at the end of the data (535 days at p50 and 973 at p90 for all 618, full period) only reflects when they were created: escalated is a fixed label, not a stage a case passes through ([DF-028](DATA_ENGINEERING.md#df-028-complaint-statuses-are-fixed-labels-not-a-lifecycle)). So the data can't say how long an escalation takes.
+The unresolved share is not a backlog that ages. Every creation quarter, from 2023 to late 2025, is 72–77% unresolved at the end of the data, so a complaint from 2023 is no more likely to be done than a recent one: the source sets each status once ([DF-028](DATA_ENGINEERING.md#df-028-complaint-statuses-are-fixed-labels-not-a-lifecycle)). The durations above therefore describe only the complaints that have both dates.
 
-Repeat complaints are rare, and they aren't re-opened disputes. 350 of 10,013 customers (3.5%) filed two or more, 707 complaints in all: of 10,370 complaints, 357 follow an earlier one by the same customer, 27 within 30 days, 64 within 90 and 92 after the earlier one had a resolution or closing date. That is as many as chance alone predicts (the Poisson check under [Decision KPIs](#decision-kpis-for-dispute-managers)), and the source has no re-opened status, so the data can't show a dispute coming back. The source's `is_repeat_complainer` flag disagrees with the complaint history and isn't used. In our service, "not resolved" on a closed report starts a new one that cites it (#90): the first real re-open signal, not yet exported.
+Escalated cases never get an outcome. None of the 514 complaints escalated in the window has a first response, resolution or closing date, in any year. Their age at the end of the data (535 days at p50 and 973 at p90 for all 618, full period) only reflects when they were created: escalated is a fixed label, not a stage a case passes through ([DF-028](DATA_ENGINEERING.md#df-028-complaint-statuses-are-fixed-labels-not-a-lifecycle)). So the data can't say how long an escalation takes.
+
+Repeat complaints aren't re-opened disputes: the 350 customers who filed more than one are as many as chance predicts (the repeat row of the [decision KPIs](#decision-kpis-for-dispute-managers)), and the source has no re-opened status. The first real re-open signal is in our service, where "not resolved" on a closed report starts a new one that cites it (#90); it isn't exported yet.
 
 Two data choices affect these rows. We kept the 52 window complaints whose outcome dates fall in 2026. We left out of the durations the 84 whose resolution date precedes their first response.
 
@@ -66,17 +68,12 @@ There is no survey CSAT for unrecognized-charge complainants at all. Surveys lin
 
 Segment and country are today's snapshot, not the values at complaint time; the channel is where the complaint was received. Cells under 30 are not compared.
 
-| Segment | Complaints | Unresolved | SLA breached | Closed-case satisfaction | Complaint-contact CSAT |
-|---|---|---|---|---|---|
-| Basic | 6,221 | 74.51% | 19.90% | 3.01 (n = 205) | 2.44 |
-| Plus | 2,557 | 74.74% | 21.47% | 3.28 (n = 100) | 2.42 |
-| Premium | 1,053 | 74.83% | 20.51% | 3.00 (n = 45) | 2.44 |
-| Student | 539 | 74.03% | 15.21% | too few (n = 21) | 2.41 |
-
-Premium complaints stay unresolved and breach SLAs as often as anyone's. No segment is handled differently today, and neither is any country or reception channel:
-
 | Cut | Complaints | Unresolved | SLA breached | First response p50 | Closed-case satisfaction |
 |---|---|---|---|---|---|
+| Basic | 6,221 | 74.51% | 19.90% | 25 h | 3.01 (n = 205) |
+| Plus | 2,557 | 74.74% | 21.47% | 25 h | 3.28 (n = 100) |
+| Premium | 1,053 | 74.83% | 20.51% | 25 h | 3.00 (n = 45) |
+| Student | 539 | 74.03% | 15.21% | 24 h | too few (n = 21) |
 | Mexico | 5,188 | 74.69% | 20.28% | 25 h | 3.07 (n = 181) |
 | Colombia | 3,129 | 74.98% | 19.69% | 25 h | 3.04 (n = 120) |
 | Argentina | 2,053 | 73.65% | 20.31% | 25 h | 3.10 (n = 70) |
@@ -87,9 +84,9 @@ Premium complaints stay unresolved and breach SLAs as often as anyone's. No segm
 | Branch | 402 | 71.89% | 21.39% | 24 h | too few (n = 13) |
 | Regulator | 118 | 75.42% | 21.19% | 26.5 h | too few (n = 3) |
 
-Half of these disputes (5,210 of 10,370) arrive through the Call Center.
+No segment, country or reception channel is handled differently today: Premium complaints stay unresolved and breach SLAs as often as anyone's. Student complaints breach the SLA less often (15.21%), the one gap above 2 points. Complaint-contact CSAT is 2.41–2.44 in every segment, against 2.82–2.84 for other contacts. Half of these disputes (5,210 of 10,370) arrive through the Call Center.
 
-Language is recorded only by our live service. Its first export (2026-10-02, 5 team and reviewer episodes, on the flow that calls no model) has 1 Spanish and 4 Portuguese reports: 4 accepted as complete handoffs, 1 routed, 0 recorded unsafe. These are counts, not rates; the export and its method are in [EVALUATION.md §11](EVALUATION.md#11-other-measurements).
+Language is recorded only by our live service, whose 5 team episodes so far are too few to compare by language ([EVALUATION.md §11](EVALUATION.md#11-other-measurements)).
 
 ## What our service changes
 
@@ -205,11 +202,12 @@ The table maps each question to a measure, gives the baseline in the supplied da
 - None of the time, SLA or satisfaction figures is an effect of our product. They are baselines to measure against.
 - No complaint links to a transaction, so "large for this customer" can only be measured live.
 - Survey answers about waiting are not measured wait, and wait is recorded only for phone contacts ([DF-027](DATA_ENGINEERING.md#df-027-wait-time-exists-only-for-phone-contacts-and-survey-wait-answers-dont-track-it)).
+- Complaint status is a fixed label ([DF-028](DATA_ENGINEERING.md#df-028-complaint-statuses-are-fixed-labels-not-a-lifecycle)), so history gives no backlog ageing, no time to escalate and no time-of-day effect.
 - The data is synthetic, and every association here is descriptive.
 
-## Metric dictionary
+## Metric dictionary: the product report
 
-Every published metric, with what it counts. "Window" is the design window unless it says *full period*; "UC" means `Cargo no reconocido` complaints created in that window. Queries are in [`data_foundation/queries/product/`](../../data_foundation/queries/product/).
+Every metric of the product report (the `PR` queries), with what it counts; the decision KPIs define theirs in their own section. "Window" is the design window unless it says *full period*; "UC" means `Cargo no reconocido` complaints created in that window. Queries are in [`data_foundation/queries/product/`](../../data_foundation/queries/product/).
 
 | Metric | Population | Numerator / denominator | Window | Query |
 |---|---|---|---|---|
@@ -220,10 +218,10 @@ Every published metric, with what it counts. "Window" is the design window unles
 | Unresolved share | UC complaints, and all other complaints | Status Open, In Process or Escalated / complaints (a status snapshot) | Design | PR-04 |
 | SLA breach rate | Same | `sla_breached` / complaints with the flag | Design | PR-04 |
 | Step durations (p50, p90) | Same, with both dates and a non-negative interval | Assignment → first response; first response → resolution or closing; creation → resolution; `resolution_days` | Design (outcomes may fall in 2026) | PR-04 |
-| Escalated time open (p50, p90) | UC complaints with status Escalated | Data end (latest `creation_date`) − creation | *Full period* | PR-05 |
+| Escalated cases' age at the data end (p50, p90) | UC complaints with status Escalated | Data end (latest `creation_date`) − creation. Reflects creation date only, not time open (DF-028) | *Full period* | PR-05 |
 | Repeat customers and follow-up complaints | Customers with UC complaints; UC complaints | Customers with 2 or more / customers; complaints after an earlier one by the same customer (within 30 or 90 days, or after its outcome) / complaints. Matches IK-02 and IK-03, whose Poisson check shows the repeats are what chance predicts | Design | PR-10 |
 | Closed-case satisfaction (F5) | UC complaints | Mean `resolution_satisfaction` over complaints closed in the window with a score; coverage = scored / UC complaints | Design | PR-06 |
 | Contact CSAT, CES, NPS | Surveys joined one-to-one to their contact | Mean and share by score, by contact reason and resolution; NPS detractors (0–6) / answers | Design | PR-07 |
 | Cuts by segment, country, channel | UC complaints, by the customer's snapshot segment or country, or by `reception_channel` | Unresolved, SLA breached, escalated / complaints; first response p50; F5 mean. Cells under 30 publish no numerators | Design | PR-08, PR-11, PR-12 |
 | Complaint-contact CSAT by segment | CSAT surveys of complaint and other contacts | Mean score; share scoring 4 / answers | Design | PR-09 |
-| Live outcomes by language | Report episodes in the live store at export | Counts only (5 episodes) | 2026-10-02 export | [EVALUATION.md §11](EVALUATION.md#11-other-measurements) |
+| Live episodes | Report episodes in the live store at export | Counts only (5 episodes), too few to compare by language | 2026-10-02 export | [EVALUATION.md §11](EVALUATION.md#11-other-measurements) |

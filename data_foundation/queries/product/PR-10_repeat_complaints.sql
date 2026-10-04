@@ -1,5 +1,5 @@
 -- id: PR-10
--- title: Repeat complainers and re-open proxies: unrecognized-charge complaints that follow an earlier one by the same customer
+-- title: Repeat complainers: unrecognized-charge complaints that follow an earlier one by the same customer (as many as chance predicts; not re-opened disputes)
 -- scope: design
 -- memory: Design-window unrecognized-charge complaints (about 10k rows) with one window per customer (lag over creation_date); aggregates only.
 -- There is no re-opened status in the source, so the proxies are labelled: a later complaint by the same customer within 30 or

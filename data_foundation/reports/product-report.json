@@ -1338,7 +1338,7 @@
       ]
     },
     "PR-10": {
-      "title": "Repeat complainers and re-open proxies: unrecognized-charge complaints that follow an earlier one by the same customer",
+      "title": "Repeat complainers: unrecognized-charge complaints that follow an earlier one by the same customer (as many as chance predicts; not re-opened disputes)",
       "scope": "design",
       "query": "data_foundation/queries/product/PR-10_repeat_complaints.sql",
       "rows": [
