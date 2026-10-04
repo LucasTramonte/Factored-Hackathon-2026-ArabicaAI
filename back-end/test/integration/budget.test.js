@@ -34,6 +34,9 @@ const CEILING = {
   agentLogin: [3, 6, 6, 1],
   // GET /audit/events (issue #69): no session read; one batch of two reads by primary key/rowid, at most limit + 1 rows each.
   audit: [2, 102, 0, 1],
+  // GET /auth/me (ADR-013 phase 0), one customer cookie: its session read and the context-card read; no write. A second
+  // (agent) cookie adds one session read. Measured, no margin.
+  authMe: [2, 1, 0, 2],
   // GET /admin/customers (ADR-007, decision 10): the session read, then the identities query above (every customers row:
   // 16 measured here, about 800 with the cohort loaded). POST /admin/act-as: session, customerSource and context card
   // reads, then actAsSession's single-use batch: its inserts each check a session by primary key (the presented admin
@@ -138,6 +141,10 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
     .call('/demo/agent-session', {})).metrics);
   const audit = await client({ authorization: 'Bearer ' + await idToken('auditor@test', { groups: ['auditor'] }) }).call('/audit/events');
   assert.equal(audit.status, 200); measured.audit = within('audit', audit.metrics);
+  // ADR-013 phase 0: a reload with a live customer session restores it.
+  const reloaded = client(); assert.equal((await reloaded.call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
+  const restored = await reloaded.call('/auth/me');
+  assert.equal(restored.status, 200); measured.authMe = within('authMe', restored.metrics);
   const admin = client({ authorization: 'Bearer ' + await idToken('demo-diego', { groups: ['admin'] }) });
   assert.equal((await admin.call('/auth/session', {})).status, 200);
   const customers = await admin.call('/admin/customers');

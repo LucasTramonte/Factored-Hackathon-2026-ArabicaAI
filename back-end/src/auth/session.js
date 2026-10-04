@@ -26,15 +26,16 @@ const requestId = request => (request.headers.get('cf-ray') ?? crypto.randomUUID
 /**
  * The live session row for ``actor`` (``{ customer_id, expires_at }``; expiry is internal only), or ``null``. A
  * presented cookie with no live row records ``session_expired`` (well formed) or ``session_rejected`` (malformed);
- * no cookie records nothing.
+ * no cookie records nothing. ``audit: false`` skips that record, for a read that answers 200 either way (``GET
+ * /auth/me``): rejection events belong to the routes that refuse with 401 (ADR-004).
  */
-export async function requireSession(request, store, actor) {
+export async function requireSession(request, store, actor, { audit = true } = {}) {
   const token = readCookies(request)[COOKIE[actor]];
   if (!token) return null;
   const hash = await tokenHash(token);
   const wellFormed = TOKEN.test(token);
   const session = wellFormed ? await store.findSession(hash, actor, Date.now()) : null;
-  if (session) return session;
+  if (session || !audit) return session;
   await store.recordAuthEvent({ now: Date.now(), actor, event: wellFormed ? 'session_expired' : 'session_rejected',
     sessionRef: hash.slice(0, 12), requestId: requestId(request) });
   return null;
