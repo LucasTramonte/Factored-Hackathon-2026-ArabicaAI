@@ -16,7 +16,7 @@ The figures come from Silver, quality run `20261002T232200Z` (390 checks, 0 erro
 |---|---|---|
 | Unrecognized-charge complaints | 11.16 a day | 10,370 complaints, 18.28% of 56,736. The share is stable by year (18.2–18.4%) |
 | Recorded claims | US$2,327 a day in source USD; US$2,474 with FX estimates | Amounts are convertible on 3,296 of 10,370 complaints (31.78%): 835 recorded in USD (US$2,161,914.20) and 2,461 FX-estimated at the creation-day rate (US$135,989.84, flagged). Excluded: 6,919 with no amount and 155 with an amount but no currency. These are claims, not losses or savings. Each source currency is reported separately ([DF-023](DATA_ENGINEERING.md#df-023-amounts-share-one-usd-scale-and-claimed-currencies-ignore-the-customers-country)) |
-| Complaint-contact workload | 11.08 hours a day, 106.70 contacts | All complaint contacts (`Queja`), not only unrecognized charges. Mean duration 434.71 s over 85,261 observed durations (86.02%); 13,861 are missing. Turning this into a cost needs a rate the data doesn't have |
+| Complaint-contact workload | 11.08 observed-duration hours/day; 106.70 all-complaint contacts/day | All complaint contacts (`Queja`), not only unrecognized charges: 99,122 contacts over 929 days. The hours sum only the 85,261 observed durations (86.02%; mean 434.71 s); 13,861 missing durations are excluded, with no imputation. Turning this into a cost needs a rate the data doesn't have |
 | Resolution of complaint contacts | 43.65%, against 76.61% for all contacts | 43,269 of 99,122, against 444,741 of 580,546 |
 
 About eleven customers a day report a charge they don't recognize, and the contact channel they reach resolves complaints far less often than anything else it handles.

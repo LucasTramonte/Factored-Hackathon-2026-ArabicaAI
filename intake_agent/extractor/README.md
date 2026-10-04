@@ -57,6 +57,20 @@ Amendment 2 lowers the reasoning level only when the latency trigger fires. **On
 
 A human reviews `extractor-v1.md` and tags `extractor-v1`. Then the frozen run happens **once** ([runbook](../../evals/intake/README.md)). The result is reported on all 60 cases and on the 52 that were not exposed (amendment 5). Manoella approves amendment 7 first.
 
+**Planned evaluation date: 2026-10-05 UTC**, after those approvals, the human tag and the custodian's verified publication of the frozen corpus. The registered `openai/gpt-oss-20b-maas` endpoint [retires on 2026-10-21](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/maas/openai/gpt-oss-20b) (ADR-006 amendment 8), so the batch must finish before that date. If the prerequisites delay the run, choose another date before retirement; a different model or host requires a new registration. This is a planned run, not a completed evaluation.
+
+Run from the repository root, keeping the registered Vertex target and model (the model id is fixed in `vertex.py`):
+
+```sh
+.venv/bin/python -m evals.intake.run \
+  --cases evals/intake/frozen_es_pt_v1.candidate.json --split frozen_es_pt_v1 --repetitions 3 \
+  --system extractor-v1=intake_agent.extractor.vertex:extract \
+  --preregistration extractor-v1=evals/intake/preregistration/extractor-v1.md \
+  --output data/frozen-run/results.json
+```
+
+The runner verifies the registration hashes and tag before scoring. Run the three repetitions back to back in one batch, recording its start/end times and any model-build metadata, as the registration requires.
+
 The registration binds the Vertex transport and its shared behavioural implementation. Run `prereg fill` with `--implementation intake_agent/extractor/vertex.py --dependency intake_agent/extractor/workers_ai.py`, the Vertex target `intake_agent.extractor.vertex:extract` and the model id `openai/gpt-oss-20b-maas`. The prompt has its own required hash. `prereg check` verifies all three files in the working tree and at the registered commit. Filling records the current commit, so the later registration-document commit doesn't move the intended human tag.
 
 **Cost:** about 360 calls before retries, billed per token against the trial credits. That is roughly 1,900 input and 250 output tokens per call (development smoke, 2026-10-03). Check the [Vertex AI pricing page](https://cloud.google.com/vertex-ai/generative-ai/pricing) for the current per-token price. Report every attempted call, the known tokens and `usage_unavailable_calls`; unknown usage is never counted as free.
