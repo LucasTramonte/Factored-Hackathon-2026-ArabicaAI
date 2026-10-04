@@ -51,7 +51,7 @@ browser -> Cloudflare Worker (router, per-IP limit, session from the verified to
   -> Amazon SES: notification emails, sent after the response
 ```
 
-The Worker and D1 remain the single runtime ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito email sign-in and SES notification delivery are deployed ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)); the shared Access and Basic gates belong to the earlier checkpoint. The Worker enforces role and customer ownership outside model output, stores sessions and cases in D1, and returns a reference only after read-back. SES sandbox restrictions remain. Agent review status records a human workflow step, not a bank resolution.
+The Worker and D1 remain the single runtime ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito email sign-in and SES notification dispatch are deployed ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)); the shared Access and Basic gates belong to the earlier checkpoint. The Worker enforces role and customer ownership outside model output, stores sessions and cases in D1, and returns a reference only after read-back. SES sandbox restrictions remain. An outbox `sent` status means SES accepted the request, not confirmed mailbox delivery; the UI describes the earlier 202 response as queued. Agent review status records a human workflow step, not a bank resolution.
 
 ## Offline learned evaluation
 

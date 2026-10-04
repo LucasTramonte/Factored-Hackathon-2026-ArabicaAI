@@ -56,6 +56,8 @@ const HISTORY_REPORTS = 20;
 
 /** At most one ``update`` email per customer and reference in this window; ``enqueueEmail`` enforces it in SQL. */
 export const UPDATE_EVERY_MS = 300000;
+/** A failed or unconfigured send has a short retry delay so concurrent clicks still cannot create duplicate sends. */
+export const EMAIL_FAILURE_RETRY_MS = 10000;
 
 /** ``shortReference`` is injectable so tests can force collisions. */
 export function createStore(db, { shortReference = newShortReference } = {}) {
@@ -593,8 +595,9 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      */
     enqueueEmail: ({ messageId, now, customerId, template, language, reference }) => template === 'update'
       ? all("INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) SELECT ?,?,?,'update',?,?,'queued' "
-        + "WHERE NOT EXISTS(SELECT 1 FROM email_outbox WHERE customer_id=? AND reference=? AND template='update' AND created_at>?) RETURNING message_id",
-        messageId, now, customerId, language, reference, customerId, reference, now - UPDATE_EVERY_MS)
+        + "WHERE NOT EXISTS(SELECT 1 FROM email_outbox WHERE customer_id=? AND reference=? AND template='update' "
+        + "AND ((provider_status IN ('queued','sent') AND created_at>?) OR (provider_status IN ('failed','skipped') AND created_at>?))) RETURNING message_id",
+        messageId, now, customerId, language, reference, customerId, reference, now - UPDATE_EVERY_MS, now - EMAIL_FAILURE_RETRY_MS)
       : all("INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) VALUES(?,?,?,?,?,?,'queued')",
         messageId, now, customerId, template, language, reference),
     /** One customer's outbox rows for a reference (index ``email_outbox_recent``); no address, no body. */
@@ -609,6 +612,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     recentEmails: async (customerId, reference, sinceMs, template) => first(
       'SELECT COUNT(*) AS count,MAX(created_at) AS latest FROM email_outbox WHERE customer_id=? AND reference=? AND created_at>? AND template=?',
       customerId, reference, sinceMs, template),
+    /** Epoch ms when the newest update stops suppressing a retry, or null when none exists. */
+    recentEmailRetryAt: async (customerId, reference, sinceMs) => (await first(
+      "SELECT MAX(created_at+CASE WHEN provider_status IN ('failed','skipped') THEN ? ELSE ? END) AS retry_at "
+      + "FROM email_outbox WHERE customer_id=? AND reference=? AND template='update' AND created_at>?",
+      EMAIL_FAILURE_RETRY_MS, UPDATE_EVERY_MS, customerId, reference, sinceMs))?.retry_at ?? null,
 
     /**
      * The auditor's read (``GET /audit/events``): the newest ``limit`` sign-in events and review-status changes, newest
