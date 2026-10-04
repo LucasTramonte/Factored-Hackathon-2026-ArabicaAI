@@ -308,6 +308,37 @@ export class CustomerPage implements OnInit, OnDestroy {
     return this.enter(() => this.service.actAs(customerId), e => this.fail(e));
   }
 
+  /** The bank-flagged charge to ask about (ADR-011), or null; a failed read just shows no alert. */
+  readonly alert = signal<Transaction | null>(null);
+  /** The short thanks after "it's mine", announced where the alert was. */
+  readonly alertNote = signal('');
+
+  private async loadAlert(): Promise<void> {
+    try {
+      this.alert.set((await this.service.alert()).alert);
+    } catch {
+      this.alert.set(null); // the alert is optional: the home works without it
+    }
+  }
+
+  /**
+   * Answer the alert. "It's mine" records it and thanks the customer; "I don't recognize it" records it and opens the
+   * guided report on that charge, the normal confirmation path. The banner goes either way; a failed record keeps it.
+   */
+  async answerAlert(answer: 'mine' | 'report'): Promise<void> {
+    const tx = this.alert();
+    if (!tx || this.busy()) return;
+    try {
+      await this.service.answerAlert(tx.transaction_id, answer);
+    } catch (e) {
+      this.fail(e);
+      return;
+    }
+    this.alert.set(null);
+    if (answer === 'mine') this.alertNote.set(this.t().alertThanks);
+    else this.openChat(tx.transaction_id);
+  }
+
   /** "Use another email". */
   anotherEmail(): void {
     this.error.set('');
@@ -359,6 +390,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       this.code = '';
       await this.loadTransactions();
       await this.loadReports();
+      void this.loadAlert();
       this.step.set('home');
     } catch (e) {
       onError(e);
@@ -398,6 +430,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.booted.set(true);
     this.step.set('home');
     void this.loadReports();
+    void this.loadAlert();
     try {
       await this.loadTransactions();
     } catch (e) {
@@ -715,6 +748,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       } else {
         this.intakeReceipt.set(result as IntakeReceipt);
         await this.loadReports();
+        void this.loadAlert(); // a report on the flagged charge ends its alert
       }
     } catch (e) {
       if (e instanceof ApiError && DEFINITIVE.has(e.status)) {
@@ -739,6 +773,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   private reset(): void {
+    this.alert.set(null);
+    this.alertNote.set('');
     this.client.set('');
     this.roles.set([]);
     this.transactions.set([]);
