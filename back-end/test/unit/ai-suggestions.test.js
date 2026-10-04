@@ -153,7 +153,11 @@ test("on: the same response and request D1 work; after it, one extraction sugges
   await Promise.all(off.pending);
   const on = await handoff(ctx, ON_B);
   assert.equal(normalized(on.text), normalized(off.text), 'the response does not depend on the switch');
-  assert.deepEqual(on.metrics, off.metrics, 'the extraction is waitUntil work on a store of its own');
+  assert.deepEqual(
+    on.metrics,
+    { ...off.metrics, queries: off.metrics.queries + 1 },
+    'only the pending AI run is recorded in the request; extraction remains waitUntil work',
+  );
   assert.equal(g.calls.length, 0, 'no model call inside the request');
   assert.equal(on.pending.length, 1);
   assert.equal(await on.pending[0], 'suggested');
