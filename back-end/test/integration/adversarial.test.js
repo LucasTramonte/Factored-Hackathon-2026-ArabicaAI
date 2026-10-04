@@ -398,3 +398,22 @@ test('logout revokes the session server-side, for every holder of the token', as
   assert.equal((await c.call('/transactions')).status, 401);
   assert.equal((await copy.call('/transactions')).status, 401);
 });
+
+test("logout ends an admin's customer and agent sessions and clears both cookies", async () => {
+  const token = 'Bearer ' + await idToken('demo-diego', { groups: ['admin'] });
+  const customer = client({ authorization: token });
+  const agent = client({ authorization: token });
+  assert.equal((await customer.call('/auth/session', {})).status, 200);
+  assert.equal((await agent.call('/demo/agent-session', {})).status, 200);
+  const both = client(); both.cookie = `${customer.cookie}; ${agent.cookie}`;
+  assert.equal((await both.call('/transactions')).status, 200);
+  assert.equal((await both.call('/agent/intakes')).status, 200);
+  const out = await both.call('/auth/logout', {});
+  assert.equal(out.status, 204);
+  const cleared = out.headers.getSetCookie().map(c => c.split(';', 1)[0]).sort();
+  assert.deepEqual(cleared, ['demo_agent_session=', 'demo_session=']);
+  for (const c of out.headers.getSetCookie()) assert.match(c, /Max-Age=0/);
+  const stale = client(); stale.cookie = `${customer.cookie}; ${agent.cookie}`;
+  assert.equal((await stale.call('/transactions')).status, 401, 'the customer session is revoked server-side');
+  assert.equal((await stale.call('/agent/intakes')).status, 401, 'the agent session is revoked server-side');
+});

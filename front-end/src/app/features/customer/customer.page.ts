@@ -364,6 +364,32 @@ export class CustomerPage implements OnInit, OnDestroy {
     else this.openChat(tx.transaction_id);
   }
 
+  /**
+   * Sign out: end the customer and agent sessions on the server (best effort: it always answers 204), forget everything
+   * held in the tab, and return to the email field. Refused while a report is open or a request is frozen.
+   */
+  async signOut(): Promise<void> {
+    if (this.busy() || this.identityLocked()) return;
+    this.busy.set(true);
+    try {
+      await this.service.logout();
+    } catch { /* the cookies may outlive a failed call, but nothing in the tab does */ }
+    this.cognito.forget();
+    this.agent.roles.set([]);
+    this.reset();
+    this.actAsIdentities.set([]);
+    this.actAsChoice = '';
+    this.chatOpen.set(false);
+    this.email = '';
+    this.code = '';
+    this.codeSent.set(false);
+    this.error.set('');
+    this.shownStep = 'login'; // the email field takes focus, not the step heading
+    this.step.set('login');
+    this.busy.set(false);
+    afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('#login-email')?.focus(), { injector: this.injector });
+  }
+
   /** "Use another email". */
   anotherEmail(): void {
     this.error.set('');

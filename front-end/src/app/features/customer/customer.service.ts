@@ -54,7 +54,7 @@ export class CustomerService {
     return this.api.request('/alerts/answer', { transaction_id: transactionId, answer });
   }
 
-  /** Revoke the browser's customer session cookie (always 204). */
+  /** Revoke the browser's customer and agent sessions and clear both cookies (always 204). */
   logout(): Promise<unknown> {
     return this.api.request('/auth/logout', {});
   }

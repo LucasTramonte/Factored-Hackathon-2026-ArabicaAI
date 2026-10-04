@@ -137,6 +137,42 @@ describe('CustomerPage', () => {
     expect(page.transactions()).toEqual([tx]);
   });
 
+  it('the account menu shows the name and id; Sign out ends the sessions and returns to the email field', async () => {
+    const fixture = TestBed.createComponent(CustomerPage);
+    const p = fixture.componentInstance;
+    const el = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(el);
+    Object.defineProperty(p, 'demoPicker', { value: false });
+    service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'email_otp', context_card: null, roles: ['admin'] });
+    p.identity = 'demo-ana';
+    fixture.autoDetectChanges();
+    await p.login();
+    await fixture.whenStable();
+    const menu = el.querySelector<HTMLDetailsElement>('nav.ar-sidebar details.user-menu')!;
+    menu.querySelector<HTMLElement>('summary')!.click();
+    expect(menu.open).toBeTrue();
+    const panel = menu.querySelector('.user-panel')!.textContent!;
+    expect(panel).toContain(p.displayName());
+    expect(panel).toContain('demo-ana');
+    expect(panel).toContain(p.t().adminChip);
+    p.frozen.set({} as never);
+    await fixture.whenStable();
+    const button = () => el.querySelector<HTMLButtonElement>('#sign-out')!;
+    expect([button().disabled, !!el.querySelector('#sign-out-locked')]).toEqual([true, true]);
+    p.frozen.set(null);
+    await fixture.whenStable();
+    p.email = 'ana@example.com';
+    service.logout.and.rejectWith(new ApiError(0)); // a failed call still clears the tab
+    button().click();
+    await new Promise(r => setTimeout(r));
+    await fixture.whenStable();
+    expect(service.logout).toHaveBeenCalledTimes(1);
+    expect(cognito.forget).toHaveBeenCalled();
+    expect([p.step(), p.client(), p.roles(), p.transactions(), p.email, p.codeSent()]).toEqual(['login', '', [], [], '', false]);
+    expect(document.activeElement?.id).toBe('login-email');
+    el.remove();
+  });
+
   it('stays on sign-in and shows the mapped error when sign-in fails', async () => {
     service.signIn.and.rejectWith(new ApiError(503, 'unavailable'));
     page.start();
