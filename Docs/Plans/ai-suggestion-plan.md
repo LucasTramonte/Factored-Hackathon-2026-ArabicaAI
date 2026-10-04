@@ -1,6 +1,6 @@
 # AI suggestions on "I can't find the charge": implementation and measurement plan
 
-**Status:** plan, 2026-10-04. Nothing here is built. The implementation comes in its own PR after this plan is reviewed. It follows [ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md) (Proposed) and needs the amendment in step 0 before the switch is turned on anywhere.
+**Status:** plan, 2026-10-04. Steps 2–5 are built behind the switch, which ships off (see the [implementation note](#implementation-note-2026-10-04)); steps 0, 1, 6 and 7 are open. It follows [ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md) (Proposed) and needs the amendment in step 0 before the switch is turned on anywhere.
 
 **For:** the team (Lucas, Roberto, Manoella) and whoever builds the PR. Manoella approves anything that changes what the model is asked or how its answer is read (ADR-006, decision 5).
 
@@ -159,3 +159,15 @@ Every failure leaves the customer exactly where they are today: an incomplete ha
   - request Vertex AI's abuse-monitoring logging exception, for zero retention;
   - pin a region if the bank requires one;
   - keep sending only the description text.
+
+## Implementation note (2026-10-04)
+
+Built on branch `feat/ai-suggestions`, switch off (`INTAKE_AI_ENABLED = "0"`). What is in it, and where it differs from the text above:
+
+- **Port and parity.** `back-end/src/modules/intake/ai-transport.js` ports `vertex.py` and `workers_ai.py` (body, parse, schema, one retry, 10 s deadline, no retry on provider errors); `matcher.js` ports `label_rules.evaluate`. `python -m evals.intake.online_parity` runs the evaluated Python, unchanged, on the development split and authored synthetic inputs and writes `back-end/test/fixtures/ai-parity.json`: 15 request bodies byte-identical, 26 parse cases, 21 HTTP exchanges (kind, calls, usage), 753 policy cases, all equal. Known divergences, none reachable with the routes' inputs: Python's `json.loads` accepts `NaN`/`Infinity` in a provider body (the JS reads such a body as `provider_error`); `Decimal` accepts non-ASCII digits and `fromisoformat` week dates (the JS refuses them, so they can only drop a suggestion); diacritics are removed only in U+0300–U+036F.
+- **Online inputs.** `as_of` is null, as the old shadow call sent: the Worker doesn't know the customer's local time, so relative dates suggest nothing. D1 holds no category, card or country per charge, so those facts never fit; the category is taken from the closed vocabulary's merchant names. The customer's "cards" are the currencies of their own charges, as `systems.customers_from` derives them.
+- **Outcome kinds** are the ones in the fallbacks table except `injection_flagged`, `not_answered` and `rejected`: the injection flag never changes the outcome (a reported purchase is still suggested), "not answered" is a run without a choice, and "rejected" is the choice `none`.
+- **Credential:** option A, as above. The Worker never holds a Google key.
+- **Storage and routes:** migration 0024 (runs with the arm, suggestions, the customer's choice, the agent's mark, the daily cap); `GET /intake/handoff/{reference}/suggestions`, `POST …/suggestions/confirm` and `POST /agent/suggestion-mark`. The arm is fixed in the handoff's reservation batch. One `suggestion_recorded` event per run carries the arm, the outcome and the usage; the customer's choice and the agent's mark are in D1 only, not in events.
+- **Human steps before the switch is on:** the ADR-012 amendment (step 0); the service account, pool, provider with the Worker's JWKS and the binding (step 1); `wrangler secret put VERTEX_WIF_SIGNING_KEY`; the latency measurement from the Worker (step 6).
+
