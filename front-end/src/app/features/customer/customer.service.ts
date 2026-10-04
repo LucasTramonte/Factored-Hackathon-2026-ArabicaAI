@@ -3,7 +3,7 @@ import { ApiService } from '../../core/http/api.service';
 import { LangService } from '../../shared/i18n/lang.service';
 import type { SessionState } from '../../shared/models/intake.model';
 import { ContextCard, CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeReceipt, IntakeStart, IntakeStartBody,
-  ReportList, Role, SuggestionChoice, SuggestionList, TransactionList, AlertResponse } from '../../shared/models/intake.model';
+  ReportList, Role, SuggestionChoice, SuggestionList, TransactionList, AlertResponse, ServiceTimes } from '../../shared/models/intake.model';
 
 /** Customer calls: email sign-in (simulated in local development), own charges and the guided intake. */
 @Injectable({ providedIn: 'root' })
@@ -71,6 +71,11 @@ export class CustomerService {
 
   reports(): Promise<ReportList> {
     return this.api.request<ReportList>('/reports');
+  }
+
+  /** This bank's historical response times for unrecognized-charge reports (a reviewed aggregate, the same for everyone). */
+  serviceTimes(): Promise<ServiceTimes> {
+    return this.api.request<ServiceTimes>('/intake/service-times');
   }
 
   /** The receipt answer "was it easy to report this charge?" for an own report; the first answer stands (409 on a different one). */

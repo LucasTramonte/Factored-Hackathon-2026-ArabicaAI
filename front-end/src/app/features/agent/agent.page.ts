@@ -7,6 +7,7 @@ import { ApiError } from '../../core/http/api.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { demoPicker } from '../../core/auth/cognito.config';
 import { formatSourceTime } from '../../shared/format/source-time.util';
+import { formatMoney } from '../../shared/format/money.util';
 import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
@@ -38,7 +39,8 @@ export class AgentPage {
   readonly codeSent = signal(false);
   email = '';
   code = '';
-  readonly t = inject(LangService).t;
+  private readonly lang = inject(LangService);
+  readonly t = this.lang.t;
   readonly busy = signal(false);
   readonly error = signal('');
   readonly loaded = signal(false);
@@ -51,6 +53,10 @@ export class AgentPage {
   readonly openProtocol = signal<string | null>(null);
   private detailRequest = 0;
   readonly sourceTime = formatSourceTime;
+  /** A stored amount in the interface language's conventions (``ARS 120.443,55``). */
+  money(amount: string, currency: string): string {
+    return formatMoney(amount, currency, this.lang.lang());
+  }
   private readonly detailHeading = viewChild<ElementRef<HTMLElement>>('detailHeading');
   private readonly signInButton = viewChild<ElementRef<HTMLButtonElement>>('signIn');
   private readonly statusText = viewChild<ElementRef<HTMLElement>>('statusText');

@@ -274,3 +274,24 @@ export interface SessionState {
   customer: { customer_id: string; roles: Role[]; context_card: ContextCard | null } | null;
   agent: boolean;
 }
+
+/** One historical interval (contract ``serviceTimes.metrics``): ``n`` have it, ``missing`` don't yet, ``negative`` run backwards. */
+export interface ServiceTimeMetric {
+  metric: 'first_response' | 'creation_to_resolution';
+  unit: 'hours' | 'days';
+  p50: number;
+  p90: number;
+  n: number;
+  missing: number;
+  negative: number;
+  /** ``resolved_only``: a survivor statistic over resolved complaints, never shown as an expected time. */
+  covers: 'responded' | 'resolved_only';
+}
+/** GET /intake/service-times (contract ``serviceTimes``): this bank's history, not a prediction or a service level. */
+export interface ServiceTimes {
+  basis: 'bank_history';
+  version: string;
+  published_on: string;
+  population: { subcategory: string; window_start: string; window_end_exclusive: string; complaints: number; source: string };
+  metrics: ServiceTimeMetric[];
+}

@@ -57,7 +57,8 @@ def make_silver(tmp_path: Path, customers=CUSTOMERS, products=PRODUCTS, purchase
                     " transaction_date TIMESTAMP, merchant_name VARCHAR, merchant_category VARCHAR, amount DOUBLE,"
                     " currency VARCHAR, transaction_country VARCHAR, transaction_type VARCHAR, transaction_status VARCHAR)")
         con.execute("CREATE TABLE silver.fact_complaints(complaint_id VARCHAR, customer_id VARCHAR, creation_date TIMESTAMP,"
-                    " category VARCHAR, subcategory VARCHAR)")
+                    " category VARCHAR, subcategory VARCHAR, assignment_date TIMESTAMP DEFAULT NULL,"
+                    " first_response_date TIMESTAMP DEFAULT NULL, resolution_date TIMESTAMP DEFAULT NULL)")
         con.execute("CREATE TABLE bronze.transactions(transaction_id VARCHAR, amount VARCHAR, transaction_date VARCHAR,"
                     " _source_file VARCHAR)")
         for table, rows in (("silver.dim_customers", customers), ("silver.dim_products", products),
@@ -468,3 +469,24 @@ def test_a_null_id_in_gold_customers_cannot_hide_a_missing_customer(tmp_path, ta
     with pytest.raises(gb.GoldCheckError) as err:
         run(tmp_path, make_silver(tmp_path, **silver_kwargs), (table,))
     assert "customer_missing_from_gold_customers" in {c.name for c in err.value.failed}
+
+# complaint_id, customer_id, creation_date, category, subcategory, assignment_date, first_response_date, resolution_date
+TIMED = [("R1", "C1", "2025-01-01 00:00:00", "T", "Cargo no reconocido", "2025-01-01 00:00:00", "2025-01-01 10:00:00", "2025-01-11 00:00:00"),
+         ("R2", "C1", "2025-01-02 00:00:00", "T", "Cargo no reconocido", "2025-01-02 00:00:00", "2025-01-03 06:00:00", None),
+         ("R3", "C2", "2025-01-03 00:00:00", "T", "Cargo no reconocido", "2025-01-03 00:00:00", None, None),
+         ("R4", "C2", "2025-01-04 00:00:00", "T", "Cargo no reconocido", "2025-01-04 12:00:00", "2025-01-04 06:00:00", "2025-01-02 00:00:00"),
+         ("R5", "C3", "2026-02-01 00:00:00", "T", "Cargo no reconocido", "2026-02-01 00:00:00", "2026-02-01 01:00:00", None),  # after the window
+         ("R6", "C3", "2025-01-05 00:00:00", "T", "Cobro indebido", "2025-01-05 00:00:00", "2025-01-05 01:00:00", None)]       # other type
+
+
+def test_complaint_timing_counts_every_window_complaint_and_keeps_survivor_intervals_apart(tmp_path):
+    silver = make_silver(tmp_path, complaints=TIMED)
+    quality = gb.check_quality(silver, make_quality(tmp_path, silver), {"complaints"})
+    with gb.connect(tmp_path / "gold_fixture.duckdb", silver) as con:
+        _, checks = gb.build(con, ("complaint_timing",), silver, quality)
+    assert all(c.passed for c in checks) and len(checks) == 4
+    rows = gold_rows(tmp_path, "SELECT metric, unit, p50, p90, n, missing, negative, population, subcategory,"
+                     " CAST(window_start AS VARCHAR), CAST(window_end_exclusive AS VARCHAR) FROM gold.complaint_timing ORDER BY metric")
+    # R5 is after the window and R6 another type; R4's dates run backwards and are counted, not used.
+    assert rows == [("creation_to_resolution", "days", 10.0, 10.0, 1, 2, 1, 4, "Cargo no reconocido", "2023-06-17", "2026-01-01"),
+                    ("first_response", "hours", 20.0, 28.0, 2, 1, 1, 4, "Cargo no reconocido", "2023-06-17", "2026-01-01")]
