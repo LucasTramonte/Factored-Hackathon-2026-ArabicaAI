@@ -130,10 +130,11 @@ const CEILING = {
   // The dispute managers' KPI read (intakeKpis, scripts/intake-kpis.mjs): one batch of seven reads, one round trip, no
   // write. The window is found through migration 0025's indexes, so an empty one costs a constant 30 rows (index probes and
   // the empty intermediate results of the ranking statements), whatever the store holds. KPI_FIXTURE acknowledged handoffs
-  // cost 887 (about 43 an episode: each of five statements reads the episode's index entry, row, handoff and events, and
-  // the span and repeat statements count their materialized and ranked rows again). Measured, no margin (ADR-004).
+  // cost 927 (about 46 an episode: each of five statements reads the episode's index entry, row, handoff and events, and
+  // the span and repeat statements count their materialized and ranked rows again; the 3-in-90-days proxy's second LAG
+  // adds 2 an episode, 887 -> 927). Measured, no margin (ADR-004).
   kpisEmpty: [7, 30, 0, 1],
-  kpisFixture: [7, 887, 0, 1]
+  kpisFixture: [7, 927, 0, 1]
 };
 const KPI_FIXTURE = 20;
 // An export page reads about 2 rows per episode (its page entry and the look-ahead that ends its event range) plus

@@ -851,7 +851,8 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /**
      * The dispute managers' KPIs (Docs/deliverables/BUSINESS_OUTCOMES.md, "Decision KPIs for dispute managers") for the
      * episodes started in [sinceMs, untilMs), cut by language (``all``, ``es``, ``pt``, ``en``), plus the alerts (ADR-011)
-     * customers answered in that window, which carry no language. Read-only. Every share is ``{ numerator, denominator,
+     * customers answered in that window, which carry no language. Read-only. The spec's single persistence share and the
+     * repeat reporters' Poisson tail flag can't be formed here (see the doc); their computable parts are returned instead. Every share is ``{ numerator, denominator,
      * rate }`` with a null rate on an empty denominator; a percentile over nothing is null. Amounts stay in their source
      * currency, as stored text, and are never summed or converted. No customer or transaction identifier leaves SQL.
      * Definitions are in Docs/intake/intake-events.md ("Dispute-manager KPIs").
@@ -890,16 +891,19 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         // Acknowledged reports per customer: a repeat reporter has two of them, in the window, at most KPI_REPEAT_MS apart.
         ['WITH d AS MATERIALIZED (SELECT e.customer_id,e.language AS lang,e.created_at FROM intake_episodes e JOIN intake_handoffs h ON h.episode_id=e.episode_id '
           + 'WHERE ' + KPI_WINDOW + ' AND ' + ACKNOWLEDGED + "),lanes AS (SELECT customer_id,lang,created_at FROM d UNION ALL SELECT customer_id,'all',created_at FROM d),"
-          + 'gaps AS (SELECT lang,customer_id,created_at-LAG(created_at) OVER (PARTITION BY lang,customer_id ORDER BY created_at) AS gap FROM lanes) '
-          + 'SELECT lang,COUNT(DISTINCT customer_id) AS reporting,COUNT(DISTINCT CASE WHEN gap<=? THEN customer_id END) AS repeaters FROM gaps GROUP BY lang',
-          ...window, KPI_REPEAT_MS],
+          // gap: since the customer's previous report; gap3: since the one before it (three reports within that span).
+          + 'gaps AS (SELECT lang,customer_id,created_at-LAG(created_at) OVER w AS gap,created_at-LAG(created_at,2) OVER w AS gap3 FROM lanes '
+          + 'WINDOW w AS (PARTITION BY lang,customer_id ORDER BY created_at)) '
+          + 'SELECT lang,COUNT(DISTINCT customer_id) AS reporting,COUNT(DISTINCT CASE WHEN gap<=? THEN customer_id END) AS repeaters,'
+          + 'COUNT(DISTINCT CASE WHEN gap3<=? THEN customer_id END) AS repeaters3 FROM gaps GROUP BY lang',
+          ...window, KPI_REPEAT_MS, KPI_REPEAT_MS],
         ['WITH d AS MATERIALIZED (SELECT e.language AS lang,t.currency,t.amount AS value FROM intake_episodes e JOIN intake_handoffs h ON h.episode_id=e.episode_id '
           + 'JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id JOIN transactions t ON t.customer_id=c.customer_id AND t.transaction_id=c.transaction_id '
           + 'WHERE ' + KPI_WINDOW + " AND e.state='complete_handoff' AND h.kind='complete'),"
           + ranked(['currency'], 'CAST(value AS REAL),value', QUARTILE_RANKS), ...window],
         [ALERT_ANSWERS + " SELECT COUNT(*) AS answered,COALESCE(SUM(answer='mine'),0) AS recognized,COALESCE(SUM(answer='report'),0) AS not_mine,"
           + "COALESCE(SUM(reported),0) AS reported,COALESCE(SUM(answer='mine' AND reported),0) AS recognized_then_reported FROM x", untilMs, ...window],
-        [ALERT_ANSWERS + ",d AS (SELECT 'all' AS lang,currency,amount AS value FROM x WHERE answer='mine')," + ranked(['currency'], 'CAST(value AS REAL),value', QUARTILE_RANKS, false),
+        [ALERT_ANSWERS + ",d AS (SELECT 'all' AS lang,currency,amount AS value FROM x WHERE answer='mine' AND NOT reported)," + ranked(['currency'], 'CAST(value AS REAL),value', QUARTILE_RANKS, false),
           untilMs, ...window]
       ]);
       const of = (result, lang) => result.results.filter(row => row.lang === lang);
@@ -922,24 +926,32 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         const repeat = of(repeats, lang)[0];
         by_language[lang] = {
           reports: { started, outcomes: Object.fromEntries(['complete_handoff', 'incomplete_handoff', 'technical_handoff', 'abandoned', 'pending'].map(k => [k, count(k)])),
-            not_complete_handoff: share(started - count('complete_handoff'), started) },
-          workload: { handoffs: share(handoffs, started), opened_within_24h: share(count('opened_in_time'), handoffs), unopened: count('unopened'),
+            not_complete_handoff: share(started - count('pending') - count('complete_handoff'), started - count('pending')) },
+          workload: { handoffs: share(handoffs, started),
+            by_kind: { complete: count('complete_handoff'), incomplete: count('incomplete_handoff'), technical: count('technical_handoff') },
+            opened_within_24h: share(count('opened_in_time'), handoffs), unopened: count('unopened'),
             status: { received: count('received'), in_review: count('in_review'), closed: count('closed') } },
           friction: { funnel: Object.fromEntries(['transaction_confirmed', 'cant_find', 'handoff_created', 'acknowledged'].map(k => [k, share(count(k), started)])),
-            clarifications_per_episode: share(count('clarifications'), started),
+            technical_handoffs: share(count('technical_handoff'), started), clarifications_per_episode: share(count('clarifications'), started),
             span_ms: { ended, p50: ended ? (span[(ended + 1) >> 1] + span[(ended >> 1) + 1]) / 2 : null, p95: ended ? span[Math.floor((95 * ended + 99) / 100)] : null } },
           suggestions: { runs: sum(arms, 'runs'), pending: sum(arms.filter(row => row.outcome === null), 'runs'), by_arm, shown: sum(arms, 'shown'),
             confirmed: sum(arms, 'confirmed'), none_of_these: sum(arms, 'rejected'), marked_correct: sum(arms, 'marked_correct'), marked_wrong: sum(arms, 'marked_wrong') },
           persistence: { none_of_these_still_handoff: share(sum(arms, 'rejected'), sum(arms, 'shown')), confirmed_suggestion_marked_wrong: share(sum(arms, 'marked_wrong'), marked) },
           repeat_reporters: share(repeat?.repeaters ?? 0, repeat?.reporting ?? 0),
+          repeat_reporters_3plus_in_90d: share(repeat?.repeaters3 ?? 0, repeat?.reporting ?? 0),
           value_at_stake: { complete_handoffs: quartiles(of(amounts, lang)), no_amount: count('incomplete_handoff') + count('technical_handoff') }
         };
       }
       const answers = alerts.results[0];
+      // Deflected: "Yes, it's mine" not followed by a report on that charge before the window's end.
+      const deflectedCount = answers.recognized - answers.recognized_then_reported;
       return { window: { since: new Date(sinceMs).toISOString(), until: new Date(untilMs).toISOString() }, by_language,
         alerts: { answered: answers.answered, recognized: answers.recognized, not_mine: answers.not_mine, reported: answers.reported,
-          deflected_by_explanation: share(answers.recognized, answers.answered),
+          recognized_then_reported: answers.recognized_then_reported, deflected: deflectedCount,
+          deflected_by_explanation: share(deflectedCount, answers.answered),
           persistence_recognized_then_reported: share(answers.recognized_then_reported, answers.recognized),
+          // The one persistence signal formable over confirmed reports: such a report is a complete handoff started in the window.
+          complete_handoffs_after_recognized: share(answers.recognized_then_reported, by_language.all.reports.outcomes.complete_handoff),
           value_at_stake_deflected: quartiles(deflected.results) } };
     },
     /**

@@ -53,6 +53,10 @@ test('an empty window has zero counts and null rates and percentiles, and reads 
   assert.deepEqual(all.workload.opened_within_24h, { numerator: 0, denominator: 0, rate: null });
   assert.deepEqual(all.friction.span_ms, { ended: 0, p50: null, p95: null });
   assert.deepEqual(all.repeat_reporters, { numerator: 0, denominator: 0, rate: null });
+  assert.deepEqual(all.repeat_reporters_3plus_in_90d, { numerator: 0, denominator: 0, rate: null });
+  assert.deepEqual(all.friction.technical_handoffs, { numerator: 0, denominator: 0, rate: null });
+  assert.deepEqual(all.workload.by_kind, { complete: 0, incomplete: 0, technical: 0 });
+  assert.deepEqual(kpis.alerts.complete_handoffs_after_recognized, { numerator: 0, denominator: 0, rate: null });
   assert.deepEqual(all.persistence.confirmed_suggestion_marked_wrong.rate, null);
   assert.deepEqual(all.value_at_stake, { complete_handoffs: {}, no_amount: 0 });
   assert.deepEqual(kpis.alerts.deflected_by_explanation, { numerator: 0, denominator: 0, rate: null });
@@ -80,6 +84,27 @@ test('repeat reporters: two acknowledged reports at most 90 days apart, both in 
   assert.deepEqual(kpis.by_language.en.repeat_reporters, { numerator: 0, denominator: 0, rate: null });
   // A window that holds only the later reports sees no repeat: an earlier report outside it doesn't count.
   assert.deepEqual((await store.intakeKpis({ sinceMs: T0 + 2 * DAY, untilMs: T0 + 200 * DAY })).by_language.all.repeat_reporters, { numerator: 0, denominator: 2, rate: 0 });
+});
+
+test('three reports within 90 days (first to third, inclusive) flag the interim tail proxy; three spread wider do not', async () => {
+  const { store } = setup();
+  for (const at of [T0, T0 + 45 * DAY, T0 + KPI_REPEAT_MS]) await report(store, 'x', at);
+  for (const at of [T0, T0 + 50 * DAY, T0 + 100 * DAY]) await report(store, 'y', at);
+  await report(store, 'z', T0);
+  const { all } = (await store.intakeKpis({ sinceMs: T0, untilMs: T0 + 200 * DAY })).by_language;
+  assert.deepEqual(all.repeat_reporters, { numerator: 2, denominator: 3, rate: 2 / 3 });
+  assert.deepEqual(all.repeat_reporters_3plus_in_90d, { numerator: 1, denominator: 3, rate: 1 / 3 });
+});
+
+test('not_complete_handoff is over ended reports: a pending start is in neither part', async () => {
+  const { store } = setup();
+  await report(store, 'x', T0, { transactionId: 'x1' }); await report(store, 'y', T0);
+  await store.startIntake({ customerId: 'z', language: 'es', statement: 'No reconozco este cargo.', key: crypto.randomUUID(), reason: 'not_mine', now: T0, expiresAt: T0 + 3600000 });
+  const { reports, workload, friction } = (await store.intakeKpis({ sinceMs: T0, untilMs: T0 + DAY })).by_language.all;
+  assert.equal(reports.outcomes.pending, 1);
+  assert.deepEqual(reports.not_complete_handoff, { numerator: 1, denominator: 2, rate: 0.5 });
+  assert.deepEqual(workload.by_kind, { complete: 1, incomplete: 1, technical: 0 });
+  assert.deepEqual(friction.technical_handoffs, { numerator: 0, denominator: 3, rate: 0 });
 });
 
 test('first open within 24 h is inclusive at the boundary; unopened handoffs stay in the denominator', async () => {
@@ -119,10 +144,16 @@ test('alerts: recognized, not mine, reported only after the answer and before th
   const before = await store.intakeKpis({ sinceMs: T0, untilMs: T0 + DAY });
   assert.deepEqual([before.alerts.answered, before.alerts.recognized, before.alerts.not_mine, before.alerts.reported], [2, 1, 1, 0]);
   assert.deepEqual(before.alerts.persistence_recognized_then_reported, { numerator: 0, denominator: 1, rate: 0 });
+  assert.deepEqual(before.alerts.deflected_by_explanation, { numerator: 1, denominator: 2, rate: 0.5 });
   assert.deepEqual(before.alerts.value_at_stake_deflected, { BRL: { n: 1, p25: '100.00', p50: '100.00', p75: '100.00' } });
+  assert.deepEqual(before.alerts.complete_handoffs_after_recognized, { numerator: 0, denominator: 0, rate: null });
+  // Once the recognized charge is reported, it is persistence, no longer a deflection, and its amount leaves the deflected value.
   const after = await store.intakeKpis({ sinceMs: T0, untilMs: T0 + 2 * DAY });
   assert.deepEqual(after.alerts.persistence_recognized_then_reported, { numerator: 1, denominator: 1, rate: 1 });
-  assert.deepEqual(after.alerts.deflected_by_explanation, { numerator: 1, denominator: 2, rate: 0.5 });
+  assert.deepEqual([after.alerts.recognized_then_reported, after.alerts.deflected], [1, 0]);
+  assert.deepEqual(after.alerts.deflected_by_explanation, { numerator: 0, denominator: 2, rate: 0 });
+  assert.deepEqual(after.alerts.value_at_stake_deflected, {});
+  assert.deepEqual(after.alerts.complete_handoffs_after_recognized, { numerator: 1, denominator: 1, rate: 1 });
 });
 
 test('a malformed window is refused before any query', async () => {

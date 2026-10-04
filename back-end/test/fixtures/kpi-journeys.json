@@ -1,5 +1,5 @@
 {
-  "description": "Authored journeys for the dispute-manager KPI instrumentation test (kpi-instrumentation.test.js). Fictitious demo customers only; kpi_seed.sql adds three bank-flagged charges for demo-carla. Phase 1 runs, then one idle sweep 11 minutes ahead closes its starts, then phase 2. Every expected value was counted by hand from the journeys; \"from_events\" marks a wall-clock duration, which the test takes from the episode scorer (evals/intake/episodes.py) and requires the store to equal. The test tests the measurement, not the customers.",
+  "description": "Authored journeys for the dispute-manager KPI instrumentation test (kpi-instrumentation.test.js). Fictitious demo customers only; kpi_seed.sql adds three bank-flagged charges for demo-carla. Phase 1 runs, then one idle sweep 11 minutes ahead closes its starts, then phase 2. Every expected value was counted by hand from the journeys; \"from_events\" marks a wall-clock duration, which the test takes from the episode scorer (evals/intake/episodes.py) and requires the store to equal; the exact 90-day and 24-hour boundaries are proven in test/unit/intake-kpis.test.js. The test tests the measurement, not the customers.",
   "journeys": [
     {
       "id": "J05",
@@ -292,12 +292,17 @@
             "pending": 1
           },
           "not_complete_handoff": {
-            "numerator": 8,
-            "denominator": 13,
-            "rate": 0.6153846153846154
+            "numerator": 7,
+            "denominator": 12,
+            "rate": 0.5833333333333334
           }
         },
         "workload": {
+          "by_kind": {
+            "complete": 5,
+            "incomplete": 4,
+            "technical": 1
+          },
           "handoffs": {
             "numerator": 10,
             "denominator": 13,
@@ -338,6 +343,11 @@
               "rate": 0.7692307692307693
             }
           },
+          "technical_handoffs": {
+            "numerator": 1,
+            "denominator": 13,
+            "rate": 0.07692307692307693
+          },
           "clarifications_per_episode": {
             "numerator": 0,
             "denominator": 13,
@@ -375,6 +385,11 @@
             "denominator": 1,
             "rate": 1
           }
+        },
+        "repeat_reporters_3plus_in_90d": {
+          "numerator": 2,
+          "denominator": 4,
+          "rate": 0.5
         },
         "repeat_reporters": {
           "numerator": 3,
@@ -416,6 +431,11 @@
           }
         },
         "workload": {
+          "by_kind": {
+            "complete": 2,
+            "incomplete": 2,
+            "technical": 0
+          },
           "handoffs": {
             "numerator": 4,
             "denominator": 5,
@@ -456,6 +476,11 @@
               "rate": 0.8
             }
           },
+          "technical_handoffs": {
+            "numerator": 0,
+            "denominator": 5,
+            "rate": 0
+          },
           "clarifications_per_episode": {
             "numerator": 0,
             "denominator": 5,
@@ -494,6 +519,11 @@
             "rate": 1
           }
         },
+        "repeat_reporters_3plus_in_90d": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0
+        },
         "repeat_reporters": {
           "numerator": 1,
           "denominator": 3,
@@ -528,6 +558,11 @@
           }
         },
         "workload": {
+          "by_kind": {
+            "complete": 2,
+            "incomplete": 1,
+            "technical": 0
+          },
           "handoffs": {
             "numerator": 3,
             "denominator": 4,
@@ -568,6 +603,11 @@
               "rate": 0.75
             }
           },
+          "technical_handoffs": {
+            "numerator": 0,
+            "denominator": 4,
+            "rate": 0
+          },
           "clarifications_per_episode": {
             "numerator": 0,
             "denominator": 4,
@@ -605,6 +645,11 @@
             "rate": null
           }
         },
+        "repeat_reporters_3plus_in_90d": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0
+        },
         "repeat_reporters": {
           "numerator": 0,
           "denominator": 3,
@@ -639,12 +684,17 @@
             "pending": 1
           },
           "not_complete_handoff": {
-            "numerator": 3,
-            "denominator": 4,
-            "rate": 0.75
+            "numerator": 2,
+            "denominator": 3,
+            "rate": 0.6666666666666666
           }
         },
         "workload": {
+          "by_kind": {
+            "complete": 1,
+            "incomplete": 1,
+            "technical": 1
+          },
           "handoffs": {
             "numerator": 3,
             "denominator": 4,
@@ -685,6 +735,11 @@
               "rate": 0.75
             }
           },
+          "technical_handoffs": {
+            "numerator": 1,
+            "denominator": 4,
+            "rate": 0.25
+          },
           "clarifications_per_episode": {
             "numerator": 0,
             "denominator": 4,
@@ -718,6 +773,11 @@
             "rate": null
           }
         },
+        "repeat_reporters_3plus_in_90d": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0
+        },
         "repeat_reporters": {
           "numerator": 0,
           "denominator": 3,
@@ -741,22 +801,29 @@
       "recognized": 2,
       "not_mine": 1,
       "reported": 2,
+      "recognized_then_reported": 1,
+      "deflected": 1,
       "deflected_by_explanation": {
-        "numerator": 2,
+        "numerator": 1,
         "denominator": 3,
-        "rate": 0.6666666666666666
+        "rate": 0.3333333333333333
       },
       "persistence_recognized_then_reported": {
         "numerator": 1,
         "denominator": 2,
         "rate": 0.5
       },
+      "complete_handoffs_after_recognized": {
+        "numerator": 1,
+        "denominator": 5,
+        "rate": 0.2
+      },
       "value_at_stake_deflected": {
         "BRL": {
-          "n": 2,
+          "n": 1,
           "p25": "12.40",
           "p50": "12.40",
-          "p75": "58.00"
+          "p75": "12.40"
         }
       }
     }

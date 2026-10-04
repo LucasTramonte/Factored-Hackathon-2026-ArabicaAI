@@ -7,8 +7,9 @@
  *
  * Window: the suites run one file at a time, so [start of this test, end of its journeys) holds only these episodes and
  * alert answers. Time seams are the store's own ``now`` parameters, as the other suites use them: the idle sweep runs
- * 11 minutes ahead (``maxNow``), and one agent's first open is stamped 25 hours after acceptance. The 90-day boundary of
- * repeat reporting is proven in test/unit/intake-kpis.test.js, where every time is set.
+ * 11 minutes ahead (``maxNow``), and one agent's first open is stamped 25 hours after acceptance.
+ * Determinism: spans are wall-clock, so their expected values come from the scorer; the exact 90-day and 24-hour boundaries
+ * are proven in test/unit/intake-kpis.test.js, where every time is set.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
