@@ -99,6 +99,63 @@ The definitions are in the [customer and measurement contract](../intake/custome
 
 A handoff never counts as an automated resolution, so the brief's "safe automated resolution" has no numerator in this workflow. The learned component was compared with the checklist on held-out cases on 2026-10-04: 53 of 60 against 23, 0 unsafe, and 46 of 52 against 20 on the cases never exposed ([`EVALUATION.md`](EVALUATION.md#1-the-result)). That measures reading on authored messages, not a business outcome.
 
+## Decision KPIs for dispute managers
+
+Most dispute operations measure outputs: cases processed, refunds, write-offs. A dispute manager deciding whether intake works needs earlier measures:
+- does intake let weak claims through, or push valid ones away?
+- how much of the reporting activity becomes team workload?
+- does the journey create friction?
+- who keeps coming back?
+- how much value is at stake on each side?
+
+The table maps each question to a measure, gives the baseline in the supplied data, and names what our service records to measure it going forward.
+
+**Baselines.** The baselines come from Silver, quality run `pr23-check` (391 checks, 0 errors, 7 warnings, READY, for the same DuckDB file). They cover unrecognized-charge complaints in the design window (2023-06-17 to 2025-12-31, ADR-005): 10,370 complaints, or 10,217 in the 10 full quarters used for trends. The queries are [`data_foundation/queries/intake_kpis/`](../../data_foundation/queries/intake_kpis/), the runner is `data_foundation/scripts/run_intake_kpis.py`, and the [aggregates](../Evidence/business/intake-kpi-baselines-design-2026-10-04.json) hold no row-level data. Intervals are Wilson 95%; trends are Cochran–Armitage over quarters.
+
+| Manager's question | Decision KPI (numerator / denominator) | Baseline in the data | What our service records to measure it |
+|---|---|---|---|
+| How many reports don't end as a valid claim? | Reports that end without a complete handoff / reports started. The parts are: abandoned (idle-closed), "I can't find it", technical, and "I recognize it" on the bank's alert | Rejected after review: **0.98%** (100 / 10,217; 0.81–1.19%), no trend (p = 0.45). Mis-recorded at intake (an unrecognized charge filed as a suggestion or request): **14.75%** (14.08–15.45%), p = 0.13 | `intake_started`, `handoff_created.kind`, the idle-abandonment close, and `proactive_answers` (ADR-011) |
+| How much of the activity becomes team workload? | Complete and incomplete handoffs / reports started; reports an agent opened within 24 h / handoffs | Assigned to an agent: **65.95%** (65.02–66.86%). Escalated: **4.94%** (4.54–5.38%). Both flat (p ≥ 0.73) | Handoffs, `first_opened_at`, and the received → in review → closed transitions |
+| Did the cardholder persist after evidence against the claim? | Reports confirmed after one of three signals / all confirmed reports. The signals: the customer answered "I recognize it" on the bank's alert for the same charge; the customer chose "none of these" on the AI suggestions and still handed off; the agent marked a confirmed suggestion wrong | **Not measurable.** No complaint links to a transaction (DF-003), and the data has no authentication evidence (3-D Secure, chip and PIN). A prior purchase at the same merchant **does not separate fraud**: fraud rate 0.102% for a first-time merchant against 0.100% for a merchant seen before, risk ratio **1.02 (0.87–1.21)** over 800,008 approved purchases, the same in 2023, 2024 and 2025 | `proactive_answers`, the suggestion choice, and the agent's mark (#113). "Seen this merchant before" can be shown to the agent as context, never as a suspicion score |
+| Is the journey working or creating friction? | Drop-off at each step (started → reason → charge picked or "can't find it" → confirmed → handoff); episode span p50/p95; clarifications per report; technical failures / started | **Not observable.** The digital events contain no dispute journey, only views of `/help`. The live service has 5 team episodes (span p50 11.6 s, p95 14.7 s), which support no rate | Event timestamps per step (`intake-events.md`) and the idle close |
+| Are the same cardholders reporting again and again? | Customers with 2 or more reports in 90 days / reporting customers; flag a customer whose count exceeds the Poisson baseline's 0.1% tail | Repeats are **what chance predicts**: 9,663 customers with 1 report, 350 with 2 or more, against a Poisson expectation of 9,677 and 342 (χ² = 0.19, p = 0.66). Median gap 280 days. The source flag `is_repeat_complainer` is **unreliable**: it marks 1,055 complaints whose customer has no other complaint, and misses 2,858 who have | Reports per customer, computed from the store, never from a flag |
+| What is the value at stake on each side? | Median and quartiles of the charge amount, in its own currency, for deflected reports against reports that became handoffs. Never summed across currencies | Claimed amounts have the same scale whatever the outcome or currency (DF-023): a median of about 2,100–4,000 in every outcome group. Only 31.8% of complaints carry an amount and a currency, and rejected complaints are too few per currency (7–13) to compare | The confirmed charge's stored amount and currency; there is no amount when the charge isn't found |
+
+**What these baselines say.** Every intake-quality rate in the supplied data is flat across 10 quarters, repeat reporting is random, and no transaction field we can link flags a questionable claim. That is the expected behaviour of a synthetic generator, and it is useful: it gives stable reference rates. But **the data can't show whether intake quality improves, or which claims are questionable**. Only the journey data our service produces can, so the measurement plan below is built on it.
+
+### How we will measure it without leakage
+
+1. **Historical baselines.**
+   - They come only from the design window.
+   - **Confirmation rule, fixed before the holdout is read (committed with this section):**
+     - run the same queries once on the holdout window (2026-01-01 to 2026-06-17);
+     - for each of the five rates, run a two-proportion z-test of holdout against design at α = 0.01 (0.05 / 5, Bonferroni). A baseline is confirmed when p ≥ 0.01;
+     - repeat reporting is confirmed when the holdout Poisson fit has p ≥ 0.01;
+     - the merchant-familiarity result is confirmed when the holdout risk-ratio interval includes 1.
+   - Any baseline that fails is reported as unstable and not used as a reference.
+   - **Result (run once on 2026-10-04, after the rule was committed in `478a7a7`).** The holdout window has 1,924 complaints, 2 quarters ([aggregates](../Evidence/business/intake-kpi-baselines-holdout-2026-10-04.json)). Every baseline is confirmed:
+
+     | Baseline | Holdout | Test against design | Verdict |
+     |---|---|---|---|
+     | Rejected | 0.47% (9 / 1,924; 0.25–0.89%) | p = 0.029 | Confirmed, but the lowest margin: watch it |
+     | Escalated | 5.41% (4.48–6.51%) | p = 0.39 | Confirmed |
+     | Mis-recorded | 14.92% (13.39–16.58%) | p = 0.85 | Confirmed |
+     | Digital channel | 24.90% (23.02–26.88%) | p = 0.69 | Confirmed |
+     | Assigned to an agent | 68.19% (66.08–70.23%) | p = 0.056 | Confirmed |
+     | Repeat reporters | Poisson fit (1,900 and 12 observed against 1,899.5 and 12.2 expected) | p = 0.95 | Confirmed |
+     | Familiar merchant | Risk ratio 0.96 (0.45–2.04) | Interval includes 1 | Confirmed. The interval is wide because a short window has few repeat purchases (7,051) |
+
+     The repeat flag disagrees with the history again: 265 flagged without another complaint, 118 not flagged with one.
+2. **Service KPIs after deploy.**
+   - The first 30 started reports, or 4 weeks, whichever comes later, form the service's own baseline. No change to the flow is made during it.
+   - After that, each rate is tracked on a p-chart with 3σ limits from the baseline. A point outside the limits is a signal to investigate, not a conclusion.
+   - Comparisons between flow versions use the randomized A/B pilot (ADR-014, intention to treat) with the analysis fixed before the pilot starts.
+3. **Instrumentation test set.**
+   - Before the KPIs are trusted, a set of authored journeys, each with known expected counts, runs on local D1: abandon at each step, "I recognize it" on the alert, "can't find it", "none of these", a repeat reporter, a technical failure.
+   - The KPI queries must reproduce those counts exactly.
+   - The set tests the measurement, not the customers. It isn't built yet.
+4. **What stays out of reach.** Real abandonment reasons, real fraud, and any savings or ROI figure. These need production traffic with a labelled outcome (a confirmed dispute result), which neither the data nor the demo has.
+
 ## What not to claim
 
 - Claimed amounts are not losses, and source currencies are never added together.
