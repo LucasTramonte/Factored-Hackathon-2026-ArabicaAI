@@ -5,7 +5,7 @@
 import { fail, json } from './http.js';
 import { GRANTED } from './auth/cognito.js';
 import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession, whoAmI } from './modules/customer/routes.js';
-import { startIntake, confirmIntake, confirmSuggestion, getSuggestions, handoffIntake, listReports, recordFeedback, requestUpdate } from './modules/intake/routes.js';
+import { startIntake, confirmIntake, confirmSuggestion, getServiceTimes, getSuggestions, handoffIntake, listReports, recordFeedback, requestUpdate } from './modules/intake/routes.js';
 import { listAgentIntakes, getAgentIntakeDetail, markSuggestion, startAgentSession, transitionIntake } from './modules/agent/routes.js';
 import { listAuditEvents } from './modules/audit/routes.js';
 import { actAs, listCustomers } from './modules/admin/routes.js';
@@ -23,6 +23,7 @@ export const API_ROUTES = {
   '/intake/start': { POST: startIntake },
   '/intake/confirm': { POST: confirmIntake },
   '/intake/handoff': { POST: handoffIntake },
+  '/intake/service-times': { GET: getServiceTimes },
   '/reports': { GET: listReports },
   '/reports/update': { POST: requestUpdate },
   '/reports/feedback': { POST: recordFeedback },
@@ -61,6 +62,7 @@ export const ROUTE_ROLES = {
   '/intake/start': 'customer',
   '/intake/confirm': 'customer',
   '/intake/handoff': 'customer',
+  '/intake/service-times': 'customer',
   '/reports': 'customer',
   '/reports/update': 'customer',
   '/reports/feedback': 'customer',

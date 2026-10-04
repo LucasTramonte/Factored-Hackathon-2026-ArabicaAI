@@ -1,8 +1,9 @@
 /**
- * Extractor v1 on Google Vertex AI, ported from the evaluated Python (ADR-012 decision 4): the transport of
- * ``intake_agent/extractor/vertex.py`` with the body, parsing, schema validation, one retry on invalid output and the
- * 10 s overall deadline of ``intake_agent/extractor/workers_ai.py``. Nothing here changes what the model is asked or how
- * its answer is read; golden fixtures generated from the Python (``evals/intake/online_parity.py``) pin the request bytes
+ * Extractor v2 on Google Vertex AI (ADR-006 amendment 10), ported from the Python reference
+ * ``intake_agent/extractor/vertex_v2.py``: extractor v1's prompt, body, parsing, schema validation, one retry on invalid
+ * output and 10 s overall deadline (``workers_ai.py``, ``vertex.py``), on Gemini 3.5 Flash-Lite at minimal thinking, plus
+ * one jittered retry on HTTP 429 that shares the second attempt (so at most two calls). Nothing here changes what the
+ * model is asked or how its answer is read; golden fixtures generated from the Python (``evals/intake/online_parity.py``) pin the request bytes
  * and the parsed facts (``test/unit/ai-parity.test.js``).
  *
  * Invariants:
@@ -12,19 +13,22 @@
  * - Every result carries usage: one call per attempt, and an attempt without provider token counts adds one to
  *   ``usage_unavailable_calls``, so unmeasured is never reported as free.
  * - Failures are kinds, never exceptions: ``timeout``, ``provider_error`` (HTTP 429/5xx, network, non-JSON, an error
- *   envelope; no retry), ``config_error`` (401/403, any other non-2xx, a refused redirect, an invalid project id) and
- *   ``invalid_output`` (invalid JSON or schema twice).
+ *   envelope; only a 429 is retried, once, because Google refuses it before doing any work; a timeout or 5xx is never
+ *   retried, since Google keeps working on an abandoned call and bills it), ``config_error`` (401/403, any other non-2xx,
+ *   a refused redirect, an invalid project id) and ``invalid_output`` (invalid JSON or schema twice).
  */
 import { PROMPT } from './extractor-prompt.js';
 
-/** Vertex AI's managed open-model id, as registered (ADR-006 amendment 7). */
-export const MODEL = 'openai/gpt-oss-20b-maas';
+/** Vertex AI's model id for extractor v2 (ADR-006 amendment 10); v1's ``openai/gpt-oss-20b-maas`` is no longer called. */
+export const MODEL = 'google/gemini-3.5-flash-lite';
 /** ADR-006 decision 4: one 10 s deadline shared by the call and its retry. */
 export const EXTRACTION_TIMEOUT_MS = 10000;
 const TEMPERATURE = 0;
 const MAX_TOKENS = 2048;
-const REASONING_EFFORT = 'low';
+const REASONING_EFFORT = 'minimal';
 const ATTEMPTS = 2;
+/** ``vertex_v2.RETRY_WAIT_S``: the jittered wait before retrying a 429, never past the deadline. */
+export const RETRY_WAIT_MS = [500, 1500];
 const GUIDED = 'guided-0.1';
 const PROJECT = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
 
@@ -44,18 +48,30 @@ export const VOCABULARY = {
   card_types: ['Tarjeta Crédito', 'Tarjeta Débito']
 };
 
-/** ``extractor-v1@<first 12 hex of SHA-256(prompt)>``, the id the pre-registration's prompt hash pins. */
+/** ``extractor-v2@<first 12 hex of SHA-256(prompt)>``: v2 keeps v1's registered prompt, so the hash is v1's. */
 export async function registeredVersion() {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(PROMPT)));
-  return 'extractor-v1@' + [...digest].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 12);
+  return 'extractor-v2@' + [...digest].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 12);
 }
 
 /** Event ``model_version`` values the exporter accepts: the guided flow. The extractor's version travels as ``producer``. */
 export const producers = () => new Set([GUIDED]);
 
-/** The OpenAI-compatible endpoint for ``project`` on the global location, or ``null`` for an invalid project id. */
-export const vertexUrl = (project, origin = 'https://aiplatform.googleapis.com') => typeof project === 'string' && PROJECT.test(project)
-  ? `${origin}/v1/projects/${project}/locations/global/endpoints/openapi/chat/completions` : null;
+/**
+ * Vertex AI's hosts per location: ``global`` routes anywhere; ``us`` and ``eu`` are Google's multi-region endpoints, which
+ * keep processing inside that geography (ADR-012 decision 4; ADR-006 amendment 10: Gemini 3.5 Flash-Lite serves both).
+ */
+export const VERTEX_HOSTS = { global: 'https://aiplatform.googleapis.com', us: 'https://aiplatform.us.rep.googleapis.com',
+  eu: 'https://aiplatform.eu.rep.googleapis.com' };
+
+/**
+ * The OpenAI-compatible endpoint for ``project`` at ``location`` (``VERTEX_LOCATION``, default ``global``), or ``null`` for
+ * an invalid project id or an unknown location, which the run records as ``config_error``. ``origin`` replaces the host
+ * (local tests only).
+ */
+export const vertexUrl = (project, origin = undefined, location = 'global') =>
+  typeof project === 'string' && PROJECT.test(project) && Object.hasOwn(VERTEX_HOSTS, location)
+    ? `${origin ?? VERTEX_HOSTS[location]}/v1/projects/${project}/locations/${location}/endpoints/openapi/chat/completions` : null;
 
 /**
  * Python's ``json.dumps(value, ensure_ascii=False)`` for JSON values: ``", "`` and ``": "`` separators. String escapes
@@ -67,7 +83,7 @@ export function pyJson(value) {
   return JSON.stringify(value);
 }
 
-/** ``vertex.build_body``: the committed prompt plus the four allowed inputs, then Vertex's model id. */
+/** ``vertex_v2.build_body``: the committed prompt plus the four allowed inputs, v2's thinking level, then the model id. */
 export function buildBody(message, sessionLanguage, asOf, vocabulary = VOCABULARY) {
   const user = { message, session_language: sessionLanguage, as_of: asOf, vocabulary };
   return { messages: [{ role: 'system', content: PROMPT }, { role: 'user', content: pyJson(user) }],
@@ -147,7 +163,7 @@ function usageOf(payload) {
 }
 
 class Failure extends Error {
-  constructor(kind) { super(kind); this.kind = kind; }
+  constructor(kind, throttled = false) { super(kind); this.kind = kind; this.throttled = throttled; }
 }
 
 /** ``vertex._post``: one POST within ``ms``; maps every failure to a kind and wraps the OpenAI shape as an envelope. */
@@ -170,7 +186,7 @@ async function post(fetcher, url, token, bytes, ms) {
       if (status < 200 || status > 299) {
         if (response.body) response.body.cancel().catch(() => {});
         // Status only: the error body is never read, so nothing from the request can leak.
-        throw new Failure(status === 429 || status >= 500 ? 'provider_error' : 'config_error');
+        throw new Failure(status === 429 || status >= 500 ? 'provider_error' : 'config_error', status === 429);
       }
       let payload;
       try {
@@ -188,12 +204,15 @@ async function post(fetcher, url, token, bytes, ms) {
   }
 }
 
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
- * ``vertex.extract`` for one message at ``url`` (``vertexUrl``) with a Google access ``token``. Resolves
+ * ``vertex_v2.extract`` for one message at ``url`` (``vertexUrl``) with a Google access ``token``. Resolves
  * ``{ kind: 'extracted', extracted, usage }`` or ``{ kind: <failure>, usage }``; never throws. ``usage`` is
- * ``{ llm_calls, known_input_tokens, known_output_tokens, usage_unavailable_calls }``.
+ * ``{ llm_calls, known_input_tokens, known_output_tokens, usage_unavailable_calls }``. ``sleep`` and ``wait`` (the
+ * 429 back-off in ms; random in ``RETRY_WAIT_MS`` when null) are test seams.
  */
-export async function extract({ url, message, language, asOf = null, token, fetcher = fetch, now = () => Date.now() }) {
+export async function extract({ url, message, language, asOf = null, token, fetcher = fetch, now = () => Date.now(), sleep = pause, wait = null }) {
   const usage = { llm_calls: 0, known_input_tokens: 0, known_output_tokens: 0, usage_unavailable_calls: 0 };
   if (!url) return { kind: 'config_error', usage };
   const bytes = new TextEncoder().encode(pyJson(buildBody(message, language, asOf)));
@@ -208,6 +227,11 @@ export async function extract({ url, message, language, asOf = null, token, fetc
     } catch (error) {
       // This attempt's tokens are unknown (a timeout may still be billed).
       usage.usage_unavailable_calls += 1;
+      const backoff = wait ?? RETRY_WAIT_MS[0] + Math.random() * (RETRY_WAIT_MS[1] - RETRY_WAIT_MS[0]);
+      if (error instanceof Failure && error.throttled && attempt + 1 < ATTEMPTS && now() + backoff < deadline) {
+        await sleep(backoff);
+        continue;
+      }
       return { kind: error instanceof Failure ? error.kind : 'provider_error', usage };
     }
     const counts = usageOf(payload);

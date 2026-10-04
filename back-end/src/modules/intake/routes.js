@@ -208,6 +208,25 @@ export async function listReports(request, env, store) {
 }
 
 /**
+ * GET /intake/service-times: how long unrecognized-charge complaints waited at this bank, historically (the reviewed Gold
+ * aggregate in ``service_timing``). The same for every customer, but served only to a live customer session, like the
+ * rest of the report flow. ``first_response`` is what the customer is told; ``creation_to_resolution`` covers resolved
+ * complaints only (``covers: 'resolved_only'``), so a client must never show it as an expected time. No baseline: 503.
+ */
+export async function getServiceTimes(request, env, store) {
+  const current = await requireSession(request, store, 'customer');
+  if (!current) return fail(401, 'Start a demo session first');
+  if (new URL(request.url).search) return fail(422, 'Unexpected parameters');
+  const rows = await store.serviceTiming();
+  if (!rows.length) return fail(503, 'Service times unavailable');
+  const { version, published_on, subcategory, window_start, window_end_exclusive, source, population } = rows[0];
+  return json({ basis: 'bank_history', version, published_on,
+    population: { subcategory, window_start, window_end_exclusive, complaints: population, source },
+    metrics: rows.map(({ metric, unit, p50, p90, n, missing, negative }) =>
+      ({ metric, unit, p50, p90, n, missing, negative, covers: metric === 'creation_to_resolution' ? 'resolved_only' : 'responded' })) });
+}
+
+/**
  * POST /reports/update ``{ protocol }``: email the session customer the status of one of their acknowledged reports.
  * Foreign and missing reports get the same 404; no target 409; one queued or SES-accepted ``update`` email per report
  * per 5 minutes (429). A failed or skipped attempt stays auditable in the outbox and can be retried after 10 seconds.

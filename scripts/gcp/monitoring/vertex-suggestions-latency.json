@@ -1,0 +1,39 @@
+{
+  "displayName": "Vertex AI suggestions: slow model responses (p95 over 5 s)",
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "Extractor v2's total latency at Vertex (`model_invocation_latencies`, `latency_type = total`) had a p95 above 5 s over 15 minutes, with at least 3 calls in that window so one slow call can't fire it. Healthy p95 is about 2.1-2.2 s (development, 180 calls) and the Worker gives up at 10 s, so this fires before customers start losing suggestions to timeouts. Source: scripts/gcp/monitoring/README.md."
+  },
+  "userLabels": { "app": "arabica-intake", "managed_by": "repo" },
+  "combiner": "AND",
+  "conditions": [
+    {
+      "displayName": "p95 total latency of gemini-3.5-flash-lite above 5,000 ms over 15 min",
+      "conditionThreshold": {
+        "filter": "resource.type = \"aiplatform.googleapis.com/PublisherModel\" AND resource.labels.model_user_id = \"gemini-3.5-flash-lite\" AND metric.type = \"aiplatform.googleapis.com/publisher/online_serving/model_invocation_latencies\" AND metric.labels.latency_type = \"total\"",
+        "aggregations": [
+          { "alignmentPeriod": "900s", "perSeriesAligner": "ALIGN_DELTA", "crossSeriesReducer": "REDUCE_PERCENTILE_95" }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 5000,
+        "duration": "0s",
+        "trigger": { "count": 1 }
+      }
+    },
+    {
+      "displayName": "at least 3 gemini-3.5-flash-lite calls in the same 15 min",
+      "conditionThreshold": {
+        "filter": "resource.type = \"aiplatform.googleapis.com/PublisherModel\" AND resource.labels.model_user_id = \"gemini-3.5-flash-lite\" AND metric.type = \"aiplatform.googleapis.com/publisher/online_serving/model_invocation_count\"",
+        "aggregations": [
+          { "alignmentPeriod": "900s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM" }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 2,
+        "duration": "0s",
+        "trigger": { "count": 1 }
+      }
+    }
+  ],
+  "alertStrategy": { "autoClose": "3600s" },
+  "enabled": true
+}

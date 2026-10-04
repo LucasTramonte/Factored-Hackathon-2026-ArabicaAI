@@ -77,6 +77,9 @@ const CEILING = {
   // 1 session row + about 2 rows per episode of the customer + the case row (primary key) of a complete report.
   // Measured on a customer with one complete report: 2 queries, 5 rows read, 0 written, 2 round trips (ceiling 7 rows read).
   reports: [2, 7, 0, 2],
+  // Session, then the newest reviewed timing baseline (migration 0027): one statement over two rows, no write.
+  // Measured 2026-10-04: 2 queries, 7 rows read, 0 written, 2 round trips.
+  serviceTimes: [2, 7, 0, 2],
   // Session, owned report with its target flag, the outbox insert that checks the 5-minute window itself (row, primary
   // key, email_outbox_recent); the send marks the row from its own store after the response (Task 3.3).
   reportsUpdate: [3, 14, 3, 3],
@@ -111,12 +114,14 @@ const CEILING = {
   // read-back); a replay writes nothing. The after-response run (ctx.waitUntil, its own store): the atomic claim, the cap
   // slot, the pre-recorded call, the customer's purchases (one batch of two reads, at most 200 charges) and the outcome
   // batch (run, at most three suggestions, one event). Review fixes, 2026-10-04: claim and shown_at (ADR-004 note).
+  // Circuit breaker, 2026-10-04 (ADR-006 amendment 10): one read of the last five model-calling outcomes through migration
+  // 0026's partial index (+1 query, +1 round trip, +5 rows read), and that index's entry when the run finishes (+1 write).
   intakeIncompleteDetails: [16, 52, 21, 7],
   suggestions: [3, 14, 1, 2],
   suggestionConfirm: [3, 10, 2, 2],
   suggestionDetail: [5, 83, 1, 3],
   suggestionMark: [3, 7, 2, 2],
-  suggestionRun: [8, 31, 9, 5],
+  suggestionRun: [9, 36, 10, 6],
   // The idle sweep's suggestion part (ADR-012): one atomic batch per page of at most 100 stale runs of acknowledged
   // handoffs, both statements picking the page through the pending-run partial index: one event per run (its episode's
   // next seq and a check that it has none yet: about 23 reads a run), then the update. Nothing due reads 7 rows.
@@ -268,6 +273,8 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   const reports = await cohort.call('/reports'); assert.equal(reports.status, 200); assertContract('reportList', reports.body);
   assert.equal(reports.body.items.length, 1); assert.equal(reports.body.has_more, false);
   measured.reports = within('reports', reports.metrics);
+  const times = await cohort.call('/intake/service-times'); assert.equal(times.status, 200); assertContract('serviceTimes', times.body);
+  measured.serviceTimes = within('serviceTimes', times.metrics);
   const update = await cohort.call('/reports/update', { protocol: cohortReceipt.body.protocol });
   assert.equal(update.status, 202); assertContract('updateQueued', update.body);
   measured.reportsUpdate = within('reportsUpdate', update.metrics);

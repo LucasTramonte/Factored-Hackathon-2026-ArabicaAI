@@ -1,4 +1,4 @@
-# ADR-014 — Online AI only for "I can't find it" suggestions, off until a pilot; no fraud model
+# ADR-014 — Online AI only for "I can't find it" suggestions, enabled in the demo; no fraud model
 
 - **Status:** Proposed
 - **Date:** 2026-10-04
@@ -23,6 +23,8 @@ We also re-examined fraud detection. It is the most visible ML use case in the d
 
 ## Options evaluated
 
+These options record the original proposal; the decisions below reflect the demo amendments.
+
 | | 1. Keep production deterministic | 2. Vertex AI for bounded suggestions, switch off until a pilot | 3. Offline or shadow only | 4. Transaction-level fraud detection |
 |---|---|---|---|---|
 | **Value to a customer or judge** | Works today; no new failure mode | The one free-text step gets help: "Is it one of these?" from the customer's own charges, so a person doesn't match by hand | Evidence without product change (offline: exists) | Looks impressive |
@@ -38,18 +40,18 @@ We also re-examined fraud detection. It is the most visible ML use case in the d
 
 ## Decision
 
-1. **Build option 2 and keep it off.** The suggestion path ships behind `INTAKE_AI_ENABLED = "0"`, as specified in the [AI suggestion plan](../Plans/ai-suggestion-plan.md):
+1. **Option 2 is enabled in the demo.** Since 2026-10-04, `INTAKE_AI_ENABLED = "1"` and `INTAKE_AI_SHARE_B = "1"` assign every eligible report to arm B ([ADR-012 amendment 1](ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3)). Set the switch to `"0"` to disable suggestions, or the share to `"0.5"` to restore the randomized pilot. The [AI suggestion plan](../Plans/ai-suggestion-plan.md) specifies the path:
    - the model runs after the reference is returned;
    - deterministic code picks at most 3 of the customer's own charges;
    - the customer confirms one or answers "none of these";
    - a person reviews every report.
 
    The path never refunds, blocks or decides fraud, and a handoff stays a handoff (ADR-002 decisions 1–3).
-2. **Turning it on is a pilot, and only in the demo environment, with synthetic customers.** ADR-012's third condition, 30 live episodes, can only be met by running the path. So it may be switched on in the demo environment as the pilot that collects those episodes:
-   - each "I can't find it" report is assigned to an arm at random (50/50), and only arm B gets the extraction;
+2. **Demo enablement is limited to synthetic customers.** ADR-012 amendment 1 permits the demo before condition 3 is met; the current all-B demo is not the randomized pilot:
+   - to run that pilot, set `INTAKE_AI_SHARE_B = "0.5"`: each eligible "I can't find it" report is assigned to an arm at random (50/50), and only arm B gets the extraction;
    - the decision rules fixed in the plan switch it off: any unsafe outcome; more than 5% failures over the last 50; more than 1 in 10 confirmed suggestions marked wrong by agents (with at least 20 reviewed); the report request's p95 at 2,000 ms or more;
    - **the demo pilot does not satisfy ADR-012's third condition.** Team and reviewer sessions can't show how often real customers can't find a charge. The demo pilot tests the mechanics: failure rates, latency from the Worker, agent-marked correctness on authored situations. Real-customer use is measured only in a production pilot whose population is the bank's signed-in customers who start a report, with numerator the reports ending in "I can't find it", over at least 30 started reports in a stated event-time window, by language, with abandoned reports counted in the denominator. Turning it on for real customers needs that measurement and a new decision.
-3. **The online model is the evaluated one, and only until it retires.** That is v1, `openai/gpt-oss-20b-maas` on Vertex AI with `reasoning_effort: "low"` and the registered prompt. The Worker refuses to call it after its configured retirement date (2026-10-21). After that the path falls back on its own. A successor (the plan recommends Gemini 3.5 Flash-Lite) is a new version: an isolated build, re-measured development triggers, a new held-out set, a registration and a person's tag.
+3. **The online model is extractor v2, Gemini 3.5 Flash-Lite.** [ADR-006 amendment 10](ADR-006-learned-extractor-workers-ai.md#post-freeze-amendment-2026-10-04) adopted it on 2026-10-04 after v1's endpoint degraded, with v1's unchanged prompt and parsing and `reasoning_effort: "minimal"`. Its evidence is the development and safety splits only; v1's frozen result does not transfer. A new held-out set, registration and person's tag remain owed. The Worker stops calling v2 from its configured review date, currently 2027-01-31, and falls back to the incomplete handoff; configuration can only move this date earlier. With the switch on, predeploy fails one day before that date.
 4. **Credential: Workload Identity Federation, no Google key** (ADR-012 decision 4 as revised). The Worker signs a short-lived JWT, exchanges it at Google's STS, and impersonates a service account that holds only Vertex AI User.
 5. **No transaction-level fraud model.** It isn't defensible on this data:
    - **The label can't be timed.** `is_fraud` has no availability timestamp, and `process_date` carries no label-arrival information (lag −1 to 0 days, the same for both classes; `fraud_readiness_findings.md`, finding 2). So no time-based split with a real label-delay embargo can be built.
@@ -73,10 +75,10 @@ Prices are list prices from the Cloud Billing Catalog API, read 2026-10-04. "Per
 
 - **+** The brief's learned component is in the product, not only in the evaluation, while every decision stays deterministic.
 - **+** It adds 0 ms to the customer's request and costs under 1 cent a day at the dataset bank's volume.
-- **+** The pilot produces the evidence ADR-012 asked for: use rate, confirmation rate and agent-marked correctness, by randomized arm.
+- **+** The demo records use, confirmation and agent-marked correctness. Comparisons by randomized arm require the 50/50 pilot.
 - **+** Saying no to fraud is itself a result: the data can't support it, and the record shows why.
-- **−** v1 runs on Google's `global` endpoint, which doesn't pin where text is processed. That is fine for synthetic customers. The successor runs in the `us` multi-region, which keeps text in the United States. For real data a bank also needs Vertex's zero-retention exception, and a self-deployed regional endpoint if the text must stay in Latin America.
-- **−** v1 retires on 2026-10-21. Until a successor is registered, the path turns itself off on that date.
+- **−** v2 currently runs on Google's `global` endpoint, which doesn't pin where text is processed. The demo uses synthetic customers; a pinned region remains a production requirement when the bank requires one. For real data a bank also needs Vertex's zero-retention exception, and a self-deployed regional endpoint if the text must stay in Latin America.
+- **−** v2's review date is 2027-01-31. The path turns itself off on that date unless a fresh review updates the guard.
 - **−** The JavaScript port is new code reading the model's answer. Its parity with the evaluated Python is proven only on the development split and malformed cases. Manoella approves it (ADR-006 decision 5).
 - **−** A demo pilot measures team and reviewer sessions, not customers.
 

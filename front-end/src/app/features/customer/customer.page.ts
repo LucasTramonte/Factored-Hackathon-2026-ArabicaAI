@@ -3,12 +3,13 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { formatSourceTime } from '../../shared/format/source-time.util';
+import { formatMoney } from '../../shared/format/money.util';
 import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
-  REASONS, REASON_LABEL, Reason, Report, ReportList, SuggestedCharge, SuggestionAnswer, SuggestionList, Transaction } from '../../shared/models/intake.model';
+  REASONS, REASON_LABEL, Reason, Report, ReportList, ServiceTimes, SuggestedCharge, SuggestionAnswer, SuggestionList, Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { AgentService } from '../agent/agent.service';
@@ -138,6 +139,13 @@ export class CustomerPage implements OnInit, OnDestroy {
   private readonly narrowQuery = typeof matchMedia === 'function' ? matchMedia('(max-width: 1180px)') : null;
   readonly narrow = signal(this.narrowQuery?.matches ?? false);
   readonly sourceTime = formatSourceTime;
+  /** A stored amount in the interface language's conventions (``ARS 120.443,55``). */
+  money(amount: string, currency: string): string {
+    return formatMoney(amount, currency, this.lang.lang());
+  }
+  /** This bank's history for "How long does it take?", loaded the first time it is asked; null until then or if it fails. */
+  readonly serviceTimes = signal<ServiceTimes | null>(null);
+  private serviceTimesLoad: Promise<void> | null = null;
   identity = '';
   chatStatement = '';
   chatDetails = '';
@@ -594,7 +602,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       }
       this.frozen.set({ path: 'confirm', body: { customer_confirmed: true, episode_id: episode.episode_id,
         idempotency_key: crypto.randomUUID(), transaction_id: tx.transaction_id } });
-      this.log.update(l => [...l, { from: 'me', text: `${tx.merchant_name || this.t().noMerchant} · ${tx.amount} ${tx.currency}` }]);
+      this.log.update(l => [...l, { from: 'me', text: `${tx.merchant_name || this.t().noMerchant} · ${this.money(tx.amount, tx.currency)}` }]);
     }
     await this.run();
   }
@@ -725,13 +733,41 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** Guide lines are i18n keys; the greeting carries the customer's first name. */
   lineText(line: ChatLine): string {
     if (!('key' in line)) return line.text;
+    if (line.key === 'faqTimeA') return this.timeAnswer();
     const key = line.key === 'chatHelloGeneral' && !this.firstName() ? 'chatHelloGeneralNoName' : line.key;
     return this.t()[key].replace('{name}', () => this.firstName());
+  }
+
+  /**
+   * "How long does it take?" from this bank's history (first response only; resolution covers resolved reports only, so
+   * it is described, never quoted), with the receipt's reference when there is one. Without the history: no numbers.
+   */
+  timeAnswer(): string {
+    const t = this.t();
+    const first = this.serviceTimes()?.metrics.find(m => m.metric === 'first_response' && m.unit === 'hours' && m.n > 0);
+    const ref = this.intakeReceipt()?.reference_short;
+    const tail = ref ? ' ' + t.faqTimeRef.replace('{ref}', () => ref) : '';
+    if (!first) return t.faqTimeA + tail;
+    return t.faqTimeHistory.replace('{p50}', () => this.duration(first.p50, 'about')).replace('{p90}', () => this.duration(first.p90, 'within')) + tail;
+  }
+
+  /** ``about``: the nearest whole unit (25 h → 1 day); ``within``: rounded up, so "within" stays true (44 h → 2 days). */
+  private duration(hours: number, mode: 'about' | 'within'): string {
+    const t = this.t();
+    const round = mode === 'about' ? Math.round : Math.ceil;
+    const [value, one, many] = hours >= (mode === 'about' ? 18 : 24) ? [Math.max(1, round(hours / 24)), t.unitDay, t.unitDays]
+      : [Math.max(1, round(hours)), t.unitHour, t.unitHours];
+    return `${value} ${value === 1 ? one : many}`;
   }
 
   ask(question: keyof typeof FAQ): void {
     const answer = FAQ[question];
     if (!answer) throw new Error('Unknown FAQ');
+    if (question === 'faqTimeQ' && !this.serviceTimes()) {
+      // A failed load keeps the answer without numbers; the next question tries again.
+      this.serviceTimesLoad ??= this.service.serviceTimes().then(times => this.serviceTimes.set(times), () => undefined)
+        .finally(() => { this.serviceTimesLoad = null; });
+    }
     this.faqLog.update(l => [...l, { from: 'me', key: question }, { from: 'bot', key: answer }]);
     // The charge list can push the panel's top out of view: bring the new answer into view, without moving focus.
     afterNextRender(() => this.host.nativeElement.querySelector('.chat-faq-log li:last-child')?.scrollIntoView({ block: 'nearest' }),
@@ -850,7 +886,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** The pick button's accessible name names the charge, since every button reads the same. */
   suggestionLabel(c: SuggestedCharge): string {
     return this.t().suggestPickLabel.replace('{merchant}', () => c.merchant_name || this.t().noMerchant).replace('{date}', () => this.chargeWhen(c))
-      .replace('{amount}', () => `${c.amount} ${c.currency}`);
+      .replace('{amount}', () => this.money(c.amount, c.currency));
   }
 
   private call(f: Frozen): Promise<IntakeStart | IntakeReceipt> {

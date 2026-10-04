@@ -7,7 +7,13 @@ import { LangService, errorText } from '../../shared/i18n/lang.service';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { AgentService } from '../agent/agent.service';
-import { Identity, IntakeReceipt, IntakeStart, Report, Role, Transaction } from '../../shared/models/intake.model';
+import { Identity, IntakeReceipt, IntakeStart, Report, Role, ServiceTimes, Transaction } from '../../shared/models/intake.model';
+
+/** The reviewed baseline as GET /intake/service-times serves it (migration 0027). */
+const TIMES: ServiceTimes = { basis: 'bank_history', version: '4e2a1b33eac4812d', published_on: '2026-10-04',
+  population: { subcategory: 'Cargo no reconocido', window_start: '2023-06-17', window_end_exclusive: '2026-01-01', complaints: 10370, source: 'silver.fact_complaints' },
+  metrics: [{ metric: 'creation_to_resolution', unit: 'days', p50: 15, p90: 27, n: 2414, missing: 7956, negative: 0, covers: 'resolved_only' },
+    { metric: 'first_response', unit: 'hours', p50: 25, p90: 44, n: 6045, missing: 4325, negative: 0, covers: 'responded' }] };
 
 describe('CustomerPage', () => {
   let service: jasmine.SpyObj<CustomerService>;
@@ -18,7 +24,7 @@ describe('CustomerPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed', 'sendFeedback', 'suggestions', 'answerSuggestions'],
+      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed', 'sendFeedback', 'suggestions', 'answerSuggestions', 'serviceTimes'],
       { client: signal(''), card: signal(null), roles: signal([]) });
     service.suggestions.and.resolveTo({ status: 'none', items: [], choice: null, chosen_transaction_id: null, answerable: false });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
@@ -28,6 +34,7 @@ describe('CustomerPage', () => {
     service.signInWithToken.and.resolveTo({ customer_id: 'CLI-1', mode: 'email_otp', context_card: null, roles: ['customer'] });
     service.logout.and.resolveTo();
     service.reports.and.resolveTo({ items: [], has_more: false });
+    service.serviceTimes.and.resolveTo(TIMES);
     service.displayed.and.resolveTo({});
     cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
     cognito.requestCode.and.resolveTo();
@@ -798,8 +805,8 @@ describe('CustomerPage', () => {
           expect(box.getAttribute('aria-labelledby')).toBe('suggestions-title');
           const picks = [...box.querySelectorAll<HTMLButtonElement>('.suggestion-pick')];
           expect(picks.map(b => b.getAttribute('aria-label'))).toEqual([
-            p.t().suggestPickLabel.replace('{merchant}', 'Mercado Demo').replace('{date}', '2026-09-25 14:00 ' + p.t().utc).replace('{amount}', '125.50 BRL'),
-            p.t().suggestPickLabel.replace('{merchant}', p.t().noMerchant).replace('{date}', '2026-09-27 10:30:00').replace('{amount}', '47.30 BRL')]);
+            p.t().suggestPickLabel.replace('{merchant}', 'Mercado Demo').replace('{date}', '2026-09-25 14:00 ' + p.t().utc).replace('{amount}', p.money('125.50', 'BRL')),
+            p.t().suggestPickLabel.replace('{merchant}', p.t().noMerchant).replace('{date}', '2026-09-27 10:30:00').replace('{amount}', p.money('47.30', 'BRL'))]);
           expect(picks.every(b => b.type === 'button' && b.textContent!.trim() === p.t().suggestPick)).toBeTrue();
           expect(box.querySelector('.suggestion-none')!.textContent!.trim()).toBe(p.t().suggestNone);
           const live = el.querySelector('.suggestion-announce')!;
@@ -963,6 +970,53 @@ describe('CustomerPage', () => {
       expect(page.reportOf('demo-tx-001')).toBeUndefined();
     });
 
+    describe('"How long does it take?" from this bank\'s history', () => {
+      const answer = async () => { page.ask('faqTimeQ'); await new Promise(r => setTimeout(r)); return page.lineText(page.faqLog().at(-1)!); };
+
+      it('quotes first response only, rounded so each word stays true, in each language', async () => {
+        lang.set('pt');
+        expect(await answer()).toBe('No histórico deste banco, metade dos relatos de cobrança não reconhecida recebeu uma primeira resposta em cerca de 1 dia, '
+          + 'e 9 em cada 10 em até 2 dias. Os casos que foram resolvidos levaram mais tempo, e nem todos os casos são resolvidos. '
+          + 'É um histórico, não um prazo para o seu relato.');
+        lang.set('es');
+        expect(page.lineText(page.faqLog().at(-1)!)).toContain('la mitad de los reportes de cargos no reconocidos recibió una primera respuesta en cerca de 1 día, y 9 de cada 10 en hasta 2 días');
+        lang.set('en');
+        expect(page.lineText(page.faqLog().at(-1)!)).toContain('half of unrecognized-charge reports got a first response in about 1 day, and 9 in 10 within 2 days');
+        for (const code of ['es', 'pt', 'en'] as const) {
+          lang.set(code);
+          const text = page.lineText(page.faqLog().at(-1)!);
+          expect(text).not.toMatch(/15|27|2[.,]?414/, 'the resolved-only resolution figures are never quoted');
+        }
+        expect(service.serviceTimes).toHaveBeenCalledTimes(1);
+        await answer();
+        expect(service.serviceTimes).withContext('loaded once, then reused').toHaveBeenCalledTimes(1);
+      });
+
+      it('names hours below a day, and adds the receipt reference once there is one', async () => {
+        service.serviceTimes.and.resolveTo({ ...TIMES, metrics: [{ ...TIMES.metrics[1], p50: 5, p90: 20 }] });
+        lang.set('en');
+        expect(await answer()).toContain('in about 5 hours, and 9 in 10 within 20 hours');
+        page.intakeReceipt.set({ ...intakeReceipt, reference_short: 'AR-HQDG-8WF2' });
+        expect(page.lineText(page.faqLog().at(-1)!)).toMatch(/Keep your reference AR-HQDG-8WF2\.$/);
+      });
+
+      it('without the history it answers without numbers, and asks again next time', async () => {
+        service.serviceTimes.and.rejectWith(new ApiError(503, 'x'));
+        lang.set('pt');
+        expect(await answer()).toBe(lang.t().faqTimeA);
+        service.serviceTimes.and.resolveTo(TIMES);
+        expect(await answer()).toContain('cerca de 1 dia');
+      });
+    });
+
+    it('the "can\'t find it" answer says charges may be suggested, and a person reviews either way', () => {
+      for (const code of ['es', 'pt', 'en'] as const) {
+        lang.set(code);
+        page.ask('faqMissingQ');
+        expect(page.lineText(page.faqLog().at(-1)!)).toMatch(/sugerir|suggest/);
+      }
+    });
+
     it('answers FAQs from fixed translated text only, apart from the report conversation', () => {
       const before = page.log();
       page.ask('faqTimeQ');
@@ -1043,7 +1097,7 @@ describe('CustomerPage', () => {
         const { fixture, p, el } = await home(); await settle(fixture);
         const banner = el.querySelector('.proactive-alert')!;
         expect(banner.textContent).toContain('Mercado');
-        expect(banner.textContent).toContain('125.50 BRL');
+        expect(banner.textContent).toContain('BRL\u00a0125,50');
         expect(banner.textContent).toContain(p.t().alertTitle);
         expect(banner.textContent).not.toMatch(/fraude|bloque|reembols/i);
         banner.querySelectorAll<HTMLButtonElement>('button')[1].click();
@@ -1318,7 +1372,7 @@ describe('CustomerPage', () => {
         listed('received');
         const { el } = await home();
         expect(rows(el)[0]).toContain('Mercado');
-        expect(rows(el)[0]).toContain('125.50 BRL');
+        expect(rows(el)[0]).toContain('BRL 125,50'); // rows() collapses whitespace
       });
     });
 
@@ -1650,6 +1704,34 @@ describe('CustomerPage', () => {
       expect(table.querySelectorAll(':scope > :not([role="row"])').length).toBe(0);
     });
 
+    it('amounts follow the interface language; a high-priority receipt says so in each language, with or without a card-block line', async () => {
+      service.transactions.and.resolveTo({ items: [{ ...tx, amount: '120443.55', currency: 'ARS' }], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
+      const { fixture, p, el } = await home();
+      const lang = TestBed.inject(LangService);
+      const amount = () => el.querySelector('.td-amount')!.textContent!.replace(/\s/g, ' ').trim();
+      expect(amount()).toBe('ARS 120.443,55');
+      lang.set('en'); fixture.detectChanges();
+      expect(amount()).toBe('ARS 120,443.55');
+      lang.set('es'); fixture.detectChanges();
+      el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!.click();
+      service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
+      service.confirmIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', protocol: '99999999-8888-4777-8666-555555555555', kind: 'complete',
+        accepted_at: 'x', replayed: false, actions_taken: [], unresolved_questions: [], reference_short: 'AR-HQDG-8WF2', next_step_code: 'await_human_review', urgency: 'high' });
+      p.chatStatement = 'No reconozco este cargo.'; p.reason.set('not_mine'); await p.send();
+      p.choice = 'demo-tx-001'; p.chatConfirmed = true; await p.confirmCharge();
+      fixture.detectChanges(); await fixture.whenStable();
+      const receiptEl = el.querySelector('#intake-receipt')!;
+      expect(receiptEl.querySelector('.ar-ref-code')?.textContent?.trim()).toBe('AR-HQDG-8WF2');
+      for (const code of ['es', 'pt', 'en'] as const) {
+        lang.set(code); fixture.detectChanges();
+        expect(receiptEl.querySelector('.priority-line')?.textContent).toContain(p.t().receiptPriority);
+        expect(receiptEl.querySelector('h3')?.textContent?.trim()).toBe(p.t().receiptComplete);
+      }
+      expect(receiptEl.querySelector('.urgent-line')).toBeNull('no card-block line was sent, so none is shown');
+      expect(receiptEl.textContent).not.toContain('99999999-8888-4777-8666-555555555555');
+      expect(['Reporte recibido', 'Relato recebido', 'Report received']).toEqual((['es', 'pt', 'en'] as const).map(c => { lang.set(c); return p.t().receiptComplete; }));
+    });
+
     it('opens the chat from a charge row, links the textarea to its error, and focuses the receipt', async () => {
       const { fixture, p, el } = await home();
       el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!.click();
@@ -1678,14 +1760,15 @@ describe('CustomerPage', () => {
       fixture.detectChanges();
       await fixture.whenStable();
       const receiptEl = el.querySelector('#intake-receipt')!;
-      expect(receiptEl.textContent).toContain('99999999-8888-4777-8666-555555555555');
+      expect(receiptEl.textContent).not.toContain('99999999-8888-4777-8666-555555555555', 'the internal case id is the agent\'s, never the customer\'s');
       expect(document.activeElement).toBe(receiptEl);
       // The sentence that says a person reviews the case and nothing was refunded comes right after the reference, before the checks.
       const order = [...receiptEl.children].map(c => c.className || c.tagName);
       expect(order.indexOf('next-step')).toBe(order.indexOf('ar-ref') + 1);
       expect(order.indexOf('next-step')).toBeLessThan(order.indexOf('checks'));
       expect(receiptEl.querySelector('.ar-ref-code')?.textContent?.trim()).toBe('AR-7K3M-2Q4X');
-      expect(receiptEl.querySelector('.case-id')?.textContent).toContain('99999999-8888-4777-8666-555555555555'); // the UUID stays, smaller, as the case id
+      expect(receiptEl.querySelector('.case-id')).toBeNull();
+      expect(receiptEl.querySelector('.priority-line')).toBeNull('a normal report says nothing about priority');
       const checks = [...receiptEl.querySelectorAll('.checks li')].map(li => li.textContent?.trim());
       expect(checks).toEqual([p.t().check_owned_transaction_retrieved, p.t().check_customer_confirmation_recorded]);
       expect(receiptEl.querySelector('.open-questions')).toBeNull();

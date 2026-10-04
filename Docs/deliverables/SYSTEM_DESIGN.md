@@ -30,11 +30,11 @@ Our job: **every dispute reaches a person with the right transaction, confirmed 
 
 The customer signs in, picks a reason, writes a short statement, picks the charge from their own recent card purchases and confirms it. The service stores the case with the statement and the verified transaction, reads it back, and only then shows a reference. If the customer can't find the charge, or a lookup fails, the case still reaches a person as an incomplete or technical handoff, with the open questions listed. The agent sees the customer's words, the confirmed transaction when there is one, what was checked and what is still unknown.
 
-A "?" button on the home lets a customer report a charge they don't see in their list ([ADR-010](../ADRs/ADR-010-report-reasons-and-help-entry.md), decision 5). It opens the same guided chat with no charge selected, through the same `POST /intake/start`. When no owned charge is confirmed, nothing automated happens: the report ends as an incomplete handoff for a person, the problem statement's "case requiring human intervention" (p. 3).
+A "?" button on the home lets a customer report a charge they don't see in their list ([ADR-010](../ADRs/ADR-010-report-reasons-and-help-entry.md), decision 5). It opens the same guided chat with no charge selected, through the same `POST /intake/start`. When no owned charge is confirmed, the report ends as an incomplete handoff for a person; the enabled demo may then suggest charges for the customer to confirm. The report remains the problem statement's "case requiring human intervention" (p. 3).
 
 An earlier design read free text and routed other requests (another language, a recognized charge, a lost card, a balance question) with an explicit message. That routing exists only in the evaluation harness. The online service accepts only an unrecognized-charge report, and no step needs it to understand free text: the charge comes from a list and the reason from a closed set.
 
-**Deployed state:** main `a47b2e1`, Worker `d8da20c6`, deployed 2026-10-04 by the GitHub Actions deploy workflow, D1 migrations 0001–0023, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0). The follow-ups #87–#106 and #110 are deployed and not yet tagged.
+**Deployed state:** release [v0.3.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.3.0) (`0a743bb`, Worker `22e99b3f`, D1 migrations 0001–0025), deployed 2026-10-04 by the GitHub Actions deploy workflow. AI suggestions on "I can't find it" are on in the demo from the deploy that carries [ADR-012 amendment 1](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3). Every later deploy is in the [release history](../releases/README.md) and `wrangler deployments list`.
 
 | Stage | State | What it does |
 |---|---|---|
@@ -52,7 +52,8 @@ An earlier design read free text and routed other requests (another language, a 
 | Admin | Deployed (#95–#97, #101) | One code opens both views, and an admin can "view as" any loaded customer, audited by reference |
 | Proactive alert | Deployed (#106) | One in-app banner on a charge the bank flagged ([below](#the-proactive-alert)) |
 | Session restore | Deployed (#110) | A reload restores the live session from the cookie |
-| Reading free text | Offline only; shadow switch off | The learned extractor and the rule-based checklist, evaluated under one written policy ([below](#the-learned-component-and-where-ai-belongs)) |
+| "How long does it take?" | Deployed (#116) | Answered from this bank's history, a reviewed Gold aggregate seeded into D1 (migration 0027): half of unrecognized-charge reports got a first response in about 1 day (p50 25 h) and 9 in 10 within 2 days (p90 44 h), n = 6,045 of 10,370. Resolution times are described, never quoted, because they cover resolved reports only. Not a prediction or a service level |
+| AI suggestions on "I can't find it" | Deployed (#113), on in the demo (ADR-012 amendment 1) | After the reference, extractor v2 (Gemini 3.5 Flash-Lite with v1's prompt) reads the customer's description on Vertex AI; code suggests up to three of their own charges; the customer confirms or declines; a person reviews ([below](#the-learned-component-and-where-ai-belongs)) |
 
 The customer and measurement contracts are in [`Docs/intake/`](../intake/customer-and-measurement-contract.md).
 
@@ -80,7 +81,7 @@ The editable source is [`current-workflow.svg`](../Evidence/diagrams/current-wor
 
 ### The target workflow, with AI online
 
-This is where the flow goes once the AI path qualifies. The plan, its measures and its fallbacks are in the [AI suggestion plan](../Plans/ai-suggestion-plan.md); the switch is off today.
+This is the AI suggestion flow enabled in the demo; real-customer use still requires the production gate. The plan, its measures and its fallbacks are in the [AI suggestion plan](../Plans/ai-suggestion-plan.md); it is on in the demo since 2026-10-04 ([ADR-012 amendment 1](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3)), with every eligible report read.
 
 ![Target workflow: the customer's request stays deterministic; for "I can't find it", Vertex AI reads the description after the reference, code suggests up to three of the customer's own charges, the customer confirms and a person reviews; every failure falls back to today's handoff; events feed the pilot measures and the offline evaluation](../Evidence/diagrams/target-workflow.png)
 
@@ -88,7 +89,7 @@ Five rules shape it:
 - **The customer's request never waits for a model.** The reference comes back in one round trip; the model runs afterwards.
 - **The model reads; code decides.** It returns facts in a closed vocabulary. Deterministic code picks from the customer's own charges, enforced in SQL.
 - **Every failure ends where today's flow ends.** The case stays an incomplete handoff for a person, and the failure is recorded as a kind.
-- **It can switch itself off.** Rules fixed in advance (any unsafe outcome, more than 5% failures, too many wrong suggestions, a slow request) turn it off. A retired model id is never called.
+- **It has an off switch and automatic guards.** Operators turn it off under the plan's rules (any unsafe outcome, more than 5% failures, too many wrong suggestions, a slow request). The circuit breaker pauses failing calls, and the retirement guard never calls a retired model.
 - **It produces its own labels.** Agents mark confirmed suggestions correct or wrong, which feeds the next model's evaluation.
 
 The editable source is [`build_target_workflow.py`](../Evidence/diagrams/build_target_workflow.py).
@@ -166,21 +167,21 @@ In production, the bank's identity provider (OIDC with MFA, step-up for a disput
 
 ## The learned component and where AI belongs
 
-The brief asks where AI is appropriate and where deterministic logic is preferable. Our answer, for now: every live path stays deterministic.
+The brief asks where AI is appropriate and where deterministic logic is preferable. Our answer: every live path is deterministic except one. When a customer can't find the charge and describes it, a model reads the description after the reference is returned, and code suggests up to three of their own charges.
 
 **What the model does.** A pretrained `gpt-oss-20b` turns a message into facts from a closed vocabulary: amount, date, currency, merchant, card, country. The same written policy that drives the rule-based checklist then decides the action. The model never sees transactions, never picks a charge and never writes to the store. Only synthetic messages, the session's language and time, and the vocabulary reach it. Why this design and this model are in [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md).
 
 **Where it runs.** Development started on Workers AI. Bedrock inference is blocked on the project's AWS Free plan, so amendment 7 moved the offline evaluation to Google Vertex AI (`openai/gpt-oss-20b-maas`, the same weights, the same prompt and parsing; only the transport differs).
 
-**Where it stands.** At the provider's default reasoning level the model was accurate but slow. On Workers AI its p95 was 3.58 s; on Vertex it got 180 of 180 calls correct with 0 unsafe, but a p95 of 2.64 s with an interval upper bound of 3.08 s. Both fired the 3 s trigger. The isolated builder then set `reasoning_effort: "low"`, verified on Vertex only (amendments 8 and 9). At low, development scored 18 of 18 by majority with 0 unsafe, 158 of 160 calls schema-valid, and a p95 upper bound of about 2,340 ms. Instability passes under a ruling Manoella made after the result was seen (the model changed its reading on 1 of 18 cases; two provider failures count as errors); amendment 9 records every other reading. Every development trigger passes. On the one frozen run (2026-10-04, tag `extractor-v1`), the model got 53 of 60 held-out cases right against the checklist's 23, and 46 of 52 on the cases that never leaked, with 0 unsafe ([`EVALUATION.md`](EVALUATION.md#1-the-result)). Online, the shadow switch is off (`INTAKE_AI_ENABLED`, `APPROVED_EXTRACTOR = null`).
+**Where it stands.** At the provider's default reasoning level the model was accurate but slow. On Workers AI its p95 was 3.58 s; on Vertex it got 180 of 180 calls correct with 0 unsafe, but a p95 of 2.64 s with an interval upper bound of 3.08 s. Both fired the 3 s trigger. The isolated builder then set `reasoning_effort: "low"`, verified on Vertex only (amendments 8 and 9). At low, development scored 18 of 18 by majority with 0 unsafe, 158 of 160 calls schema-valid, and a p95 upper bound of about 2,340 ms. Instability passes under a ruling Manoella made after the result was seen (the model changed its reading on 1 of 18 cases; two provider failures count as errors); amendment 9 records every other reading. Every development trigger passes. On the one frozen run (2026-10-04, tag `extractor-v1`), the model got 53 of 60 held-out cases right against the checklist's 23, and 46 of 52 on the cases that never leaked, with 0 unsafe ([`EVALUATION.md`](EVALUATION.md#1-the-result)). Online, extractor v2 suggestions are enabled in the demo (`INTAKE_AI_ENABLED = "1"`, `INTAKE_AI_SHARE_B = "1"`); the former shadow path has been removed.
 
-**Why it stays offline ([ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md), Proposed).** We asked, path by path, whether the evidence shows the deterministic flow falling short. The checklist's one measured weakness, reading free text, sits on a step the guided flow doesn't need. The one path where a model could help, matching an "I can't find it" description to the customer's own charges, has one live occurrence in five episodes. And the model adds about 1.6 s at p50 to any step it joins, against a 2,000 ms report-request target. So ADR-012 names that path in advance and sets the bar for switching it on. The first two conditions now hold; the last two don't yet:
+**Why only there ([ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md), Proposed).** We asked, path by path, whether the evidence shows the deterministic flow falling short. The checklist's one measured weakness, reading free text, sits on a step the guided flow doesn't need. The one path where a model could help, matching an "I can't find it" description to the customer's own charges, has one live occurrence in five episodes. And the model adds about 1.6 s at p50 to any step it joins, against a 2,000 ms report-request target. So ADR-012 names that path in advance and sets the bar for switching it on. The first two conditions now hold; the last two don't yet:
 - the frozen comparison has run, and the extractor is at least as correct as the checklist on held-out cases, with 0 unsafe;
 - every development trigger passes, including instability;
 - "I can't find it" is at least 15% of started reports over at least 30 live episodes;
 - the path stays under the 2,000 ms target with the model call included.
 
-When it qualifies, the model reads only the details text, deterministic code suggests up to three of the customer's own charges, and the customer confirms one or keeps the handoff. A timeout, malformed output or provider error falls back to today's incomplete handoff. Google retires the `gpt-oss-20b-maas` endpoint on 2026-10-21, so a production path needs a successor pre-registered and re-evaluated as a new version.
+**On in the demo since 2026-10-04** ([amendment 1](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3)). The first two conditions hold. The third can only be measured by running the path, and the model runs after the response, so the request never waits for it. What it targets is the linking gap: no complaint in the data points to a transaction, so today a person matches a description by hand. The model reads only the details text, deterministic code suggests up to three of the customer's own charges, and the customer confirms one or keeps the handoff. A timeout, malformed output or provider error falls back to today's incomplete handoff, and a circuit breaker stops calling a provider that is failing. **The online model is extractor v2** ([ADR-006 amendment 10](../ADRs/ADR-006-learned-extractor-workers-ai.md#post-freeze-amendment-2026-10-04)). On 2026-10-04 Google's shared pool for v1's `gpt-oss-20b` degraded, from about 0.5 s to a 216 s hourly mean, while Gemini 3.5 Flash-Lite answered at a p50 of 1.6 s. v2 keeps v1's prompt and parsing, and scored 18/18 on development and 22/22 on the red-team set, 0 unsafe. Those sets aren't held out, so the 53/60 frozen result stays v1's.
 
 **Should an AI replace the human reviewer?** We tested that against the data, and the answer is no. All 580,546 contact-centre interactions in the design window have a human agent, so there is no automated service to compare with. Satisfaction follows resolution, not the handler: resolved complaints score about 3.0 and unresolved about 2.0 on a 1–4 scale, whoever handled them and however long it took. Speed shows no reliable effect: days to resolution and the score correlate at 0.036 (n = 397). And about 80% of resolutions move money or change the account, which ADR-002 keeps out of a model's hands. The one AI step left open is agent assist, where a model drafts the first explanation and a person edits and sends it. It needs its own ADR and a pilot.
 
@@ -262,7 +263,7 @@ The open question is speed, not cost. Each layer's choice, the priced alternativ
 - **The data is synthetic.** Every rate describes a generated dataset. Real volume, peaks and phrasing could all differ.
 - **The test set is small and authored.** It showed a large improvement over the rules, but the model's rate is known only within about 77–94%, on messages a model wrote from our specs, not on real customers.
 - **Some test content leaked.** Content of 8 frozen cases was reachable during the model build. We report results with and without them, and the next build uses a checkout with no history.
-- **The evaluated model endpoint is short-lived.** It retires on 2026-10-21. Its successor needs its own registration and fresh held-out cases, because the frozen set is now spent.
+- **The online model has no held-out result.** v1's endpoint degraded and retires on 2026-10-21, so the demo runs v2 (Gemini 3.5 Flash-Lite, v1's prompt). v2 is measured only on the development and red-team sets, which were written with corpus knowledge. Its held-out evaluation needs a new set, because the frozen set is spent.
 - **Friendly fraud can't be measured.** A customer may dispute a charge they made. Complaints don't link to transactions and outcomes are templates ([DF-025](DATA_ENGINEERING.md#df-025-dispute-outcomes-cant-show-friendly-fraud)), so we can't size it. Deciding it is out of scope. Intake reduces it by showing the merchant and time before the report and asking for explicit confirmation.
 - **The alert's flags are authored.** Until `fraud_score`'s provenance is confirmed, the alert demonstrates the experience, not a detection rate. Even confirmed, about half of fraud would not be flagged.
 - **New data doesn't reach the demo on its own.** The pipeline handles new and late days, but refreshing the served cohort is manual and stops in three known places ([`DATA_ENGINEERING.md` section 8](DATA_ENGINEERING.md#8-if-new-data-arrives-tomorrow)).
@@ -274,8 +275,9 @@ The open question is speed, not cost. Each layer's choice, the priced alternativ
 The deployed state is [above](#the-solution-and-what-exists-today); the extractor's offline state is in [its section](#the-learned-component-and-where-ai-belongs).
 
 **Before submission on 2026-10-05:**
-1. Tag v0.3.0 for the deployed follow-ups, after a person's go-ahead.
-2. Confirm submission access and repository visibility with a person; agents don't change permissions.
+1. ~~Tag v0.3.0~~ Done 2026-10-04 on `0a743bb`.
+2. ~~Turn AI suggestions on in the demo~~ Done 2026-10-04 (ADR-012 amendment 1), with extractor v2 and every eligible report in arm B.
+3. Confirm submission access and repository visibility with a person; agents don't change permissions.
 
 **After submission:**
 - the rest of ADR-013 phase 0 (sliding sessions), then Google sign-in for staff;
