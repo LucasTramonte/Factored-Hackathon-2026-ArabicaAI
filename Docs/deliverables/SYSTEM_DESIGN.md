@@ -78,6 +78,21 @@ A large charge you don't recognize causes panic. The customer wants it handled f
 
 The editable source is [`current-workflow.svg`](../Evidence/diagrams/current-workflow.svg). It labels deployed, built and pending work separately. The older Excalidraw and PNG drawings in that folder show the former Access and Basic gates and are historical.
 
+### The target workflow, with AI online
+
+This is where the flow goes once the AI path qualifies. The plan, its measures and its fallbacks are in the [AI suggestion plan](../Plans/ai-suggestion-plan.md); the switch is off today.
+
+![Target workflow: the customer's request stays deterministic; for "I can't find it", Vertex AI reads the description after the reference, code suggests up to three of the customer's own charges, the customer confirms and a person reviews; every failure falls back to today's handoff; events feed the pilot measures and the offline evaluation](../Evidence/diagrams/target-workflow.png)
+
+Five rules shape it:
+- **The customer's request never waits for a model.** The reference comes back in one round trip; the model runs afterwards.
+- **The model reads; code decides.** It returns facts in a closed vocabulary. Deterministic code picks from the customer's own charges, enforced in SQL.
+- **Every failure ends where today's flow ends.** The case stays an incomplete handoff for a person, and the failure is recorded as a kind.
+- **It can switch itself off.** Rules fixed in advance (any unsafe outcome, more than 5% failures, too many wrong suggestions, a slow request) turn it off. A retired model id is never called.
+- **It produces its own labels.** Agents mark confirmed suggestions correct or wrong, which feeds the next model's evaluation.
+
+The editable source is [`build_target_workflow.py`](../Evidence/diagrams/build_target_workflow.py).
+
 ### The batch data path
 
 ```text
@@ -113,11 +128,26 @@ One Cloudflare Worker serves the Angular client and the API, with sessions and c
 
 Migrations are additive and are applied to remote D1 by the deploy workflow after CI passes on `main`. One that drops, renames or rebuilds stops the deploy for a person.
 
-### The AWS production target
+### Production targets: AWS and GCP
 
-If a bank ran this workflow on AWS, the same design becomes the target below: CloudFront and WAF at the edge, an HTTP API and Lambda in a two-AZ VPC, RDS PostgreSQL Multi-AZ, a Bedrock endpoint, and a daily Fargate batch into an S3 lake. We priced it, drew it and wrote it as [CloudFormation templates](../Costs/aws-target/), but never deployed it. A bank's requirement for private networking, a standby database and its own keys would trigger the move, not traffic. Today's AWS use is Cognito and SES next to the Cloudflare service.
+If a bank ran this workflow on its own cloud, the same design becomes one of the targets below. Neither has been deployed. A bank's requirement for private networking, a standby database and its own keys would trigger the move, not traffic (next section). Today's AWS use is Cognito and SES next to the Cloudflare service, and today's GCP use is Vertex AI for the evaluation.
+
+| | AWS | GCP |
+|---|---|---|
+| Edge | CloudFront + WAF | Global HTTPS load balancer + Cloud Armor + Cloud CDN |
+| API | API Gateway + Lambda (Node 22) | Cloud Run (Node 22), load-balancer ingress only |
+| AI suggestion, after the response | Bedrock gpt-oss-20b, In-Region, through PrivateLink | Vertex AI Gemini 2.5 Flash-Lite in-region, through Cloud Tasks and Private Google Access |
+| Database | RDS PostgreSQL Multi-AZ, db.t4g.small | Cloud SQL PostgreSQL regional HA, db-g1-small |
+| Batch | Fargate daily task + EventBridge | Cloud Run job + Cloud Scheduler |
+| Keys and logs | KMS, CloudWatch | Cloud KMS, Cloud Logging |
+| Infrastructure as code | [CloudFormation](../Costs/aws-target/) (`cfn-lint`) | [Terraform](../Costs/gcp-target/main.tf) (`terraform validate`) |
+| List price, same volumes | **$86.36 a month** | **$90.09 a month** |
+
+On both, about two thirds of the bill is the standby database. The rest is fixed edge or private-network cost: GCP pays for a load-balancer rule and gets private API access free; AWS pays for a private endpoint and gets its edge almost free. Line by line: [ADR-004 section 3](../ADRs/ADR-004-intake-capacity-and-cost.md) for AWS, the [GCP target](../Costs/gcp-target/README.md) for GCP.
 
 ![AWS production target: CloudFront and WAF at the edge, HTTP API and Lambda in a two-AZ VPC with RDS PostgreSQL Multi-AZ and a Bedrock endpoint, a daily Fargate batch into an S3 lake](../Costs/aws-target/architecture.png)
+
+![GCP production target: global HTTPS load balancer with Cloud Armor and Cloud CDN, Cloud Run API with Cloud Tasks for the AI suggestion, Cloud SQL PostgreSQL regional HA on a private IP, Vertex AI in-region, a daily Cloud Run job into a CMEK lake](../Costs/gcp-target/architecture.png)
 
 ## Security and identity
 
@@ -176,11 +206,52 @@ We compare three systems on the same cases: everything to a person, the rule-bas
 
 Intake always ends with a person, so its automated-resolution rate is `not defined`; a live page load of recent charges is not a resolution. How the sets were built, every leakage control, what 60 cases can and can't show, and the options we rejected are in [`EVALUATION.md`](EVALUATION.md).
 
-## Cost and capacity
+## Capacity: the numbers before the boxes
+
+Every box in the targets above has to be justified by a number. The rule we used comes from a common systems-design reference: do the arithmetic before adding infrastructure, and if the number doesn't justify a box, the box doesn't go in (Hello Interview, 2026).
+
+**What one report costs the system.** These are the guided flow's measured figures from the D1 budget tests (CI ceilings; ADR-004, sections 2 and implementation notes). One complete episode, with sign-in and one agent look, takes:
+- 9 requests;
+- 318 rows read;
+- 51 rows written.
+
+A case is about 367 bytes with a typical statement and 4.3 KB at the 2,000-character maximum.
+
+**How many reports.** The dataset's busiest days come from ADR-004's scenarios. Hours are flat in the data, so the peak hour is assumed at 3× the average; that is an assumption, not a measurement. The last column is a stress check, not a forecast.
+
+| Per second, at the peak hour (3× average) | S3: every contact, p95 day (818) | S4: 10× S3 (8,180) | 100× S3 (81,800) |
+|---|---|---|---|
+| API requests | 0.26 | 2.6 | 26 |
+| Database rows written | 1.4 | 14 | 145 |
+| Database rows read | 9 | 90 | 900 |
+| Model calls (S2 ceiling: every complaint contact, 145 a day) | 0.005 | 0.05 | 0.5 |
+| Storage growth per year, typical / longest statements | 1.6 / 7 GB | 16 / 70 GB | 160 / 700 GB |
+
+**Against typical capacities** (orders of magnitude from Hello Interview, 2026; workload, hardware and configuration change them):
+
+| Component | Typical capacity | Our worst case above | What it means |
+|---|---|---|---|
+| Cache (Redis) | about 1 ms, 100k+ operations/s | 900 reads/s, all by primary key | **No cache.** Indexed reads are already fast, and a lookup cache on fast reads is a classic mistake |
+| Database (PostgreSQL) | up to 50k reads/s and 10–20k writes/s; up to 64 TiB | 145 writes/s and 900 reads/s at 100× | **One primary, no sharding, no read replicas.** About 1% of write capacity at 100× our busiest day. The standby exists for availability, not load |
+| App server | 100k+ connections; CPU is the first limit | 26 requests/s at 100×; measured Worker CPU 0–4 ms a request | **One small instance**, scaling to zero. Lambda or Cloud Run without provisioned capacity |
+| Queue (Kafka) | about 1M messages/s per broker | 0.5 model calls/s | **No Kafka.** A queue for 5k writes/s is a classic mistake, and we have 0.5 events/s. The only queue in the GCP target, Cloud Tasks, is there for retries and a rate cap on the model call, not throughput |
+
+**Latency, which is what actually shapes the design:**
+- **Data inside the cloud is fast:** memory is nanoseconds, SSD is microseconds to milliseconds, and a hop is under 1 ms within a zone and 1–2 ms across zones. A regional standby's synchronous commit costs a couple of milliseconds, well within the 2,000 ms request target.
+- **The long hops are elsewhere.** A cross-region hop is 50–150 ms, so the API belongs in the same region as its database, and a customer in Mexico or Colombia reaching `us-central1` or `us-east-2` pays about one of these per request.
+- **The model is the slowest step by far.** Its p95 was 2,048 ms on the frozen run, more than every other step put together. That alone is why the model runs after the response and never inside the customer's request.
+
+**What does bind:**
+- **D1's limits, on the prototype.**
+  - The Free plan's 100,000 rows written a day allow about 1,960 episodes a day. That covers S3 but not S4, which needs Workers Paid at $5 a month.
+  - D1's 10 GB database limit is reached in about 7 months at S4 with typical statements. That is the real trigger for PostgreSQL, together with a bank's availability and key requirements.
+- **Cost, on the production targets,** which is dominated by the standby database at any volume in the table.
+
+## Cost
 
 **The Cloudflare service fits the free plan.** It serves a cohort of 796 customers from the dataset who disputed a charge, not the full slice. It handles about 1,960 complete episodes a day for a customer signed in by email, limited by D1 writes (51 rows each; ADR-004, latest implementation note). The busiest day for unrecognized-charge complaints in 2025 had 23. Writes are the first limit to hit, and $5 a month removes it. Cognito and SES are separate AWS costs. The historical $0.21 exploratory AWS spend is a dated snapshot, and no fresh billing export has been assessed.
 
-**The AWS production target costs $86.36 a month** at list price ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)): about $0.02 per disputed case, or $0.0035 per contact at the front door. About three quarters is a standby database and private networking, which a bank's requirements dictate, not traffic. At 10× the traffic the bill rises by about 46%.
+**The AWS production target costs $86.36 a month, and the GCP one $90.09,** at list price ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)): about $0.02 per disputed case, or $0.0035 per contact at the front door. On AWS about three quarters is a standby database and private networking, which a bank's requirements dictate, not traffic; at 10× the traffic the bill rises by about 46%. The GCP figure comes from the Cloud Billing Catalog's list prices for the same volumes ([GCP target](../Costs/gcp-target/README.md)).
 
 **Reading one message costs a fraction of a cent.** At the default reasoning level it was about $0.0005 (about 1,900 input and 250 output tokens). At low on Vertex it is about 2,107 input and 130 output tokens, or about US$0.00018 at the price recorded on 2026-10-03 (ADR-012; re-check before production). If every one of the 11 daily reports took the model path, it would cost well under a cent a day.
 

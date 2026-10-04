@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1180" viewBox="0 0 1600 1180" role="img" aria-labelledby="title description" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+<title id="title">ArabicaAI: target intake workflow with online AI suggestions</title>
+<desc id="description">The customer request stays deterministic and returns a reference after read-back. When the customer cannot find the charge, a model on Vertex AI reads the description after the response, deterministic code suggests up to three of the customer's own charges, the customer confirms one, and a person reviews. Every failure falls back to the incomplete handoff used today. Events without text feed the pilot measures and the offline evaluation.</desc>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#41556b"/></marker><marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#c5221f"/></marker></defs>
+<rect width="1600" height="1180" fill="#ffffff"/>
+<text x="40" y="46" font-size="26" font-weight="700" fill="#16191f">ArabicaAI · target workflow with online AI suggestions</text>
+<text x="40" y="72" font-size="14" fill="#414d5c">Planned (Docs/Plans/ai-suggestion-plan.md, ADR-012). Today the switch is off and the flow is the deterministic part only. Solid: synchronous request · dashed: after the response · red: fallback.</text>
+<rect x="30" y="95" width="1540" height="270" rx="14" fill="#edf6f3" stroke="#9cc8b8" stroke-width="1.4"/>
+<text x="54" y="125" font-size="18" font-weight="700" fill="#16191f">1 · The customer's request: deterministic, answered in one round trip</text>
+<text x="54" y="147" font-size="13" fill="#414d5c">No model call here. A reference is shown only after the case row is read back (ADR-002). Target p95 below 2,000 ms.</text>
+<rect x="60" y="175" width="190" height="90" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="155.0" y="209.0" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Customer</text>
+<text x="155.0" y="228.0" text-anchor="middle" font-size="12.5" fill="#414d5c">signed in (Cognito code)</text>
+<text x="155.0" y="243.0" text-anchor="middle" font-size="12.5" fill="#414d5c">ES · PT · EN</text>
+<rect x="300" y="175" width="220" height="90" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="410.0" y="209.0" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Worker · session</text>
+<text x="410.0" y="228.0" text-anchor="middle" font-size="12.5" fill="#414d5c">identity from the session only</text>
+<text x="410.0" y="243.0" text-anchor="middle" font-size="12.5" fill="#414d5c">reason from a closed list</text>
+<polygon points="640,168.0 725.0,220 640,272.0 555.0,220" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="640" y="216" text-anchor="middle" font-size="12.5" font-weight="600" fill="#16191f">Charge in</text>
+<text x="640" y="231" text-anchor="middle" font-size="12.5" font-weight="600" fill="#16191f">own list?</text>
+<rect x="780" y="140" width="230" height="80" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="895.0" y="176.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Confirm the charge</text>
+<text x="895.0" y="195.5" text-anchor="middle" font-size="12.5" fill="#414d5c">ownership checked in SQL</text>
+<rect x="780" y="250" width="230" height="90" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="895.0" y="284.0" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">“I can't find it”</text>
+<text x="895.0" y="303.0" text-anchor="middle" font-size="12.5" fill="#414d5c">customer describes it</text>
+<text x="895.0" y="318.0" text-anchor="middle" font-size="12.5" fill="#414d5c">in their own words</text>
+<rect x="1080" y="175" width="230" height="90" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="1195.0" y="216.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">D1 write + read-back</text>
+<text x="1195.0" y="235.5" text-anchor="middle" font-size="12.5" fill="#414d5c">complete or incomplete handoff</text>
+<rect x="1360" y="175" width="200" height="90" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="1460.0" y="209.0" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Reference</text>
+<text x="1460.0" y="228.0" text-anchor="middle" font-size="12.5" fill="#414d5c">shown at once</text>
+<text x="1460.0" y="243.0" text-anchor="middle" font-size="12.5" fill="#414d5c">status emails after</text>
+<polyline points="250,220 298,220" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<polyline points="520,220 555,220" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<polyline points="640,168 640,180 725,180 778,180" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="700" y="172" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">yes</text>
+<polyline points="640,272 640,295 778,295" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="700" y="288" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">no</text>
+<polyline points="1010,180 1045,180 1045,210 1078,210" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<polyline points="1010,295 1045,295 1045,240 1078,240" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<polyline points="1310,220 1358,220" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<rect x="30" y="385" width="1540" height="330" rx="14" fill="#eef3fc" stroke="#a9c1ea" stroke-width="1.4"/>
+<text x="54" y="415" font-size="18" font-weight="700" fill="#16191f">2 · AI suggestion, only for “I can't find it”, after the reference is returned</text>
+<text x="54" y="437" font-size="13" fill="#414d5c">ctx.waitUntil (Cloud Tasks in the GCP target). The model reads text; code decides; the customer confirms; a person reviews.</text>
+<polygon points="195,460.0 320.0,525 195,590.0 70.0,525" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="195" y="521" text-anchor="middle" font-size="12.5" font-weight="600" fill="#16191f">Guards pass?</text>
+<text x="195" y="536" text-anchor="middle" font-size="12.5" font-weight="600" fill="#16191f">switch · daily cap</text>
+<text x="195" y="551" text-anchor="middle" font-size="12.5" font-weight="600" fill="#16191f">model date · token</text>
+<rect x="360" y="480" width="230" height="90" rx="10" fill="#e8f0fe" stroke="#41556b" stroke-width="1.8"/>
+<text x="475.0" y="506.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Vertex AI</text>
+<text x="475.0" y="525.5" text-anchor="middle" font-size="12.5" fill="#414d5c">reads the description only</text>
+<text x="475.0" y="540.5" text-anchor="middle" font-size="12.5" fill="#414d5c">facts in a closed vocabulary</text>
+<text x="475.0" y="555.5" text-anchor="middle" font-size="12.5" fill="#414d5c">10 s deadline · 1 retry</text>
+<rect x="640" y="480" width="220" height="90" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="750.0" y="521.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Schema check</text>
+<text x="750.0" y="540.5" text-anchor="middle" font-size="12.5" fill="#414d5c">invalid → no suggestion</text>
+<rect x="910" y="480" width="240" height="90" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="1030.0" y="514.0" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Deterministic matcher</text>
+<text x="1030.0" y="533.0" text-anchor="middle" font-size="12.5" fill="#414d5c">facts → at most 3 of the</text>
+<text x="1030.0" y="548.0" text-anchor="middle" font-size="12.5" fill="#414d5c">customer's own charges (SQL)</text>
+<rect x="1200" y="480" width="180" height="90" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="1290.0" y="521.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Store suggestions</text>
+<text x="1290.0" y="540.5" text-anchor="middle" font-size="12.5" fill="#414d5c">references only, no text</text>
+<rect x="1200" y="610" width="360" height="80" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="1380.0" y="646.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">“Is it one of these?”</text>
+<text x="1380.0" y="665.5" text-anchor="middle" font-size="12.5" fill="#414d5c">customer confirms one · or “none of these”</text>
+<rect x="1410" y="470" width="150" height="110" rx="10" fill="#fff7ec" stroke="#41556b" stroke-width="1.8"/>
+<text x="1485.0" y="499.0" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Agent queue</text>
+<text x="1485.0" y="518.0" text-anchor="middle" font-size="12.5" fill="#414d5c">a person reviews</text>
+<text x="1485.0" y="533.0" text-anchor="middle" font-size="12.5" fill="#414d5c">every report</text>
+<text x="1485.0" y="548.0" text-anchor="middle" font-size="12.5" fill="#414d5c">suggestion marked as</text>
+<text x="1485.0" y="563.0" text-anchor="middle" font-size="12.5" fill="#414d5c">customer-confirmed</text>
+<polyline points="1120,342 1120,374 18,374 18,525 68,525" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)" stroke-dasharray="6 5"/>
+<text x="660" y="368" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">incomplete handoff stored</text>
+<polyline points="320,525 358,525" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="339" y="517" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">yes</text>
+<polyline points="590,525 638,525" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="614" y="517" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">JSON</text>
+<polyline points="860,525 908,525" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="884" y="517" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">facts</text>
+<polyline points="1150,525 1198,525" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="1174" y="517" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">1–3</text>
+<polyline points="1290,570 1290,608" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)" stroke-dasharray="6 5"/>
+<polyline points="1495,608 1495,582" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<rect x="60" y="625" width="1080" height="70" rx="10" fill="#fdecea" stroke="#c5221f" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text x="80" y="652" font-size="15" font-weight="700" fill="#a50e0e">Fallback: the case stays today's incomplete handoff, unchanged</text>
+<text x="80" y="675" font-size="12.5" fill="#5f2120">off · capped · retired model · auth error · timeout · provider error (no retry) · invalid output · no match / ambiguous · not answered in 15 s. Each recorded as a kind.</text>
+<polyline points="195,591 195,623" fill="none" stroke="#c5221f" stroke-width="1.8" marker-end="url(#r)" stroke-dasharray="6 5"/>
+<polyline points="475,572 475,623" fill="none" stroke="#c5221f" stroke-width="1.8" marker-end="url(#r)" stroke-dasharray="6 5"/>
+<polyline points="750,572 750,623" fill="none" stroke="#c5221f" stroke-width="1.8" marker-end="url(#r)" stroke-dasharray="6 5"/>
+<polyline points="1030,572 1030,623" fill="none" stroke="#c5221f" stroke-width="1.8" marker-end="url(#r)" stroke-dasharray="6 5"/>
+<text x="222" y="602" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">no</text>
+<rect x="30" y="735" width="1540" height="255" rx="14" fill="#f6f3fb" stroke="#c3b5e3" stroke-width="1.4"/>
+<text x="54" y="765" font-size="18" font-weight="700" fill="#16191f">3 · Measure it, decide on it, improve it</text>
+<text x="54" y="787" font-size="13" fill="#414d5c">Events carry references, outcome kinds, calls and tokens, never the customer's words (intake-events.md).</text>
+<rect x="60" y="820" width="250" height="130" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="185.0" y="851.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Pilot record</text>
+<text x="185.0" y="870.5" text-anchor="middle" font-size="12.5" fill="#414d5c">arm A/B at random (50/50)</text>
+<text x="185.0" y="885.5" text-anchor="middle" font-size="12.5" fill="#414d5c">outcome kind per report</text>
+<text x="185.0" y="900.5" text-anchor="middle" font-size="12.5" fill="#414d5c">calls · tokens · latency</text>
+<text x="185.0" y="915.5" text-anchor="middle" font-size="12.5" fill="#414d5c">agent marks suggestion</text>
+<text x="185.0" y="930.5" text-anchor="middle" font-size="12.5" fill="#414d5c">correct / wrong</text>
+<rect x="360" y="820" width="280" height="130" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="500.0" y="851.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Pilot measures</text>
+<text x="500.0" y="870.5" text-anchor="middle" font-size="12.5" fill="#414d5c">share “I can't find it” (≥15% of ≥30)</text>
+<text x="500.0" y="885.5" text-anchor="middle" font-size="12.5" fill="#414d5c">suggestion confirmed rate</text>
+<text x="500.0" y="900.5" text-anchor="middle" font-size="12.5" fill="#414d5c">agent-marked correct rate</text>
+<text x="500.0" y="915.5" text-anchor="middle" font-size="12.5" fill="#414d5c">fallback rate · p95 · cost</text>
+<text x="500.0" y="930.5" text-anchor="middle" font-size="12.5" fill="#414d5c">agent time to match, A vs B</text>
+<rect x="690" y="820" width="270" height="130" rx="10" fill="#fdecea" stroke="#c5221f" stroke-width="1.8"/>
+<text x="825.0" y="859.0" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Decision rules (fixed now)</text>
+<text x="825.0" y="878.0" text-anchor="middle" font-size="12.5" fill="#414d5c">any unsafe → switch off</text>
+<text x="825.0" y="893.0" text-anchor="middle" font-size="12.5" fill="#414d5c">>5% failures in last 50 → off</text>
+<text x="825.0" y="908.0" text-anchor="middle" font-size="12.5" fill="#414d5c">>1 in 10 wrong (≥20) → off</text>
+<text x="825.0" y="923.0" text-anchor="middle" font-size="12.5" fill="#414d5c">request p95 ≥ 2,000 ms → off</text>
+<rect x="1010" y="820" width="260" height="130" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="1140.0" y="859.0" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Offline evaluation</text>
+<text x="1140.0" y="878.0" text-anchor="middle" font-size="12.5" fill="#414d5c">new held-out set, other family</text>
+<text x="1140.0" y="893.0" text-anchor="middle" font-size="12.5" fill="#414d5c">agent marks as extra labels</text>
+<text x="1140.0" y="908.0" text-anchor="middle" font-size="12.5" fill="#414d5c">isolated builder · pre-registered</text>
+<text x="1140.0" y="923.0" text-anchor="middle" font-size="12.5" fill="#414d5c">one run per version (ADR-006)</text>
+<rect x="1320" y="820" width="240" height="130" rx="10" fill="#e8f0fe" stroke="#41556b" stroke-width="1.8"/>
+<text x="1440.0" y="866.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Model version</text>
+<text x="1440.0" y="885.5" text-anchor="middle" font-size="12.5" fill="#414d5c">v1 gpt-oss-20b until 2026-10-21</text>
+<text x="1440.0" y="900.5" text-anchor="middle" font-size="12.5" fill="#414d5c">v2 Gemini Flash-Lite after</text>
+<text x="1440.0" y="915.5" text-anchor="middle" font-size="12.5" fill="#414d5c">its own evaluation</text>
+<polyline points="310,885 358,885" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<polyline points="640,885 688,885" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<polyline points="960,885 1008,885" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<polyline points="1270,885 1318,885" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<polyline points="1380,692 1380,725 42,725 42,885 58,885" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)" stroke-dasharray="6 5"/>
+<text x="840" y="720" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">every report, both arms</text>
+<rect x="30" y="1005" width="1540" height="140" rx="14" fill="#f1f5fa" stroke="#b6c6da" stroke-width="1.4"/>
+<text x="54" y="1035" font-size="18" font-weight="700" fill="#16191f">4 · Data prepared in advance (batch, Python + DuckDB)</text>
+<text x="54" y="1057" font-size="13" fill="#414d5c">The Worker never reads S3, DuckDB or Silver. The customer's own charges come from the reviewed slice.</text>
+<rect x="60" y="1070" width="210" height="60" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="165.0" y="1096.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">S3 (read-only)</text>
+<text x="165.0" y="1115.5" text-anchor="middle" font-size="12.5" fill="#414d5c">organizers' bucket</text>
+<rect x="308" y="1070" width="210" height="60" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="413.0" y="1096.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Bronze</text>
+<text x="413.0" y="1115.5" text-anchor="middle" font-size="12.5" fill="#414d5c">raw Parquet</text>
+<polyline points="270,1100 306,1100" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<rect x="556" y="1070" width="210" height="60" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="661.0" y="1096.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Silver</text>
+<text x="661.0" y="1115.5" text-anchor="middle" font-size="12.5" fill="#414d5c">typed tables</text>
+<polyline points="518,1100 554,1100" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<rect x="804" y="1070" width="210" height="60" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="909.0" y="1096.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Quality gate</text>
+<text x="909.0" y="1115.5" text-anchor="middle" font-size="12.5" fill="#414d5c">errors block</text>
+<polyline points="766,1100 802,1100" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<rect x="1052" y="1070" width="210" height="60" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="1157.0" y="1096.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Gold slice</text>
+<text x="1157.0" y="1115.5" text-anchor="middle" font-size="12.5" fill="#414d5c">provenance</text>
+<polyline points="1014,1100 1050,1100" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<rect x="1300" y="1070" width="210" height="60" rx="10" fill="#ffffff" stroke="#41556b" stroke-width="1.8"/>
+<text x="1405.0" y="1096.5" text-anchor="middle" font-size="16" font-weight="650" fill="#16191f">Reviewed D1 seed</text>
+<text x="1405.0" y="1115.5" text-anchor="middle" font-size="12.5" fill="#414d5c">own charges list</text>
+<polyline points="1262,1100 1298,1100" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<polyline points="1405,1068 1405,1040 1584,1040 1584,122 895,122 895,138" fill="none" stroke="#41556b" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="1480" y="1034" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">serves each customer's own charges</text>
+</svg>

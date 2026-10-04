@@ -15,12 +15,13 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 - [Deliverables](#deliverables)
 - [Repository layout](#repository-layout)
 - [How it fits together](#how-it-fits-together)
+- [Where the AI goes online](#where-the-ai-goes-online)
 - [Data pipeline: start here](#data-pipeline-start-here)
 - [Offline baseline from supplied CSVs](#offline-baseline-from-supplied-csvs)
 - [Common commands](#common-commands)
 - [Where to look next](#where-to-look-next)
 - [About us](#about-us)
-- [Appendix: AWS production target](#appendix-aws-production-target)
+- [Appendix: production targets on AWS and GCP](#appendix-production-targets-on-aws-and-gcp)
 
 ## Deliverables
 
@@ -78,6 +79,17 @@ Everything merged through #106 and #110 is deployed, including the in-app alert 
 | Evaluation | `evals/intake`, [`EVALUATION.md`](Docs/deliverables/EVALUATION.md) | Team-built ES/PT test sets, checklist baseline, learned-component harness, episode KPI scorer |
 | Data quality register | [`DATA_ENGINEERING.md`](Docs/deliverables/DATA_ENGINEERING.md), `data_profiles/findings/` | Every dataset finding that changes or limits a decision, with its query, impact and handling |
 | Decisions | `Docs/ADRs/` | Scope, runtime, capacity, cost and cloud placement, each with its limitations and exit triggers |
+
+## Where the AI goes online
+
+The model reads better than our rules on held-out cases (53 of 60 against 23), but the guided flow only needs to read free text in one place: when a customer can't find the charge in their own list. That is where it goes online, behind a switch that is off today ([ADR-012](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md), [plan](Docs/Plans/ai-suggestion-plan.md)).
+
+![Target workflow: the customer's request stays deterministic; for "I can't find it", Vertex AI reads the description after the reference, code suggests up to three of the customer's own charges, the customer confirms and a person reviews; every failure falls back to today's handoff; events feed the pilot measures and the offline evaluation](Docs/Evidence/diagrams/target-workflow.png)
+
+- **The customer never waits for the model.** The reference comes back first; the model runs after the response.
+- **The model reads, code decides, a person reviews.** Suggestions come only from the customer's own charges.
+- **Every failure is today's flow.** Timeout, provider error, invalid output, no match or a retired model all leave the incomplete handoff as it is.
+- **It is measured and can switch itself off.** A randomized pilot measures how often the path is used and how often agents mark suggestions correct. Fixed rules turn it off on any unsafe outcome.
 
 **Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Customers, agents and evaluators sign in with an email one-time code from Amazon Cognito; ask the team to enrol your email. There is no team password ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md), [auth runbook](Docs/Plans/auth-runbook.md)).
 
@@ -169,8 +181,19 @@ We are three engineers from two coffee countries, Brazil and Colombia, and the n
 | **Roberto** ([@Robertzu43](https://github.com/Robertzu43)) | AI engineer | Colombia | The intake evaluation harness and event contract, the guided intake backend, the Angular client and agent view, and the accessibility audit; the native Spanish review of the frozen set |
 | **Lucas** ([@LucasTramonte](https://github.com/LucasTramonte)) | Machine learning engineer | Limeira, São Paulo, Brazil | The quality gate and findings register, the Worker and D1 runtime, the ADRs, the capacity and cost record, the learned extractor, the evaluation deliverable and the Gold cohort |
 
-## Appendix: AWS production target
+## Appendix: production targets on AWS and GCP
+
+Design only, never deployed: what this workflow would run on if a bank required private networking, a standby database and its own keys. Both are written as code, drawn from that code and priced at list price for the same volumes.
+
+| | AWS ([`aws-target/`](Docs/Costs/aws-target/)) | GCP ([`gcp-target/`](Docs/Costs/gcp-target/)) |
+|---|---|---|
+| Written as | CloudFormation, passes `cfn-lint` | Terraform, passes `terraform validate` |
+| API and model | Lambda; Bedrock gpt-oss-20b through PrivateLink | Cloud Run; Vertex AI Gemini 2.5 Flash-Lite in-region, after the response through Cloud Tasks |
+| Database | RDS PostgreSQL Multi-AZ | Cloud SQL PostgreSQL regional HA |
+| Per month | $86.36 ([ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) section 3) | $90.09 ([line by line](Docs/Costs/gcp-target/README.md)) |
+
+On both, the standby database is about two thirds of the bill. Load would never require it: at 100× the dataset's busiest day the database sees about 145 writes a second, around 1% of what one PostgreSQL primary handles. The [capacity estimate](Docs/deliverables/SYSTEM_DESIGN.md#capacity-the-numbers-before-the-boxes) shows the arithmetic.
 
 ![AWS production target: CloudFront and WAF at the edge, HTTP API and Lambda in a two-AZ VPC with RDS PostgreSQL Multi-AZ and a Bedrock endpoint, a daily Fargate batch into an S3 lake](Docs/Costs/aws-target/architecture.png)
 
-*Design only, never deployed: what this workflow would run on if a bank required private networking, a standby database and its own keys. It is priced at $86.36 a month, service by service, in [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) section 3. Templates and diagram source: [`Docs/Costs/aws-target/`](Docs/Costs/aws-target/).*
+![GCP production target: global HTTPS load balancer with Cloud Armor and Cloud CDN, Cloud Run API with Cloud Tasks for the AI suggestion, Cloud SQL PostgreSQL regional HA on a private IP, Vertex AI in-region, a daily Cloud Run job into a CMEK lake](Docs/Costs/gcp-target/architecture.png)

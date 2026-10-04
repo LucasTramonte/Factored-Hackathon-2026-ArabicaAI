@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="940" viewBox="0 0 1600 940" font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#414d5c"/></marker></defs>
+<rect width="1600" height="940" fill="#ffffff"/>
+<text x="40" y="44" font-size="24" font-weight="700" fill="#16191f">ArabicaAI intake: GCP production target</text>
+<text x="40" y="70" font-size="14" fill="#414d5c">Transaction-dispute intake (unrecognized charges, human handoff). Design only, never applied. The live prototype runs on Cloudflare Workers + D1.</text>
+<rect x="40" y="400" width="150" height="70" rx="8" fill="#f2f3f3" stroke="#232f3e" stroke-width="1.6"/>
+<text x="115.0" y="428.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">Customers</text>
+<text x="115.0" y="448.0" text-anchor="middle" font-size="12" fill="#414d5c">and agents (browser)</text>
+<rect x="220" y="250" width="250" height="380" rx="10" fill="#f7f3ff" stroke="#8c4fff" stroke-width="2"/>
+<text x="234" y="272" font-size="14" font-weight="700" fill="#8c4fff">Global edge</text>
+<rect x="245" y="300" width="200" height="100" rx="8" fill="#ffffff" stroke="#232f3e" stroke-width="1.6"/>
+<text x="345.0" y="343.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">External HTTPS LB</text>
+<text x="345.0" y="363.0" text-anchor="middle" font-size="12" fill="#414d5c">one global IP · managed TLS</text>
+<text x="345.0" y="378.0" text-anchor="middle" font-size="12" fill="#414d5c">/api/* → Cloud Run</text>
+<text x="345.0" y="393.0" text-anchor="middle" font-size="12" fill="#414d5c">else → bucket + Cloud CDN</text>
+<rect x="245" y="470" width="200" height="110" rx="8" fill="#ffffff" stroke="#232f3e" stroke-width="1.6" stroke-dasharray="5 4"/>
+<text x="345.0" y="518.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">Cloud Armor</text>
+<text x="345.0" y="538.0" text-anchor="middle" font-size="12" fill="#414d5c">OWASP SQLi + XSS rules</text>
+<text x="345.0" y="553.0" text-anchor="middle" font-size="12" fill="#414d5c">per-IP rate limit on /api/*</text>
+<line x1="345" y1="470" x2="345" y2="402" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="395" y="440" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">inspects</text>
+<line x1="190" y1="435" x2="243" y2="360" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)"/>
+<rect x="500" y="100" width="1070" height="800" rx="10" fill="#fbfbfb" stroke="#1a73e8" stroke-width="2"/>
+<text x="514" y="122" font-size="14" font-weight="700" fill="#1a73e8">Google Cloud · us-central1 (Iowa)</text>
+<rect x="530" y="150" width="190" height="80" rx="8" fill="#ffffff" stroke="#232f3e" stroke-width="1.6"/>
+<text x="625.0" y="183.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">Cloud Storage · site</text>
+<text x="625.0" y="203.0" text-anchor="middle" font-size="12" fill="#414d5c">Angular build</text>
+<text x="625.0" y="218.0" text-anchor="middle" font-size="12" fill="#414d5c">served via Cloud CDN</text>
+<line x1="445" y1="330" x2="528" y2="195" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="478" y="250" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">static files</text>
+<rect x="760" y="150" width="560" height="720" rx="10" fill="#f4fbf1" stroke="#188038" stroke-width="2"/>
+<text x="774" y="172" font-size="14" font-weight="700" fill="#188038">VPC · Private Google Access · no NAT</text>
+<rect x="780" y="190" width="520" height="440" rx="8" fill="none" stroke="#188038" stroke-width="1.2" stroke-dasharray="4 4"/>
+<text x="792" y="210" font-size="12" fill="#188038">Private subnet · Direct VPC egress · regional (2 zones)</text>
+<rect x="530" y="390" width="190" height="100" rx="8" fill="#ffffff" stroke="#232f3e" stroke-width="1.6"/>
+<text x="625.0" y="433.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">Cloud Run · API</text>
+<text x="625.0" y="453.0" text-anchor="middle" font-size="12" fill="#414d5c">Node 22 · 1 vCPU · 512 MiB</text>
+<text x="625.0" y="468.0" text-anchor="middle" font-size="12" fill="#414d5c">ingress: load balancer only</text>
+<text x="625.0" y="483.0" text-anchor="middle" font-size="12" fill="#414d5c">0–10 instances</text>
+<line x1="445" y1="370" x2="528" y2="430" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="480" y="392" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">/api/*</text>
+<rect x="1070" y="250" width="210" height="110" rx="8" fill="#fff7ec" stroke="#232f3e" stroke-width="1.6"/>
+<text x="1175.0" y="298.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">Cloud SQL PostgreSQL</text>
+<text x="1175.0" y="318.0" text-anchor="middle" font-size="12" fill="#414d5c">db-g1-small · regional HA</text>
+<text x="1175.0" y="333.0" text-anchor="middle" font-size="12" fill="#414d5c">20 GB SSD · IAM auth</text>
+<text x="1175.0" y="348.0" text-anchor="middle" font-size="12" fill="#414d5c">PITR 7 days · private IP</text>
+<rect x="800" y="470" width="200" height="100" rx="8" fill="#eef6ff" stroke="#232f3e" stroke-width="1.6"/>
+<text x="900.0" y="513.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">Cloud Tasks</text>
+<text x="900.0" y="533.0" text-anchor="middle" font-size="12" fill="#414d5c">suggestion queue</text>
+<text x="900.0" y="548.0" text-anchor="middle" font-size="12" fill="#414d5c">5/s cap · 1 retry</text>
+<text x="900.0" y="563.0" text-anchor="middle" font-size="12" fill="#414d5c">after the reference</text>
+<polyline points="720,420 900,420 900,330 1068,330" fill="none" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="985" y="322" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">IAM auth</text>
+<line x1="720" y1="465" x2="798" y2="505" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="760" y="500" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">enqueue</text>
+<text x="760" y="514" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">after commit</text>
+<polyline points="900,572 900,610 625,610 625,492" fill="none" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="760" y="604" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">calls internal route (OIDC)</text>
+<rect x="780" y="660" width="520" height="190" rx="8" fill="none" stroke="#188038" stroke-width="1.2" stroke-dasharray="4 4"/>
+<text x="792" y="680" font-size="12" fill="#188038">Batch · Cloud Run job, no inbound</text>
+<rect x="1000" y="710" width="280" height="110" rx="8" fill="#eef6ff" stroke="#232f3e" stroke-width="1.6"/>
+<text x="1140.0" y="758.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">Cloud Run job · daily batch</text>
+<text x="1140.0" y="778.0" text-anchor="middle" font-size="12" fill="#414d5c">DuckDB: Bronze → Silver → quality → Gold</text>
+<text x="1140.0" y="793.0" text-anchor="middle" font-size="12" fill="#414d5c">2 vCPU · 4 GiB · about 15 min/day</text>
+<polyline points="1265,708 1265,600 1292,600 1292,320 1282,320" fill="none" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)"/>
+<text x="1175" y="598" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">loads the serving slice</text>
+<text x="1175" y="612" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">(IAM auth)</text>
+<rect x="1350" y="470" width="190" height="100" rx="8" fill="#eef6ff" stroke="#232f3e" stroke-width="1.6"/>
+<text x="1445.0" y="513.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">Vertex AI</text>
+<text x="1445.0" y="533.0" text-anchor="middle" font-size="12" fill="#414d5c">Gemini 2.5 Flash-Lite</text>
+<text x="1445.0" y="548.0" text-anchor="middle" font-size="12" fill="#414d5c">regional · us-central1</text>
+<text x="1445.0" y="563.0" text-anchor="middle" font-size="12" fill="#414d5c">extracts facts only</text>
+<polyline points="690,492 690,645 1445,645 1445,572" fill="none" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)" stroke-dasharray="6 5"/>
+<text x="1080" y="639" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">model call (from the task route) · Private Google Access</text>
+<rect x="1350" y="710" width="190" height="90" rx="8" fill="#ffffff" stroke="#232f3e" stroke-width="1.6"/>
+<text x="1445.0" y="748.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">Cloud Storage · lake</text>
+<text x="1445.0" y="768.0" text-anchor="middle" font-size="12" fill="#414d5c">Bronze/Silver/Gold Parquet</text>
+<text x="1445.0" y="783.0" text-anchor="middle" font-size="12" fill="#414d5c">CMEK · Silver/Gold kept 7 days</text>
+<line x1="1280" y1="765" x2="1348" y2="765" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)"/>
+<rect x="800" y="740" width="170" height="70" rx="8" fill="#ffffff" stroke="#232f3e" stroke-width="1.6"/>
+<text x="885.0" y="768.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">Cloud Scheduler</text>
+<text x="885.0" y="788.0" text-anchor="middle" font-size="12" fill="#414d5c">daily</text>
+<line x1="970" y1="775" x2="998" y2="775" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)"/>
+<rect x="1350" y="150" width="190" height="90" rx="8" fill="#ffffff" stroke="#232f3e" stroke-width="1.6"/>
+<text x="1445.0" y="188.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">Cloud Logging</text>
+<text x="1445.0" y="208.0" text-anchor="middle" font-size="12" fill="#414d5c">references only</text>
+<text x="1445.0" y="223.0" text-anchor="middle" font-size="12" fill="#414d5c">30-day retention · alerts</text>
+<rect x="1350" y="290" width="190" height="90" rx="8" fill="#ffffff" stroke="#232f3e" stroke-width="1.6"/>
+<text x="1445.0" y="328.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">Cloud KMS</text>
+<text x="1445.0" y="348.0" text-anchor="middle" font-size="12" fill="#414d5c">one customer key</text>
+<text x="1445.0" y="363.0" text-anchor="middle" font-size="12" fill="#414d5c">SQL · lake (CMEK)</text>
+<polyline points="700,388 700,245 740,245 740,135 1330,135 1330,195 1348,195" fill="none" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)" stroke-dasharray="6 5"/>
+<text x="1040" y="129" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">structured logs</text>
+<text x="40" y="918" font-size="13" fill="#414d5c">Estimated $90.09/month at list price (Cloud Billing Catalog, us-central1, read 2026-10-04, free tiers not applied). Same volumes as the AWS target. Sizing and comparison: README.md here. Source: main.tf.</text>
+</svg>
