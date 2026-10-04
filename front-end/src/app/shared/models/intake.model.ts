@@ -131,9 +131,42 @@ export interface AgentIntakeDetail extends AgentIntake {
   first_opened_at: string;
   /** Up to 20 other acknowledged reports in the newest 21 episodes; has_more means the window may omit older reports. */
   customer_history: { reports: number; open: number; high_urgency: number; last_status: HandoffStatus | null; last_accepted_at: string | null; has_more: boolean };
-  /** Whether a model read the case in shadow: version and call count only, never its output; it decides nothing. */
-  model_reading: { mode: 'off' | 'shadow'; model_version: string | null; llm_calls: number };
+  /** Whether a model read the customer's details to suggest charges (ADR-012): version and call count only; it decides nothing. */
+  model_reading: { mode: 'off' | 'suggestion'; model_version: string | null; llm_calls: number };
+  /** The customer's answer to a suggestion: a charge they confirmed, or none. A suggestion, never bank-verified evidence. */
+  customer_suggestion: CustomerSuggestion | null;
   scope: 'synthetic_demo_only';
+}
+
+/** One of the customer's own charges as stored, offered as a suggestion (contract ``suggestedCharge``). */
+export type SuggestedCharge = Transaction;
+export type SuggestionAnswer = 'confirmed' | 'none';
+/** GET /intake/handoff/{reference}/suggestions (contract ``suggestionList``). */
+export interface SuggestionList {
+  status: 'pending' | 'none' | 'suggested';
+  items: SuggestedCharge[];
+  choice: SuggestionAnswer | null;
+  chosen_transaction_id: string | null;
+}
+/** POST /intake/handoff/{reference}/suggestions/confirm (contract ``suggestionChoice``). */
+export interface SuggestionChoice {
+  choice: SuggestionAnswer;
+  transaction_id: string | null;
+  chosen_at: string;
+}
+export type SuggestionMarkValue = 'correct' | 'wrong';
+/** The agent detail's view of a customer's answer to a suggestion (contract ``agentIntakeDetail.customer_suggestion``). */
+export interface CustomerSuggestion {
+  choice: SuggestionAnswer;
+  verified_by_bank: false;
+  mark: SuggestionMarkValue | null;
+  transaction: SuggestedCharge | null;
+}
+/** POST /agent/suggestion-mark (contract ``suggestionMark``). */
+export interface SuggestionMark {
+  protocol: string;
+  mark: SuggestionMarkValue;
+  marked_at: string;
 }
 
 // Guided intake (W5 fe-intake-chat): POST /demo/session context card and the /intake/* bodies and receipts.

@@ -294,6 +294,27 @@
                     </div>
                   </div>
                 }
+                @if (suggestionList(); as s) {
+                  <section class="ar-panel suggestions" id="suggestions" aria-labelledby="suggestions-title">
+                    <h4 id="suggestions-title">{{ t().suggestTitle }}</h4>
+                    @if (!suggestionAnswer()) {
+                      <p class="ar-small">{{ t().suggestIntro }}</p>
+                      <ul class="suggestion-list">
+                        @for (c of s.items; track c.transaction_id) {
+                          <li>
+                            <span class="suggestion-charge"><span>{{ c.merchant_name || t().noMerchant }}</span> <span class="ar-small">{{ chargeWhen(c) }}</span>
+                              <span class="ar-amount">{{ c.amount }} {{ c.currency }}</span></span>
+                            <button type="button" class="ar-btn ar-btn-sm suggestion-pick" (click)="answerSuggestion(c.transaction_id)" [attr.aria-disabled]="suggestionSending()" [attr.aria-label]="suggestionLabel(c)">{{ t().suggestPick }}</button>
+                          </li>
+                        }
+                      </ul>
+                      <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm suggestion-none" (click)="answerSuggestion(null)" [attr.aria-disabled]="suggestionSending()">{{ t().suggestNone }}</button>
+                      @if (suggestionFailed()) { <p class="ar-small" role="alert">{{ t().suggestFailed }}</p> }
+                    }
+                    <p class="suggestion-thanks" role="status" tabindex="-1">{{ suggestionAnswer() === 'confirmed' ? t().suggestThanksConfirmed : suggestionAnswer() === 'none' ? t().suggestThanksNone : '' }}</p>
+                  </section>
+                }
+                <p class="sr-only suggestion-announce" aria-live="polite">{{ suggestionList() && !suggestionAnswer() ? t().suggestFound : '' }}</p>
                 <div class="report-actions chat-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="newReport()">{{ t().chatNew }}</button></div>
               }
               @case ('ended') {

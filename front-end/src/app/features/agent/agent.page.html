@@ -106,6 +106,34 @@
 
           <p id="model-reading" class="status-line">{{ modelLine(d) }}</p>
 
+          @if (d.customer_suggestion; as cs) {
+            <section id="customer-suggestion" class="ar-panel ar-panel-warn" aria-labelledby="customer-suggestion-title">
+              <h3 id="customer-suggestion-title"><span class="ar-chip ar-chip-warn">{{ t().suggestionHeading }}</span></h3>
+              @if (cs.choice === 'confirmed' && cs.transaction; as tx) {
+                <p class="ar-small">{{ t().suggestionNotVerified }}</p>
+                <dl class="detail-meta">
+                  <div><dt>{{ t().transactionId }}</dt><dd class="ar-mono">{{ tx.transaction_id }}</dd></div>
+                  <div><dt>{{ t().merchant }}</dt><dd>{{ tx.merchant_name || t().noMerchant }}</dd></div>
+                  <div><dt>{{ t().amount }}</dt><dd class="ar-amount">{{ tx.amount }} {{ tx.currency }}</dd></div>
+                  <div><dt>{{ t().date }}</dt><dd>
+                    @if (tx.source_occurred_at) { {{ sourceTime(tx.source_occurred_at) }} ({{ t().tzMissing }}) }
+                    @else if (tx.occurred_at) { {{ tx.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }} }
+                    @else { {{ t().dateMissing }} }
+                  </dd></div>
+                </dl>
+                <div class="mark-bar" role="group" [attr.aria-label]="t().suggestionMarkQuestion">
+                  @if (!cs.mark) {
+                    <span>{{ t().suggestionMarkQuestion }}</span>
+                    <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm mark-correct" (click)="mark(d, 'correct')" [disabled]="marking()">{{ t().suggestionMarkCorrect }}</button>
+                    <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm mark-wrong" (click)="mark(d, 'wrong')" [disabled]="marking()">{{ t().suggestionMarkWrong }}</button>
+                    @if (markFailed()) { <span class="ar-small" role="alert">{{ t().suggestionMarkFailed }}</span> }
+                  }
+                  <span #markStatus class="mark-status" role="status" tabindex="-1">{{ cs.mark === 'correct' ? t().suggestionMarkedCorrect : cs.mark === 'wrong' ? t().suggestionMarkedWrong : '' }}</span>
+                </div>
+              } @else { <p class="status-line">{{ t().suggestionNoneChosen }}</p> }
+            </section>
+          }
+
           <h3>{{ t().statement }}</h3>
           <p class="case-statement" [attr.lang]="d.language">{{ d.customer_statement }}</p>
 

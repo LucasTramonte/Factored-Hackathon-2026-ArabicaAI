@@ -8,7 +8,7 @@ import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
-  REASONS, REASON_LABEL, Reason, Report, ReportList, Transaction } from '../../shared/models/intake.model';
+  REASONS, REASON_LABEL, Reason, Report, ReportList, SuggestedCharge, SuggestionAnswer, SuggestionList, Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { AgentService } from '../agent/agent.service';
@@ -34,6 +34,8 @@ type Frozen = { path: 'start'; body: IntakeStartBody } | { path: 'confirm'; body
 
 /** FAQ question → fixed answer. Only the dispute process; nothing is answered from free text. */
 export const FAQ = { faqNextQ: 'faqNextA', faqTimeQ: 'faqTimeA', faqMissingQ: 'faqMissingA' } as const;
+/** After a receipt for "I can't find it" with details, how long the client waits for suggestions (ADR-012). */
+export const SUGGESTION_WAIT_MS = 15000;
 /** Receipt title per server-decided kind. */
 const RECEIPT_TITLE = { complete: 'receiptComplete', incomplete: 'receiptIncomplete', technical: 'receiptTechnical' } as const;
 /** Reason → its one-line statement, filled in the report language. ``other`` has none. */
@@ -98,6 +100,16 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly feedbackRecorded = signal(false);
   readonly feedbackSending = signal(false);
   readonly feedbackFailed = signal(false);
+  /** Charges the service suggests for an "I can't find it" receipt (ADR-012), or null when there are none (yet). */
+  readonly suggestionList = signal<SuggestionList | null>(null);
+  /** The customer's stored answer to the suggestions; nothing is closed or decided by it. */
+  readonly suggestionAnswer = signal<SuggestionAnswer | null>(null);
+  readonly suggestionSending = signal(false);
+  readonly suggestionFailed = signal(false);
+  /** Milliseconds between suggestion checks; a test seam. */
+  suggestionPollMs = 1500;
+  /** Each watch gets a number; a newer receipt, a new report or leaving the page stops the older one. */
+  private suggestionWatch = 0;
   readonly ended = signal(false);
   readonly chatError = signal('');
   readonly log = signal<ChatLine[]>([{ from: 'bot', key: 'chatHello' }]);
@@ -217,6 +229,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     clearTimeout(this.introTimer);
     if (this.narrowQuery) this.narrowQuery.onchange = null;
     this.cognito.forget();
+    this.suggestionWatch++;
   }
 
   start(): void {
@@ -689,6 +702,11 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.feedbackRecorded.set(false);
     this.feedbackSending.set(false);
     this.feedbackFailed.set(false);
+    this.suggestionWatch++;
+    this.suggestionList.set(null);
+    this.suggestionAnswer.set(null);
+    this.suggestionSending.set(false);
+    this.suggestionFailed.set(false);
     this.ended.set(false);
     this.asking.set(false);
     this.chatError.set('');
@@ -747,6 +765,8 @@ export class CustomerPage implements OnInit, OnDestroy {
         this.log.update(l => [...l, { from: 'bot', key: 'chatChoose' }]);
       } else {
         this.intakeReceipt.set(result as IntakeReceipt);
+        // Only "I can't find it" with what the customer remembers can get suggestions; the receipt never waits for them.
+        if (frozen.path === 'handoff' && frozen.body.details && (result as IntakeReceipt).kind === 'incomplete') void this.watchSuggestions(result as IntakeReceipt);
         await this.loadReports();
         void this.loadAlert(); // a report on the flagged charge ends its alert
       }
@@ -762,6 +782,64 @@ export class CustomerPage implements OnInit, OnDestroy {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /**
+   * Check for suggestions for at most ``SUGGESTION_WAIT_MS`` after the receipt, then stop. Shown only for the receipt
+   * they belong to and only while unanswered; any failure simply shows nothing (the report already reached a person).
+   */
+  private async watchSuggestions(receipt: IntakeReceipt): Promise<void> {
+    const watch = ++this.suggestionWatch;
+    const until = Date.now() + SUGGESTION_WAIT_MS;
+    const current = () => watch === this.suggestionWatch && this.intakeReceipt() === receipt;
+    for (;;) {
+      let list: SuggestionList;
+      try { list = await this.service.suggestions(receipt.protocol); } catch { return; }
+      if (!current()) return;
+      if (list.status === 'suggested' && list.items.length) {
+        this.suggestionList.set(list);
+        this.suggestionAnswer.set(list.choice);
+        return;
+      }
+      if (list.status !== 'pending' || Date.now() + this.suggestionPollMs > until) return;
+      await new Promise(done => setTimeout(done, this.suggestionPollMs));
+      if (!current()) return;
+    }
+  }
+
+  /** The customer's one answer: a suggested charge, or none of them (null). A 409 means an answer is already stored. */
+  async answerSuggestion(transactionId: string | null): Promise<void> {
+    const receipt = this.intakeReceipt();
+    if (!receipt || !this.suggestionList() || this.suggestionAnswer() || this.suggestionSending()) return;
+    this.suggestionSending.set(true);
+    this.suggestionFailed.set(false);
+    try {
+      const stored = await this.service.answerSuggestions(receipt.protocol, transactionId);
+      if (this.intakeReceipt() !== receipt) return;
+      this.suggestionAnswer.set(stored.choice);
+    } catch (e) {
+      if (this.intakeReceipt() !== receipt) return;
+      if (e instanceof ApiError && e.status === 409) this.suggestionAnswer.set(transactionId ? 'confirmed' : 'none');
+      else this.suggestionFailed.set(true);
+    } finally {
+      if (this.intakeReceipt() === receipt) {
+        this.suggestionSending.set(false);
+        // The buttons are gone once answered: keep keyboard and screen-reader users on the confirmation.
+        if (this.suggestionAnswer()) afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('.suggestion-thanks')?.focus(), { injector: this.injector });
+      }
+    }
+  }
+
+  /** When a suggested charge happened, as served: the timezone-free source time, else the UTC instant. */
+  chargeWhen(c: SuggestedCharge): string {
+    if (c.source_occurred_at) return this.sourceTime(c.source_occurred_at);
+    return c.occurred_at ? c.occurred_at.slice(0, 16).replace('T', ' ') + ' ' + this.t().utc : this.t().dateMissing;
+  }
+
+  /** The pick button's accessible name names the charge, since every button reads the same. */
+  suggestionLabel(c: SuggestedCharge): string {
+    return this.t().suggestPickLabel.replace('{merchant}', () => c.merchant_name || this.t().noMerchant).replace('{date}', () => this.chargeWhen(c))
+      .replace('{amount}', () => `${c.amount} ${c.currency}`);
   }
 
   private call(f: Frozen): Promise<IntakeStart | IntakeReceipt> {

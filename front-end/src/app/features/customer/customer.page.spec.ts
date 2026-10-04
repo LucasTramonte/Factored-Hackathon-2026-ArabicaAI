@@ -18,7 +18,9 @@ describe('CustomerPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed', 'sendFeedback'], { client: signal(''), card: signal(null), roles: signal([]) });
+      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed', 'sendFeedback', 'suggestions', 'answerSuggestions'],
+      { client: signal(''), card: signal(null), roles: signal([]) });
+    service.suggestions.and.resolveTo({ status: 'none', items: [], choice: null, chosen_transaction_id: null });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null, roles: ['customer'] });
@@ -660,6 +662,125 @@ describe('CustomerPage', () => {
       expect(page.log().at(-1)).toEqual({ from: 'me', text: 'Unos 50 euros el martes, en una tienda de ropa.' });
       expect(page.receiptTitle()).toBe(lang.t().receiptIncomplete);
       expect(page.identityLocked()).toBeFalse();
+    });
+
+    describe('suggestions on "I can\'t find it" (ADR-012)', () => {
+      const charge: Transaction = { transaction_id: 'demo-tx-001', merchant_name: 'Mercado Demo', occurred_at: '2026-09-25T14:00:00+00:00', source_occurred_at: null, amount: '125.50', currency: 'BRL' };
+      const other: Transaction = { transaction_id: 'demo-tx-004', merchant_name: '', occurred_at: null, source_occurred_at: '2026-09-27T10:30:00', amount: '47.30', currency: 'BRL' };
+      const incomplete: IntakeReceipt = { ...intakeReceipt, kind: 'incomplete', actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'] };
+      const pending = { status: 'pending' as const, items: [], choice: null, chosen_transaction_id: null };
+      const shown = { status: 'suggested' as const, items: [charge, other], choice: null, chosen_transaction_id: null };
+      const settle = () => new Promise(r => setTimeout(r, 20));
+
+      beforeEach(() => { page.suggestionPollMs = 1; });
+
+      it('checks after the receipt until the service has read the details, then offers its charges; the receipt never waits', async () => {
+        service.suggestions.and.returnValues(Promise.resolve(pending), Promise.resolve(pending), Promise.resolve(shown));
+        service.handoffIntake.and.resolveTo(incomplete);
+        await startEpisode();
+        await review();
+        expect(page.chatStep()).toBe('receipt');
+        await settle();
+        expect(service.suggestions.calls.allArgs()).toEqual([[incomplete.protocol], [incomplete.protocol], [incomplete.protocol]]);
+        expect(page.suggestionList()?.items.map(c => c.transaction_id)).toEqual(['demo-tx-001', 'demo-tx-004']);
+      });
+
+      it('never checks without details or for another kind of receipt, and shows nothing for none', async () => {
+        service.handoffIntake.and.resolveTo(incomplete);
+        await startEpisode();
+        service.startIntake.and.resolveTo(started);
+        page.chatStatement = 'x'.repeat(1991); // no room left for details: the handoff goes without the question
+        page.newReport(); page.reason.set('not_mine'); page.chatStatement = 'x'.repeat(1991); await page.send();
+        await page.cannotFind();
+        await settle();
+        expect(service.suggestions).not.toHaveBeenCalled();
+        page.newReport(); await startEpisode();
+        service.confirmIntake.and.resolveTo(intakeReceipt);
+        page.choice = 'demo-tx-001'; page.chatConfirmed = true; await page.confirmCharge();
+        await settle();
+        expect(service.suggestions).not.toHaveBeenCalled();
+        page.newReport(); await startEpisode(); await review(); await settle();
+        expect(service.suggestions).toHaveBeenCalledTimes(1);
+        expect(page.suggestionList()).toBeNull();
+      });
+
+      it('stops checking after about 15 seconds, and a new report stops a watch in flight', async () => {
+        service.suggestions.and.resolveTo(pending);
+        service.handoffIntake.and.resolveTo(incomplete);
+        await startEpisode();
+        let clock = 1_000_000;
+        spyOn(Date, 'now').and.callFake(() => clock += 4000);
+        await review();
+        await settle();
+        const calls = service.suggestions.calls.count();
+        expect(calls).toBeGreaterThan(0);
+        expect(calls).toBeLessThanOrEqual(4);
+        expect(page.suggestionList()).toBeNull();
+        (Date.now as jasmine.Spy).and.callThrough();
+        let answer!: (l: typeof shown) => void;
+        service.suggestions.and.returnValue(new Promise(r => answer = r));
+        page.newReport(); await startEpisode(); await review();
+        page.newReport();
+        answer(shown); await settle();
+        expect(page.suggestionList()).toBeNull();
+      });
+
+      it('picking a charge sends only its id, once; "none of these" sends none; a 409 or a failure behaves', async () => {
+        service.suggestions.and.resolveTo(shown);
+        service.handoffIntake.and.resolveTo(incomplete);
+        await startEpisode(); await review(); await settle();
+        service.answerSuggestions.and.resolveTo({ choice: 'confirmed', transaction_id: 'demo-tx-004', chosen_at: '2026-10-04T12:00:00.000Z' });
+        await page.answerSuggestion('demo-tx-004');
+        await page.answerSuggestion(null);
+        expect(service.answerSuggestions.calls.allArgs()).toEqual([[incomplete.protocol, 'demo-tx-004']]);
+        expect(page.suggestionAnswer()).toBe('confirmed');
+        page.newReport(); await startEpisode(); await review(); await settle();
+        expect([page.suggestionAnswer(), page.suggestionFailed()]).toEqual([null, false]);
+        service.answerSuggestions.and.rejectWith(new ApiError(503, 'x'));
+        await page.answerSuggestion(null);
+        expect([page.suggestionAnswer(), page.suggestionFailed()]).toEqual([null, true]);
+        service.answerSuggestions.and.rejectWith(new ApiError(409, 'x'));
+        await page.answerSuggestion(null);
+        expect([page.suggestionAnswer(), page.suggestionFailed()]).toEqual(['none', false]);
+        expect(service.answerSuggestions.calls.mostRecent().args).toEqual([incomplete.protocol, null]);
+      });
+
+      it('renders each charge with its own named pick button and "none of these", announces them politely, then thanks with focus', async () => {
+        service.suggestions.and.resolveTo(shown);
+        service.handoffIntake.and.resolveTo(incomplete);
+        const fixture = TestBed.createComponent(CustomerPage);
+        const p = fixture.componentInstance;
+        p.suggestionPollMs = 1;
+        p.identity = 'demo-ana'; await p.login(); p.openChat();
+        service.startIntake.and.resolveTo(started);
+        p.chatStatement = 'No reconozco este cargo.'; p.reason.set('not_mine'); await p.send();
+        p.cannotFind(); p.chatDetails = 'Lembro só do mercado, uns 125 reais.'; await p.handoff();
+        await settle(); fixture.detectChanges(); await fixture.whenStable();
+        const el = fixture.nativeElement as HTMLElement;
+        for (const code of ['es', 'pt', 'en'] as const) {
+          lang.set(code); fixture.detectChanges();
+          const box = el.querySelector<HTMLElement>('#suggestions')!;
+          expect(box.querySelector('h4')!.textContent!.trim()).toBe(p.t().suggestTitle);
+          expect(box.getAttribute('aria-labelledby')).toBe('suggestions-title');
+          const picks = [...box.querySelectorAll<HTMLButtonElement>('.suggestion-pick')];
+          expect(picks.map(b => b.getAttribute('aria-label'))).toEqual([
+            p.t().suggestPickLabel.replace('{merchant}', 'Mercado Demo').replace('{date}', '2026-09-25 14:00 ' + p.t().utc).replace('{amount}', '125.50 BRL'),
+            p.t().suggestPickLabel.replace('{merchant}', p.t().noMerchant).replace('{date}', '2026-09-27 10:30:00').replace('{amount}', '47.30 BRL')]);
+          expect(picks.every(b => b.type === 'button' && b.textContent!.trim() === p.t().suggestPick)).toBeTrue();
+          expect(box.querySelector('.suggestion-none')!.textContent!.trim()).toBe(p.t().suggestNone);
+          const live = el.querySelector('.suggestion-announce')!;
+          expect([live.getAttribute('aria-live'), live.textContent!.trim()]).toEqual(['polite', p.t().suggestFound]);
+        }
+        service.answerSuggestions.and.resolveTo({ choice: 'none', transaction_id: null, chosen_at: '2026-10-04T12:00:00.000Z' });
+        el.querySelector<HTMLButtonElement>('.suggestion-none')!.click();
+        await fixture.whenStable(); fixture.detectChanges(); await fixture.whenStable();
+        expect(el.querySelectorAll('#suggestions button').length).toBe(0);
+        const thanks = el.querySelector<HTMLElement>('.suggestion-thanks')!;
+        expect([thanks.getAttribute('role'), thanks.textContent!.trim()]).toEqual(['status', p.t().suggestThanksNone]);
+        expect(document.activeElement).toBe(thanks);
+        expect(el.querySelector('.suggestion-announce')!.textContent!.trim()).toBe('');
+        lang.set('es');
+      });
     });
 
     it('the details field cannot outgrow the statement column, and with no room left the handoff goes without the question', async () => {
