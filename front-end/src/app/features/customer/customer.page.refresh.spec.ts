@@ -15,7 +15,7 @@ describe('Customer bounded refresh', () => {
     visible = 'visible'; online = true;
     spyOnProperty(document, 'visibilityState', 'get').and.callFake(() => visible);
     spyOnProperty(navigator, 'onLine', 'get').and.callFake(() => online);
-    service = jasmine.createSpyObj<CustomerService>('CustomerService', ['signIn', 'transactions', 'reports', 'alert', 'identities', 'displayed', 'messages', 'logout'],
+    service = jasmine.createSpyObj<CustomerService>('CustomerService', ['signIn', 'transactions', 'reports', 'alert', 'identities', 'displayed', 'messages', 'postMessage', 'logout'],
       { client: signal(''), card: signal(null), roles: signal([]) });
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', roles: ['customer'], mode: 'simulated_login' });
     service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
@@ -163,5 +163,33 @@ describe('Customer bounded refresh', () => {
     const fixture = TestBed.createComponent(CustomerPage); fixture.detectChanges(); const page = fixture.componentInstance; page.identity = 'demo-ana'; void page.login(); fixture.destroy();
     signedIn({ customer_id: 'demo-ana', roles: ['customer'], mode: 'simulated_login' }); flushMicrotasks(); tick(60000); flushMicrotasks();
     expect(service.client()).toBe(''); expect(service.reports).not.toHaveBeenCalled();
+  }));
+
+  for (const resource of ['transactions', 'reports'] as const) for (const failed of [false, true]) it(`does not continue sign-in after destruction during initial ${resource} ${failed ? 'failure' : 'success'}`, fakeAsync(() => {
+    let settle!: () => void;
+    if (resource === 'transactions') service.transactions.and.returnValue(new Promise((resolve, reject) => settle = () => failed ? reject(new ApiError(503)) : resolve({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null })));
+    else service.reports.and.returnValue(new Promise((resolve, reject) => settle = () => failed ? reject(new ApiError(503)) : resolve({ items: [report], has_more: false })));
+    const fixture = TestBed.createComponent(CustomerPage); fixture.detectChanges(); const page = fixture.componentInstance; page.identity = 'demo-ana'; void page.login(); flushMicrotasks();
+    const count = service.reports.calls.count(); const step = page.step(); const error = page.error(); fixture.destroy(); settle(); flushMicrotasks(); tick(60000); flushMicrotasks();
+    expect(page.step()).toBe(step); expect(page.error()).toBe(error); expect(service.reports.calls.count()).toBe(count); expect(service.alert).not.toHaveBeenCalled();
+  }));
+
+  for (const resource of ['reports', 'messages'] as const) it(`retains the global ${resource}401 pause through close/reopen/switch until successful sign-in`, fakeAsync(() => {
+    const { fixture, page } = home(); void page.toggleMessages('P'); flushMicrotasks(); service[resource].and.rejectWith(new ApiError(401)); tick(30000); flushMicrotasks();
+    const reads = [service.reports.calls.count(), service.messages.calls.count()]; service.messages.and.resolveTo({ status: 'received', can_post: true, items: [] });
+    void page.toggleMessages('P'); void page.toggleMessages('P'); void page.toggleMessages('Q'); page.refreshReports(); window.dispatchEvent(new Event('focus')); flushMicrotasks(); tick(60000); flushMicrotasks();
+    expect([service.reports.calls.count(), service.messages.calls.count()]).toEqual(reads); expect(page.thread()).toBeNull();
+    service.reports.and.resolveTo({ items: [report], has_more: false }); void page.login(); flushMicrotasks(); tick(30000); flushMicrotasks();
+    expect(service.reports.calls.count()).toBeGreaterThan(reads[0]); expect(service.messages.calls.count()).toBeGreaterThan(reads[1]); expect(page.thread()?.status).toBe('received'); fixture.destroy();
+  }));
+
+  it('reads back a posted message after an earlier polling read settles without overlapping reads', fakeAsync(() => {
+    const { fixture, page } = home(); void page.toggleMessages('P'); flushMicrotasks();
+    let beforePost!: (value: MessageThread) => void; let outstanding = 1;
+    service.messages.and.returnValue(new Promise(resolve => beforePost = value => { outstanding--; resolve(value); })); tick(30000); flushMicrotasks();
+    const stored = { message_id: 'stored', author: 'customer' as const, body: 'Just posted details', created_at: '2026-10-04T12:00:00Z' }; service.postMessage.and.resolveTo(stored);
+    service.messages.and.callFake(() => { expect(outstanding).toBe(0); return Promise.resolve({ status: 'received', can_post: true, items: [stored] }); });
+    let finished = false; void page.sendMessage(stored.body).then(() => finished = true); flushMicrotasks(); expect(finished).toBeFalse(); expect(service.messages.calls.count()).toBe(2);
+    beforePost({ status: 'received', can_post: true, items: [] }); flushMicrotasks(); expect(finished).toBeTrue(); expect(page.thread()?.items).toEqual([stored]); expect(service.messages.calls.count()).toBe(3); fixture.destroy();
   }));
 });

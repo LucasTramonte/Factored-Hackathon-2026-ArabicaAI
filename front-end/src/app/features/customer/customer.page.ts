@@ -529,6 +529,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   private async enter(session: () => Promise<CustomerSession>, onError: (e: unknown) => void): Promise<void> {
     if (this.busy()) return;
     const generation = this.generation;
+    let acceptedGeneration = generation;
     this.busy.set(true);
     this.error.set('');
     try {
@@ -540,9 +541,12 @@ export class CustomerPage implements OnInit, OnDestroy {
         this.backToEmail();
         try {
           await this.service.logout();
+          if (acceptedGeneration !== this.generation) return;
           this.agent.roles.set([]); // logout also ended the agent session
         } catch (e) {
+          if (acceptedGeneration !== this.generation) return;
           this.reset();
+          acceptedGeneration = this.generation;
           this.fail(e);
           return;
         }
@@ -550,6 +554,7 @@ export class CustomerPage implements OnInit, OnDestroy {
         return;
       }
       if (s.customer_id !== this.client()) this.reset();
+      acceptedGeneration = this.generation;
       this.card.set(s.context_card ?? null);
       this.client.set(s.customer_id);
       this.roles.set(s.roles);
@@ -557,17 +562,20 @@ export class CustomerPage implements OnInit, OnDestroy {
       this.codeSent.set(false);
       this.code = '';
       await this.loadTransactions();
+      if (acceptedGeneration !== this.generation) return;
       await this.loadReports();
+      if (acceptedGeneration !== this.generation) return;
       this.step.set('home');
       this.scheduleReports();
+      this.scheduleThread();
       const g = this.generation;
       void this.loadAlert().then(() => {
         if (g === this.generation) afterNextRender(() => { if (g === this.generation) this.offerTour(); }, { injector: this.injector });
       });
     } catch (e) {
-      onError(e);
+      if (acceptedGeneration === this.generation) onError(e);
     } finally {
-      this.busy.set(false);
+      if (acceptedGeneration === this.generation) this.busy.set(false);
     }
   }
 
@@ -680,6 +688,7 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Never throws; failures keep the last confirmed snapshot and back off. */
   private loadReports(): Promise<void> {
+    if (this.refreshUnauthorized) return Promise.resolve();
     if (this.reportRead) return this.reportRead;
     clearTimeout(this.reportTimer);
     const g = this.generation, controller = this.reportAbort = new AbortController();
@@ -714,6 +723,7 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Only the exact open-thread instance may update its snapshot, including close/reopen of one report. */
   private loadThread(): Promise<void> {
+    if (this.refreshUnauthorized) return Promise.resolve();
     if (this.threadRead) return this.threadRead;
     const protocol = this.openThread();
     if (!protocol) return Promise.resolve();
@@ -815,6 +825,9 @@ export class CustomerPage implements OnInit, OnDestroy {
     } finally {
       if (this.messageSending() === protocol) this.messageSending.set(null);
     }
+    if (!stillOpen()) return;
+    // A poll begun before the post may hold an older snapshot; settle it before the authoritative read-back.
+    await this.threadRead;
     if (!stillOpen()) return;
     await this.loadThread();
   }
