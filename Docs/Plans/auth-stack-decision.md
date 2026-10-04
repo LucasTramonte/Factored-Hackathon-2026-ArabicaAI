@@ -15,12 +15,11 @@ The challenge requirement is explicit: authentication must be demonstrated with 
 
 ## 1) Current state assessment
 
-The repo already has a simulated session architecture and a team access gate:
+The repo has a simulated session architecture and customer authorization flow:
 
-- [back-end/src/auth/access-gate.js](../../back-end/src/auth/access-gate.js): HTTP Basic gate for team access.
 - [back-end/src/auth/session.js](../../back-end/src/auth/session.js): session generation and validation via cookie, with the token hash stored in D1 using SHA-256.
-- [back-end/src/router.js](../../back-end/src/router.js): applies the gate before routing requests.
-- [back-end/src/modules/customer/routes.js](../../back-end/src/modules/customer/routes.js): the login flow accepts a `customer_id` from the request body, but real access to transactions and cases depends on the authenticated session.
+- [back-end/src/router.js](../../back-end/src/router.js): applies authentication checks before routing requests.
+- [back-end/src/modules/customer/routes.js](../../back-end/src/modules/customer/routes.js): the login flow accepts a `customer_id` from the request body, but access to transactions and cases depends on the authenticated session.
 
 This is a good demo foundation, but it is not real banking authentication. The main security risk is:
 
@@ -47,7 +46,7 @@ The risk is not that the app will “crash a system,” but that trust and autho
 
 - if any endpoint accepts a customer via `body.customer_id` and uses it directly as identity, it enables spoofing;
 - if the API exposes a global customer list without checking the current user’s session, it allows data leakage;
-- if the app allows anyone behind the team gate to act as any customer, it fails the challenge requirement.
+- if the app allows any authenticated user to act as any customer, it fails the challenge requirement.
 
 ### In the current context
 
@@ -373,7 +372,7 @@ These fixes should exist in both Cloudflare and AWS.
 1. Any `customer_id` coming from the request body cannot be treated as authenticated identity.
 2. Any route that lists customers or sensitive data without checking the user’s current session is an access leak.
 3. Any endpoint whose authorization depends on the customer value in the payload is unsafe.
-4. Team authentication (Basic gate / Cloudflare Access) does not replace customer identity.
+4. Team authentication does not replace customer identity.
 5. SES + Lambda alone are not enough for real authentication; they are useful for OTP and notification.
 
 ### Implementation TODOs before migration
