@@ -323,6 +323,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.destroyed = true;
     this.generation++;
     this.clearUpdates();
     this.stopRefresh();
@@ -649,31 +650,34 @@ export class CustomerPage implements OnInit, OnDestroy {
   private threadStarted = -Infinity;
   private threadWatch = 0;
   private refreshUnauthorized = false;
+  private destroyed = false;
+  private reportRetryAt = 0;
+  private threadRetryAt = 0;
 
   private canRefresh(): boolean {
-    return !!this.client() && this.step() === 'home' && document.visibilityState !== 'hidden' && navigator.onLine && !this.refreshUnauthorized;
+    return !this.destroyed && !!this.client() && this.step() === 'home' && document.visibilityState !== 'hidden' && navigator.onLine && !this.refreshUnauthorized;
   }
 
-  /** Coalesce tab-return and manual triggers with an outstanding or just completed read. */
-  refreshReports(): void {
+  /** Coalesce reads; passive events honor failure deadlines, while explicit Refresh can retry now. */
+  refreshReports(manual = true): void {
     if (!this.canRefresh()) return;
-    if (Date.now() - this.reportStarted >= 1000) void this.loadReports();
-    if (this.openThread() && Date.now() - this.threadStarted >= 1000) void this.loadThread();
+    if ((manual || Date.now() >= this.reportRetryAt) && Date.now() - this.reportStarted >= 1000) void this.loadReports();
+    if (this.openThread() && (manual || Date.now() >= this.threadRetryAt) && Date.now() - this.threadStarted >= 1000) void this.loadThread();
   }
 
   private readonly refreshVisibility = (): void => {
     clearTimeout(this.reportTimer); clearTimeout(this.threadTimer);
-    if (this.canRefresh()) { this.refreshReports(); this.scheduleReports(); this.scheduleThread(); }
+    if (this.canRefresh()) { this.refreshReports(false); this.scheduleReports(); this.scheduleThread(); }
   };
 
   private scheduleReports(): void {
     clearTimeout(this.reportTimer);
-    if (this.canRefresh() && !this.reportRead) this.reportTimer = this.zone.runOutsideAngular(() => setTimeout(() => void this.loadReports(), this.reportDelay));
+    if (this.canRefresh() && !this.reportRead) this.reportTimer = this.zone.runOutsideAngular(() => setTimeout(() => void this.loadReports(), this.reportRetryAt ? Math.max(0, this.reportRetryAt - Date.now()) : this.reportDelay));
   }
 
   private scheduleThread(): void {
     clearTimeout(this.threadTimer);
-    if (this.canRefresh() && this.openThread() && !this.threadRead) this.threadTimer = this.zone.runOutsideAngular(() => setTimeout(() => void this.loadThread(), this.threadDelay));
+    if (this.canRefresh() && this.openThread() && !this.threadRead) this.threadTimer = this.zone.runOutsideAngular(() => setTimeout(() => void this.loadThread(), this.threadRetryAt ? Math.max(0, this.threadRetryAt - Date.now()) : this.threadDelay));
   }
 
   /** Abort actual fetch and expire the UI read even if a transport never settles. */
@@ -691,7 +695,7 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Never throws; failures keep the last confirmed snapshot and back off. */
   private loadReports(): Promise<void> {
-    if (this.refreshUnauthorized) return Promise.resolve();
+    if (this.destroyed || this.refreshUnauthorized) return Promise.resolve();
     if (this.reportRead) return this.reportRead;
     clearTimeout(this.reportTimer);
     const g = this.generation, controller = this.reportAbort = new AbortController();
@@ -709,10 +713,10 @@ export class CustomerPage implements OnInit, OnDestroy {
               key: report.status === 'in_review' ? 'reportEnteredReview' as const : 'reportReviewFinished' as const }].slice(-20));
           }
         }
-        this.reports.set(list); this.reportsFailed.set(false); this.reportsChecked.set(Date.now()); this.reportDelay = 30000;
+        this.reports.set(list); this.reportsFailed.set(false); this.reportsChecked.set(Date.now()); this.reportDelay = 30000; this.reportRetryAt = 0;
       } catch (e) {
         if (g !== this.generation) return;
-        this.reportsFailed.set(true); this.reportDelay = Math.min(120000, this.reportDelay * 2);
+        this.reportsFailed.set(true); this.reportDelay = Math.min(120000, this.reportDelay * 2); this.reportRetryAt = Date.now() + this.reportDelay;
         if (e instanceof ApiError && e.status === 401) this.pauseUnauthorized();
       } finally {
         if (g === this.generation && this.reportAbort === controller) {
@@ -726,7 +730,11 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Only the exact open-thread instance may update its snapshot, including close/reopen of one report. */
   private loadThread(): Promise<void> {
-    if (this.refreshUnauthorized) return Promise.resolve();
+    if (this.destroyed) return Promise.resolve();
+    if (this.refreshUnauthorized) {
+      if (this.openThread() && !this.thread()) this.threadFailed.set(true);
+      return Promise.resolve();
+    }
     if (this.threadRead) return this.threadRead;
     const protocol = this.openThread();
     if (!protocol) return Promise.resolve();
@@ -740,10 +748,10 @@ export class CustomerPage implements OnInit, OnDestroy {
         if (!current()) return;
         const previous = this.thread();
         if (previous && thread.items.some(m => m.author === 'agent' && !previous.items.some(old => old.message_id === m.message_id))) this.agentReplyNotice.set(true);
-        this.thread.set(thread); this.threadFailed.set(false); this.threadChecked.set(Date.now()); this.threadDelay = 30000;
+        this.thread.set(thread); this.threadFailed.set(false); this.threadChecked.set(Date.now()); this.threadDelay = 30000; this.threadRetryAt = 0;
       } catch (e) {
         if (!current()) return;
-        this.threadFailed.set(true); this.threadDelay = Math.min(120000, this.threadDelay * 2);
+        this.threadFailed.set(true); this.threadDelay = Math.min(120000, this.threadDelay * 2); this.threadRetryAt = Date.now() + this.threadDelay;
         if (e instanceof ApiError && e.status === 401) this.pauseUnauthorized();
       } finally {
         if (current() && this.threadAbort === controller) {
@@ -755,6 +763,11 @@ export class CustomerPage implements OnInit, OnDestroy {
     return read;
   }
 
+  /** Explain an empty failed thread using the existing localized session or refresh error. */
+  threadRefreshError(): string {
+    return this.threadFailed() ? this.t()[this.refreshUnauthorized ? 'err401' : 'refreshFailed'] : '';
+  }
+
   private pauseUnauthorized(): void {
     this.refreshUnauthorized = true;
     clearTimeout(this.reportTimer); clearTimeout(this.threadTimer);
@@ -763,13 +776,13 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   private stopThreadRefresh(): void {
     this.threadWatch++; clearTimeout(this.threadTimer); this.threadAbort?.abort();
-    this.threadAbort = null; this.threadRead = null; this.threadDelay = 30000; this.threadStarted = -Infinity;
+    this.threadAbort = null; this.threadRead = null; this.threadDelay = 30000; this.threadStarted = -Infinity; this.threadRetryAt = 0;
     this.threadChecked.set(null); this.threadFailed.set(false); this.agentReplyNotice.set(false);
   }
 
   private stopRefresh(): void {
     clearTimeout(this.reportTimer); this.reportAbort?.abort(); this.reportAbort = null; this.reportRead = null;
-    this.stopThreadRefresh(); this.reportDelay = 30000; this.reportStarted = -Infinity;
+    this.stopThreadRefresh(); this.reportDelay = 30000; this.reportStarted = -Infinity; this.reportRetryAt = 0;
     this.reportsRefreshing.set(false); this.reportsChecked.set(null); this.changeNotices.set([]);
   }
 
@@ -1172,7 +1185,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** Send the frozen request. One 401 renews the same customer and retries the same body; after that the manual Renew/Retry stays. */
   async run(): Promise<void> {
     const frozen = this.frozen();
-    if (this.busy() || !frozen) return;
+    if (this.destroyed || this.busy() || !frozen) return;
+    const generation = this.generation;
+    const current = () => !this.destroyed && generation === this.generation;
     this.busy.set(true);
     this.chatError.set('');
     try {
@@ -1180,11 +1195,17 @@ export class CustomerPage implements OnInit, OnDestroy {
       try {
         result = await this.call(frozen);
       } catch (e) {
+        if (!current()) return;
         // Email sign-in can't renew silently (it needs a new code): the 401 stays for the manual Renew.
         if (!(e instanceof ApiError && e.status === 401) || !this.demoPicker) throw e;
         try {
-          this.card.set((await this.service.signIn(this.client()))?.context_card ?? null);
+          const session = await this.service.signIn(this.client());
+          if (!current()) return;
+          this.card.set(session?.context_card ?? null);
+          this.refreshUnauthorized = false;
+          this.scheduleReports(); this.scheduleThread();
         } catch (renewal) {
+          if (!current()) return;
           this.chatError.set(errorText(this.t(), renewal));
           return;
         }
@@ -1192,6 +1213,7 @@ export class CustomerPage implements OnInit, OnDestroy {
         this.log.update(l => [...l, { from: 'bot', key: 'sessionRenewed' }]);
         result = await this.call(frozen);
       }
+      if (!current()) return;
       this.frozen.set(null);
       if (frozen.path === 'start') {
         this.episode.set(result as IntakeStart);
@@ -1201,9 +1223,11 @@ export class CustomerPage implements OnInit, OnDestroy {
         // Only "I can't find it" with what the customer remembers can get suggestions; the receipt never waits for them.
         if (frozen.path === 'handoff' && frozen.body.details && (result as IntakeReceipt).kind === 'incomplete') void this.watchSuggestions(result as IntakeReceipt);
         await this.loadReports();
+        if (!current()) return;
         void this.loadAlert(); // a report on the flagged charge ends its alert
       }
     } catch (e) {
+      if (!current()) return;
       if (e instanceof ApiError && DEFINITIVE.has(e.status)) {
         this.frozen.set(null);
         if (frozen.path !== 'start') this.chatConfirmed = false;
@@ -1213,7 +1237,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       if (finish409) this.ended.set(true);
       this.chatError.set(finish409 ? this.t()[(e as ApiError).openReport ? 'err409OpenReport' : 'err409Finish'] : errorText(this.t(), e));
     } finally {
-      this.busy.set(false);
+      if (current()) this.busy.set(false);
     }
   }
 
