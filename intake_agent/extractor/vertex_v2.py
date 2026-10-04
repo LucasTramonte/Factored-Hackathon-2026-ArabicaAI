@@ -16,6 +16,7 @@ The Worker's port (``back-end/src/modules/intake/ai-transport.js``) is pinned to
 """
 from __future__ import annotations
 
+import os
 import random
 import time
 
@@ -27,6 +28,24 @@ REASONING_EFFORT = "minimal"
 #: The jittered wait before retrying a 429, in seconds; never past the deadline.
 RETRY_WAIT_S = (0.5, 1.5)
 _THROTTLED = "Vertex HTTP 429"
+#: Google's multi-region endpoints (``VERTEX_LOCATION=us`` or ``eu``), which v1's transport doesn't know; the Worker's
+#: ``VERTEX_HOSTS`` lists the same hosts.
+MULTI_REGION_HOSTS = {"us": "aiplatform.us.rep.googleapis.com", "eu": "aiplatform.eu.rep.googleapis.com"}
+
+
+def _credentials() -> tuple[str, str]:
+    """``vertex._credentials``, plus the ``us`` and ``eu`` multi-regions: v1's checks run unchanged on the global URL,
+    then only its host and location change."""
+    location = os.environ.get("VERTEX_LOCATION", "").strip()
+    if location not in MULTI_REGION_HOSTS:
+        return vertex._credentials()
+    previous = os.environ.pop("VERTEX_LOCATION")
+    try:
+        url, token = vertex._credentials()
+    finally:
+        os.environ["VERTEX_LOCATION"] = previous
+    return (url.replace("https://aiplatform.googleapis.com/", f"https://{MULTI_REGION_HOSTS[location]}/", 1)
+            .replace("/locations/global/", f"/locations/{location}/", 1), token)
 
 
 def build_body(message: str, session_language, as_of, vocabulary: dict) -> dict:
@@ -43,7 +62,7 @@ def extract(message: str, session_language, as_of, vocabulary: dict, *, sleep=ti
     """``vertex.extract``'s contract and attempt loop, plus one jittered retry on HTTP 429 (``sleep``/``wait`` are seams)."""
     usage = {"input_tokens": 0, "output_tokens": 0}
     try:
-        url, token = vertex._credentials()
+        url, token = _credentials()
         body = build_body(message, session_language, as_of, vocabulary)
     except Exception as exc:
         exc.usage = dict(usage)  # No request was attempted, so these zeros are measured.

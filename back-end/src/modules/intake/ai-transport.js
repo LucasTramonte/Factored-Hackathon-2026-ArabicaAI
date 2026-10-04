@@ -57,9 +57,21 @@ export async function registeredVersion() {
 /** Event ``model_version`` values the exporter accepts: the guided flow. The extractor's version travels as ``producer``. */
 export const producers = () => new Set([GUIDED]);
 
-/** The OpenAI-compatible endpoint for ``project`` on the global location, or ``null`` for an invalid project id. */
-export const vertexUrl = (project, origin = 'https://aiplatform.googleapis.com') => typeof project === 'string' && PROJECT.test(project)
-  ? `${origin}/v1/projects/${project}/locations/global/endpoints/openapi/chat/completions` : null;
+/**
+ * Vertex AI's hosts per location: ``global`` routes anywhere; ``us`` and ``eu`` are Google's multi-region endpoints, which
+ * keep processing inside that geography (ADR-012 decision 4; ADR-006 amendment 10: Gemini 3.5 Flash-Lite serves both).
+ */
+export const VERTEX_HOSTS = { global: 'https://aiplatform.googleapis.com', us: 'https://aiplatform.us.rep.googleapis.com',
+  eu: 'https://aiplatform.eu.rep.googleapis.com' };
+
+/**
+ * The OpenAI-compatible endpoint for ``project`` at ``location`` (``VERTEX_LOCATION``, default ``global``), or ``null`` for
+ * an invalid project id or an unknown location, which the run records as ``config_error``. ``origin`` replaces the host
+ * (local tests only).
+ */
+export const vertexUrl = (project, origin = undefined, location = 'global') =>
+  typeof project === 'string' && PROJECT.test(project) && Object.hasOwn(VERTEX_HOSTS, location)
+    ? `${origin ?? VERTEX_HOSTS[location]}/v1/projects/${project}/locations/${location}/endpoints/openapi/chat/completions` : null;
 
 /**
  * Python's ``json.dumps(value, ensure_ascii=False)`` for JSON values: ``", "`` and ``": "`` separators. String escapes

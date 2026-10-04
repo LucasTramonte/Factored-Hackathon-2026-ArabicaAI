@@ -1,4 +1,5 @@
 """Offline tests for extractor v2: v1's body with two fields changed, and the 429-only retry. No network, no credentials."""
+import os
 import unittest
 from unittest import mock
 
@@ -28,7 +29,7 @@ class VertexV2Tests(unittest.TestCase):
             return item
 
         sleeps = []
-        with mock.patch.object(vertex, "_credentials", return_value=(URL, "t")), mock.patch.object(vertex, "_post", side_effect=post) as p:
+        with mock.patch.object(vertex_v2, "_credentials", return_value=(URL, "t")), mock.patch.object(vertex, "_post", side_effect=post) as p:
             try:
                 result = vertex_v2.extract(MESSAGE, "es", None, VOCABULARY, sleep=sleeps.append, **kwargs)
             except Exception as exc:  # noqa: BLE001 (returned for assertions)
@@ -64,6 +65,17 @@ class VertexV2Tests(unittest.TestCase):
                          [ConnectionError("Vertex HTTP 429"), payload("nope")], [payload("nope"), ConnectionError("Vertex HTTP 429")]):
             _, calls, _ = self.run_with(outcomes + [payload()], wait=0)
             self.assertEqual(calls, 2)
+
+    def test_multi_region_urls_reuse_v1s_checks(self):
+        env = {"VERTEX_PROJECT": "factored-hackathon-arabica-ai", "VERTEX_ACCESS_TOKEN": "t"}
+        base = "/v1/projects/factored-hackathon-arabica-ai/locations/{}/endpoints/openapi/chat/completions"
+        for location, host in (("us", "aiplatform.us.rep.googleapis.com"), ("eu", "aiplatform.eu.rep.googleapis.com"),
+                               ("global", "aiplatform.googleapis.com"), ("us-central1", "us-central1-aiplatform.googleapis.com")):
+            with mock.patch.dict("os.environ", {**env, "VERTEX_LOCATION": location}, clear=True):
+                self.assertEqual(vertex_v2._credentials(), (f"https://{host}" + base.format(location), "t"), location)
+                self.assertEqual(os.environ["VERTEX_LOCATION"], location, "the environment is restored")
+        with mock.patch.dict("os.environ", {"VERTEX_LOCATION": "us", "VERTEX_ACCESS_TOKEN": "t", "VERTEX_PROJECT": "Bad Id"}, clear=True):
+            self.assertRaises(workers_ai.ConfigurationError, vertex_v2._credentials)
 
 
 if __name__ == "__main__":

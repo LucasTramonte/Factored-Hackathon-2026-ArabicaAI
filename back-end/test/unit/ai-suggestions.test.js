@@ -120,7 +120,7 @@ test('wrangler.jsonc supports either switch setting, the demo share of arm B, an
     assert.equal(newArm(vars), enabled === '1' ? 'B' : undefined, `switch ${enabled}`);
   }
   assert.deepEqual(Object.fromEntries(Object.entries(config.vars).filter(([k]) => k.startsWith('VERTEX_'))), {
-    VERTEX_PROJECT: 'factored-hackathon-arabica-ai', VERTEX_PROJECT_NUMBER: '92397500240',
+    VERTEX_PROJECT: 'factored-hackathon-arabica-ai', VERTEX_LOCATION: 'us', VERTEX_PROJECT_NUMBER: '92397500240',
     VERTEX_SERVICE_ACCOUNT: 'arabica-worker-vertex@factored-hackathon-arabica-ai.iam.gserviceaccount.com',
     VERTEX_WIF_ISSUER: 'https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev', VERTEX_WIF_KID: '9095f0228830804a',
     VERTEX_MODEL_RETIRES: DEFAULT_RETIRES });
@@ -353,7 +353,11 @@ test('model failures fall back with honest usage: config_error, provider_error (
   }
   const project = await run(t, { ...ON, VERTEX_PROJECT: 'Not A Project' }, google());
   assert.equal(project.outcome, 'config_error');
-  assert.equal(project.vertexCalls.length, 0);
+  assert.equal(project.vertexCalls.length, 0);  const nowhere = await run(t, { ...ON, VERTEX_LOCATION: 'us-central1' }, google());
+  assert.deepEqual([nowhere.outcome, nowhere.vertexCalls.length], ['config_error', 0], 'an unknown location fails closed');
+  const us = await run(t, { ...ON, VERTEX_LOCATION: 'us' }, google());
+  assert.equal(us.outcome, 'suggested');
+  assert.equal(us.vertexCalls[0].url, 'https://aiplatform.us.rep.googleapis.com/v1/projects/factored-hackathon-arabica-ai/locations/us/endpoints/openapi/chat/completions');
 });
 
 test('timeout: the 10 s deadline abandons a hung call; the call was counted as unknown before it ran', async t => {
@@ -432,6 +436,10 @@ test('the Worker JWT, the STS exchange and IAM impersonation follow Workload Ide
 test('the endpoint is the global OpenAI-compatible one; the test origin is honoured only on loopback; arms split 50/50', () => {
   assert.equal(vertexUrl('factored-hackathon-arabica-ai'), 'https://aiplatform.googleapis.com/v1/projects/factored-hackathon-arabica-ai/locations/global/endpoints/openapi/chat/completions');
   for (const bad of ['', 'UPPER-case', 'a', 'x/../y', null]) assert.equal(vertexUrl(bad), null, String(bad));
+  // ADR-006 amendment 10: the deployed Worker uses the ``us`` multi-region; an unknown location never builds a URL.
+  assert.equal(vertexUrl('factored-hackathon-arabica-ai', undefined, 'us'), 'https://aiplatform.us.rep.googleapis.com/v1/projects/factored-hackathon-arabica-ai/locations/us/endpoints/openapi/chat/completions');
+  assert.equal(vertexUrl('factored-hackathon-arabica-ai', undefined, 'eu'), 'https://aiplatform.eu.rep.googleapis.com/v1/projects/factored-hackathon-arabica-ai/locations/eu/endpoints/openapi/chat/completions');
+  for (const bad of ['us-central1', 'US', '', 'evil.example/x', 'constructor', '__proto__']) assert.equal(vertexUrl('factored-hackathon-arabica-ai', undefined, bad), null, bad);
   for (const origin of ['http://127.0.0.1:8787', 'http://localhost:1']) assert.equal(testOrigin({ VERTEX_TEST_ORIGIN: origin }), origin);
   for (const origin of ['https://evil.example', 'http://127.0.0.1.evil.example:1', 'http://127.0.0.1:1/path', 'https://127.0.0.1:1', undefined])
     assert.equal(testOrigin({ VERTEX_TEST_ORIGIN: origin }), null, String(origin));

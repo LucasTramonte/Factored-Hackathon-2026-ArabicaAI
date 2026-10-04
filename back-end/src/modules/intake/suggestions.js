@@ -140,7 +140,7 @@ export async function runSuggestion(env, store, { handoffId, customerId, details
     if (!await store.reserveAiCall({ day: new Date(now()).toISOString().slice(0, 10), cap: dailyCap(env) })) return await finish('capped');
     const producer = await registeredVersion();
     await store.startSuggestionCall({ handoffId, producer });
-    const url = vertexUrl(config.project, origin ?? undefined);
+    const url = vertexUrl(config.project, origin ?? undefined, env.VERTEX_LOCATION ?? 'global');
     const asOf = asOfAt(now());
     const result = await extract({ url, message: details, language, asOf, token, fetcher, now });
     if (result.kind !== 'extracted') return await finish(result.kind, { usage: result.usage, producer });

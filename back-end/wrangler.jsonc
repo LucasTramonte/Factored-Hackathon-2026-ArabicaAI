@@ -18,6 +18,7 @@
     "INTAKE_AI_ENABLED": "1",
     "INTAKE_AI_SHARE_B": "1",
     "VERTEX_PROJECT": "factored-hackathon-arabica-ai",
+    "VERTEX_LOCATION": "us",
     "VERTEX_PROJECT_NUMBER": "92397500240",
     "VERTEX_SERVICE_ACCOUNT": "arabica-worker-vertex@factored-hackathon-arabica-ai.iam.gserviceaccount.com",
     "VERTEX_WIF_ISSUER": "https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev",
