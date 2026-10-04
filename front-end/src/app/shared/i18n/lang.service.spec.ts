@@ -26,6 +26,14 @@ describe('LangService', () => {
     lang.set('es'); // set() persists to localStorage: leaving 'en' would start the next spec's LangService in English
   });
 
+  it('uses report vocabulary for a recovered receipt in every language', () => {
+    const lang = TestBed.inject(LangService);
+    for (const [code, term] of [['es', 'reporte'], ['pt', 'relato'], ['en', 'report']] as const) {
+      expect(lang.stringsFor(code).replayed).toContain(term);
+      expect(lang.stringsFor(code).replayed).not.toMatch(/\bcaso\b|\bcase\b/);
+    }
+  });
+
   it('translates failures by status and never shows server text', () => {
     const lang = TestBed.inject(LangService);
     lang.set('pt');
