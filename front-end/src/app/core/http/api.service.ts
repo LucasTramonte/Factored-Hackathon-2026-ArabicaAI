@@ -29,6 +29,7 @@ export class ApiService {
     }
     if (!response.ok) throw new ApiError(response.status, undefined, response.status === 409
       && (await response.json().catch(() => null))?.detail === 'This charge already has an open report');
+    if (response.status === 204) return undefined as T; // no body (logout)
     return response.json() as Promise<T>;
   }
 }

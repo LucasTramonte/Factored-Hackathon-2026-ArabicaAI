@@ -65,6 +65,11 @@ describe('ApiService', () => {
     }
   });
 
+  it('a 204 resolves without reading a body', async () => {
+    fetchSpy.and.returnValue(Promise.resolve(new Response(null, { status: 204 })));
+    expect(await api.request('/auth/logout', {})).toBeUndefined();
+  });
+
   it('treats a network failure as unconfirmed, like a 503', async () => {
     fetchSpy.and.returnValue(Promise.reject(new TypeError('Failed to fetch')));
     const e = await api.request('/cases', {}).then(() => null, (x: unknown) => x);

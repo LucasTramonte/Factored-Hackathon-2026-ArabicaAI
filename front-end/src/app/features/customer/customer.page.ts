@@ -341,10 +341,12 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly alertNote = signal('');
 
   private async loadAlert(): Promise<void> {
+    const g = this.generation;
     try {
-      this.alert.set((await this.service.alert()).alert);
+      const { alert } = await this.service.alert();
+      if (g === this.generation) this.alert.set(alert);
     } catch {
-      this.alert.set(null); // the alert is optional: the home works without it
+      if (g === this.generation) this.alert.set(null); // the alert is optional: the home works without it
     }
   }
 
@@ -367,15 +369,21 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   /**
-   * Sign out: end the customer and agent sessions on the server (best effort: it always answers 204), forget everything
-   * held in the tab, and return to the email field. Refused while a report is open or a request is frozen.
+   * Sign out: end the customer and agent sessions on the server (it answers 204), then forget everything held in the tab
+   * and return to the email field. A failed call changes nothing and shows a retryable error: the cookies would still be
+   * live, so clearing the tab would only look like a sign-out (a reload would restore the account). Refused while a
+   * report is open or a request is frozen.
    */
   async signOut(): Promise<void> {
     if (this.busy() || this.identityLocked()) return;
     this.busy.set(true);
     try {
       await this.service.logout();
-    } catch { /* the cookies may outlive a failed call, but nothing in the tab does */ }
+    } catch (e) {
+      this.fail(e);
+      this.busy.set(false);
+      return;
+    }
     this.cognito.forget();
     this.agent.roles.set([]);
     this.reset();
@@ -500,7 +508,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   private async loadTransactions(): Promise<void> {
+    const g = this.generation;
     const list = await this.service.transactions();
+    if (g !== this.generation) return;
     this.transactions.set(list.items);
     this.hasMore.set(list.has_more);
     this.viewRef.set(list.view_ref);
@@ -508,11 +518,14 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Never throws: a failed load leaves the home usable with one muted line. */
   private async loadReports(): Promise<void> {
+    const g = this.generation;
     try {
-      this.reports.set(await this.service.reports());
+      const list = await this.service.reports();
+      if (g !== this.generation) return;
+      this.reports.set(list);
       this.reportsFailed.set(false);
     } catch {
-      this.reportsFailed.set(true);
+      if (g === this.generation) this.reportsFailed.set(true);
     }
   }
 
@@ -935,7 +948,11 @@ export class CustomerPage implements OnInit, OnDestroy {
     return initialsOf(tx.merchant_name);
   }
 
+  /** Bumped by ``reset``: a load started before it never writes into the next customer's (or a signed-out) page. */
+  private generation = 0;
+
   private reset(): void {
+    this.generation++;
     this.alert.set(null);
     this.alertNote.set('');
     this.client.set('');
