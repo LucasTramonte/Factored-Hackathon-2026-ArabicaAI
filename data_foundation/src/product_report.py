@@ -448,9 +448,10 @@ def render(report: dict, manifest: dict) -> str:
              f'the data end, {esc(esc_age["data_end"])}, <b>full period</b>). None of the {num(escalated["complaints"])} escalated in the design window has '
              f'a first response, resolution or closing date, so this is a lower bound, not a closing time (PR-05).</p></div>')
     rp = s["repeat"]
-    body += (f'<h3>Repeat complaints, the re-open proxy</h3><p>{num(rp["repeat_customers"])} of {num(rp["customers"])} customers '
-             f'({pct(rp["repeat_customers"], rp["customers"])}) complained more than once. The source has no re-opened status, so these '
-             f'follow-up complaints stand in for it (PR-10):</p><div class="steps">'
+    body += (f'<h3>Repeat complaints</h3><p>{num(rp["repeat_customers"])} of {num(rp["customers"])} customers '
+             f'({pct(rp["repeat_customers"], rp["customers"])}) complained more than once (PR-10). That is as many as chance alone predicts '
+             '(the Poisson check of IK-02 in BUSINESS_OUTCOMES.md), and the source has no re-opened status, so these follow-ups are not '
+             're-opened disputes:</p><div class="steps">'
              f'<div><b>{num(rp["follow_up_complaints"])}</b><small>of {num(rp["complaints"])} complaints follow an earlier one by the same customer</small></div>'
              f'<div><b>{num(rp["within_90_days"])}</b><small>of those within 90 days</small></div>'
              f'<div><b>{num(rp["within_30_days"])}</b><small>within 30 days</small></div></div>'
