@@ -218,8 +218,8 @@
                       <li [class.done]="done" [class.current]="i === at" [attr.aria-current]="i === at ? 'step' : null">@if (done) { <span aria-hidden="true">✓</span><span class="sr-only">{{ t().stepDone }}: </span> }{{ t()[statusChip[s]] }}</li>
                     }</ol>
                     @if (reportsFailed()) { <p class="ar-caption report-stale">{{ t().refreshFailed }}</p> }
-                    <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm update-btn" (click)="requestUpdate(r.protocol)" [attr.aria-disabled]="updating() !== null"
-                      [attr.aria-label]="t().updateMe + ': ' + (r.reference_short ?? r.protocol)">{{ t().updateMe }}</button>
+                    <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm update-btn" (click)="requestUpdate(r.protocol)" [attr.aria-disabled]="updateUnavailable(r.protocol)" [attr.aria-busy]="updating() === r.protocol"
+                      [attr.aria-label]="t().updateMe + ': ' + (r.reference_short ?? r.protocol)">{{ updating() === r.protocol ? t().updateWorking : t().updateMe }}</button>
                     @if (r.status === 'closed') {
                       <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm report-again-btn" (click)="reportAgain(r)" [disabled]="!!frozen()"
                         [attr.aria-label]="t().reportAgain + ': ' + (r.reference_short ?? r.protocol)">{{ t().reportAgain }}</button>

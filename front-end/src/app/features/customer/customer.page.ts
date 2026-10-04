@@ -116,6 +116,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** The report whose update request is in flight (one at a time: every row's button waits), and the last answer shown under its row. */
   readonly updating = signal<string | null>(null);
   readonly updateNote = signal<{ protocol: string; text: string } | null>(null);
+  private readonly updateCooldowns = signal<Record<string, number>>({});
+  private readonly updateTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly transactions = signal<Transaction[]>([]);
   readonly hasMore = signal(false);
   readonly identities = signal<Identity[]>([]);
@@ -322,6 +324,7 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.generation++;
+    this.clearUpdates();
     this.stopRefresh();
     document.removeEventListener('visibilitychange', this.refreshVisibility);
     window.removeEventListener('online', this.refreshVisibility);
@@ -784,7 +787,6 @@ export class CustomerPage implements OnInit, OnDestroy {
     return this.t()[notice.key].replace('{ref}', () => notice.reference);
   }
 
-  /** Queue "Email me an update" on a report row; never claim background delivery, and keep focus on the button. */
   /** The report whose messages are open under "Your reports" (ADR-015), its thread, and the state of a post. */
   readonly openThread = signal<string | null>(null);
   readonly thread = signal<MessageThread | null>(null);
@@ -832,21 +834,42 @@ export class CustomerPage implements OnInit, OnDestroy {
     await this.loadThread();
   }
 
+  /** Keep the focused button available to keyboards while refusing pending or server-timed duplicate requests. */
+  updateUnavailable(protocol: string): boolean {
+    return this.updating() !== null || (this.updateCooldowns()[protocol] ?? 0) > Date.now();
+  }
+
+  /** Queue one report snapshot; responses and timers belong only to the signed-in customer generation. */
   async requestUpdate(protocol: string): Promise<void> {
-    if (this.updating()) return;
+    if (this.updateUnavailable(protocol)) return;
+    const generation = this.generation;
     this.updating.set(protocol);
-    this.updateNote.set(null); // cleared while the request runs, so the same answer is announced again
-    let text: string;
+    this.updateNote.set(null);
     try {
       await this.service.requestUpdate(protocol);
-      text = this.t().updateSent;
+      if (generation === this.generation) this.updateNote.set({ protocol, text: this.t().updateSent });
     } catch (e) {
+      if (generation !== this.generation) return;
       const status = e instanceof ApiError ? e.status : -1;
-      text = status === 429 ? this.t().updateRecent : status === 409 ? this.t().updateNoEmail : errorText(this.t(), e);
+      if (status === 429 && e instanceof ApiError && e.retryAfterSeconds) {
+        this.updateCooldowns.update(cooldowns => ({ ...cooldowns, [protocol]: Date.now() + e.retryAfterSeconds! * 1000 }));
+        clearTimeout(this.updateTimers.get(protocol));
+        this.updateTimers.set(protocol, this.zone.runOutsideAngular(() => setTimeout(() => {
+          if (generation !== this.generation) return;
+          this.updateCooldowns.update(cooldowns => { const next = { ...cooldowns }; delete next[protocol]; return next; });
+          this.updateTimers.delete(protocol);
+        }, e.retryAfterSeconds! * 1000)));
+      }
+      this.updateNote.set({ protocol, text: status === 429 ? this.t().updateRecent : status === 409 ? this.t().updateNoEmail
+        : status === 401 ? this.t().err401 : this.t().updateFailed });
     } finally {
-      this.updating.set(null);
+      if (generation === this.generation) this.updating.set(null);
     }
-    this.updateNote.set({ protocol, text });
+  }
+
+  private clearUpdates(): void {
+    for (const timer of this.updateTimers.values()) clearTimeout(timer);
+    this.updateTimers.clear(); this.updateCooldowns.set({}); this.updating.set(null); this.updateNote.set(null);
   }
 
   /**
@@ -1302,6 +1325,7 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   private reset(): void {
     this.generation++;
+    this.clearUpdates();
     this.stopRefresh();
     this.refreshUnauthorized = false;
     this.tour.set(null);

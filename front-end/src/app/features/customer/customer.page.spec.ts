@@ -2023,11 +2023,11 @@ describe('CustomerPage', () => {
       expect(document.activeElement).toBe(buttons[0]);
       const status = (row = 0) => el.querySelectorAll('.your-reports [role="status"]')[row]?.textContent?.trim();
       expect(status()).toBe(p.t().updateSent);
-      for (const [error, key] of [[429, 'updateRecent'], [409, 'updateNoEmail'], [503, null]] as const) {
+      for (const [error, key] of [[429, 'updateRecent'], [409, 'updateNoEmail'], [503, 'updateFailed']] as const) {
         service.requestUpdate.and.rejectWith(new ApiError(error, 'x'));
         await p.requestUpdate('11111111-2222-4333-8444-555555555555'); fixture.detectChanges();
         expect(status(0)).toBe('', 'the answer belongs to the other row');
-        expect(status(1)).toBe(key ? p.t()[key] : errorText(p.t(), new ApiError(error, 'x')));
+        expect(status(1)).toBe(p.t()[key]);
       }
     });
 
