@@ -1604,7 +1604,7 @@ describe('CustomerPage', () => {
 
       it('opens one report\'s thread from "Your reports" and shows the agent\'s question', async () => {
         const { el, p } = await openThread();
-        expect(service.messages).toHaveBeenCalledOnceWith('99999999-8888-4777-8666-555555555555');
+        expect(service.messages).toHaveBeenCalledOnceWith('99999999-8888-4777-8666-555555555555', jasmine.any(AbortSignal));
         expect(el.querySelector('.messages-btn')!.getAttribute('aria-expanded')).toBe('true');
         expect(el.querySelector('.message-agent')?.textContent).toContain('¿Recuerdas el comercio?');
         expect(el.querySelector('.message-agent')?.textContent).toContain(p.t().messageAgent);

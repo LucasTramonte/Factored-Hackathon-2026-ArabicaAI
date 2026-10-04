@@ -29,12 +29,12 @@ export class ApiError extends Error {
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   /** ``headers`` are merged over the defaults (e.g. ``Authorization`` for the sign-in token). */
-  async request<T>(path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
+  async request<T>(path: string, body?: unknown, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<T> {
     let response: Response;
     try {
       response = await fetch(path, {
         method: body === undefined ? 'GET' : 'POST',
-        credentials: 'same-origin',
+        credentials: 'same-origin', signal,
         headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
         body: body === undefined ? undefined : JSON.stringify(body)
       });

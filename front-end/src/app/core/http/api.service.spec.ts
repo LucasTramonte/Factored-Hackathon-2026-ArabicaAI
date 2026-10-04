@@ -98,4 +98,14 @@ describe('ApiService', () => {
     const e = await api.request('/cases', {}).then(() => null, (x: unknown) => x);
     expect(e instanceof ApiError && e.status).toBe(0);
   });
+
+  it('forwards cancellation to the physical fetch and maps an aborted read to an unconfirmed error', async () => {
+    const controller = new AbortController();
+    fetchSpy.and.callFake((_path: string, options: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      options.signal!.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    }));
+    const read = api.request('/reports', undefined, {}, controller.signal).catch(e => e);
+    expect(fetchSpy.calls.mostRecent().args[1].signal).toBe(controller.signal); controller.abort();
+    const error = await read; expect(error instanceof ApiError).toBeTrue(); expect((error as ApiError).status).toBe(0);
+  });
 });

@@ -20,7 +20,7 @@ describe('CustomerService guided intake', () => {
     await service.logout();
     await service.reports();
     expect(api.request.calls.allArgs()).toEqual([['/intake/start', start], ['/intake/confirm', confirm], ['/intake/handoff', handoff],
-      ['/demo/session', { customer_id: 'demo-ana' }], ['/auth/session', {}, { Authorization: 'Bearer a.b.c' }], ['/auth/logout', {}], ['/reports']]);
+      ['/demo/session', { customer_id: 'demo-ana' }], ['/auth/session', {}, { Authorization: 'Bearer a.b.c' }], ['/auth/logout', {}], ['/reports', undefined, {}, undefined]]);
   });
 
   it('sends the interface language on the charges list and posts the display acknowledgement', async () => {

@@ -298,13 +298,16 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Load the identity choices from the API; they come from the same config as the server allowlist. */
   async ngOnInit(): Promise<void> {
+    document.addEventListener('visibilitychange', this.refreshVisibility);
+    window.addEventListener('online', this.refreshVisibility);
+    window.addEventListener('offline', this.refreshVisibility);
+    window.addEventListener('focus', this.refreshVisibility);
     this.bootTimer = setTimeout(() => this.booted.set(true), 2400);
     if (this.narrowQuery) this.narrowQuery.onchange = e => this.narrow.set(e.matches);
     // Outside the zone so the app (and tests) can be stable while it waits; the signal still schedules the render.
     this.introTimer = this.zone.runOutsideAngular(() => setTimeout(() => this.introDone.set(true), 6800)); // must outlast the intro word animation delays in styles.css
-    if (this.client()) void this.resume();
-    else void this.restore();
-    if (!this.demoPicker) return;
+    const restoring = this.client() ? this.resume() : this.restore();
+    if (!this.demoPicker) { await restoring; return; }
     this.identitiesLoading.set(true);
     try {
       this.identities.set(await this.service.identities());
@@ -314,10 +317,16 @@ export class CustomerPage implements OnInit, OnDestroy {
     } finally {
       this.identitiesLoading.set(false);
     }
+    await restoring;
   }
 
   ngOnDestroy(): void {
     this.generation++;
+    this.stopRefresh();
+    document.removeEventListener('visibilitychange', this.refreshVisibility);
+    window.removeEventListener('online', this.refreshVisibility);
+    window.removeEventListener('offline', this.refreshVisibility);
+    window.removeEventListener('focus', this.refreshVisibility);
     this.tour.set(null);
     clearTimeout(this.bootTimer);
     clearTimeout(this.introTimer);
@@ -519,10 +528,12 @@ export class CustomerPage implements OnInit, OnDestroy {
    */
   private async enter(session: () => Promise<CustomerSession>, onError: (e: unknown) => void): Promise<void> {
     if (this.busy()) return;
+    const generation = this.generation;
     this.busy.set(true);
     this.error.set('');
     try {
       const s = await session();
+      if (generation !== this.generation) return;
       if (this.identityLocked() && s.customer_id !== this.client()) {
         // That sign-in set the other customer's cookie: drop it before anything else can be sent with it. If that
         // fails the cookie may remain, so the open report is dropped too and nothing can go out under it.
@@ -542,11 +553,13 @@ export class CustomerPage implements OnInit, OnDestroy {
       this.card.set(s.context_card ?? null);
       this.client.set(s.customer_id);
       this.roles.set(s.roles);
+      this.refreshUnauthorized = false;
       this.codeSent.set(false);
       this.code = '';
       await this.loadTransactions();
       await this.loadReports();
       this.step.set('home');
+      this.scheduleReports();
       const g = this.generation;
       void this.loadAlert().then(() => {
         if (g === this.generation) afterNextRender(() => { if (g === this.generation) this.offerTour(); }, { injector: this.injector });
@@ -570,6 +583,7 @@ export class CustomerPage implements OnInit, OnDestroy {
    * home, as a sign-in would. Nothing happens without a live session, or if a sign-in started meanwhile.
    */
   private async restore(): Promise<void> {
+    const generation = this.generation;
     let state;
     try {
       state = await this.service.me();
@@ -577,7 +591,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       return; // no session information: the sign-in screen stays
     }
     // Never over a sign-in the person has started (the login step, a pending or sent code), even if it is not busy now.
-    if (!state?.customer || this.client() || this.busy() || this.step() !== 'intro' || this.codeSent()) return;
+    if (generation !== this.generation || !state?.customer || this.client() || this.busy() || this.step() !== 'intro' || this.codeSent()) return;
     this.card.set(state.customer.context_card ?? null);
     this.client.set(state.customer.customer_id);
     this.roles.set(state.customer.roles);
@@ -606,17 +620,158 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.viewRef.set(list.view_ref);
   }
 
-  /** Never throws: a failed load leaves the home usable with one muted line. */
-  private async loadReports(): Promise<void> {
-    const g = this.generation;
-    try {
-      const list = await this.service.reports();
-      if (g !== this.generation) return;
-      this.reports.set(list);
-      this.reportsFailed.set(false);
-    } catch {
-      if (g === this.generation) this.reportsFailed.set(true);
-    }
+  readonly reportsChecked = signal<number | null>(null);
+  readonly threadChecked = signal<number | null>(null);
+  readonly threadFailed = signal(false);
+  readonly reportsRefreshing = signal(false);
+  readonly changeNotices = signal<{ protocol: string; key: 'reportEnteredReview' | 'reportReviewFinished'; reference: string }[]>([]);
+  readonly agentReplyNotice = signal(false);
+  private reportTimer: ReturnType<typeof setTimeout> | undefined;
+  private threadTimer: ReturnType<typeof setTimeout> | undefined;
+  private reportRead: Promise<void> | null = null;
+  private threadRead: Promise<void> | null = null;
+  private reportAbort: AbortController | null = null;
+  private threadAbort: AbortController | null = null;
+  private reportDelay = 30000;
+  private threadDelay = 30000;
+  private reportStarted = -Infinity;
+  private threadStarted = -Infinity;
+  private threadWatch = 0;
+  private refreshUnauthorized = false;
+
+  private canRefresh(): boolean {
+    return !!this.client() && this.step() === 'home' && document.visibilityState !== 'hidden' && navigator.onLine && !this.refreshUnauthorized;
+  }
+
+  /** Coalesce tab-return and manual triggers with an outstanding or just completed read. */
+  refreshReports(): void {
+    if (!this.canRefresh()) return;
+    if (Date.now() - this.reportStarted >= 1000) void this.loadReports();
+    if (this.openThread() && Date.now() - this.threadStarted >= 1000) void this.loadThread();
+  }
+
+  private readonly refreshVisibility = (): void => {
+    clearTimeout(this.reportTimer); clearTimeout(this.threadTimer);
+    if (this.canRefresh()) { this.refreshReports(); this.scheduleReports(); this.scheduleThread(); }
+  };
+
+  private scheduleReports(): void {
+    clearTimeout(this.reportTimer);
+    if (this.canRefresh() && !this.reportRead) this.reportTimer = this.zone.runOutsideAngular(() => setTimeout(() => void this.loadReports(), this.reportDelay));
+  }
+
+  private scheduleThread(): void {
+    clearTimeout(this.threadTimer);
+    if (this.canRefresh() && this.openThread() && !this.threadRead) this.threadTimer = this.zone.runOutsideAngular(() => setTimeout(() => void this.loadThread(), this.threadDelay));
+  }
+
+  /** Abort actual fetch and expire the UI read even if a transport never settles. */
+  private async boundedRead<T>(controller: AbortController, read: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort!: () => void;
+    const deadline = new Promise<never>((_, reject) => {
+      onAbort = () => reject(new ApiError(0));
+      controller.signal.addEventListener('abort', onAbort, { once: true });
+      timer = this.zone.runOutsideAngular(() => setTimeout(() => controller.abort(), 10000));
+    });
+    try { return await Promise.race([read(controller.signal), deadline]); }
+    finally { clearTimeout(timer); controller.signal.removeEventListener('abort', onAbort); }
+  }
+
+  /** Never throws; failures keep the last confirmed snapshot and back off. */
+  private loadReports(): Promise<void> {
+    if (this.reportRead) return this.reportRead;
+    clearTimeout(this.reportTimer);
+    const g = this.generation, controller = this.reportAbort = new AbortController();
+    this.reportStarted = Date.now(); this.reportsRefreshing.set(true);
+    const read = (async () => {
+      try {
+        const list = await this.boundedRead(controller, signal => this.service.reports(signal));
+        if (g !== this.generation) return;
+        const previous = this.reports();
+        if (previous) for (const report of list.items) {
+          const old = previous.items.find(r => r.protocol === report.protocol);
+          if (old && old.status !== report.status && report.status !== 'received') {
+            this.changeNotices.update(notices => [...notices.filter(n => n.protocol !== report.protocol), {
+              protocol: report.protocol, reference: report.reference_short ?? report.protocol,
+              key: report.status === 'in_review' ? 'reportEnteredReview' as const : 'reportReviewFinished' as const }].slice(-20));
+          }
+        }
+        this.reports.set(list); this.reportsFailed.set(false); this.reportsChecked.set(Date.now()); this.reportDelay = 30000;
+      } catch (e) {
+        if (g !== this.generation) return;
+        this.reportsFailed.set(true); this.reportDelay = Math.min(120000, this.reportDelay * 2);
+        if (e instanceof ApiError && e.status === 401) this.pauseUnauthorized();
+      } finally {
+        if (g === this.generation && this.reportAbort === controller) {
+          this.reportRead = null; this.reportAbort = null; this.reportsRefreshing.set(false); this.scheduleReports();
+        }
+      }
+    })();
+    this.reportRead = read;
+    return read;
+  }
+
+  /** Only the exact open-thread instance may update its snapshot, including close/reopen of one report. */
+  private loadThread(): Promise<void> {
+    if (this.threadRead) return this.threadRead;
+    const protocol = this.openThread();
+    if (!protocol) return Promise.resolve();
+    clearTimeout(this.threadTimer);
+    const g = this.generation, watch = this.threadWatch, controller = this.threadAbort = new AbortController();
+    const current = () => g === this.generation && watch === this.threadWatch && this.openThread() === protocol;
+    this.threadStarted = Date.now();
+    const read = (async () => {
+      try {
+        const thread = await this.boundedRead(controller, signal => this.service.messages(protocol, signal));
+        if (!current()) return;
+        const previous = this.thread();
+        if (previous && thread.items.some(m => m.author === 'agent' && !previous.items.some(old => old.message_id === m.message_id))) this.agentReplyNotice.set(true);
+        this.thread.set(thread); this.threadFailed.set(false); this.threadChecked.set(Date.now()); this.threadDelay = 30000;
+      } catch (e) {
+        if (!current()) return;
+        this.threadFailed.set(true); this.threadDelay = Math.min(120000, this.threadDelay * 2);
+        if (e instanceof ApiError && e.status === 401) this.pauseUnauthorized();
+      } finally {
+        if (current() && this.threadAbort === controller) {
+          this.threadRead = null; this.threadAbort = null; this.scheduleThread();
+        }
+      }
+    })();
+    this.threadRead = read;
+    return read;
+  }
+
+  private pauseUnauthorized(): void {
+    this.refreshUnauthorized = true;
+    clearTimeout(this.reportTimer); clearTimeout(this.threadTimer);
+    this.error.set(this.t().err401);
+  }
+
+  private stopThreadRefresh(): void {
+    this.threadWatch++; clearTimeout(this.threadTimer); this.threadAbort?.abort();
+    this.threadAbort = null; this.threadRead = null; this.threadDelay = 30000; this.threadStarted = -Infinity;
+    this.threadChecked.set(null); this.threadFailed.set(false); this.agentReplyNotice.set(false);
+  }
+
+  private stopRefresh(): void {
+    clearTimeout(this.reportTimer); this.reportAbort?.abort(); this.reportAbort = null; this.reportRead = null;
+    this.stopThreadRefresh(); this.reportDelay = 30000; this.reportStarted = -Infinity;
+    this.reportsRefreshing.set(false); this.reportsChecked.set(null); this.changeNotices.set([]);
+  }
+
+  /** Dismiss only the transient notice; saved progress stays visible. */
+  dismissNotice(protocol: string): void { this.changeNotices.update(notices => notices.filter(n => n.protocol !== protocol)); }
+
+  /** Explicitly view a change without automatic focus movement. */
+  viewUpdate(protocol: string): void {
+    const target = [...this.host.nativeElement.querySelectorAll<HTMLElement>('[data-report-protocol]')].find(el => el.dataset['reportProtocol'] === protocol);
+    target?.focus(); target?.scrollIntoView({ block: 'nearest' });
+  }
+
+  /** Localized notice from a confirmed saved-status change, never customer text. */
+  noticeText(notice: { key: 'reportEnteredReview' | 'reportReviewFinished'; reference: string }): string {
+    return this.t()[notice.key].replace('{ref}', () => notice.reference);
   }
 
   /** Queue "Email me an update" on a report row; never claim background delivery, and keep focus on the button. */
@@ -632,17 +787,11 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Open or close one own report's messages with the agent. */
   async toggleMessages(protocol: string): Promise<void> {
-    if (this.openThread() === protocol) { this.openThread.set(null); return; }
-    const g = this.generation;
-    this.openThread.set(protocol);
-    this.thread.set(null);
-    this.messageFailed.set('');
-    try {
-      const thread = await this.service.messages(protocol);
-      if (g === this.generation && this.openThread() === protocol) this.thread.set(thread);
-    } catch (e) {
-      if (g === this.generation && this.openThread() === protocol) this.messageFailed.set(errorText(this.t(), e));
-    }
+    const closing = this.openThread() === protocol;
+    this.stopThreadRefresh();
+    this.openThread.set(closing ? null : protocol);
+    this.thread.set(null); this.messageFailed.set('');
+    if (!closing) await this.loadThread();
   }
 
   /** Post the customer's message on the open report, then show the stored thread. */
@@ -654,7 +803,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.messageSending.set(protocol);
     this.messageFailed.set('');
     // The result belongs to the report that posted; if the customer opened another one meanwhile, it touches nothing there.
-    const stillOpen = () => this.openThread() === protocol;
+    const g = this.generation, watch = this.threadWatch;
+    const stillOpen = () => g === this.generation && watch === this.threadWatch && this.openThread() === protocol;
     try {
       await this.service.postMessage(protocol, body, key.key);
       this.messageKeys.delete(protocol);
@@ -666,10 +816,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       if (this.messageSending() === protocol) this.messageSending.set(null);
     }
     if (!stillOpen()) return;
-    try {
-      const thread = await this.service.messages(protocol);
-      if (this.openThread() === protocol) this.thread.set(thread);
-    } catch { /* the post's own result is already shown */ }
+    await this.loadThread();
   }
 
   async requestUpdate(protocol: string): Promise<void> {
@@ -1142,6 +1289,8 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   private reset(): void {
     this.generation++;
+    this.stopRefresh();
+    this.refreshUnauthorized = false;
     this.tour.set(null);
     this.alert.set(null);
     this.alertNote.set('');

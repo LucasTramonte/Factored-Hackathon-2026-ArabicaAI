@@ -196,6 +196,14 @@
 
               <section class="your-reports" id="reports" aria-labelledby="your-reports-title">
                 <h3 id="your-reports-title" tabindex="-1">{{ t().yourReports }}</h3>
+                <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm refresh-reports" (click)="refreshReports()" [attr.aria-disabled]="reportsRefreshing()">{{ t().refreshReports }}</button>
+                @if (reportsChecked(); as checked) { <p class="ar-caption">{{ t().lastChecked }}: {{ checked | date:'HH:mm:ss' }}</p> }
+                <div class="report-notices" aria-live="polite">
+                  @for (notice of changeNotices(); track notice.protocol) {
+                    <p>{{ noticeText(notice) }} <button type="button" class="link-btn" (click)="viewUpdate(notice.protocol)">{{ t().viewUpdate }}</button>
+                      <button type="button" class="link-btn" (click)="dismissNotice(notice.protocol)">{{ t().dismissUpdate }}</button></p>
+                  }
+                </div>
                 @if (reports()?.items?.length) {
                 <ul>@for (r of reports()!.items; track r.protocol) {
                   <li tabindex="-1" [attr.data-report-protocol]="r.protocol"><span class="ar-mono">{{ r.reference_short ?? r.protocol }}</span>
@@ -209,6 +217,7 @@
                       @let done = i < at || at === progressSteps.length - 1; <!-- a closed report is complete: its last step is done and current -->
                       <li [class.done]="done" [class.current]="i === at" [attr.aria-current]="i === at ? 'step' : null">@if (done) { <span aria-hidden="true">✓</span><span class="sr-only">{{ t().stepDone }}: </span> }{{ t()[statusChip[s]] }}</li>
                     }</ol>
+                    @if (reportsFailed()) { <p class="ar-caption report-stale">{{ t().refreshFailed }}</p> }
                     <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm update-btn" (click)="requestUpdate(r.protocol)" [attr.aria-disabled]="updating() !== null"
                       [attr.aria-label]="t().updateMe + ': ' + (r.reference_short ?? r.protocol)">{{ t().updateMe }}</button>
                     @if (r.status === 'closed') {
@@ -223,13 +232,24 @@
                       [attr.aria-expanded]="openThread() === r.protocol" [attr.aria-label]="t().messagesTitle + ': ' + (r.reference_short ?? r.protocol)">{{ t().messagesTitle }}</button>
                     <span class="ar-caption" role="status">@if (updateNote()?.protocol === r.protocol) { {{ updateNote()!.text }} }</span>
                     @if (openThread() === r.protocol) {
+                      <div class="open-report-progress"><span class="ar-mono">{{ r.reference_short ?? r.protocol }}</span>
+                        <ol class="report-progress" [attr.aria-label]="t().reportProgress">@for (s of progressSteps; track s) {
+                          <li [class.current]="s === r.status" [attr.aria-current]="s === r.status ? 'step' : null">{{ t()[statusChip[s]] }}</li>
+                        }</ol>
+                        <p class="ar-caption">@switch (r.status) { @case ('in_review') { {{ t().statusInReview }} } @case ('closed') { {{ t().statusClosed }} } @default { {{ t().nextStepReview }} } }</p>
+                        @if (reportsFailed()) { <p class="ar-caption">{{ t().refreshFailed }}</p> }
+                      </div>
+                      <p role="status">{{ agentReplyNotice() ? t().agentReply : '' }}</p>
+                      @if (agentReplyNotice()) { <button type="button" class="link-btn" (click)="agentReplyNotice.set(false)">{{ t().dismissUpdate }}</button> }
+                      @if (threadFailed()) { <p class="ar-caption" role="status">{{ t().refreshFailed }}</p> }
+                      @if (threadChecked(); as checked) { <p class="ar-caption">{{ t().lastChecked }}: {{ checked | date:'HH:mm:ss' }}</p> }
                       <app-message-thread viewer="customer" idPrefix="customer-messages" [scope]="r.protocol" [thread]="thread()" [sending]="messageSending() === r.protocol"
-                        [failed]="messageFailed()" [sent]="messagesSent()" (send)="sendMessage($event)" />
+                        [failed]="messageFailed() || (threadFailed() ? t().refreshFailed : '')" [sent]="messagesSent()" (send)="sendMessage($event)" />
                     }</li>
                 }</ul>
                 @if (reports()!.has_more) { <span class="ar-caption">{{ t().moreReports }}</span> }
                 } @else { <p class="ar-empty">{{ t().reportsEmpty }}</p> }
-                @if (reportsFailed()) { <p class="ar-caption" role="status">{{ t().reportsFailed }}</p> }
+                @if (reportsFailed()) { <p class="ar-caption" role="status">{{ reports() ? t().refreshFailed : t().reportsFailed }}</p> }
                 @if (intakeReceipt(); as receipt) {
                   @if (!receiptReport()) { <p class="saved-receipt"><span class="ar-mono">{{ receipt.reference_short ?? receipt.protocol }}</span> · {{ receiptTitle() }}. {{ t().nextStep }}</p> }
                 }
