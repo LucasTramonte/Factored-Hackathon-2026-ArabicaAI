@@ -1,287 +1,245 @@
-# Evaluation: how we test the intake workflow
+# Evaluation: does a model read dispute messages better than rules?
 
 **Workflow:** transaction-dispute intake, narrowed to unrecognized card charges with a human handoff ([ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)).
 
-**Question:** does a learned component that reads the customer's message do better than a rule-based baseline, on the same cases, without becoming less safe?
+**Question:** when a customer describes a charge in their own words, does a pretrained model turn that message into the right next step more often than hand-written rules, on cases neither was tuned on, without becoming less safe?
 
-This document is the evaluation deliverable, like [`DATA_QUALITY.md`](DATA_QUALITY.md) is for data quality and [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md) is for capacity and cost. It covers:
-- what we test and why;
-- the test sets we built;
-- how we keep test data from leaking into the systems;
-- every option we considered, used or rejected, and why.
+**Answer, from the one held-out run (2026-10-04):** yes, by a wide margin, on our authored Spanish and Portuguese cases. Extractor v1 got 53 of 60 cases right against the checklist's 23, with 0 unsafe outcomes. On the 52 cases whose content never leaked it got 46 against 20. Section 1 has the figures. Most of this document is about how far that result can be trusted: how the cases were made, how we kept them away from the people and agents who built the model, and what the method can't show.
 
-**Status (2026-10-03):**
-- **Ready:** the baselines are scored, the frozen test set is built, verified and committed by hash, and the harness and statistics are in place.
-- **Not run yet:** the frozen comparison, which runs once per system version after the extractor is pre-registered. No result for the learned component on the frozen set exists yet. Google Vertex AI is the evaluation host (same weights, ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan). On Vertex at the provider default reasoning level, development was 180 of 180 correct with 0 unsafe, but the latency trigger fired (p95 2.64 s, interval upper bound 3.08 s > 3.00 s). The isolated builder then sent `reasoning_effort: "low"` (amendment 8). On development: 18/18 correct, 0 unsafe, 158 of 160 schema-valid, and a p95 interval upper bound of about 2.34 s. Instability was 1/18 model changes plus 2 provider failures, which Manoella ruled are reported as errors, not instability (amendment 9; all four readings are published with it). Every development trigger passes. What remains is a checked pre-registration, a human-created tag and the one frozen run, before the endpoint retires on 2026-10-21. A person supplies a fresh access token before the authorized batch ([extractor runbook](../../intake_agent/extractor/README.md)).
+## 1. The result
 
-## 1. What is compared
+The frozen comparison ran once, on the registered extractor v1 (tag `extractor-v1` at commit `3ad34b5`, `prereg check` passing). It will not run again for this version. A changed prompt, parser, parameter or model is a new version with its own registration.
+
+The model ran 3 times per case, back to back in one batch that ended 2026-10-04 02:42 UTC. A case counts as correct when at least 2 of the 3 runs get both the action and the candidate charges right.
+
+| Frozen set | Extractor v1 (majority of 3) | Checklist | Always hand off to a person |
+|---|---|---|---|
+| All 60 cases | **53/60, 88.3%** (77.8–94.2%) | 23/60, 38.3% (27.1–51.0%) | 14/60, 23.3% (14.4–35.4%) |
+| 52 cases never exposed | **46/52, 88.5%** (77.0–94.6%) | 20/52, 38.5% (26.5–52.0%) | 12/52, 23.1% (13.7–36.1%) |
+| Spanish (30) | 27/30 | 12/30 | 7/30 |
+| Portuguese (30) | 26/30 | 11/30 | 7/30 |
+| Unsafe outcomes | 0 of 180 runs | 0 | 0 |
+| Cases that needed a person and didn't get one | 0 of 12 | 12 of 12 | 0 of 12 |
+
+Intervals are 95% Wilson. The 60 cases are an authored coverage mix, so the pooled rate describes that mix, not how often each situation happens in real life.
+
+**Paired comparison.** Both systems ran on the same cases, so we only compare where they disagree:
+- **All 60 cases:** the model alone was right on 32 and the checklist alone on 2. Exact McNemar: p ≈ 7×10⁻⁸.
+- **The 52 unexposed cases:** 28 against 2, p ≈ 8.7×10⁻⁷.
+- **Situations instead of cases.** Each situation appears twice, once per language, so the 60 cases aren't independent. The registered, more conservative analysis counts the 30 situations: the model did better on 20, worse on 2 and the same on 8 (sign test p ≈ 1.2×10⁻⁴).
+- **Same answer in both languages:** the model gave the same answer to both versions of a situation in 27 of 30, the checklist in 15.
+
+![Correct next action with 95% intervals for always-handoff, the checklist and extractor v1 on all 60 and the 52 never-exposed cases, and correct cases per scenario family](../Evidence/evaluation/frozen-v1-comparison.png)
+
+*Generated from the committed aggregates by [`build_frozen_chart.py`](../Evidence/evaluation/build_frozen_chart.py).*
+
+**Where the model missed.** The 7 misses sit in five scenario families:
+- mixed Spanish and Portuguese in one message: 0 of 2;
+- a report that also demands a refund: 2 of 4;
+- out of scope: 3 of 4;
+- a single clear match: 3 of 4;
+- an unsupported language: 1 of 2.
+
+Six of the seven were the same wrong answer in all three runs: the model asked the customer to clarify when the policy says to route the case or confirm the charge. That is the safe direction to be wrong in, since the customer is asked again rather than given a wrong charge. The checklist beat the model on 2 cases: one out-of-scope request and one message in an unsupported language, both families where fixed rules are naturally strong. Every family has fewer than five cases, so these are counts, not rates.
+
+**Stability, latency and cost:**
+- **Repetitions:** 52, 53 and 53 correct. One case of 60 changed its answer between repetitions, and there were no provider failures or timeouts.
+- **Latency:** pooled over all 180 model calls, p50 1,313 ms and p95 2,048 ms, with a 95% interval of 1,934–2,308 ms. That passes the 3,000 ms gate fixed in advance. It was measured from a laptop in Brazil to Vertex AI's `global` endpoint, not from the Worker.
+- **Tokens:** 331,233 input and 15,095 output, about 1,840 and 84 per call.
+- **Cost:** about US$0.027 for the whole batch, or US$0.00015 per call, at the prices the builder recorded from Vertex AI's pricing page on 2026-10-03.
+
+**The checklist did much worse here than in development** (16 of 18 there, 23 of 60 here). It was written by people who knew the development and evaluation cases. On the 25 `v1_authored` phrases, written by someone who didn't know its rules, it already fell to 15. The frozen set confirms that the rules fit the cases they were written against and don't generalize. It also never sent to a person any of the 12 cases that needed one; it asked for clarification instead.
+
+The published aggregates hold no message, customer or case identifier:
+- [`frozen-v1-cuts-2026-10-04.json`](../Evidence/evaluation/frozen-v1-cuts-2026-10-04.json): breakdowns by language, family and authored segment, for all cases and the unexposed ones;
+- [`frozen-v1-unexposed-2026-10-04.json`](../Evidence/evaluation/frozen-v1-unexposed-2026-10-04.json): the paired tests.
+
+Both carry the SHA-256 of the raw result (`9c0bf131…aaff2d`) and of the scored corpus (`515341c6…3c1bb1`). The raw result, which has per-case predictions, stays on the custodian's machine.
+
+## 2. What is compared, and why only reading
 
 | System | What it is |
 |---|---|
-| Always-handoff reference | Sends every case to a person. It is the floor any useful system must beat |
-| Checklist baseline (`evals/intake/baseline.py`) | Hand-written rules. They read amounts, dates, currencies and merchants with fixed patterns |
-| Extractor v1 ([ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md)) | A pretrained gpt-oss-20b model that **only turns the message into facts**. Amendment 7 runs the offline evaluation on Google Vertex AI (`openai/gpt-oss-20b-maas`, the same weights); historical development used Workers AI. The same written policy as the checklist decides the action from those facts, the session and the customer's own purchases. The online extractor stays off; its future host is a separate decision |
+| Always hand off | Sends every case to a person. The floor any useful system must beat |
+| Checklist (`evals/intake/baseline.py`) | Hand-written rules that read amounts, dates, currencies and merchants with fixed patterns |
+| Extractor v1 ([ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md)) | OpenAI's gpt-oss-20b on Google Vertex AI (`openai/gpt-oss-20b-maas`, `reasoning_effort: "low"`, temperature 0), used zero-shot. It only turns the message into facts: intent, stated amount, date, merchant, demands, injection attempts |
 
-So the comparison measures one thing: **how well each system reads the message.** Identity, ownership, confirmation and permissions stay deterministic in both, outside anything a model writes.
+Both the checklist and the model hand their facts to the same written policy ([`POLICY.md`](../../evals/intake/frozen_es_pt_v1/POLICY.md)), which picks the action from the facts, the session and the customer's own purchases. Identity, ownership, confirmation and permissions stay deterministic, outside anything a model writes. So the comparison isolates one capability, reading, and a model error can't become an action the policy wouldn't take.
 
-**What we report**, following the brief (problem statement, p. 6):
-- correct next action;
-- unsafe outcomes, meaning a disclosure or action the customer isn't entitled to;
-- missed and unnecessary handoffs;
-- p50 and p95 latency;
-- cost per attempted case.
+We report what the brief asks for (problem statement, p. 6): correct next action, unsafe outcomes, missed and unnecessary handoffs, p50 and p95 latency, and cost per attempted case, always with counts and denominators. Unsafe means disclosing or doing something the customer isn't entitled to: another customer's data, an invented charge, a refund or block, or an unconfirmed match treated as complete. "Safe automated resolution" has no numerator for intake, because the right ending is always a person, so it is reported as `not defined`.
 
-All come with their counts and denominators.
+## 3. Why we had to write the test messages
 
-"Safe automated resolution" has no numerator for intake, because the right ending is always a person. It is reported as `not defined`. The proposed read-only recent-transactions path would supply it, measured separately.
+The organizers' data can't test reading:
+- **The free text is templates.** There are 5 distinct complaint descriptions across 67,095 complaints, and 42 texts across 171,321 transcripts ([DF-001](DATA_ENGINEERING.md#df-001-source-text-fields-are-fixed-templates)). A model tested on them shows only that it can recall a template.
+- **No complaint points to a transaction** ([DF-003](DATA_ENGINEERING.md#df-003-claimed-amounts-are-not-linked-to-transactions)), so the data can't say which charge a customer disputed.
+- **There is no Portuguese text at all,** and ambiguous or duplicate charges almost never occur ([DF-012](DATA_ENGINEERING.md#df-012-ambiguous-reports-are-rare-and-double-charges-absent)).
 
-## 2. The nature of the problem: we lack realistic messages, not labels
+Labels, on the other hand, are cheap. Once a message's facts are known, the policy gives the right action exactly. What's missing is realistic customer wording. That one fact drives every choice below, including the rejection of methods built for a shortage of labels (section 9).
 
-The data decides what kind of evaluation is possible:
+## 4. The test sets
 
-- **The source text is fixed templates.** There are 5 distinct complaint descriptions in 67,095 complaints, and 42 texts in 171,321 transcripts (DF-001). A model tested on them would only show it can recall a template.
-- **No complaint points to a transaction** (DF-003). The data can't tell us which charge a customer disputed.
-- **There is no Portuguese text or Portuguese-speaking customer:** all 42 transcript texts are Spanish (DF-001). Ambiguous or duplicate charges almost never occur (DF-012).
+Every set was written by our team; none comes from the organizers' data.
 
-Once a message's facts are known, the correct action follows from the written policy ([`POLICY.md`](../../evals/intake/frozen_es_pt_v1/POLICY.md)). So labels are cheap and exact. What the dataset doesn't have is **realistic customer wording**. That shapes every choice below. Techniques built for a shortage of labels, which assume a large pool of real unlabeled messages, don't fit (section 6).
-
-## 3. The test sets: all built by our team
-
-None of the test messages comes from the organizers' data, because it has no usable free text. **We built every set ourselves.**
-
-| Set | Size | Who built it and how | What it may be used for |
+| Set | Size | How it was made | What it may be used for |
 |---|---|---|---|
 | `development` | 18 | The team | Tuning only. Never reported as an unseen result |
-| `evaluation` | 24 | The team, written with knowledge of the corpus | Regression, not an unseen estimate |
-| `v1_authored` | 25 | Andrés wrote the phrases without knowing the checklist rules; the team added fixtures, the mapping and gold, all still pending adjudication (three rows are open disagreements) | Regression. The checklist's first check on phrases written without knowledge of its rules (15/25). It is not an unseen estimate |
-| `safety` | 22 | The team: red-team cases for injection, other people's cards, refunds and similar | Safety regression |
-| **`frozen_es_pt_v1`** | **60** (30 situations, each in Spanish and Portuguese) | **The team.** We wrote the method and the drafting instructions, which spell out the policy, its rules, and the constraints for the synthetic customers and purchases. An isolated model session turned them into `POLICY.md`, the tested rules script `label_rules.py`, the fixture and the messages. We reviewed and tested the result (see below) | **The one unseen comparison, run once per system version** |
+| `evaluation` | 24 | The team, knowing the corpus | Regression |
+| `v1_authored` | 25 | Andrés wrote the phrases without knowing the checklist's rules; the team added fixtures and gold (three rows are still open disagreements) | Regression; the checklist's first test on phrases written blind to it (15/25) |
+| `safety` | 22 | The team: injection, other people's cards, refund demands | Safety regression for the checklist |
+| `frozen_es_pt_v1` | 60: 30 situations, each in Spanish and Portuguese | Described in section 5 | The one held-out comparison, once per system version |
 
-**How the frozen set was built** ([details](../../evals/intake/frozen_es_pt_v1/README.md)):
-1. **Spec first.** An isolated drafting session (Codex), following our written instructions and allowed to read only an allowlist of files, generated the synthetic customers and purchases within our constraints and wrote a structured spec for each situation: the intent and the facts the customer states. It then wrote a Spanish and a Portuguese message from each spec. The two messages use different wording; one isn't a translation of the other.
-2. **Gold by construction.** A tested rules script (`label_rules.py`) applies the written policy to the spec and the fixture, and never reads the message.
-3. **Independent verification.** A model of another family (Claude, in a fresh context that could read only the policy and the messages) re-derived the facts and the answer. It agreed on 60/60 answers and on the facts of 58/60.
-4. **Human review where it counts.** People answered plain-language multiple-choice questions on every verifier disagreement, plus a seeded random audit. They never saw codes, nor which option was the construction or verifier answer. Two aids are disclosed: Lucas's Spanish review showed a Claude-written Portuguese translation under each message, and Roberto answered after seeing AI suggestions.
-   - **Audit:** 0 label errors in 18 random cases, with an exact 95% upper bound of 15.3% (Clopper–Pearson).
-   - **Disagreements:** where a reviewer read the policy differently, we decided the rule in writing, and that decision applies to every similar case.
+## 5. How the frozen set was made and checked
 
-**Current baseline scores** (checklist / always-handoff, correct next action, 0 unsafe everywhere):
+The method is outline-then-paraphrase (Shah et al., 2018; Rastogi et al., 2020): fix the meaning first, then write the words, so the label never depends on reading the words.
 
-| Split | Checklist | Always handoff |
+1. **Spec first.** We wrote the drafting instructions: the policy, its rules and the constraints for synthetic customers and purchases. An isolated Codex session, allowed to read only an allowlist of files, generated 4 fictitious customers, 32 card purchases and 30 situation specs (the intent and the facts the customer states). It then wrote a Spanish and a Portuguese message from each spec, in different words; neither is a translation of the other.
+2. **Gold by construction.** `label_rules.py` applies the written policy to the spec and the fixture. It never reads the message, so the answer key can't inherit a reading mistake. Its behaviour is pinned by its own tests.
+3. **Independent check.** Claude, a different model family from the drafter, in a fresh context that could read only the policy and the messages, re-derived the facts and the answer from each message. It agreed on all 60 answers and on the facts of 58.
+4. **People where it matters.** Reviewers answered plain-language multiple-choice questions on every disagreement, plus a seeded random audit of 18 cases. They saw neither codes nor which option was the construction's or the checker's.
+   - **Audit result:** 0 label errors in 18, which bounds the label error rate below 15.3% with 95% confidence (exact Clopper–Pearson).
+   - **Disagreements:** where a reviewer read the policy differently, we wrote down the rule and applied it to every similar case. All five questions kept the existing rule.
+5. **Frozen by hash.** Every withheld file (fixture, specs, messages, gold, checker files, review answers) is committed only as a SHA-256 in `COMMITMENT.json`. The test suite recomputes those hashes on the machine that holds the files, and they matched before the run.
+
+## 6. How we kept the test set away from the model
+
+There are two ways test data leaks into a result here: statistics from the test period shape the design, or someone who saw test cases shapes the system. Each control is enforced by code or visible in git, not left to good intentions.
+
+| Risk | Control | Enforced by |
 |---|---|---|
-| development | 16/18 | 4/18 |
-| evaluation | 22/24 | 4/24 |
-| v1_authored | 15/25 | 12/25 |
-| safety | 20/22 | 8/22 |
+| Test-period data shapes the design | Two windows by business timestamp: design before 2026-01-01, holdout after. Only the design window informs prompts, thresholds or fixtures. `process_date` is never treated as the event date ([DF-004](DATA_ENGINEERING.md#df-004-processing-partition-precedes-the-event-date-for-early-hour-events)) | `run_findings.py` bounds every design query and has no option to move the window; a test fails on an unbounded query ([ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md)) |
+| The model's builder sees test cases | The frozen files never enter the repository. The extractor was built by an isolated agent in a checkout where those files don't exist | `COMMITMENT.json`; `make_clean_checkout.py` refuses a checkout if a withheld path exists or is tracked, or if more than one commit is reachable |
+| People who saw cases steer the model | Lucas, Roberto and the assistant sessions that helped them have seen frozen cases, so none of them may change the prompt, parsing or parameters. Behaviour and label changes need Manoella, who has seen none | [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md), decision 5 |
+| The system changes after seeing results | Pre-registration binds the prompt, the implementation and its dependency by SHA-256 to a git tag, with the model id and parameters. The runner refuses to score the frozen set without a valid registration, and the check passed before this run | `prereg.py`, `run.py` |
+| The test set changes after the fact | Every withheld file must match its committed hash when published | `rehearse_publication.py`, `test_artifacts.py` |
+| Scoring repeatedly until it looks good | Each registered version is scored once, and every version's result is reported. This was the only run of extractor v1 | ADR-005, decision 4 (a rule, not code) |
+| Tuning on test material | Tuning used only `development`. A scenario family lives in exactly one split within a corpus, and the runner rejects a corpus that breaks that. The frozen set shares one skill name (`no_match`) with development, scored on different cases, which is how a held-out test normally works | `validate()` in `run.py` |
+| Test content spreads through documents | Status pages carry rules and aggregates, never messages or fixture detail | `REVIEW_STATUS.md` |
 
-The checklist's misses on `v1_authored` are the gap a learned reader should close: currency words, non-ISO and relative dates, and paraphrases.
+**What got through, and what it did to the result.** We found and disclosed these before the run:
+- **8 of the 60 cases had content in git.** Until 2026-09-30, `REVIEW_STATUS.md` listed 6 case IDs with the policy question each raised, and two earlier versions of it held fragments of 2 more messages. A ninth ID appears in a test file with no content.
+- **The builder could have reached them.** The extractor was built in a `git worktree`, which shares the repository's history. Its instructions forbade other branches and reflogs but not the branch's own history, and git can't prove what was read.
+- **The fix:** we redacted the page and moved the blind checkout to a history-free snapshot, tested so an earlier commit's text can't be reached. We also registered in advance that the result would be reported with and without those 8 cases.
 
-## 4. How we prevent data leakage
+The 52-case cut answers whether the leak helped: the model scored 88.5% without the exposed cases and 88.3% with them. On the 8 exposed cases it got 7 right, and the checklist 3. There is no sign that exposure inflated the result, though 8 cases are too few to prove it had no effect.
 
-Leakage can happen in two ways here. Statistics from the test period can shape design choices, and people who built or tuned a system can see test cases. Each control below is enforced by code or visible in git history, not left to good intentions.
+**Other disclosures:**
+- **One full-period profiling** happened before the time windows existed. For every fact later used in design, the design-window value agrees to one decimal place.
+- **The drafting session read one file outside its allowlist,** the repository's agent configuration, which contains no cases.
+- **Two reviews weren't blind.** Roberto answered the Spanish review after seeing AI suggestions, so it isn't counted as an independent audit. Lucas reviewed Spanish with a machine translation beside each message.
+- **Two development labels were corrected** because they contradicted the written policy. The trail is in the [development log](../../intake_agent/extractor/DEV_LOG.md).
+- **Two run-record gaps:**
+  - The runner writes `gold_status: "Authored; pending team review"` into every result. That text predates the review and is stale; the gold was reviewed as described in section 5.
+  - The runner records only the batch's end time, not its start, and the provider returned no model build metadata to record. The batch ran in one sitting of a few minutes, well inside the registered 24-hour limit.
 
-| Risk | Control | Where it is enforced |
-|---|---|---|
-| Data from the test period shapes design | Two windows by business timestamp: design before 2026-01-01, holdout after. Only the design window informs prompts, thresholds or fixtures. `process_date` is never used as the event date (DF-004) | `data_profiles/findings/run_findings.py` bounds every design query and has no option to move the window. A test fails if a design query isn't bounded ([ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md)) |
-| The model's builder sees test cases | The frozen files stay off the repository behind a SHA-256 commitment. The extractor is built by an isolated agent in a clean checkout where those files don't exist. Since 2026-09-30 that checkout is a history-free snapshot, because a shared-history worktree exposed old versions of a status page (see the disclosures) | `COMMITMENT.json`, and `make_clean_checkout.py`, which refuses a checkout if any withheld path exists or is tracked, or if more than one commit is reachable |
-| The test set is changed after the fact | Every committed file (the cases, fixture, gold, verifier files, queues and review answers) must match its SHA-256 when published. Mutable working state (review progress files and the session record) isn't committed and is disclosed as such. The checks run on the machine that holds the withheld files; CI skips them | `rehearse_publication.py`, and the invariance test in `test_label_rules.py` |
-| The system is changed after seeing results | Pre-registration binds the prompt file and the implementation file, by hash, to a git tag. The model name is fixed inside that hashed implementation file. The runner refuses to score the frozen set without a valid registration | `evals/intake/preregistration/prereg.py`, `evals/intake/run.py` |
-| The frozen set is scored repeatedly until a result looks good | Rule, not code: each registered version is scored once, a fix is a new version, and every version's result is reported. Run outputs are local, so each published result will name its registration, tag and commit | [ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md), decision 4 |
-| Tuning on test material | Tuning happens only on `development`. Within a corpus, a scenario family lives in exactly one split, and the runner rejects a corpus that breaks that. Across corpora, the frozen set reuses three skill names from `cases.json`. One of them, `no_match`, is a development family, so the extractor is tuned on that skill and then scored on it with different cases, which is how a held-out test normally works. The other two appear only in `safety`. No frozen case was ever in development | `validate()` in `evals/intake/run.py` (within a corpus) |
-| People who saw test cases steer the model | Anyone who has seen a frozen case (Lucas, Roberto, and the assistant sessions that helped them) may not change the model's prompt, parsing or parameters. Policy or label changes need the approval of Manoella, who hasn't seen any frozen case | [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md), decision 5 |
-| Test content spreads through documents | Status pages carry aggregates and rules only, never messages or fixture detail | `REVIEW_STATUS.md`, redacted on 2026-09-30 (see the disclosure below) |
+## 7. The analysis, fixed before the run
 
-**What we disclose**, instead of hiding it:
-- **One full-period profiling:** before the time windows existed, we profiled several facts over the full period once. For every fact later used in design, the design-window values agree to one decimal place ([`DATA_QUALITY.md`](DATA_QUALITY.md), Disclosure).
-- **The drafting session read one extra file:** the repository's agent configuration, which contains no cases.
-- **Roberto's Spanish review isn't blind:** he answered after seeing AI suggestions, so it isn't counted as an independent audit.
-- **Frozen-case detail reached git, and the blind build could reach it.** The facts:
-  - Until 2026-09-30, `REVIEW_STATUS.md` listed the IDs of 6 frozen cases next to the policy question each one raised and the rule's answer, and named one message's language.
-  - Two earlier versions of the same file (commits `f847c47` and `798889f`, later removed in `59067f1`) described 2 more cases with fragments of their messages and their answers.
-  - `test_review.py` pins the IDs of 2 cases, with no content.
-  - The extractor v1 build ran in a `git worktree`, which shares the repository's history, so all of this was reachable from the builder's checkout. Its [committed instructions](../../evals/intake/preregistration/extractor-v1-builder-instructions.md) allowed only `POLICY.md` and `label_rules.py` in that folder and forbade other branches and reflogs, but not the branch's own history, and git can't prove what was read.
-  - Manoella was also told the page was safe to read.
+The pre-registration ([`extractor-v1.md`](../../evals/intake/preregistration/extractor-v1.md)) fixed these choices before any frozen case was scored:
+- **Primary metric:** correct next action by per-case majority over 3 repetitions, with Wilson intervals, on all 60 cases and on the 52 unexposed.
+- **Comparison:** exact McNemar on the discordant cases, plus a situation-level analysis, because the Spanish and Portuguese versions of a situation are correlated (Miller, 2024).
+- **Safety:** unsafe outcomes as a count over every run, never averaged against successes.
+- **Breakdowns:** by language, scenario family and cross-language consistency (CheckList-style invariance, Ribeiro et al., 2020). Groups under 5 cases are descriptive only.
+- **Latency:** p95 over all model calls, with a distribution-free order-statistic interval. The gate passes only if the interval's upper bound is at most 3,000 ms, which needs at least 72 calls.
+- **Stability:** the model's run-to-run changes, counted separately from provider failures (amendment 9).
+- **Reporting:** the result is published whatever it is.
 
-  **In total, 8 of the 60 frozen cases had content exposed (2 of them with message fragments), plus 1 more case ID.** What we did:
-  - redacted the page;
-  - the frozen result will be **reported with and without those 8 cases**, so any effect of the exposure is visible;
-  - the blind checkout is now a history-free snapshot (one commit, no shared objects), tested so that an earlier commit's text can't be reached. The next blind build uses it.
-- **Two development labels were corrected:** they contradicted the written policy. The trail and the before and after scores are in the [development log](../../intake_agent/extractor/DEV_LOG.md).
+**What 60 cases could detect.** Before the run we simulated the exact McNemar test with 60 paired cases (α = 0.05, 4,000 draws per row). Because each situation appears twice, the last column treats each language pair as one case (30):
 
-## 5. Statistics, and what 60 cases can and can't show
-
-- **Paired comparison:** exact McNemar test on the cases where the two systems disagree, since both run on the same cases.
-- **Rates:** Wilson intervals. **Audit error:** an exact Clopper–Pearson upper bound.
-- **Latency:** p95 with a distribution-free order-statistic interval, which needs at least 72 calls to exist. The gate, fixed before any measurement ([ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md), Proposed; amendment 1):
-  - at least 150 model-calling executions on the development split, pooled across all repetitions into the runner's `repetition: "all"` summary row, each at its wall time with timeouts at their full duration;
-  - the p95 of that pooled sample, with the equal-tailed 95% interval reported as `latency_p95_interval_ms`;
-  - **pass only if the interval's upper bound is at most 3,000 ms.** Otherwise the latency trigger fires, and the response is a lower reasoning level, not a larger model.
-- **Repeated runs:** 3 repetitions of the model, scored by per-case majority, with run-to-run variability reported.
-- **Breakdowns:** by scenario family (the skill tested) and by language, with authored segment metadata reported separately where present. A pooled rate is labelled "authored coverage mix, not prevalence".
-
-**The honest limit is size.** We simulated the exact McNemar test (`stats.mcnemar_exact`, α = 0.05, 4,000 draws per row) with 60 paired cases. Each row assumes the share of cases only the model gets right (b) and the share only the checklist gets right (c). Other assumptions give other figures, so the table shows the order of magnitude, not a promise:
-
-| Assumed b / c | Net gain | Chance of detecting it (60 cases) | The same, if each Spanish/Portuguese pair behaves as one case (30) |
+| Assumed share only the model gets right / only the checklist | Net gain | Chance of detecting it | If each language pair counts as one case |
 |---|---|---|---|
 | 10% / 2% | about 8 points | 28% | 4% |
 | 15% / 3% | about 12 points | 50% | 15% |
 | 25% / 3% | about 22 points | 91% | 53% |
 
-So the frozen set can only show a **large** improvement. That may be enough, because the checklist misses 40% of `v1_authored`. We also state it up front, and before the frozen run we will register the analysis:
-- group each Spanish/Portuguese pair so we don't overstate certainty (Miller, 2024);
-- declare the smallest effect the sample can detect;
-- report whether both languages get the same answer for the same situation. That invariance check comes free with the paired design (Ribeiro et al., 2020).
+The set could only show a large improvement. The observed gain was about 50 points, so detection isn't the issue. Precision is: the model's rate is known only to within roughly 77–94%.
 
-## 6. Options we considered
+## 8. Limits of this method
+
+These limit what the result means. None of them is hidden in the numbers above.
+
+- **Authored, not real, messages.** Every message was written by a model from our specs. They cover the situations we thought of, in the style a model writes. Real customers write shorter messages, with typos and slang, and sometimes several topics at once. The result says the model reads our coverage set well, not how it does on real traffic.
+- **The writer and the reader may share a style.** The messages were drafted by an OpenAI model (Codex) and the system under test is an OpenAI open-weight model. A shared style could make the messages easier for it to read. The independent checker was a different family (Claude) and agreed on 60 of 60 answers, which limits but doesn't remove the concern.
+- **Correct means agrees with our policy.** Gold comes from our written policy applied to our specs. If the policy is wrong for a bank, both systems are judged against the same wrong answer. The result measures reading, not whether the policy is right.
+- **Small and correlated.** 60 cases from 30 situations. Every family breakdown has fewer than 5 cases. The label audit bounds error only below 15.3%.
+- **Single-turn.** Each case is one message. The live guided flow is a sequence of steps, and a conversational follow-up wasn't tested.
+- **One host, one day, one endpoint that is going away.** Vertex AI exposes no immutable snapshot for `gpt-oss-20b-maas`, and Google retires the endpoint on 2026-10-21. The result doesn't transfer to its successor, which needs its own registration and fresh held-out cases, since this frozen set has now been used.
+- **The baseline is ours.** The checklist is a reasonable rules engine, not the best one possible. A team that spent more time on rules, or a small trained classifier, could narrow the gap.
+- **The latency wasn't measured where it would run.** It was measured from a laptop to Vertex AI, not from the Worker, and without the deterministic matching and database work an online request adds.
+- **Nothing here measures a customer outcome.** It shows better reading. It doesn't show that a customer finishes a report faster or that an agent resolves anything sooner.
+- **The model never ran on the 22 `safety` cases.** Its 0 unsafe comes from the frozen set's own adversarial situations; only the checklist was scored on the dedicated red-team set.
+
+## 9. What else could have been tested
+
+In rough order of value, with what stopped us:
+
+1. **Real customer messages.** Shadow mode on live traffic, where the model reads but changes nothing, would give real wording and the share of customers who can't find their charge, the number that decides whether the AI path is worth running ([ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md), condition 3). There is no real traffic yet: the live service has 5 episodes, all team sessions.
+2. **A second, larger held-out set from another model family.** About 200 cases written by a different generator (for example Gemini or Claude), with the same spec-first gold, would remove the shared-style concern and give about 90% power for an 8-point gain. This is also what a successor model needs, since the frozen set is spent. It needs a generator, an inference budget and a protocol decision.
+3. **Harder language.** Code-switching between Spanish and Portuguese (the model's weakest family, 0 of 2), regional variants (Mexican, Colombian, Argentine, Brazilian), typos, voice-to-text output and very short messages. CheckList-style perturbations (change the amount format, make the date relative, add noise) would test these systematically.
+4. **The red-team set against the model.** Running the 22 `safety` cases and a larger injection set through the model, not just the checklist.
+5. **Other models and sizes.** gpt-oss-120b, a small fast model, and a frontier model on the same cases, to put accuracy, latency and cost on one chart and pick the successor with evidence.
+6. **A stronger baseline.** Rules written blind by someone outside the team, or a small trained classifier, so the model has to beat a serious alternative.
+7. **Fully blind native review.** Native speakers from each country, who have seen no AI suggestions, labelling a larger random sample. That tightens the 15.3% label-error bound.
+8. **Latency and failure from the Worker itself.** The full suggestion path (token exchange, model call, matching, database), measured where it would run, under the 2,000 ms request target.
+9. **A product outcome.** A pilot that measures whether suggestions cut the time an agent spends matching a charge, or how often customers confirm a suggested charge, against today's manual match.
+
+## 10. Options we considered
 
 | Option | Decision | Why |
 |---|---|---|
-| Test on the organizers' complaint or transcript text | Rejected | Fixed templates (DF-001). A model would be tested on recall, not reading |
-| Random row split of the dataset | Rejected | It mixes time periods and puts near-identical templates on both sides ([ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md)) |
-| Train our own text model | Rejected | There is no realistic text to learn from; on templates it would learn a lookup |
-| **Pretrained model, zero-shot, extracting facts only** | **Used** | This is transfer learning without training data. The model reads, and the rules decide, so its errors are measurable and its reach is limited |
-| Weak supervision (labeling functions, as in Snorkel) | Rejected for evaluation | Our checklist *is* a set of labeling functions. Using it to label test cases would build its known errors into the answer key the model must beat |
-| Semi-supervision | Rejected | It needs a large pool of real unlabeled messages, which we don't have |
-| Active learning | Deferred to production | With real traffic, the messages where the checklist and the model disagree are the most useful ones for a person to label (query by committee). No traffic exists yet |
-| A model as judge to score answers | Rejected | Our outputs are facts and actions that can be checked exactly. A model judge adds inconsistency, cost and known biases (position, verbosity, preferring its own family) without adding information |
-| **A model as an independent checker of the test answers** | **Used** | Claude re-derived the answers from the messages, of a different family from the drafting session, and a human audit bounds how often it could be wrong |
-| Hand-written cases from spec, gold by rules (outline, then paraphrase) | **Used** for the frozen set | The label is exact by construction, and people only review where the checker disagrees, plus a random audit |
-| A larger synthetic tier (code samples situations, another model writes the messages, automatic and human checks) | **Proposed, pending a decision** | It would give the statistical power the 60 cases lack: about 90% to detect an 8-point gain with 200 cases. It would be reported separately and never as real-customer accuracy. The original Workers AI budget was insufficient; a generator, paid inference budget and approved protocol remain undecided |
-| Public benchmarks (MASSIVE for Spanish/Portuguese slots, BANKING77 for banking intents) | Rejected | MASSIVE is virtual-assistant speech in European Spanish and Portuguese, and BANKING77 is English intent classification. Neither tests reading a LATAM dispute message |
-| Prediction-powered inference (few labels plus many model predictions) | Rejected | Labels aren't our bottleneck. Realistic messages are |
-| Clustered errors, power analysis and invariance reporting | **Adopted**, to be registered before the frozen run | They make the small sample's limits explicit instead of hidden |
-| Latency judged on 48 calls against a fixed 3 s trigger | Replaced | 48 calls can't estimate a p95; the trigger would fire 43% of the time at a true p95 of exactly 3 s |
+| Test on the organizers' complaint or transcript text | Rejected | Templates; it would test recall, not reading |
+| Random row split of the dataset | Rejected | Mixes time periods and puts near-identical templates on both sides |
+| Train our own text model | Rejected | No realistic text to learn from; on templates it would learn a lookup |
+| Pretrained model, zero-shot, extracting facts only | Used | Transfer without training data. The model reads and the rules decide, so its errors are measurable and its reach is limited |
+| Weak supervision (Snorkel-style labelling functions) | Rejected | The checklist is a set of labelling functions; using it to label tests would bake its errors into the answer key |
+| Semi-supervision | Rejected | Needs a large pool of real unlabelled messages, which we don't have |
+| Active learning | Deferred | Useful once real traffic exists: cases where the checklist and the model disagree are the best ones for a person to label |
+| A model as judge of the answers | Rejected | Facts and actions can be checked exactly; a judge adds cost, inconsistency and known biases |
+| A model as independent checker of the gold | Used | A different family re-derived every answer; a human audit bounds its error |
+| Spec-first cases with gold by rules | Used | Exact labels; people review only disagreements plus a random audit |
+| Public benchmarks (MASSIVE, BANKING77) | Rejected | European Spanish and Portuguese assistant speech, or English intents; neither is a LATAM dispute message |
+| Prediction-powered inference | Rejected | Labels aren't the bottleneck |
+| Clustered analysis, power analysis, invariance | Adopted before the run | They make a small sample's limits explicit |
+| Latency judged on 48 calls against a fixed 3 s | Replaced | 48 calls can't estimate a p95 |
 
-## 7. What the results will and won't claim
+**How we got here in development.** On Workers AI at the provider's default reasoning level, development was accurate but slow (pooled p95 3,582 ms, failing the gate), so amendment 7 moved the evaluation to Vertex AI and amendment 8 set `reasoning_effort: "low"`. At low, development scored 18 of 18 by majority, 0 unsafe, a p95 upper bound of about 2,340 ms, and instability that passed under Manoella's amendment 9 ruling. The full trail is in the [development log](../../intake_agent/extractor/DEV_LOG.md) and the [historical development cuts](../Evidence/evaluation/development-cuts-2026-10-01.json).
 
-**They will say:**
-- how each system behaves on stated scenarios, per skill and per language;
-- how often it was unsafe, with counts and denominators;
-- how fast it answered and what it cost per case.
+## 11. Other measurements
 
-**They won't say:**
-- how often those scenarios happen in real life;
-- that the model improves a live service;
-- that zero observed unsafe outcomes means zero risk.
+These come from separate streams and are never pooled with the frozen result.
 
-The Portuguese results show the system handles Portuguese, not that there is Portuguese demand. Offline results, simulations and projections are labelled separately, as the brief asks.
+**Recent-charges view** (provisional, [ADR-009](../ADRs/ADR-009-recent-charges-resolution.md) Proposed), scored by [`evals/inquiry/score.py`](../../evals/inquiry/score.py) on 12 authored requests against local D1:
+- **Results:** 10 of 12 were safe automated resolutions (83%, 55–95%), 0 unsafe. Two of the 12 were written to fail (an expired session and a recording failure), so 10 is the maximum.
+- **Limit:** the cases were written with the code they test. They show it does what its authors intended, not how it does on unseen requests.
+- **To reproduce:** `make intake-ui-build`, then `INQUIRY_OUT=data/charge-views/authored.jsonl npm --prefix back-end run test:integration`, then `.venv/bin/python -m evals.inquiry.score data/charge-views/authored.jsonl`.
 
-### Historical development language comparison
+**Live service:** 5 report episodes exported from remote D1 on 2026-10-02, all team and reviewer sessions since the last demo reset, on the guided flow, which calls no model.
+- **Outcomes:** 4 complete handoffs, 1 incomplete ("I can't find it"), 0 recorded unsafe. Safety is recorded as `not_assessed`, never as safe.
+- **Episode span:** p50 11.6 s, p95 14.7 s. That includes the customer's reading and typing.
+- **Cost:** $0 on Workers Free, with no model calls.
+- **Limit:** five episodes support no rate.
+- **To reproduce:** `node scripts/close-idle-intakes.mjs --remote` and `node scripts/export-intake-events.mjs --remote`, from `back-end/`. A person runs these, because the first one writes.
 
-The saved Workers AI development run executed **2026-10-01T03:27:53.338606+00:00** was regrouped on 2026-10-03 without calling a system, rescoring predictions or changing labels. [Aggregate evidence](../Evidence/evaluation/development-cuts-2026-10-01.json) records the exact result and corpus SHA-256 hashes; the current corpus matches the run. Population: 18 authored development cases, nine Spanish and nine Portuguese, representing nine translated situation pairs. Each system contributes one primary outcome per case: reference execution or model majority over ten repetitions. There are no customer joins or exclusions.
+**Report-request latency:** the target is p95 below 2,000 ms. The only timed evidence is one `POST /intake/confirm` at 1,268 ms and one `POST /intake/start` at 368 ms, from an older version. **The target is not demonstrated.** [`summarize_worker_latency.py`](../../scripts/summarize_worker_latency.py) summarizes a future authorized export.
 
-| Session language | Cases per system | Checklist correct (95% Wilson) | Extractor majority correct (95% Wilson) | Always handoff correct (95% Wilson) | Recorded unsafe per system |
-|---|---|---|---|---|---|
-| Spanish | 9 | 8/9 (56.5–98.0%) | 9/9 (70.1–100%) | 2/9 (6.3–54.7%) | 0/9 |
-| Portuguese | 9 | 8/9 (56.5–98.0%) | 9/9 (70.1–100%) | 2/9 (6.3–54.7%) | 0/9 |
-| All | 18 | 16/18 (67.2–96.9%) | 18/18 (82.4–100%) | 4/18 (9.0–45.2%) | 0/18 |
+## Reproducing and where to look
 
-These descriptive intervals do not account for correlated translation pairs; neither language ranks above the other. All **18/18 development cases lack authored segment metadata**, retained as the explicit null-segment population for every system. No named segment performance can be inferred. This historical tuned-development result is not a Bedrock or frozen result. The separate pooled 180-execution model latency remains p95 3,581.5 ms, interval 3,416.3–4,201.3 ms, failing the 3,000 ms development gate; per-case majority medians do not decide it.
-
-Reproduce the aggregate from the retained local result:
+The frozen run, the custodian's commands (the run is not repeated for this version):
 
 ```bash
-.venv/bin/python -m evals.intake.report_cuts \
-  data_foundation/runs/latency-2026-10-01/results.json evals/intake/cases.json
+.venv/bin/python -m evals.intake.preregistration.prereg check --file evals/intake/preregistration/extractor-v1.md
+.venv/bin/python -m evals.intake.run --cases evals/intake/frozen_es_pt_v1.candidate.json --repetitions 3 \
+  --system extractor-v1=intake_agent.extractor.vertex:extract \
+  --preregistration extractor-v1=evals/intake/preregistration/extractor-v1.md --output data/frozen-run/results.json
+.venv/bin/python -m evals.intake.report_cuts data/frozen-run/results.json evals/intake/frozen_es_pt_v1.candidate.json \
+  --exposed <private exposed-id list> > data/frozen-run/cuts.json
+.venv/bin/python -m evals.intake.frozen_report data/frozen-run/results.json --system extractor-v1 \
+  --exposed <private exposed-id list> > data/frozen-run/unexposed-comparison.json
 ```
-
-### Language and segment reporting
-
-The runner already reports `all`, `es` and `pt` by trusted session language, with counts and Wilson intervals. The episode scorer reports `all`, `es`, `pt` and `en`. Unsupported message languages stay in their session-language group. Every table states its population and denominator; zero denominators yield no rate. Five live episodes, including one Spanish episode, cannot support language rankings or a comparative latency claim.
-
-The supplied customer's `segment` is a current snapshot retained in Silver and analytical Gold. It is absent from served D1 customers and live intake events, so **live/source-customer segment evaluation is not assessed**. The frozen exporter can carry a synthetic fixture's authored `segment` on each case. Those labels describe authored coverage, not real customer segments; they do not satisfy a claim about segment performance in the supplied population. Frozen customers are fictitious and must never be mapped to source customers to manufacture metadata.
-
-After the approved one-time run, the custodian can produce supplemental aggregates without another model call:
-
-```bash
-.venv/bin/python -m evals.intake.report_cuts data/frozen-run/results.json \
-  /private/path/to/the-scored-corpus.json \
-  --exposed /private/path/to/the-authorized-exposed-ids.json > data/frozen-run/cuts.json
-.venv/bin/python -m evals.intake.frozen_report data/frozen-run/results.json \
-  --system extractor-v1 --exposed /private/path/to/the-authorized-exposed-ids.json \
-  > data/frozen-run/unexposed-comparison.json
-```
-
-The report refuses unless the metadata corpus's SHA-256 equals the runner's recorded corpus hash. It groups primary per-case outcomes (one reference row or model majority row per case) by session language, scenario family and authored segment; missing segment remains a `null` group with its denominator. With the authorized exposed-id list, it reports both all-60 and unexposed-52 populations plus each system's rate difference (`unexposed − all`); the second command supplies the exact paired McNemar comparison. Groups below five cases are marked sparse and support descriptive counts and intervals only, never rankings or a pass/fail decision. An omitted empty group has no cases and no inferred rate. The pooled execution rows, rather than these majority-row medians, decide the latency gate. The report contains aggregates and source hashes, with no messages, customer identifiers or case identifiers. The custodian checks the expected 60/52 counts before publication; none of the 60 is presented as a wholly blind corpus.
-
-## 8. Normal resolution path (provisional, ADR-009 Proposed)
-
-The recent-charges view shows a signed-in customer their own recent charges, read-only ([ADR-009](../ADRs/ADR-009-recent-charges-resolution.md)). It is scored by [`evals/inquiry/score.py`](../../evals/inquiry/score.py) on its own stream and never mixed with the intake episodes above.
-
-**Population:** 12 authored cases, each an explicit request run against local D1: Spanish, Portuguese and English × a normal list, an empty one and a first page with more to come, plus an expired session (es), another customer trying to acknowledge the view (pt) and a failure to record the view (en). They test stated situations. They are not a sample of how often customers ask. The team wrote these cases (with an agent) together with the code they test, so they show the code does what its authors intended, not how it performs on unseen requests.
-
-**Attempted** means the service returned the list (HTTP 200). **Safe automated resolution** means a view was recorded, the client acknowledged it as displayed, its coverage was declared and nothing unsafe happened. **Unsafe** means another customer's row was served or acknowledged, or a view was recorded or acknowledged without a live session. It is a gate, reported as a count and never netted against successes.
-
-| | Cases | Attempted | Safe automated resolution (95% Wilson) | Unsafe |
-|---|---|---|---|---|
-| All | 12 | 11 | 10 of 12, 83% (55–95%) | 0 |
-| Spanish | 4 | 3 | 3 of 4, 75% (30–95%) | 0 |
-| Portuguese | 4 | 4 | 4 of 4, 100% (51–100%) | 0 |
-| English | 4 | 4 | 3 of 4, 75% (30–95%) | 0 |
-
-10 of 12 reflects the authored mix, not service performance: two of the 12 were written to fail (expired session, tool failure), so 10 is the maximum by design. The expired session is refused before anything is served, and when recording the view fails the rows are still shown but there is no view to acknowledge. **Cost per success** is $0.00: the ADR-004 cost per attempted case on Workers Free ($0) × 11 attempts ÷ 10 successes. On Workers Paid it would depend on real monthly volume, which these cases do not measure.
-
-This shows that, in authored cases, the service served the customer's own charges and the client displayed them. It does not show that a bank resolved anything or that a customer was satisfied. The figures are provisional while ADR-009 is Proposed. To reproduce, install dependencies with `make intake-setup`, then from the repository root build the real client assets and run the local-D1 suite:
-
-```bash
-make intake-ui-build
-rm -f data/charge-views/authored.jsonl
-INQUIRY_OUT=data/charge-views/authored.jsonl npm --prefix back-end run test:integration
-.venv/bin/python -m evals.inquiry.score data/charge-views/authored.jsonl
-```
-
-**Live page loads** are reported separately, as descriptive counts and display rates only, never as resolutions: a page load is not an explicit request. A person reads them with `cd back-end && npx wrangler d1 execute arabica-intake-demo --remote --json --command "SELECT language, row_count, has_more, coverage, retrieved_at, displayed_at FROM charge_views"`. Those figures are pending until the path is deployed.
-
-## 9. Live service, as measured
-
-The deployed Worker's own record, exported on 2026-10-02 at 23:10 UTC from remote D1 (`back-end/scripts/export-intake-events.mjs`, which validates every event with `evals/intake/episodes.py` and publishes all of them or nothing). **Population:** every report episode in the live store at export, 5 of them (out-of-scope requests never start an episode, so they are not in this log), between 2026-10-01 12:40 and 2026-10-02 14:57 UTC. The demo reset clears episodes, so this is the traffic since the last reset: team and reviewer sessions, not a sample of customers. The live flow is `guided-0.1`, which calls no model.
-
-| | Started (denominator) | Complete handoff accepted (`accepted`) | Routed (incomplete handoff) | Recorded unsafe | Safety not assessed | Episode span p50 / p95 |
-|---|---|---|---|---|---|---|
-| All | 5 | 4 | 1 | 0 | 5 | 11.6 s / 14.7 s |
-| Spanish | 1 | 1 | 0 | 0 | 1 | 14.7 s / 14.7 s |
-| Portuguese | 4 | 3 | 1 | 0 | 4 | 10.9 s / 12.9 s |
-| English | 0 | 0 | 0 | 0 | 0 | none |
-
-- **Safe accepted is 0 by contract, not by failure.** Production records `safety = not_assessed` unless a check ran ([`intake-events.md`](../intake/intake-events.md)), and an unassessed episode is never counted as safe. The 4 accepted handoffs are reported as they are.
-- **Episode span is not service latency.** It runs from the start of a report to its handoff, including the customer's reading and typing. Per-request service latency is not reported here.
-- **Cost per attempted case** is $0 on Workers Free (ADR-004): 0 model calls and 0 tokens over the 5 episodes, 24 tool calls. **Cost per successful automated resolution** is `not defined` for intake, because a handoff is not a resolution (ADR-002).
-- **English** shows 0 started because it became a report language after these episodes (ADR-008). It is listed so the column is never silently missing.
-- Five episodes support no rate. With one Spanish episode, its p50 and p95 are the same value.
-
-To reproduce, a person runs this from `back-end/` with the Worker's Cloudflare account selected (`CLOUDFLARE_ACCOUNT_ID`). The first command closes episodes idle at the time it runs, immediately before the export, and prints that `cutoff` (a remote write; [`intake-events.md`](../intake/intake-events.md) says to state it with the figures). This run's cutoff was 2026-10-02T23:10:09Z; no episode was pending or abandoned, so it does not change these figures. The second command only reads:
-
-```bash
-node scripts/close-idle-intakes.mjs --remote --max-pages 100
-node scripts/export-intake-events.mjs --remote --max-pages 100 --output ../data/intake-events/live.jsonl > ../data/intake-events/live.out.json
-```
-
-The summary in `live.out.json` holds every figure above. The files stay in ignored `data/`.
-
-## 10. Report-request latency: evidence still incomplete
-
-The report endpoint's p95 target is **below 2,000 ms**, separately from the offline model's 3,000 ms development gate. Episode span in section 9 includes reading and typing and cannot test that target.
-
-The available 2026-10-01 Worker tail export contains only **one** timed `POST /intake/confirm` request: HTTP 201, wall time 1,268 ms, Worker `f8e3a6ec-de71-4b32-b589-c1c3929c2d6b`. It also has one `POST /intake/start` at 368 ms. The 2026-09-29 dashboard export has one legacy `/cases` request at 605 ms. These are older-version, sparse observations, not current-release p95 evidence. Their export sampling and completeness have not been established. **The current report p95 target is not demonstrated.**
-
-To summarize an authorized local export without exposing request identifiers, headers, URLs or customer fields:
-
-```bash
-.venv/bin/python scripts/summarize_worker_latency.py \
-  data/observability/tail-2026-10-01.jsonl --route /intake/confirm
-```
-
-[`summarize_worker_latency.py`](../../scripts/summarize_worker_latency.py) reads dashboard arrays or JSONL/pretty-printed tail records, coalesces dashboard records by request ID internally, preserving any observed failure and the largest known duration/status and reports only route/version aggregates. Each group includes total and timed requests, missing durations, failed requests and status counts, p50/p95 wall time and its 95% order-statistic interval. Optional `--since` (inclusive) and `--until` (exclusive) bound the UTC event-time window. The singleton's p95 interval and threshold assertion are undefined. Missing durations and non-successes remain visible rather than being dropped from the population description.
-
-A claim about the recorded or later deployment requires a new authorized export of that version with declared capture coverage, enough timed report requests for tail uncertainty, the exact event-time window, and counts of failures and missing durations. The analyzer is evidence from the supplied export only; it cannot establish completeness or replace that capture. No new live measurement was made in this review.
-
-## Where to look
 
 - Harness, baselines and splits: [`evals/intake/`](../../evals/intake/README.md)
-- Frozen set method and review status: [`evals/intake/frozen_es_pt_v1/`](../../evals/intake/frozen_es_pt_v1/README.md), [`REVIEW_STATUS.md`](../../evals/intake/frozen_es_pt_v1/REVIEW_STATUS.md)
-- Pre-registration and blind build: [`evals/intake/preregistration/`](../../evals/intake/preregistration/README.md)
-- Protocol and learned component: [ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md), [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md)
-- Extractor development log, including the latency measurements: [`intake_agent/extractor/DEV_LOG.md`](../../intake_agent/extractor/DEV_LOG.md)
+- Frozen set method and review status: [`frozen_es_pt_v1/`](../../evals/intake/frozen_es_pt_v1/README.md), [`REVIEW_STATUS.md`](../../evals/intake/frozen_es_pt_v1/REVIEW_STATUS.md)
+- Pre-registration and the blind build: [`evals/intake/preregistration/`](../../evals/intake/preregistration/README.md)
+- Protocol and learned component: [ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md), [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md); whether the model goes online: [ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md)
 
 **References:**
 - Ribeiro et al., "Beyond Accuracy: Behavioral Testing of NLP Models with CheckList", ACL 2020.
@@ -289,6 +247,6 @@ A claim about the recorded or later deployment requires a new authorized export 
 - Northcutt et al., "Pervasive Label Errors in Test Sets", NeurIPS 2021.
 - Zheng et al., "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena", NeurIPS 2023.
 - Ratner et al., "Snorkel", VLDB 2017.
-- Huyen, *Designing Machine Learning Systems* (2022), ch. 4, and *AI Engineering* (2025), chs. 3–4 and 8.
 - Shah et al. (2018) and Rastogi et al. (2020) for outline-then-paraphrase data collection.
 - Dwork et al. (2015) for using a holdout once.
+- Huyen, *Designing Machine Learning Systems* (2022), ch. 4, and *AI Engineering* (2025), chs. 3–4 and 8.

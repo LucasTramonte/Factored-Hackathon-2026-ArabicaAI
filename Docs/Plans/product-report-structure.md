@@ -11,7 +11,7 @@ Submission closes on 2026-10-05. Nothing below is deleted; sections are only ord
   - section 0: KPIs 1–3 and the resolution gap (43.65% against 76.61%, design window; #86's 43.60% / 76.65% are *full period*), as reviewed `make report` aggregates with their SQL;
   - section 4, the "before" picture: unresolved share, SLA breaches, time to first response and to close (non-escalated), closed-case satisfaction (F5), contact-centre CSAT by resolution;
   - section 9's segment cut;
-  - F1 and the wait missingness registered as DF-027 in `DATA_QUALITY.md`;
+  - F1 and the wait missingness registered as DF-027 in `DATA_ENGINEERING.md`;
   - section 11, the limits.
 - **After 10-05, or only if time allows:**
   - sections 2 and 5 (critical customers and the priority order are stated policies, not demanded by the brief);
@@ -252,7 +252,7 @@ Survey answers and comments are never charted as evidence of wait or quality (F1
 
 ## Build order
 1. **Section 0, KPIs 1–3,** as reviewed aggregates in `make report`, with their SQL (insights report next steps 1–2).
-2. **Register F1** and the wait missingness in `DATA_QUALITY.md`, with a query (next step 3).
+2. **Register F1** and the wait missingness in `DATA_ENGINEERING.md`, with a query (next step 3).
 3. **Sections 1, 3, 4, 5 and 6** from Silver, with satisfaction shown only with its population (next step 4).
 4. **Section 9's segment cut** (next step 5), then sections 7 and 8 from the D1 export, plus the latency run.
 5. **Sections 10 and 11,** then the `/insights` page (section 12) with Roberto, once the aggregates are reviewed.
@@ -260,6 +260,6 @@ Survey answers and comments are never charted as evidence of wait or quality (F1
 The metric dictionary grows with each step: a metric is added to it when its query is written, not at the end.
 
 ## Open decisions
-1. **Report format:** the `make report` HTML hub only, or also a Markdown deliverable (`Docs/deliverables/PRODUCT_REPORT.md`) with static charts.
+1. **Report format:** the `make report` HTML hub only, or also a Markdown deliverable (`Docs/deliverables/BUSINESS_OUTCOMES.md`) with static charts.
 2. **Whether the critical-customer and priority definitions** stay report-only, or are proposed for the product.
 3. **Who runs the latency measurement** for the 4 s target (the summarizer exists since #91; the run and log export need a person with the Cloudflare account), and who exports the D1 status history.

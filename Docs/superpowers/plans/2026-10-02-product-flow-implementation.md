@@ -603,7 +603,7 @@ Branch `feat/urgency-and-shadow`.
 - [ ] `Docs/deliverables/SYSTEM_DESIGN.md`: "What we built" table gains sign-in, reports, status and notifications; the customer-experience section's "Planned" bullets move to "Built" where true; status date updated.
 - [ ] The team page (artifact "ArabicaAI Product Flow"): correct "the `priority` column exists and is never set" to "`priority` is fixed to `normal` by its CHECK; urgency is a new column", and "migration 0009" for the status machine to "0011".
 - [ ] `Docs/ADRs/ADR-007-…`: state that failed one-time-code attempts happen at Cognito and are visible in CloudTrail, not in `auth_events`.
-- [ ] `Docs/deliverables/ARCHITECTURE.md` and the README diagram note: Cognito and SES boxes, Access removed.
+- [ ] `Docs/deliverables/SYSTEM_DESIGN.md` and the README diagram note: Cognito and SES boxes, Access removed.
 - [ ] `Docs/intake/intake-events.md`: no change to the event vocabulary; a note that status transitions are stored in `handoff_status_history` and are not intake events.
 - [ ] `Docs/releases/README.md`: proposed `v0.2.0` "Submission" row with migrations 0009 to 0011, the Worker version and the secrets that must exist.
 - [ ] `python3 scripts/check_doc_links.py` green. PR label `documentation`.

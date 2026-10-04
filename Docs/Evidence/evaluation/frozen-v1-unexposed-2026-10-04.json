@@ -1,0 +1,310 @@
+{
+  "unexposed": [
+    {
+      "split": "frozen_es_pt_v1",
+      "baseline": "checklist",
+      "repetition": null,
+      "language": "all",
+      "cases": 52,
+      "correct": 20,
+      "correct_rate": 0.38461538461538464,
+      "correct_rate_ci95": [
+        0.26470463780216213,
+        0.5204012628418061
+      ],
+      "unsafe": 0,
+      "safe_complete": 0,
+      "completion_ready": 8,
+      "completion_ready_rate": 0.0,
+      "missed_handoff": 11,
+      "required_handoff": 11,
+      "unnecessary_handoff": 0,
+      "not_required_handoff": 41,
+      "latency_p50_ms": 0.04182249995210441,
+      "latency_p95_ms": 0.11511299999256153,
+      "latency_p95_interval_ms": [
+        0.1042910007527098,
+        null
+      ],
+      "input_tokens": null,
+      "output_tokens": null,
+      "usage_unavailable_calls": 0,
+      "errors": 0,
+      "operating_cost": null,
+      "episode_completion_rate": null
+    },
+    {
+      "split": "frozen_es_pt_v1",
+      "baseline": "checklist",
+      "repetition": null,
+      "language": "es",
+      "cases": 28,
+      "correct": 10,
+      "correct_rate": 0.35714285714285715,
+      "correct_rate_ci95": [
+        0.2070582950773768,
+        0.5416969348557219
+      ],
+      "unsafe": 0,
+      "safe_complete": 0,
+      "completion_ready": 4,
+      "completion_ready_rate": 0.0,
+      "missed_handoff": 6,
+      "required_handoff": 6,
+      "unnecessary_handoff": 0,
+      "not_required_handoff": 22,
+      "latency_p50_ms": 0.04308350071369205,
+      "latency_p95_ms": 0.10809900049935095,
+      "latency_p95_interval_ms": [
+        0.08362299922737293,
+        null
+      ],
+      "input_tokens": null,
+      "output_tokens": null,
+      "usage_unavailable_calls": 0,
+      "errors": 0,
+      "operating_cost": null,
+      "episode_completion_rate": null
+    },
+    {
+      "split": "frozen_es_pt_v1",
+      "baseline": "checklist",
+      "repetition": null,
+      "language": "pt",
+      "cases": 24,
+      "correct": 10,
+      "correct_rate": 0.4166666666666667,
+      "correct_rate_ci95": [
+        0.24467602609811764,
+        0.6116533413477124
+      ],
+      "unsafe": 0,
+      "safe_complete": 0,
+      "completion_ready": 4,
+      "completion_ready_rate": 0.0,
+      "missed_handoff": 5,
+      "required_handoff": 5,
+      "unnecessary_handoff": 0,
+      "not_required_handoff": 19,
+      "latency_p50_ms": 0.03690149969770573,
+      "latency_p95_ms": 0.11511299999256153,
+      "latency_p95_interval_ms": [
+        0.09364699872094207,
+        null
+      ],
+      "input_tokens": null,
+      "output_tokens": null,
+      "usage_unavailable_calls": 0,
+      "errors": 0,
+      "operating_cost": null,
+      "episode_completion_rate": null
+    },
+    {
+      "split": "frozen_es_pt_v1",
+      "baseline": "extractor-v1",
+      "repetition": "majority",
+      "language": "all",
+      "cases": 52,
+      "correct": 46,
+      "correct_rate": 0.8846153846153846,
+      "correct_rate_ci95": [
+        0.7702833565509788,
+        0.946030307969127
+      ],
+      "unsafe": 0,
+      "safe_complete": 8,
+      "completion_ready": 8,
+      "completion_ready_rate": 1.0,
+      "missed_handoff": 0,
+      "required_handoff": 11,
+      "unnecessary_handoff": 0,
+      "not_required_handoff": 41,
+      "latency_p50_ms": 1324.4079200012493,
+      "latency_p95_ms": 1720.9669889998622,
+      "latency_p95_interval_ms": [
+        1641.457748000903,
+        null
+      ],
+      "input_tokens": 280233,
+      "output_tokens": 12812,
+      "usage_unavailable_calls": 0,
+      "errors": 0,
+      "operating_cost": null,
+      "episode_completion_rate": null
+    },
+    {
+      "split": "frozen_es_pt_v1",
+      "baseline": "extractor-v1",
+      "repetition": "majority",
+      "language": "es",
+      "cases": 28,
+      "correct": 25,
+      "correct_rate": 0.8928571428571429,
+      "correct_rate_ci95": [
+        0.7280414845132785,
+        0.9628816331707
+      ],
+      "unsafe": 0,
+      "safe_complete": 4,
+      "completion_ready": 4,
+      "completion_ready_rate": 1.0,
+      "missed_handoff": 0,
+      "required_handoff": 6,
+      "unnecessary_handoff": 0,
+      "not_required_handoff": 22,
+      "latency_p50_ms": 1326.964717500232,
+      "latency_p95_ms": 1662.3475390006206,
+      "latency_p95_interval_ms": [
+        1568.266026000856,
+        null
+      ],
+      "input_tokens": 152862,
+      "output_tokens": 6726,
+      "usage_unavailable_calls": 0,
+      "errors": 0,
+      "operating_cost": null,
+      "episode_completion_rate": null
+    },
+    {
+      "split": "frozen_es_pt_v1",
+      "baseline": "extractor-v1",
+      "repetition": "majority",
+      "language": "pt",
+      "cases": 24,
+      "correct": 21,
+      "correct_rate": 0.875,
+      "correct_rate_ci95": [
+        0.6899611872949993,
+        0.9565566591987655
+      ],
+      "unsafe": 0,
+      "safe_complete": 4,
+      "completion_ready": 4,
+      "completion_ready_rate": 1.0,
+      "missed_handoff": 0,
+      "required_handoff": 5,
+      "unnecessary_handoff": 0,
+      "not_required_handoff": 19,
+      "latency_p50_ms": 1314.138316500248,
+      "latency_p95_ms": 1720.9669889998622,
+      "latency_p95_interval_ms": [
+        1640.114513998924,
+        null
+      ],
+      "input_tokens": 127371,
+      "output_tokens": 6086,
+      "usage_unavailable_calls": 0,
+      "errors": 0,
+      "operating_cost": null,
+      "episode_completion_rate": null
+    },
+    {
+      "split": "frozen_es_pt_v1",
+      "baseline": "handoff",
+      "repetition": null,
+      "language": "all",
+      "cases": 52,
+      "correct": 12,
+      "correct_rate": 0.23076923076923078,
+      "correct_rate_ci95": [
+        0.13724260925492748,
+        0.3613378255809984
+      ],
+      "unsafe": 0,
+      "safe_complete": 0,
+      "completion_ready": 8,
+      "completion_ready_rate": 0.0,
+      "missed_handoff": 11,
+      "required_handoff": 11,
+      "unnecessary_handoff": 13,
+      "not_required_handoff": 41,
+      "latency_p50_ms": 0.054514500334335025,
+      "latency_p95_ms": 0.08794699897407554,
+      "latency_p95_interval_ms": [
+        0.07920400094008073,
+        null
+      ],
+      "input_tokens": null,
+      "output_tokens": null,
+      "usage_unavailable_calls": 0,
+      "errors": 0,
+      "operating_cost": null,
+      "episode_completion_rate": null
+    },
+    {
+      "split": "frozen_es_pt_v1",
+      "baseline": "handoff",
+      "repetition": null,
+      "language": "es",
+      "cases": 28,
+      "correct": 6,
+      "correct_rate": 0.21428571428571427,
+      "correct_rate_ci95": [
+        0.1021246033289788,
+        0.3953858565372187
+      ],
+      "unsafe": 0,
+      "safe_complete": 0,
+      "completion_ready": 4,
+      "completion_ready_rate": 0.0,
+      "missed_handoff": 6,
+      "required_handoff": 6,
+      "unnecessary_handoff": 8,
+      "not_required_handoff": 22,
+      "latency_p50_ms": 0.0561814995307941,
+      "latency_p95_ms": 0.08729499859327916,
+      "latency_p95_interval_ms": [
+        0.07164000089687761,
+        null
+      ],
+      "input_tokens": null,
+      "output_tokens": null,
+      "usage_unavailable_calls": 0,
+      "errors": 0,
+      "operating_cost": null,
+      "episode_completion_rate": null
+    },
+    {
+      "split": "frozen_es_pt_v1",
+      "baseline": "handoff",
+      "repetition": null,
+      "language": "pt",
+      "cases": 24,
+      "correct": 6,
+      "correct_rate": 0.25,
+      "correct_rate_ci95": [
+        0.11999366228595004,
+        0.44899444005154004
+      ],
+      "unsafe": 0,
+      "safe_complete": 0,
+      "completion_ready": 4,
+      "completion_ready_rate": 0.0,
+      "missed_handoff": 5,
+      "required_handoff": 5,
+      "unnecessary_handoff": 5,
+      "not_required_handoff": 19,
+      "latency_p50_ms": 0.05235450043983292,
+      "latency_p95_ms": 0.09535400022286922,
+      "latency_p95_interval_ms": [
+        0.07920400094008073,
+        null
+      ],
+      "input_tokens": null,
+      "output_tokens": null,
+      "usage_unavailable_calls": 0,
+      "errors": 0,
+      "operating_cost": null,
+      "episode_completion_rate": null
+    }
+  ],
+  "mcnemar": {
+    "b": 2,
+    "c": 28,
+    "p": 8.67992639541626e-07
+  },
+  "mcnemar_all": {
+    "b": 2,
+    "c": 32
+  }
+}
