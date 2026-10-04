@@ -151,6 +151,9 @@ describe('CustomerPage', () => {
     const menu = el.querySelector<HTMLDetailsElement>('nav.ar-sidebar details.user-menu')!;
     menu.querySelector<HTMLElement>('summary')!.click();
     expect(menu.open).toBeTrue();
+    el.querySelector<HTMLElement>('#sign-out')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect([menu.open, document.activeElement]).toEqual([false, menu.querySelector('summary')]);
+    menu.querySelector<HTMLElement>('summary')!.click();
     const panel = menu.querySelector('.user-panel')!.textContent!;
     expect(panel).toContain(p.displayName());
     expect(panel).toContain('demo-ana');
@@ -168,6 +171,7 @@ describe('CustomerPage', () => {
     await fixture.whenStable();
     expect(service.logout).toHaveBeenCalledTimes(1);
     expect(cognito.forget).toHaveBeenCalled();
+    expect(TestBed.inject(AgentService).roles()).toEqual([]);
     expect([p.step(), p.client(), p.roles(), p.transactions(), p.email, p.codeSent()]).toEqual(['login', '', [], [], '', false]);
     expect(document.activeElement?.id).toBe('login-email');
     el.remove();

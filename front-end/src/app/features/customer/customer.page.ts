@@ -318,7 +318,9 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.actAsLoading.set(true);
     this.error.set('');
     try {
-      this.actAsIdentities.set(await this.service.adminCustomers());
+      const who = this.client();
+      const list = await this.service.adminCustomers();
+      if (this.client() === who) this.actAsIdentities.set(list); // never another customer's (or a signed-out tab's) list
     } catch (e) {
       this.fail(e);
     } finally {
@@ -390,6 +392,13 @@ export class CustomerPage implements OnInit, OnDestroy {
     afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('#login-email')?.focus(), { injector: this.injector });
   }
 
+  /** Escape closes the account menu and returns focus to its summary. */
+  closeUserMenu(menu: HTMLDetailsElement): void {
+    if (!menu.open) return;
+    menu.open = false;
+    menu.querySelector<HTMLElement>('summary')?.focus();
+  }
+
   /** "Use another email". */
   anotherEmail(): void {
     this.error.set('');
@@ -425,6 +434,7 @@ export class CustomerPage implements OnInit, OnDestroy {
         this.backToEmail();
         try {
           await this.service.logout();
+          this.agent.roles.set([]); // logout also ended the agent session
         } catch (e) {
           this.reset();
           this.fail(e);

@@ -417,3 +417,11 @@ test("logout ends an admin's customer and agent sessions and clears both cookies
   assert.equal((await stale.call('/transactions')).status, 401, 'the customer session is revoked server-side');
   assert.equal((await stale.call('/agent/intakes')).status, 401, 'the agent session is revoked server-side');
 });
+
+test('logout with only the agent cookie is 204 and ends the agent session', async () => {
+  const agent = client();
+  assert.equal((await agent.call('/demo/agent-session', {})).status, 200);
+  const stale = client(); stale.cookie = agent.cookie;
+  assert.equal((await agent.call('/auth/logout', {})).status, 204);
+  assert.equal((await stale.call('/agent/intakes')).status, 401);
+});
