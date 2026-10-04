@@ -1,0 +1,26 @@
+{
+  "displayName": "Live demo: /healthz failing from several regions",
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "Cloud Monitoring's uptime check `arabica-intake-healthz` calls `https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/healthz` every 5 minutes from several regions and expects `\"status\":\"ok\"` (the Worker's D1 ping). This fires when more than one region fails for 5 minutes: the Worker or D1 is down for customers. Check Workers & Pages → factored-hackathon-2026-arabicaai → Observability, query `event = \"unhandled_error\"`. Source: scripts/gcp/monitoring/README.md."
+  },
+  "userLabels": { "app": "arabica-intake", "managed_by": "repo" },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "/healthz uptime check failing in more than one region for 5 min",
+      "conditionThreshold": {
+        "filter": "resource.type = \"uptime_url\" AND resource.labels.host = \"factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev\" AND metric.type = \"monitoring.googleapis.com/uptime_check/check_passed\"",
+        "aggregations": [
+          { "alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_NEXT_OLDER", "crossSeriesReducer": "REDUCE_COUNT_FALSE", "groupByFields": ["resource.label.host"] }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 1,
+        "duration": "300s",
+        "trigger": { "count": 1 }
+      }
+    }
+  ],
+  "alertStrategy": { "autoClose": "3600s" },
+  "enabled": true
+}

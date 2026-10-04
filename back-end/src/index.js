@@ -1,9 +1,11 @@
 /**
  * Worker entry point for the intake demo API. D1 holds customers, charges, cases and sessions.
- * Any unexpected error becomes a generic 503 with no internal detail.
+ * Any unexpected error becomes a generic 503 with no internal detail. Every request writes one ``request`` log line,
+ * and an unexpected error one ``unhandled_error`` line with its class only (``log.js``; never a message or the path).
  */
 import { fail } from './http.js';
-import { route } from './router.js';
+import { logEvent } from './log.js';
+import { route, routeLabel } from './router.js';
 import { createStore } from './store/d1.js';
 
 /** Attach per-request D1 counters, only where ``DEMO_EXPOSE_DB_METRICS`` is ``"1"`` (local tests). */
@@ -17,11 +19,20 @@ export function withMetrics(response, env, store) {
 
 export default {
   async fetch(request, env, ctx) {
+    const started = Date.now();
     const store = createStore(env.DB);
+    const label = routeLabel(new URL(request.url).pathname);
+    const ray = request.headers.get('cf-ray');
+    let response;
     try {
-      return withMetrics(await route(request, env, store, ctx), env, store);
-    } catch {
-      return fail(503, 'Demo service unavailable; retry later');
+      response = await route(request, env, store, ctx);
+    } catch (error) {
+      logEvent('unhandled_error', { route: label, method: request.method, error: error?.name ?? typeof error, ray });
+      response = fail(503, 'Demo service unavailable; retry later');
     }
+    const { queries, rowsRead, rowsWritten } = store.metrics();
+    logEvent('request', { route: label, method: request.method, status: response.status, ms: Date.now() - started, ray,
+      d1_queries: queries, d1_rows_read: rowsRead, d1_rows_written: rowsWritten });
+    return withMetrics(response, env, store);
   }
 };

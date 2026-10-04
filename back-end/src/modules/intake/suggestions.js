@@ -17,6 +17,7 @@
 import { VOCABULARY, extract, registeredVersion, vertexUrl } from './ai-transport.js';
 import { accessToken, credentialConfig } from './vertex-auth.js';
 import { suggest } from './matcher.js';
+import { logEvent } from '../../log.js';
 
 /**
  * The last day (UTC, exclusive) the Worker calls ``google/gemini-3.5-flash-lite`` without a fresh review. Google has
@@ -122,18 +123,24 @@ function suggestionFor(extracted, { country, purchases }, asOf = null) {
  * ``fetcher`` and ``now`` are test seams.
  */
 export async function runSuggestion(env, store, { handoffId, customerId, details, language }, { fetcher = fetch, now = Date.now } = {}) {
-  const finish = async (outcome, { usage = ZERO, producer = null, ids = [], injectionFlagged = null } = {}) => {
+  const started = now();
+  let arm = null;
+  const finish = async (outcome, { usage = ZERO, producer = null, ids = [], injectionFlagged = null, breaker = false } = {}) => {
     await store.recordSuggestionOutcome({ handoffId, outcome, producer, usage, transactionIds: ids, injectionFlagged, now: now() });
+    // Kinds and counts only: never the details text, the facts or the charges (log.js).
+    logEvent('suggestion_run', { outcome, arm, llm_calls: usage.llm_calls, ms: now() - started, breaker, suggested: ids.length,
+      location: env.VERTEX_LOCATION ?? 'global' });
     return outcome;
   };
   try {
     const claimed = await store.claimSuggestionRun({ handoffId, now: now() });
     if (!claimed) return null;
+    arm = claimed.arm ?? null;
     if (!switchOn(env) || claimed.arm !== 'B') return await finish('off');
     if (retired(env, now())) return await finish('retired');
     const config = credentialConfig(env);
     if (!config) return await finish('off');
-    if (await breakerOpen(store, now())) return await finish('provider_error');
+    if (await breakerOpen(store, now())) return await finish('provider_error', { breaker: true });
     const origin = testOrigin(env);
     const token = await accessToken(config, { fetcher, now, origin });
     if (!token) return await finish('auth_error');

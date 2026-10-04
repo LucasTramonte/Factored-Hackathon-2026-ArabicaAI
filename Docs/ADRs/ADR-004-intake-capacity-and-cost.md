@@ -445,3 +445,8 @@ At the S4 stress case (10× the in-scope calls), multiply by 10. **Latency and t
 - **The read.** The session, then the newest reviewed timing baseline in one statement: `2 / 7 / 0 / 2`. The table holds one row per metric per published version (two today), so the read stays a few rows as versions accumulate slowly.
 - **When.** The client loads it only when a customer asks "How long does it take?", once per page, and reuses it. A failed load is retried the next time the question is asked.
 - **Migration 0027** creates `service_timing` and inserts two reviewed rows. That is additive, so the deploy applies it.
+
+**2026-10-04 messages and structured logs ([ADR-015](ADR-015-agent-customer-messages.md); migration 0028):** measured on native local D1, and the ceilings equal the measured values (`budget.test.js`).
+- **Messages.** A post is the session, then one batch: a guarded insert and a read-back of its key, `3 / 10–11 / 4 / 2` (10 rows read alone, 11 in the full suite; the ceiling is 11). A thread read is the session, then one batch of the report's status and at most 51 messages through `handoff_messages_thread`, `3 / 7–8 / 0 / 2` on a short thread (the ceiling is 8). Posts stop at 50 messages per report, so a thread read stays bounded.
+- **Logs.** One `request` line per request, plus one `suggestion_run` line per AI run. No D1 work; the CPU cost is a `JSON.stringify` of a few fields. Workers Logs on the Free plan allows 200,000 events a day, and the demo writes about two per request ([observability runbook](../Plans/observability-runbook.md)).
+- **Uptime check.** A GCP probe calls `/healthz` every 5 minutes from 6 regions: about 1,700 requests a day, each one D1 ping (`SELECT 1`).
