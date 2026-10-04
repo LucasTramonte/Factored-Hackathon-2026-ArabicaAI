@@ -15,11 +15,11 @@ The challenge requirement is explicit: authentication must be demonstrated with 
 
 ## 1) Current state assessment
 
-The repo has a simulated session architecture and customer authorization flow:
+The demo picker provides a simulated session and customer scoping flow:
 
 - [back-end/src/auth/session.js](../../back-end/src/auth/session.js): session generation and validation via cookie, with the token hash stored in D1 using SHA-256.
-- [back-end/src/router.js](../../back-end/src/router.js): applies authentication checks before routing requests.
-- [back-end/src/modules/customer/routes.js](../../back-end/src/modules/customer/routes.js): the login flow accepts a `customer_id` from the request body, but access to transactions and cases depends on the authenticated session.
+- [back-end/src/router.js](../../back-end/src/router.js): declares `/demo/session` public; protected routes check sessions in their handlers.
+- [back-end/src/modules/customer/routes.js](../../back-end/src/modules/customer/routes.js): when `DEMO_PICKER=1`, the public demo identity picker accepts a `customer_id` from the JSON body without authenticating the caller or binding the caller to that customer. Later access to transactions and cases is scoped by the resulting session.
 
 This is a good demo foundation, but it is not real banking authentication. The main security risk is:
 
@@ -27,12 +27,12 @@ This is a good demo foundation, but it is not real banking authentication. The m
 - the code must enforce that identity comes from the session token (cookie / Authorization header) and never from an arbitrary payload value;
 - any endpoint that lists customers or customer data must verify the session and compare the authenticated `customer_id` to the target `customer_id`.
 
-In other words, the correct rule is:
+For the demo picker, the actual boundary is:
 
-- `POST /demo/session` may receive a `customer_id` only as a selection from an authenticated user or an allowed identity list;
-- but authorization to view transactions, open cases, and query data must come from the active session and the authenticated customer relationship.
+- `POST /demo/session` accepts an allowed, loaded customer selection when `DEMO_PICKER=1`; this validates the selection, not the caller's identity. With the picker disabled, the endpoint returns 404;
+- later customer routes use the cookie token to retrieve the session's stored `customer_id` and scope transactions, cases, and queries to that demo customer.
 
-Therefore, the statement “the user must always come from the authentication token in the header, never from the body” is correct for the security level required here. The only nuance is that in this project the session mechanism is a cookie (`Cookie: demo_session=...`) rather than a bearer token. Even so, identity still comes from the browser authentication header, not from the JSON payload.
+The rule “the user must always come from the authentication token in the header, never from the body” describes the required authenticated flow. The demo picker does not establish real customer identity: its cookie (`Cookie: demo_session=...`) preserves a customer selection originally supplied in JSON. Keep this flow limited to local development with synthetic demo data; session scoping alone does not prove that the caller is that customer.
 
 ---
 
@@ -50,7 +50,7 @@ The risk is not that the app will “crash a system,” but that trust and autho
 
 ### In the current context
 
-In the current code, this problem is partially mitigated because the authorization layer uses a validated session and `readSession(...)` to derive the `customer_id` from the stored cookie token. The code also checks ownership when listing and creating cases.
+In the current code, `requireSession(...)` validates the cookie token and returns the live session row, whose stored `customer_id` scopes customer routes. The code also checks ownership when listing and creating cases. For a picker-created session, these checks enforce demo session scoping without establishing real customer identity.
 
 So the honest answer is:
 
