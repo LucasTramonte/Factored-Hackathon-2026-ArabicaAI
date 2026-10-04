@@ -55,3 +55,10 @@
 .suggestion-list { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-direction: column; gap: 8px; }
 .suggestion-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
 .suggestion-charge { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+/* The account menu: the sidebar's user block opens a panel with the id, the roles and Sign out. Inline in the wide
+   sidebar; at 960px and below the sidebar is a sticky header, so the panel drops below it, anchored to the header. */
+.user-menu > summary { cursor: pointer; list-style: none; border-radius: var(--radius-md); } .user-menu > summary::-webkit-details-marker { display: none; }
+.user-panel { margin-top: 12px; padding: 16px; gap: 8px; } .user-panel .ar-btn { align-self: flex-start; }
+@media (max-width: 960px) {
+  .user-panel { position: absolute; top: 100%; right: 16px; z-index: 5; width: min(300px, calc(100% - 32px)); margin-top: 4px; }
+}

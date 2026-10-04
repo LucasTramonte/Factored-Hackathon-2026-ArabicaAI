@@ -44,7 +44,7 @@ test('session start, expiry, rejection and logout write one reference-only row e
   }
 });
 
-test('logout records only a real session of the same actor, and never revokes the other actor', async () => {
+test("logout records only a real session of the same actor, and never revokes a token presented under the other actor's cookie", async () => {
   const dead = await call('/auth/logout', { cookie: `demo_session=${'d'.repeat(64)}`, body: {} });
   const agent = await call('/demo/agent-session', { body: {} });
   const crossed = await call('/auth/logout', { cookie: 'demo_session=' + agent.cookie.split('=')[1], body: {} });

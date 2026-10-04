@@ -319,7 +319,9 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.actAsLoading.set(true);
     this.error.set('');
     try {
-      this.actAsIdentities.set(await this.service.adminCustomers());
+      const who = this.client();
+      const list = await this.service.adminCustomers();
+      if (this.client() === who) this.actAsIdentities.set(list); // never another customer's (or a signed-out tab's) list
     } catch (e) {
       this.fail(e);
     } finally {
@@ -340,10 +342,12 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly alertNote = signal('');
 
   private async loadAlert(): Promise<void> {
+    const g = this.generation;
     try {
-      this.alert.set((await this.service.alert()).alert);
+      const { alert } = await this.service.alert();
+      if (g === this.generation) this.alert.set(alert);
     } catch {
-      this.alert.set(null); // the alert is optional: the home works without it
+      if (g === this.generation) this.alert.set(null); // the alert is optional: the home works without it
     }
   }
 
@@ -363,6 +367,45 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.alert.set(null);
     if (answer === 'mine') this.alertNote.set(this.t().alertThanks);
     else this.openChat(tx.transaction_id);
+  }
+
+  /**
+   * Sign out: end the customer and agent sessions on the server (it answers 204), then forget everything held in the tab
+   * and return to the email field. A failed call changes nothing and shows a retryable error: the cookies would still be
+   * live, so clearing the tab would only look like a sign-out (a reload would restore the account). Refused while a
+   * report is open or a request is frozen.
+   */
+  async signOut(): Promise<void> {
+    if (this.busy() || this.identityLocked()) return;
+    this.busy.set(true);
+    try {
+      await this.service.logout();
+    } catch (e) {
+      this.fail(e);
+      this.busy.set(false);
+      return;
+    }
+    this.cognito.forget();
+    this.agent.roles.set([]);
+    this.reset();
+    this.actAsIdentities.set([]);
+    this.actAsChoice = '';
+    this.chatOpen.set(false);
+    this.email = '';
+    this.code = '';
+    this.codeSent.set(false);
+    this.error.set('');
+    this.shownStep = 'login'; // the email field takes focus, not the step heading
+    this.step.set('login');
+    this.busy.set(false);
+    afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('#login-email')?.focus(), { injector: this.injector });
+  }
+
+  /** Escape closes the account menu and returns focus to its summary. */
+  closeUserMenu(menu: HTMLDetailsElement): void {
+    if (!menu.open) return;
+    menu.open = false;
+    menu.querySelector<HTMLElement>('summary')?.focus();
   }
 
   /** "Use another email". */
@@ -400,6 +443,7 @@ export class CustomerPage implements OnInit, OnDestroy {
         this.backToEmail();
         try {
           await this.service.logout();
+          this.agent.roles.set([]); // logout also ended the agent session
         } catch (e) {
           this.reset();
           this.fail(e);
@@ -465,7 +509,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   private async loadTransactions(): Promise<void> {
+    const g = this.generation;
     const list = await this.service.transactions();
+    if (g !== this.generation) return;
     this.transactions.set(list.items);
     this.hasMore.set(list.has_more);
     this.viewRef.set(list.view_ref);
@@ -473,11 +519,14 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Never throws: a failed load leaves the home usable with one muted line. */
   private async loadReports(): Promise<void> {
+    const g = this.generation;
     try {
-      this.reports.set(await this.service.reports());
+      const list = await this.service.reports();
+      if (g !== this.generation) return;
+      this.reports.set(list);
       this.reportsFailed.set(false);
     } catch {
-      this.reportsFailed.set(true);
+      if (g === this.generation) this.reportsFailed.set(true);
     }
   }
 
@@ -967,7 +1016,11 @@ export class CustomerPage implements OnInit, OnDestroy {
     return initialsOf(tx.merchant_name);
   }
 
+  /** Bumped by ``reset``: a load started before it never writes into the next customer's (or a signed-out) page. */
+  private generation = 0;
+
   private reset(): void {
+    this.generation++;
     this.alert.set(null);
     this.alertNote.set('');
     this.client.set('');
