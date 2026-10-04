@@ -33,7 +33,7 @@ test('every template in every language names the reference, says no refund start
   for (const lang of ['es', 'pt', 'en']) for (const template of ['received', 'in_review', 'closed', 'update']) {
     for (const urgent of [false, true]) {
       const { subject, text, html } = render(template, lang, { reference: 'AR-ABCD-1234', urgent, status: 'X-STATUS',
-        appUrl: 'https://demo.example/', customer_statement: 'SECRET STATEMENT', closing_note: 'SECRET CLOSING EXPLANATION', statement: 'SECRET STATEMENT', closing_note: 'SECRET CLOSING EXPLANATION' });
+        appUrl: 'https://demo.example/', customer_statement: 'SECRET STATEMENT', statement: 'SECRET STATEMENT', closing_note: 'SECRET CLOSING EXPLANATION' });
       const where = `${template}/${lang}/${urgent}`;
       assert.ok(subject && text.includes('AR-ABCD-1234') && html.includes('AR-ABCD-1234'), where);
       assert.ok(text.includes(NO_REFUND[lang]) && html.includes(NO_REFUND[lang]), where);
