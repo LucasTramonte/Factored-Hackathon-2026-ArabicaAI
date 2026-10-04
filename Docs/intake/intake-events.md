@@ -159,27 +159,36 @@ node scripts/intake-kpis.mjs [--since 2026-10-01] [--until 2026-10-08T00:00:00Z]
 | KPI | Definition |
 |---|---|
 | `reports.outcomes` | Episodes by state: `complete_handoff`, `incomplete_handoff` ("I can't find it"), `technical_handoff`, `abandoned` (closed by the idle sweep), `pending` (still choosing, or a reservation not yet acknowledged). They add up to `started`. |
-| `reports.not_complete_handoff` | Episodes not ending in a complete handoff / started. |
-| `workload.handoffs` | Acknowledged handoffs of any kind / started. |
+| `reports.not_complete_handoff` | Ended episodes not ending in a complete handoff / ended episodes. `pending` is in neither part and is reported on its own. |
+| `workload.handoffs` | Acknowledged handoffs of any kind / started. Technical handoffs are included, unlike the complete-and-incomplete wording in `BUSINESS_OUTCOMES.md`, because a technical handoff also reaches an agent; `workload.by_kind` gives complete, incomplete and technical apart, so either reading can be formed. |
 | `workload.opened_within_24h` | Handoffs an agent first opened (`first_opened_at`) at most 24 h after `accepted_at`, inclusive / acknowledged handoffs. A handoff not yet opened stays in the denominator (`unopened` counts them), so a recent window understates this share until 24 h have passed. |
 | `workload.status` | Acknowledged handoffs by current review status: received, in review, closed. |
-| `friction.funnel` | Started → `transaction_confirmed` (a complete handoff reserved) or `cant_find` (an incomplete one) → `handoff_created` (any reservation, technical included) → `acknowledged` (receipt read back), each / started. Picking a charge happens in the client and is not recorded, so an abandonment can't be placed between start and pick. |
+| `friction.funnel` | Started → `transaction_confirmed` (a complete handoff reserved) or `cant_find` (an incomplete one) → `handoff_created` (any reservation, technical included) → `acknowledged` (receipt read back), each / started. Picking a charge happens in the client and is not recorded, so an abandonment can't be placed between start and pick. The reason step equals started: `/intake/start` requires a reason, so no episode exists without one. |
+| `friction.technical_handoffs` | Acknowledged technical handoffs (a lookup failed) / started. |
 | `friction.clarifications_per_episode` | `clarification_requested` events / started. The guided producer emits none, so this is 0 until a producer that asks does. |
 | `friction.span_ms` | `duration_ms` of each ended episode's `intake_ended`: median (the mean of the two middle values when their number is even) and nearest-rank p95, as the episode scorer computes latency. An abandoned episode's span runs to its idle deadline. |
 | `suggestions` | Suggestion runs (ADR-012) of the window's episodes: `by_arm` (`A`, `B`, or `none` with the switch off) counts finished runs by outcome; `pending` runs have none yet. `shown`, `confirmed`, `none_of_these`, `marked_correct` and `marked_wrong` are counted as in the pilot summary. |
 | `persistence.none_of_these_still_handoff` | Runs where the customer answered "none of these" / runs whose suggestions were shown. The report stays an incomplete handoff whatever the answer. |
 | `persistence.confirmed_suggestion_marked_wrong` | Confirmed suggestions an agent marked wrong / confirmed suggestions an agent marked. |
 | `repeat_reporters` | Customers with two acknowledged reports in the window at most 90 days apart / customers with at least one. Reports before the window don't count, so a window shorter than 90 days sees only repeats inside it. |
+| `repeat_reporters_3plus_in_90d` | Customers with three acknowledged reports in the window, the first and third at most 90 days apart / customers with at least one. An interim proxy for the tail flag (below). |
 | `value_at_stake.complete_handoffs` | Per source currency, the confirmed charge's amount: `n` and the nearest-rank quartiles (the smallest observed amount with at least a quarter, half or three quarters of the amounts at or below it), as stored text. Currencies are never summed or converted. |
 | `value_at_stake.no_amount` | Acknowledged incomplete and technical handoffs: reports with no confirmed charge. |
-| `alerts` | The customers' own answers (an admin's answer while acting as a customer is not counted) to the bank's alert (ADR-011) given in the window: `recognized` ("Yes, it's mine"), `not_mine` ("I don't recognize it, report it"), and `reported`, answers whose charge then got a complete report that started after the answer and before the window's end. |
-| `alerts.deflected_by_explanation` | "Yes, it's mine" / answers. |
+| `alerts` | The customers' own answers (an admin's answer while acting as a customer is not counted) to the bank's alert (ADR-011) given in the window: `recognized` ("Yes, it's mine"), `not_mine` ("I don't recognize it, report it"), and `reported`, answers whose charge then got a complete report that started after the answer and before the window's end. `recognized_then_reported` is the recognized ones among those; `deflected` is recognized minus recognized-then-reported. |
+| `alerts.deflected_by_explanation` | "Yes, it's mine" answers not followed by a report on that charge / answers. |
 | `alerts.persistence_recognized_then_reported` | "Yes, it's mine" answers whose charge was reported afterwards / "Yes, it's mine" answers. |
-| `alerts.value_at_stake_deflected` | Per source currency, quartiles of the charge amounts answered "Yes, it's mine", as above. |
+| `alerts.complete_handoffs_after_recognized` | Recognized-then-reported / complete handoffs started in the window: the one persistence signal formable over confirmed reports (below). |
+| `alerts.value_at_stake_deflected` | Per source currency, quartiles of the deflected charges' amounts ("Yes, it's mine" and no report afterwards), as above. |
+
+**Persistence: why three shares, not one.** `BUSINESS_OUTCOMES.md` asks for one share: confirmed reports after any of three signals / all confirmed reports. Only the alert signal can be formed that way. A "none of these" report never becomes a confirmed (complete) report, and a customer-confirmed suggestion is still an incomplete handoff, so two of the three signals never sit inside "confirmed reports". The output therefore carries three shares, each over its own denominator: `alerts.persistence_recognized_then_reported` (over "Yes, it's mine" answers), `persistence.none_of_these_still_handoff` (over runs whose suggestions were shown) and `persistence.confirmed_suggestion_marked_wrong` (over confirmed suggestions an agent marked). The computable part of the single share is `alerts.complete_handoffs_after_recognized`.
+
+**Repeat reporters: the tail flag is not computed.** `BUSINESS_OUTCOMES.md` would flag a customer whose report count exceeds the Poisson baseline's 0.1% tail. That needs a baseline rate from the service's own baseline period, which doesn't exist yet, and flagging means naming a customer, which this read never does. Until both are settled, `repeat_reporters_3plus_in_90d` counts such customers without identifying them.
+
+**Determinism.** Spans are wall-clock, so the instrumentation test takes their expected values from the scorer; the exact 90-day and 24-hour boundaries are proven in the unit test.
 
 **Proof before use.** `back-end/test/integration/kpi-instrumentation.test.js` drives the authored journeys in `back-end/test/fixtures/kpi-journeys.json` over HTTP on local D1 and requires every value above to equal the hand-counted one. It also scores the same episodes' exported events with `evals/intake/episodes.py` and requires both paths to agree on started, outcomes, clarifications, spans and suggestion results by arm. `back-end/test/unit/intake-kpis.test.js` proves the boundaries real time can't place: 90 days between reports and 24 h to the first open, both inclusive.
 
-**Cost.** One batch of seven reads, no write: a constant 30 rows for an empty window, and about 43 rows per episode in it (ADR-004, 2026-10-04 KPI note).
+**Cost.** One batch of seven reads, no write: a constant 30 rows for an empty window, and about 46 rows per episode in it (ADR-004, 2026-10-04 KPI note).
 
 ## Open questions for Lucas and Manoella
 
