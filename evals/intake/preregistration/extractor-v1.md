@@ -45,3 +45,25 @@ These are the measurements behind the registration. Development is for tuning, s
 - **Undisclosed model version:** the provider exposes no immutable snapshot for `openai/gpt-oss-20b-maas`. Run the 3 repetitions back to back in one batch and record the start and end times and any model-build metadata in the responses. If that metadata changes within the batch, or the batch spans more than 24 hours, the batch is void and is run again as a whole. The report states that the fixed-model assumption rests on this procedure, not on a provider guarantee.
 - **Latency and cost:** p50/p95 wall time per case and the actual tokens and price per case, with the price source and date. Calls without usage are counted in `usage_unavailable_calls` and never reported as free.
 - **Reporting rule:** the result is published whatever it is. A change after this run is `v2`, marked post-exposure.
+
+```json prereg
+{
+  "commit": "3ad34b5392f707eb667ea74d12a2ed2e4bba7406",
+  "dependency_sha256": {
+    "intake_agent/extractor/workers_ai.py": "b4a5132244b0ef848adf6bd05e8c5bc11d26b39ec565c5c922baebdf3db99829"
+  },
+  "implementation_file": "intake_agent/extractor/vertex.py",
+  "implementation_sha256": "1a4503b14d2ed46943dbecccf613770969c5866499e1420914ee3d3d33502a70",
+  "model": "openai/gpt-oss-20b-maas",
+  "params": {
+    "reasoning_effort": "low",
+    "temperature": "0"
+  },
+  "prompt_file": "intake_agent/extractor/prompt.md",
+  "prompt_sha256": "a270773600cf8c36ca343a619d8b5e1477ac5897211f428722b47b61f3f87e05",
+  "registered_utc": "2026-10-04T02:18:04.603905+00:00",
+  "system": "extractor-v1",
+  "tag": "extractor-v1",
+  "target": "intake_agent.extractor.vertex:extract"
+}
+```
