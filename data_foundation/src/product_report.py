@@ -443,10 +443,13 @@ def render(report: dict, manifest: dict) -> str:
         rates += [(f'{label}: unresolved', _ratio(unresolved(r), r["complaints"]), pct(unresolved(r), r["complaints"]), tone),
                   (f'{label}: SLA breached', _ratio(r["sla_breached"], r["sla_known"]), pct(r["sla_breached"], r["sla_known"]), tone)]
     body += '<figure><figcaption>Unresolved share (Open, In Process or Escalated) and SLA breach rate (PR-04)</figcaption>' + _bars(rates) + '</figure>'
-    body += (f'<div class="callout"><b>{_fmt(esc_age["age_since_creation_d_p50"], 0)} days</b><p><b>How long escalated unrecognized charges '
-             f'have stayed open, at the median</b> ({_fmt(esc_age["age_since_creation_d_p90"], 0)} at p90; {num(esc_age["escalated"])} cases at '
-             f'the data end, {esc(esc_age["data_end"])}, <b>full period</b>). None of the {num(escalated["complaints"])} escalated in the design window has '
-             f'a first response, resolution or closing date, so this is a lower bound, not a closing time (PR-05).</p></div>')
+    # The most outcome dates any escalated case has: 0 means none of them has a first response, resolution or closing.
+    with_outcome = max(escalated["first_response_n"], escalated["to_resolution_n"], escalated["to_closing_n"])
+    body += (f'<div class="callout"><b>{num(with_outcome)} of {num(escalated["complaints"])}</b><p><b>Escalated unrecognized charges in the design '
+             'window with a first response, resolution or closing date.</b> Escalated is a fixed label, not a stage (DF-028): their age at the data end '
+             f'({_fmt(esc_age["age_since_creation_d_p50"], 0)} days at the median, {_fmt(esc_age["age_since_creation_d_p90"], 0)} at p90, '
+             f'{num(esc_age["escalated"])} cases, <b>full period</b>) only reflects when they were created, so the data can\'t say how long an '
+             'escalation takes (PR-05).</p></div>')
     rp = s["repeat"]
     body += (f'<h3>Repeat complaints</h3><p>{num(rp["repeat_customers"])} of {num(rp["customers"])} customers '
              f'({pct(rp["repeat_customers"], rp["customers"])}) complained more than once (PR-10). That is as many as chance alone predicts '
