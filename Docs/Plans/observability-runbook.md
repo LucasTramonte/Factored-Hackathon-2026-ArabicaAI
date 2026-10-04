@@ -48,7 +48,7 @@
 ## 3. What observability already found
 
 - **2026-10-04, Vertex:** Google's shared pool for `gpt-oss-20b` degraded, and the switch to extractor v2 followed ([ADR-006 amendment 10](../ADRs/ADR-006-learned-extractor-workers-ai.md#post-freeze-amendment-2026-10-04)).
-- **2026-10-04, email** (found in #117): production report emails don't arrive. The SES identity the Worker may send from (`rzuniga@aptsny.co`, IAM policy `ses-send-only`) belongs to a domain that publishes DMARC `p=reject` with no DKIM, so receivers reject the mail. This is a configuration fix, a person's step: send from a verified domain the team controls, with DKIM, and update the IAM policy and `SES_FROM`.
+- **2026-10-04, email** (found in #117, fixed the same day in #120): report emails didn't arrive. The Worker's SES sender was a personal address on a company domain that publishes DMARC `p=reject` without DKIM for SES, so receivers rejected the mail. The fix: a domain the team controls, `arabicaai-demo.com`, verified in SES with Easy DKIM, a custom MAIL FROM and DMARC `p=none`, as the sender (`noreply@`) of both the Worker and Cognito. Confirmed in production at 20:16 UTC (outbox `sent`, inbox delivery). Bounce and complaint handling is configured by `back-end/scripts/ses/setup.sh`: account suppression, an SNS event destination, and two reputation alarms.
 
 ## Why not Cloud Run for observability
 

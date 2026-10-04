@@ -378,26 +378,29 @@ export class CustomerPage implements OnInit, OnDestroy {
   async signOut(): Promise<void> {
     if (this.busy() || this.identityLocked()) return;
     this.busy.set(true);
+    // One reset of ``busy`` whatever happens, so a throw while clearing local state can never leave the page stuck.
     try {
-      await this.service.logout();
-    } catch (e) {
-      this.fail(e);
+      try {
+        await this.service.logout();
+      } catch (e) {
+        this.fail(e);
+        return;
+      }
+      this.cognito.forget();
+      this.agent.roles.set([]);
+      this.reset();
+      this.actAsIdentities.set([]);
+      this.actAsChoice = '';
+      this.chatOpen.set(false);
+      this.email = '';
+      this.code = '';
+      this.codeSent.set(false);
+      this.error.set('');
+      this.shownStep = 'login'; // the email field takes focus, not the step heading
+      this.step.set('login');
+    } finally {
       this.busy.set(false);
-      return;
     }
-    this.cognito.forget();
-    this.agent.roles.set([]);
-    this.reset();
-    this.actAsIdentities.set([]);
-    this.actAsChoice = '';
-    this.chatOpen.set(false);
-    this.email = '';
-    this.code = '';
-    this.codeSent.set(false);
-    this.error.set('');
-    this.shownStep = 'login'; // the email field takes focus, not the step heading
-    this.step.set('login');
-    this.busy.set(false);
     afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('#login-email')?.focus(), { injector: this.injector });
   }
 

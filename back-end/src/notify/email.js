@@ -6,8 +6,8 @@ import { AwsClient } from 'aws4fetch';
 
 const b64 = bytes => btoa(Array.from(new Uint8Array(bytes), b => String.fromCharCode(b)).join(''));
 const unb64 = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
-const utf8 = new TextEncoder();
-const utf8b64 = text => b64(utf8.encode(text));
+const ENCODER = new TextEncoder();
+const utf8b64 = text => b64(ENCODER.encode(text));
 /** Base64 in 76-character lines, as MIME bodies require. */
 const wrap = text => text.replace(/.{1,76}/g, '$&\r\n');
 /**
@@ -15,10 +15,11 @@ const wrap = text => text.replace(/.{1,76}/g, '$&\r\n');
  * splitting a character), folded with CRLF and a space between words.
  */
 export function encodedWords(text) {
-  const words = []; let chunk = '';
+  const words = []; let chunk = '', bytes = 0;
   for (const ch of text) {
-    if (utf8.encode(chunk + ch).length > 45) { words.push(chunk); chunk = ''; }
-    chunk += ch;
+    const size = ENCODER.encode(ch).length;
+    if (bytes + size > 45) { words.push(chunk); chunk = ''; bytes = 0; }
+    chunk += ch; bytes += size;
   }
   words.push(chunk);
   return words.map(w => `=?UTF-8?B?${utf8b64(w)}?=`).join('\r\n ');
@@ -74,6 +75,8 @@ export async function decrypt(blob, env) {
 export async function sendEmail(env, { to, subject, text, html, inline = [] }, fetchImpl = fetch) {
   const { SES_ACCESS_KEY_ID: accessKeyId, SES_SECRET_ACCESS_KEY: secretAccessKey, SES_REGION: region, SES_FROM: from } = env;
   if (!accessKeyId || !secretAccessKey || !region || !from) return { ok: false, skipped: true };
+  // Fail closed for both the structured and raw SES paths; none of these values may inject another header.
+  if (/[\r\n]/.test(from + to + subject)) return { ok: false };
   try {
     const aws = new AwsClient({ accessKeyId, secretAccessKey, service: 'ses', region });
     const signed = await aws.sign(`https://email.${region}.amazonaws.com/v2/email/outbound-emails`, {

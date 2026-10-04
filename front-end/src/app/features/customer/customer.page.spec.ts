@@ -208,6 +208,18 @@ describe('CustomerPage', () => {
     expect([page.reports(), page.reportsFailed(), page.alert()]).toEqual([null, false, null]);
   });
 
+  it('sign-out always releases busy: a failed logout, or a throw while clearing local state, never leaves the page stuck', async () => {
+    page.identity = 'demo-ana';
+    await page.login();
+    service.logout.and.rejectWith(new ApiError(503, 'x'));
+    await page.signOut();
+    expect(page.busy()).toBeFalse();
+    service.logout.and.resolveTo();
+    cognito.forget.and.callFake(() => { cognito.forget.and.stub(); throw new Error('storage blocked'); }); // once
+    await expectAsync(page.signOut()).toBeRejected();
+    expect(page.busy()).toBeFalse();
+  });
+
   it('stays on sign-in and shows the mapped error when sign-in fails', async () => {
     service.signIn.and.rejectWith(new ApiError(503, 'unavailable'));
     page.start();

@@ -105,9 +105,15 @@ test('with an inline image the message goes as raw MIME: text, html and the cid 
 test('a CR or LF in a header field is refused, and a send with one fails instead of injecting a header', async () => {
   const base = { from: 'a@x', to: 'b@x', subject: 's', text: 't', html: null, inline: [] };
   for (const field of ['from', 'to', 'subject']) for (const bad of ['\r', '\n']) assert.throws(() => mime({ ...base, [field]: `x${bad}Bcc: c@x` }), /CR\/LF/);
-  let called = false;
-  assert.deepEqual(await sendEmail({ ...ses, SES_FROM: 'a@x\r\nBcc: c@x' }, { ...mail, inline: [{ cid: 'c', type: 'image/png', base64: 'AA==' }] }, async () => { called = true; }), { ok: false });
-  assert.equal(called, false);
+  for (const bad of [
+    { env: ses, message: { ...mail, to: 'a@b.c\r\nBcc: x@y.z' } },
+    { env: ses, message: { ...mail, subject: 'subject\nBcc: x@y.z' } },
+    { env: { ...ses, SES_FROM: 'A <a@b.c>\r\nBcc: x@y.z' }, message: mail }
+  ]) {
+    let called = false;
+    assert.deepEqual(await sendEmail(bad.env, bad.message, async () => { called = true; }), { ok: false });
+    assert.equal(called, false);
+  }
 });
 
 test('RFC 2047 encoded words: at most 75 characters each, folded between words, multibyte characters never split', () => {
@@ -119,10 +125,13 @@ test('RFC 2047 encoded words: at most 75 characters each, folded between words, 
   assert.equal(parts.map(w => Buffer.from(w.slice(10, -2), 'base64').toString('utf8')).join(''), long);
   assert.equal(encodedWords('a'.repeat(46)).split('\r\n ').length, 2);
   assert.equal(encodedWords('a'.repeat(45)), `=?UTF-8?B?${Buffer.from('a'.repeat(45)).toString('base64')}?=`);
+  assert.equal(encodedWords('ñ'.repeat(23)).split('\r\n ').length, 2, '46 bytes of two-byte characters split before the 23rd');
 });
 
-test('mime() without HTML still closes the related part', () => {
-  assert.ok(mime({ from: 'a', to: 'b', subject: 'ñ', text: 'ñ', html: null, inline: [] }).endsWith('--rel-arabicaai--\r\n'));
+test('mime without html still closes every part, and the Date header uses the given time', () => {
+  const raw = mime({ from: 'a', to: 'b', subject: 'ñ', text: 'ñ', html: null, inline: [], date: new Date('2026-10-04T20:30:00Z') });
+  assert.ok(raw.endsWith('--rel-arabicaai--\r\n'));
+  assert.match(raw, /\r\nDate: Sun, 04 Oct 2026 20:30:00 GMT\r\n/);
 });
 
 test('a send never throws: non-2xx and network errors fail, missing config skips without a call', async () => {
