@@ -27,7 +27,8 @@ export async function listCustomers(request, env, store) {
 /**
  * POST /admin/act-as with exactly ``{ customer_id }``: replace the admin's customer session with one for that customer.
  * The new session keeps the admin mark (so the admin can switch again), stores no email (notifications never go to the
- * admin's address for another customer's reports, and the customer's own address on file is untouched), and the same
+ * admin's address for another customer's reports, and the customer's own address on file is untouched; only an update
+ * the admin asks for goes to the admin's own address, through the remembered sign-in identity), and the same
  * batch records one reference-only ``admin_actions`` row. The swap is single-use: of concurrent calls with one cookie,
  * the first wins and the rest are 401. From here identity comes from the session, as everywhere.
  */

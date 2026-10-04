@@ -167,6 +167,27 @@ describe('AgentPage', () => {
     expect(el().querySelector('.role-banner')).toBeNull();
   });
 
+  it('a late session restore never replaces an agent sign-in in progress (code sent)', async () => {
+    let answer!: (s: unknown) => void;
+    spyOn(TestBed.inject(CustomerService), 'me').and.returnValue(new Promise(r => answer = r) as never);
+    const arrived = TestBed.createComponent(AgentPage);
+    arrived.componentInstance.codeSent.set(true);
+    answer({ customer: null, agent: true });
+    await new Promise(r => setTimeout(r));
+    expect(service.roles()).toEqual([]);
+    expect(service.intakes).not.toHaveBeenCalled();
+  });
+
+  it('a reload restores a live agent session from the cookie and loads the queue (ADR-013)', async () => {
+    spyOn(TestBed.inject(CustomerService), 'me').and.resolveTo({ customer: null, agent: true });
+    const arrived = TestBed.createComponent(AgentPage);
+    await new Promise(r => setTimeout(r));
+    await arrived.whenStable();
+    expect(service.intakes).toHaveBeenCalled();
+    expect([arrived.componentInstance.loaded(), service.roles()]).toEqual([true, ['agent']]);
+    expect(service.signIn).not.toHaveBeenCalled();
+  });
+
   it('loads the queue on arrival when this tab already holds an agent session (an admin signed in on the customer view)', async () => {
     service.roles.set(['admin']);
     const arrived = TestBed.createComponent(AgentPage);

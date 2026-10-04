@@ -119,6 +119,24 @@ export async function startEmailSession(request, env, store, ctx, verify = verif
     { 'Set-Cookie': await startSession(request, store, 'customer', customerId, emailEnc, { admin: claims.groups.includes('admin') }) });
 }
 
+/**
+ * GET /auth/me (ADR-013, phase 0): the browser's live sessions, so a reload restores the signed-in state from the cookies
+ * instead of the tab. ``{ customer: { customer_id, roles, context_card } | null, agent: boolean }``: never a token, an
+ * expiry or another customer. Reads only the presented cookies (each through its own actor), so no request field can
+ * name an identity; no query is accepted. ``roles`` is ``['admin']`` for a session an admin opened, else ``['customer']``.
+ */
+export async function whoAmI(request, env, store) {
+  if (new URL(request.url).search) return fail(422, 'No query parameters are accepted');
+  // A reload with an expired or stale cookie is normal here and answers 200, so it writes no rejection event.
+  const customer = await requireSession(request, store, 'customer', { audit: false });
+  const agent = await requireSession(request, store, 'agent', { audit: false });
+  return json({
+    customer: customer ? { customer_id: customer.customer_id, roles: customer.admin === 1 ? ['admin'] : ['customer'],
+      context_card: await cardOf(store, customer.customer_id) } : null,
+    agent: agent !== null
+  });
+}
+
 /** POST /auth/logout: revoke the presented customer session; always 204, so it reveals nothing. */
 export async function logout(request, env, store) {
   return new Response(null, { status: 204, headers: { 'Set-Cookie': await endSession(request, store, 'customer') } });

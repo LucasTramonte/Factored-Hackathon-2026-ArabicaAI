@@ -56,6 +56,8 @@ const HISTORY_REPORTS = 20;
 
 /** At most one ``update`` email per customer and reference in this window; ``enqueueEmail`` enforces it in SQL. */
 export const UPDATE_EVERY_MS = 300000;
+/** A failed or unconfigured send has a short retry delay so concurrent clicks still cannot create duplicate sends. */
+export const EMAIL_FAILURE_RETRY_MS = 10000;
 
 /** ``shortReference`` is injectable so tests can force collisions. */
 export function createStore(db, { shortReference = newShortReference } = {}) {
@@ -140,10 +142,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      * ``emailEnc`` (an email sign-in), upsert the customer's encrypted address in the same round trip. Records
      * ``session_started`` in the same batch. ``admin`` marks a session an admin opened (migration 0021).
      */
-    rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt, emailEnc, requestId, admin = false }) => batch([
+    rotateSession: ({ now, oldHash, newHash, actor, customerId, expiresAt, emailEnc, requestId, admin = false, actingAdmin = null }) => batch([
       ['DELETE FROM sessions WHERE expires_at<=?', now],
       ...(oldHash ? [['DELETE FROM sessions WHERE token_hash=?', oldHash]] : []),
-      ['INSERT INTO sessions(token_hash,actor,customer_id,expires_at,admin) VALUES(?,?,?,?,?)', newHash, actor, customerId, expiresAt, admin ? 1 : 0],
+      ['INSERT INTO sessions(token_hash,actor,customer_id,expires_at,admin,acting_admin_customer_id) VALUES(?,?,?,?,?,?)',
+        newHash, actor, customerId, expiresAt, admin ? 1 : 0, actingAdmin],
       ...(emailEnc ? [[UPSERT_TARGET, customerId, emailEnc, now]] : []),
       [AUTH_EVENT, now, actor, 'session_started', newHash.slice(0, 12), requestId]
     ]),
@@ -151,14 +154,16 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      * Act-as (ADR-007, decision 10), single-use in one atomic batch: the new admin-marked customer session is inserted
      * only while ``oldHash`` is still a live admin session, the two audit rows only if that insert happened, and then
      * the old session is deleted. Of concurrent calls with one cookie, only the first finds it; the rest insert nothing.
-     * Stores no email. Resolves ``true`` when the new session exists.
+     * Stores no email; the new session keeps the customer id the admin signed in as (``acting_admin_customer_id``,
+     * migration 0022), carried forward across switches. Resolves ``true`` when the new session exists.
      */
     actAsSession: async ({ now, oldHash, newHash, customerId, expiresAt, requestId }) => {
       const created = "WHERE EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer')";
       const results = await batch([
         ['DELETE FROM sessions WHERE expires_at<=?', now],
-        ["INSERT INTO sessions(token_hash,actor,customer_id,expires_at,admin) SELECT ?,'customer',?,?,1 "
-          + "WHERE EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND admin=1 AND expires_at>?)",
+        ["INSERT INTO sessions(token_hash,actor,customer_id,expires_at,admin,acting_admin_customer_id) "
+          + "SELECT ?,'customer',?,?,1,acting_admin_customer_id FROM sessions "
+          + "WHERE token_hash=? AND actor='customer' AND admin=1 AND acting_admin_customer_id IS NOT NULL AND expires_at>?",
           newHash, customerId, expiresAt, oldHash, now],
         ["INSERT INTO auth_events(ts,actor,event,session_ref,request_id) SELECT ?,'customer','session_started',?,? " + created,
           now, newHash.slice(0, 12), requestId, newHash],
@@ -168,9 +173,14 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       ]);
       return results[1]?.meta?.changes === 1;
     },
-    /** The live ``actor`` session: ``{ customer_id, expires_at, admin }`` (``admin`` is 1 for a session an admin opened). */
-    findSession: (hash, actor, now) =>
-      first('SELECT customer_id, expires_at, admin FROM sessions WHERE token_hash=? AND actor=? AND expires_at>?', hash, actor, now),
+    /**
+     * The live ``actor`` session: ``{ customer_id, expires_at, admin, acting_admin_customer_id }`` (``admin`` is 1 for a
+     * session an admin opened; the last is the admin's own customer id on every admin session, never returned). An admin
+     * session without it predates migration 0022, when an act-as session couldn't be told from the admin's own; it reads
+     * as expired, so its customer id is never taken for the admin's (the admin signs in once more).
+     */
+    findSession: (hash, actor, now) => first('SELECT customer_id, expires_at, admin, acting_admin_customer_id FROM sessions '
+      + 'WHERE token_hash=? AND actor=? AND expires_at>? AND NOT (admin=1 AND acting_admin_customer_id IS NULL)', hash, actor, now),
     /** Newest act-as rows (references only), for tests and operators. */
     listAdminActions: limit => all('SELECT * FROM admin_actions ORDER BY id DESC LIMIT ?', limit),
 
@@ -521,13 +531,13 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     },
     /**
      * One acknowledged report of this customer (same predicate as ``listCustomerHandoffs``) with its episode language
-     * and whether the customer has a notification target; null when missing or another customer's.
+     * and whether ``recipient`` (default the customer) has a notification target; null when missing or another customer's.
      */
-    findCustomerReport: (customerId, protocol) => first(
+    findCustomerReport: (customerId, protocol, recipient = customerId) => first(
       'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,h.status,e.language,'
-      + 'EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id) AS has_target '
+      + 'EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=?) AS has_target '
       + "FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
-      + 'AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))', customerId, protocol, protocol),
+      + 'AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))', recipient, customerId, protocol, protocol),
     /**
      * One acknowledged handoff by public ``protocol``, in one round trip: the first read stamps ``first_opened_at``
      * (migration 0018; later reads keep it), then the detail row, then a summary of the same customer's *other*
@@ -611,8 +621,9 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      */
     enqueueEmail: ({ messageId, now, customerId, template, language, reference }) => template === 'update'
       ? all("INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) SELECT ?,?,?,'update',?,?,'queued' "
-        + "WHERE NOT EXISTS(SELECT 1 FROM email_outbox WHERE customer_id=? AND reference=? AND template='update' AND created_at>?) RETURNING message_id",
-        messageId, now, customerId, language, reference, customerId, reference, now - UPDATE_EVERY_MS)
+        + "WHERE NOT EXISTS(SELECT 1 FROM email_outbox WHERE customer_id=? AND reference=? AND template='update' "
+        + "AND ((provider_status IN ('queued','sent') AND created_at>?) OR (provider_status IN ('failed','skipped') AND created_at>?))) RETURNING message_id",
+        messageId, now, customerId, language, reference, customerId, reference, now - UPDATE_EVERY_MS, now - EMAIL_FAILURE_RETRY_MS)
       : all("INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) VALUES(?,?,?,?,?,?,'queued')",
         messageId, now, customerId, template, language, reference),
     /** One customer's outbox rows for a reference (index ``email_outbox_recent``); no address, no body. */
@@ -627,6 +638,11 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     recentEmails: async (customerId, reference, sinceMs, template) => first(
       'SELECT COUNT(*) AS count,MAX(created_at) AS latest FROM email_outbox WHERE customer_id=? AND reference=? AND created_at>? AND template=?',
       customerId, reference, sinceMs, template),
+    /** Epoch ms when the newest update stops suppressing a retry, or null when none exists. */
+    recentEmailRetryAt: async (customerId, reference, sinceMs) => (await first(
+      "SELECT MAX(created_at+CASE WHEN provider_status IN ('failed','skipped') THEN ? ELSE ? END) AS retry_at "
+      + "FROM email_outbox WHERE customer_id=? AND reference=? AND template='update' AND created_at>?",
+      EMAIL_FAILURE_RETRY_MS, UPDATE_EVERY_MS, customerId, reference, sinceMs))?.retry_at ?? null,
 
     /**
      * The auditor's read (``GET /audit/events``): the newest ``limit`` sign-in events and review-status changes, newest

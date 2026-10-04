@@ -116,8 +116,9 @@ test('migration 0014 admits English and keeps every episode, foreign key and ind
   // Today's confirm reads the bank flag (0023, ADR-011); transactions are outside what 0014 rebuilds.
   db.exec(readFileSync(new URL('../../migrations/0023_bank_flag.sql', import.meta.url), 'utf8'));
   db.exec(reason);
-  // Today's session insert writes the admin mark (0021, ADR-007 decision 10); sessions are outside what 0014 rebuilds.
-  db.exec(readFileSync(new URL('../../migrations/0021_admin_act_as.sql', import.meta.url), 'utf8'));
+  // Today's session insert writes the admin mark (0021, ADR-007 decision 10) and today's session read the acting admin
+  // (0022); sessions are outside what 0014 rebuilds.
+  for (const f of ['0021_admin_act_as.sql', '0022_acting_admin.sql']) db.exec(readFileSync(new URL('../../migrations/' + f, import.meta.url), 'utf8'));
   assert.equal((await call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
   for (const [language, statement, complete] of [['es', 'No reconozco este cargo.', true], ['pt', 'Não reconheço esta cobrança.', false], ['es', 'No reconozco este otro cargo.', null]]) {
     const start = await call('/intake/start', { language, mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine', customer_statement: statement, idempotency_key: crypto.randomUUID() });
