@@ -735,6 +735,14 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      */
     claimSuggestionRun: async ({ handoffId, now }) => first(
       'UPDATE handoff_suggestion_runs SET claimed_at=? WHERE handoff_id=? AND claimed_at IS NULL AND outcome IS NULL RETURNING arm', now, handoffId),
+    /**
+     * The outcomes of at most ``limit`` runs that called the model and finished since ``since``, newest first (partial
+     * index ``handoff_suggestion_runs_called``): what the circuit breaker in ``suggestions.js`` reads. A run the breaker
+     * skipped made no call, so it never counts.
+     */
+    recentModelOutcomes: async ({ since, limit }) => (await all(
+      'SELECT outcome FROM handoff_suggestion_runs WHERE llm_calls>0 AND outcome IS NOT NULL AND finished_at>=? ORDER BY finished_at DESC LIMIT ?',
+      since, limit)).map(r => r.outcome),
     /** Count the call before it runs as one call with unknown usage, so a Worker stopped mid-call never makes it free. */
     startSuggestionCall: ({ handoffId, producer }) => all(
       'UPDATE handoff_suggestion_runs SET producer=?,llm_calls=1,usage_unavailable_calls=1 WHERE handoff_id=? AND outcome IS NULL', producer, handoffId),

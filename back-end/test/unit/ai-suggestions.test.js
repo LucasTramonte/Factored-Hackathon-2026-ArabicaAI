@@ -16,7 +16,7 @@ import { createStore } from '../../src/store/d1.js';
 import { route } from '../../src/router.js';
 import { EXTRACTION_TIMEOUT_MS, MODEL, VOCABULARY, producers, registeredVersion, vertexUrl } from '../../src/modules/intake/ai-transport.js';
 import { PROMPT } from '../../src/modules/intake/extractor-prompt.js';
-import { DEFAULT_RETIRES, OUTCOMES, asOfAt, newArm, retired, runSuggestion, testOrigin } from '../../src/modules/intake/suggestions.js';
+import { BREAKER_WINDOW_MS, DEFAULT_RETIRES, OUTCOMES, asOfAt, newArm, retired, runSuggestion, shareB, testOrigin } from '../../src/modules/intake/suggestions.js';
 import { EXCHANGE_MS, accessToken, audience, credentialConfig, resetTokenCache, workerJwt } from '../../src/modules/intake/vertex-auth.js';
 import { tokenHash } from '../../src/auth/session.js';
 import { assertContract } from '../support/contract.js';
@@ -26,7 +26,7 @@ import { scorerPython } from '../../scripts/scorer-python.mjs';
 import { close } from '../support/close.js';
 
 const SOURCE_PROMPT = readFileSync(new URL('../../../intake_agent/extractor/prompt.md', import.meta.url), 'utf8');
-const VERSION = 'extractor-v1@' + createHash('sha256').update(SOURCE_PROMPT).digest('hex').slice(0, 12);
+const VERSION = 'extractor-v2@' + createHash('sha256').update(SOURCE_PROMPT).digest('hex').slice(0, 12);
 const ANA = 'a'.repeat(64), BRUNO = 'b'.repeat(64), AGENT = 'c'.repeat(64);
 const { privateKey, publicKey } = await generateKeyPair('RS256', { extractable: true });
 const PEM = await exportPKCS8(privateKey);
@@ -110,10 +110,11 @@ test('the committed prompt copy is byte-identical to the evaluated prompt, and t
   assert.deepEqual([...producers()], ['guided-0.1']);
 });
 
-test('wrangler.jsonc ships the switch off, the non-secret Vertex vars, and no key, binding or test seam', async () => {
+test('wrangler.jsonc ships the switch on with every eligible report in arm B (ADR-012 amendment 1), the non-secret Vertex vars, and no key, binding or test seam', async () => {
   const config = await readWranglerConfig();
   assert.equal(config.ai, undefined, 'no Workers AI binding: the evaluated host is Vertex AI');
-  assert.equal(config.vars.INTAKE_AI_ENABLED, '0');
+  assert.equal(config.vars.INTAKE_AI_ENABLED, '1');
+  assert.equal(shareB(config.vars), 1);
   assert.deepEqual(Object.fromEntries(Object.entries(config.vars).filter(([k]) => k.startsWith('VERTEX_'))), {
     VERTEX_PROJECT: 'factored-hackathon-arabica-ai', VERTEX_PROJECT_NUMBER: '92397500240',
     VERTEX_SERVICE_ACCOUNT: 'arabica-worker-vertex@factored-hackathon-arabica-ai.iam.gserviceaccount.com',
@@ -168,7 +169,7 @@ test("on: the same response and request D1 work; after it, one extraction sugges
   assert.equal(vertex.init.headers.Authorization, 'Bearer vertex-token');
   assert.equal(vertex.init.redirect, 'manual');
   const body = JSON.parse(vertex.body);
-  assert.deepEqual([body.model, body.temperature, body.max_tokens, body.reasoning_effort], [MODEL, 0, 2048, 'low']);
+  assert.deepEqual([body.model, body.temperature, body.max_tokens, body.reasoning_effort], [MODEL, 0, 2048, 'minimal']);
   assert.equal(body.messages[0].content, PROMPT);
   const user = JSON.parse(body.messages[1].content);
   assert.match(user.as_of, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/, 'the harness form: UTC wall time, no offset');
@@ -256,6 +257,26 @@ test('zero or invalid daily caps stop extraction after authentication', async t 
   }
 });
 
+test('circuit breaker: 3 of the last 5 model-calling runs failing in 5 minutes skips the call until they age out', async t => {
+  const ctx = await setup(t);
+  const t0 = Date.now();
+  const once = async (vertex, at) => {
+    const { receipt } = await handoff(ctx, ON_B, { ctx: false });
+    const mocked = google({ vertex });
+    const outcome = await runSuggestion(ON, ctx.store(), { handoffId: receipt.protocol, customerId: 'ana', details: DETAILS, language: 'es' },
+      { fetcher: mocked.fetcher, now: () => at });
+    return [outcome, mocked.vertexCalls().length, ctx.one('SELECT llm_calls FROM handoff_suggestion_runs WHERE handoff_id=?', receipt.protocol).llm_calls];
+  };
+  const down = () => json({}, 503);
+  assert.deepEqual(await once(down, t0), ['provider_error', 1, 1]);
+  assert.deepEqual(await once(undefined, t0 + 1), ['suggested', 1, 1], 'one failure and a success: closed');
+  assert.deepEqual(await once(down, t0 + 2), ['provider_error', 1, 1], 'two failures: still closed');
+  assert.deepEqual(await once(down, t0 + 3), ['provider_error', 1, 1]);
+  assert.deepEqual(await once(undefined, t0 + 4), ['provider_error', 0, 0], 'three of four failed: open, no call, no usage');
+  assert.deepEqual(await once(undefined, t0 + 5), ['provider_error', 0, 0], 'a skipped run made no call, so it never counts');
+  assert.deepEqual(await once(undefined, t0 + 2 + BREAKER_WINDOW_MS), ['suggested', 1, 1], 'the failures aged out: the next run probes');
+});
+
 test('the daily cap is kept in D1 per UTC day and counts each extraction once', async t => {
   const ctx = await setup(t);
   const env = { ...ON, INTAKE_AI_DAILY_CAP: '1' };
@@ -268,14 +289,14 @@ test('the daily cap is kept in D1 per UTC day and counts each extraction once', 
   assert.deepEqual(ctx.rows('SELECT day,calls FROM ai_daily_calls').map(r => ({ ...r })), [{ day: new Date().toISOString().slice(0, 10), calls: 1 }]);
 });
 
-test('the retirement guard can only move earlier than 2026-10-21, the built-in date for the model', async t => {
-  assert.equal(DEFAULT_RETIRES, '2026-10-21');
-  assert.equal(retired({}, Date.parse('2026-10-20T23:59:59Z')), false);
-  assert.equal(retired({}, Date.parse('2026-10-21T00:00:00Z')), true);
+test('the retirement guard can only move earlier than 2027-01-31, the built-in review date for the model', async t => {
+  assert.equal(DEFAULT_RETIRES, '2027-01-31');
+  assert.equal(retired({}, Date.parse('2027-01-30T23:59:59Z')), false);
+  assert.equal(retired({}, Date.parse('2027-01-31T00:00:00Z')), true);
   assert.equal(retired({ VERTEX_MODEL_RETIRES: '2026-10-10' }, Date.parse('2026-10-10T00:00:00Z')), true, 'an earlier date applies');
-  for (const at of ['2026-10-21T00:00:00Z', '2026-12-31T00:00:00Z']) assert.equal(retired({ VERTEX_MODEL_RETIRES: '2099-01-01' }, Date.parse(at)), true, at);
-  const late = await run(t, ON, { fetcher: noFetch, calls: [], vertexCalls: () => [] }, { now: () => Date.parse('2026-10-22T09:00:00Z') });
-  assert.equal(late.outcome, 'retired', 'ON says 2099, the Worker still refuses after 2026-10-21');
+  for (const at of ['2027-01-31T00:00:00Z', '2027-12-31T00:00:00Z']) assert.equal(retired({ VERTEX_MODEL_RETIRES: '2099-01-01' }, Date.parse(at)), true, at);
+  const late = await run(t, ON, { fetcher: noFetch, calls: [], vertexCalls: () => [] }, { now: () => Date.parse('2027-02-01T09:00:00Z') });
+  assert.equal(late.outcome, 'retired', 'ON says 2099, the Worker still refuses after 2027-01-31');
   assert.equal(asOfAt(Date.parse('2026-10-05T23:30:12.345Z')), '2026-10-05T23:30:12');
 });
 
@@ -300,14 +321,15 @@ test('token exchange failures are auth_error, with no model call and nothing cac
   assert.equal(malformed.calls.length, 0, 'a malformed account never reaches a Google path');
 });
 
-test('model failures fall back with honest usage: config_error, provider_error (no retry), invalid_output (one retry)', async t => {
+test('model failures fall back with honest usage: config_error, provider_error (only a 429 retried, once), invalid_output (one retry)', async t => {
   const invalid = () => answer({ intent: 'report' });
   for (const [label, vertex, expected, calls, usage] of [
     ['401', () => json({}, 401), 'config_error', 1, [1, 0, 0, 1]],
     ['403', () => json({}, 403), 'config_error', 1, [1, 0, 0, 1]],
     ['404', () => json({}, 404), 'config_error', 1, [1, 0, 0, 1]],
     ['500', () => json({}, 500), 'provider_error', 1, [1, 0, 0, 1]],
-    ['429', () => json({}, 429), 'provider_error', 1, [1, 0, 0, 1]],
+    ['429 twice', () => json({}, 429), 'provider_error', 2, [2, 0, 0, 2]],
+    ['429 then valid', (call, n) => n === 1 ? json({}, 429) : answer(FARMACIA), 'suggested', 2, [2, 1840, 84, 1]],
     ['network', () => { throw new TypeError('reset'); }, 'provider_error', 1, [1, 0, 0, 1]],
     ['error envelope', () => json({ error: { message: 'x' } }), 'provider_error', 1, [1, 0, 0, 1]],
     ['invalid twice', invalid, 'invalid_output', 2, [2, 3680, 168, 0]],
@@ -415,6 +437,15 @@ test('the endpoint is the global OpenAI-compatible one; the test origin is honou
   const b = arms.filter(a => a === 'B').length;
   assert.ok(arms.every(a => a === 'A' || a === 'B'));
   assert.ok(b > 140 && b < 260, `without the loopback test origin the arm is random: ${b} of 400 were B`);
+});
+
+test('INTAKE_AI_SHARE_B sets the share of arm B; anything but a number from 0 to 1 keeps the pilot\'s 50/50', () => {
+  for (const [value, share] of [[undefined, 0.5], ['', 0.5], ['x', 0.5], ['-0.1', 0.5], ['1.5', 0.5], ['0', 0], ['0.25', 0.25], ['1', 1]])
+    assert.equal(shareB({ INTAKE_AI_SHARE_B: value }), share, String(value));
+  const draw = share => Array.from({ length: 200 }, () => newArm({ ...ON, INTAKE_AI_SHARE_B: share }));
+  assert.ok(draw('1').every(a => a === 'B'));
+  assert.ok(draw('0').every(a => a === 'A'));
+  assert.equal(newArm({ INTAKE_AI_ENABLED: '0', INTAKE_AI_SHARE_B: '1' }), undefined, 'the switch still decides first');
 });
 
 test('suggestion runs export with references and counts only, and the scorer summarises them by arm', async t => {

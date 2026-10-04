@@ -92,7 +92,7 @@ test("waitUntil with mocked Vertex: the customer's own charge is suggested; anot
     "Carla's Mercado Demo charge is never Ana's suggestion");
   const run = await recorded(receipt.episode_id);
   assert.deepEqual([run.result, run.arm, run.llm_calls, run.known_input_tokens, run.usage_unavailable_calls, run.suggestions], ['suggested', 'B', 1, 1840, 0, 1]);
-  assert.match(run.producer, /^extractor-v1@[0-9a-f]{12}$/);
+  assert.match(run.producer, /^extractor-v2@[0-9a-f]{12}$/);
   const byShort = await ana.call(`/intake/handoff/${receipt.reference_short}/suggestions`);
   assert.deepEqual(byShort.body, shown);
   const sent = await (await fetch(process.env.VERTEX_MOCK_URL + '/__vertex')).json();

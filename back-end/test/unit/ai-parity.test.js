@@ -15,7 +15,7 @@ test('the vocabulary is the evaluation vocabulary, in the same key order', () =>
   assert.equal(JSON.stringify(VOCABULARY), JSON.stringify(FIXTURES.vocabulary));
 });
 
-test('request bodies are byte-identical to vertex.build_body serialised by json.dumps(ensure_ascii=False)', () => {
+test('request bodies are byte-identical to vertex_v2.build_body serialised by json.dumps(ensure_ascii=False)', () => {
   assert.ok(FIXTURES.bodies.length >= 10);
   for (const { message, language, as_of, body } of FIXTURES.bodies) {
     assert.equal(pyJson(buildBody(message, language, as_of)), body, message.slice(0, 40));
@@ -30,7 +30,7 @@ test('parse accepts, normalises and refuses exactly what workers_ai.parse does',
   }
 });
 
-test('the attempt loop matches vertex.extract on every authored HTTP exchange: kind, facts, calls and usage', async () => {
+test('the attempt loop matches vertex_v2.extract on every authored HTTP exchange: kind, facts, calls and usage', async () => {
   for (const scenario of FIXTURES.scenarios) {
     const queue = [...scenario.responses];
     let requests = 0;
@@ -40,7 +40,7 @@ test('the attempt loop matches vertex.extract on every authored HTTP exchange: k
       const { status, body } = queue.shift();
       return new Response(status === 204 ? null : body, { status, headers: { 'Content-Type': 'application/json' } });
     };
-    const result = await extract({ url: 'https://vertex.test/x', message: 'No reconozco un cargo de 85.00 USD del 2026-06-10', language: 'es', token: 't', fetcher });
+    const result = await extract({ url: 'https://vertex.test/x', message: 'No reconozco un cargo de 85.00 USD del 2026-06-10', language: 'es', token: 't', fetcher, wait: 0 });
     assert.equal(result.kind, scenario.kind, scenario.name);
     assert.equal(requests, scenario.requests, scenario.name);
     assert.equal(result.usage.llm_calls, scenario.requests, scenario.name);

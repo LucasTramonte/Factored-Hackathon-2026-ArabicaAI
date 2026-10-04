@@ -111,12 +111,14 @@ const CEILING = {
   // read-back); a replay writes nothing. The after-response run (ctx.waitUntil, its own store): the atomic claim, the cap
   // slot, the pre-recorded call, the customer's purchases (one batch of two reads, at most 200 charges) and the outcome
   // batch (run, at most three suggestions, one event). Review fixes, 2026-10-04: claim and shown_at (ADR-004 note).
+  // Circuit breaker, 2026-10-04 (ADR-006 amendment 10): one read of the last five model-calling outcomes through migration
+  // 0026's partial index (+1 query, +1 round trip, +5 rows read), and that index's entry when the run finishes (+1 write).
   intakeIncompleteDetails: [16, 52, 21, 7],
   suggestions: [3, 14, 1, 2],
   suggestionConfirm: [3, 10, 2, 2],
   suggestionDetail: [5, 83, 1, 3],
   suggestionMark: [3, 7, 2, 2],
-  suggestionRun: [8, 31, 9, 5],
+  suggestionRun: [9, 36, 10, 6],
   // The idle sweep's suggestion part (ADR-012): one atomic batch per page of at most 100 stale runs of acknowledged
   // handoffs, both statements picking the page through the pending-run partial index: one event per run (its episode's
   // next seq and a check that it has none yet: about 23 reads a run), then the update. Nothing due reads 7 rows.
