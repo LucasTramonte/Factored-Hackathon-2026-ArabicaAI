@@ -385,7 +385,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     } catch {
       return; // no session information: the sign-in screen stays
     }
-    if (!state?.customer || this.client() || this.busy()) return;
+    // Never over a sign-in the person has started (the login step, a pending or sent code), even if it is not busy now.
+    if (!state?.customer || this.client() || this.busy() || this.step() !== 'intro' || this.codeSent()) return;
     this.card.set(state.customer.context_card ?? null);
     this.client.set(state.customer.customer_id);
     this.roles.set(state.customer.roles);

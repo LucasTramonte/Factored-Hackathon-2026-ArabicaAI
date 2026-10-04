@@ -70,7 +70,8 @@ export class AgentPage {
   private async restore(): Promise<void> {
     try {
       const state = await this.customer.me();
-      if (!state?.agent || this.roles().length || this.busy()) return;
+      // Never over an agent sign-in that has started, including while the code is sent.
+      if (!state?.agent || this.roles().length || this.busy() || this.codeSent()) return;
       this.roles.set(state.customer?.roles.includes('admin') ? ['admin'] : ['agent']);
       await this.refresh();
     } catch { /* no session information: the sign-in stays */ }

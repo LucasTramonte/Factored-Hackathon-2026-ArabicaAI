@@ -24,7 +24,13 @@ test('no cookie, an expired, malformed or swapped cookie restore nothing; a quer
   const swapped = client(); swapped.cookie = agent.cookie.replace('demo_agent_session=', 'demo_session='); // an agent token in the customer slot
   const expired = client(); expired.cookie = 'demo_session=' + process.env.EXPIRED_TOKEN;
   const malformed = client(); malformed.cookie = 'demo_session=not-a-token';
-  for (const c of [swapped, expired, malformed]) assert.deepEqual((await me(c)).body, { customer: null, agent: false });
+  for (const c of [swapped, expired, malformed]) {
+    const res = await me(c);
+    assert.deepEqual(res.body, { customer: null, agent: false });
+    assert.equal(res.metrics.rows_written, 0, 'a stale cookie on a reload writes no rejection event (ADR-004)');
+  }
+  const refused = await expired.call('/transactions');
+  assert.equal(refused.status, 401); assert.ok(refused.metrics.rows_written > 0, 'the 401 routes still audit the rejection');
   const ana = client(); assert.equal((await ana.call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
   for (const query of ['?customer_id=demo-bruno', '?x=1']) assert.equal((await ana.call('/auth/me' + query)).status, 422, query);
 });

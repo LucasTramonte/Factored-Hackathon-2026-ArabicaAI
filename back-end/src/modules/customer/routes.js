@@ -127,8 +127,9 @@ export async function startEmailSession(request, env, store, ctx, verify = verif
  */
 export async function whoAmI(request, env, store) {
   if (new URL(request.url).search) return fail(422, 'No query parameters are accepted');
-  const customer = await requireSession(request, store, 'customer');
-  const agent = await requireSession(request, store, 'agent');
+  // A reload with an expired or stale cookie is normal here and answers 200, so it writes no rejection event.
+  const customer = await requireSession(request, store, 'customer', { audit: false });
+  const agent = await requireSession(request, store, 'agent', { audit: false });
   return json({
     customer: customer ? { customer_id: customer.customer_id, roles: customer.admin === 1 ? ['admin'] : ['customer'],
       context_card: await cardOf(store, customer.customer_id) } : null,

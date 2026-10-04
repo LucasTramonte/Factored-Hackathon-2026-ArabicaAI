@@ -53,6 +53,18 @@ describe('CustomerPage', () => {
     expect([fresh.client(), fresh.step()]).toEqual(['', 'intro']);
   });
 
+  it('a late session restore never replaces a sign-in the person has started', async () => {
+    let answer!: (s: unknown) => void;
+    Object.assign(service, { me: jasmine.createSpy('me').and.returnValue(new Promise(r => answer = r)) });
+    const p = TestBed.createComponent(CustomerPage).componentInstance;
+    void p.ngOnInit();
+    p.start();
+    expect(p.step()).toBe('login');
+    answer({ customer: { customer_id: 'demo-ana', roles: ['customer'], context_card: null }, agent: false });
+    await new Promise(r => setTimeout(r));
+    expect([p.client(), p.step()]).toEqual(['', 'login']);
+  });
+
   it('starts on the intro, moves to sign-in on start, and to the home once charges are loaded', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     const p = fixture.componentInstance;
