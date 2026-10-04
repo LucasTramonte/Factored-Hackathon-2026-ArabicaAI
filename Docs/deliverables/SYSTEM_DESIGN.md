@@ -52,6 +52,7 @@ An earlier design read free text and routed other requests (another language, a 
 | Admin | Deployed (#95–#97, #101) | One code opens both views, and an admin can "view as" any loaded customer, audited by reference |
 | Proactive alert | Deployed (#106) | One in-app banner on a charge the bank flagged ([below](#the-proactive-alert)) |
 | Session restore | Deployed (#110) | A reload restores the live session from the cookie |
+| "How long does it take?" | Deployed (#116) | Answered from this bank's history, a reviewed Gold aggregate seeded into D1 (migration 0027): half of unrecognized-charge reports got a first response in about 1 day (p50 25 h) and 9 in 10 within 2 days (p90 44 h), n = 6,045 of 10,370. Resolution times are described, never quoted, because they cover resolved reports only. Not a prediction or a service level |
 | AI suggestions on "I can't find it" | Deployed (#113), on in the demo (ADR-012 amendment 1) | After the reference, extractor v2 (Gemini 3.5 Flash-Lite with v1's prompt) reads the customer's description on Vertex AI; code suggests up to three of their own charges; the customer confirms or declines; a person reviews ([below](#the-learned-component-and-where-ai-belongs)) |
 
 The customer and measurement contracts are in [`Docs/intake/`](../intake/customer-and-measurement-contract.md).

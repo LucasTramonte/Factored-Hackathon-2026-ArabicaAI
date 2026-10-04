@@ -140,6 +140,18 @@ No step needs the service to understand free text in order to act: the charge co
 - Roberto and Manoella approve in the PR that carries it.
 - The extractor's behaviour (the registered prompt, model, reasoning level and policy) is unchanged. This is a deployment decision, not a behavioural change under ADR-006 decision 5.
 
+**Implementation notes (2026-10-04, same day).**
+- **Region.** Vertex AI is called in Google's `us` multi-region (`VERTEX_LOCATION = "us"`, host `aiplatform.us.rep.googleapis.com`). That meets decision 4's "pin a region" step. Measured through the Worker's own transport (15 interleaved calls each, development messages): `us` p50 0.87 s and p90 2.33 s, against `global` p50 1.19 s and p90 1.44 s. The median is faster and the tail heavier in this small sample; both are far inside the 10 s deadline. The reason is residency, not speed.
+- **Alerts.** Cloud Monitoring alerts on 429/5xx (3 or more in 15 minutes) and on p95 latency (above 5 s, with at least 3 calls), from Vertex's native metrics ([`scripts/gcp/monitoring/`](../../scripts/gcp/monitoring/README.md)). No notification channel exists yet; a person attaches one.
+- **Retention, read from the project and Google's documentation, not assumed.**
+  - Google's in-memory cache (24-hour TTL) is **on**: the project's `cacheConfig` has no `disableCache: true`. It also reports `retentionConfig.retentionType: DURABLE`, a field absent from Google's published `CacheConfig` reference, so it is recorded here, not interpreted.
+  - Prompt logging for abuse monitoring **applies**. The project is on standard terms with a non-invoiced (trial) billing account, the case [Google's zero data retention page](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/vertex-ai-zero-data-retention) says is in scope. **No exemption has been requested.**
+  - **Prerequisites before any real customer data, each a person's action:**
+    1. Request the abuse-monitoring exemption from Google (through Google Cloud support, as that page describes), or move to an invoiced billing account.
+    2. Disable the cache: `PATCH https://aiplatform.googleapis.com/v1/projects/92397500240/cacheConfig` with body `{"name": "projects/92397500240/cacheConfig", "disableCache": true}`, then read it back.
+
+  The demo holds synthetic customers only, so neither blocks it.
+
 ## Alternatives considered
 
 - **An AI assistant for the whole conversation.** It would add 1.6 to 2.6 s to every turn and a new failure mode to every step, to solve a reading problem the guided flow doesn't have. Rejected: no measured benefit on live paths. Reopen if a live path appears that must be decided from free text.

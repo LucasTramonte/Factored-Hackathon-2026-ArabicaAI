@@ -82,6 +82,7 @@ There is no team password. Customers sign in with an email one-time code (`POST 
 | `POST /auth/session` | none | Customer sign-in from `Authorization: Bearer <Cognito ID token>` in group `customer` or `admin`, with a loaded customer id | 200, 401, 403 (not enrolled), 422 (no token), 503 (JWKS unreachable) |
 | `POST /auth/logout` | none | Revokes the presented customer session | 204 |
 | `GET /auth/me` | none; reads the presented cookies | ADR-013 phase 0: `{ customer: { customer_id, roles, context_card } \| null, agent }` for the browser's live sessions, so a reload restores the signed-in state; never a token or expiry (`sessionState`) | 200, 422 (any query) |
+| `GET /intake/service-times` | customer | This bank's history for "How long does it take?": the newest reviewed `service_timing` baseline (migration 0027, from `gold.complaint_timing`) with its population (subcategory, window, complaints, source) and, per metric, p50, p90, `n`, `missing` and `negative`. `first_response` is what the customer is told; `creation_to_resolution` is marked `resolved_only` and never shown as an expected time. Not a prediction or a service level | 200, 401, 422 (any query parameter), 503 (no baseline loaded) |
 | `GET /reports` | customer | The customer's own acknowledged reports, newest first, 20 a page with `has_more`: reference, kind, status, next step and the confirmed charge id (null without one) | 200, 401, 422 (any query parameter) |
 | `GET /alerts` | customer session | The proactive alert ([ADR-011](../Docs/ADRs/ADR-011-proactive-alert-bank-flag.md)): `{ alert }`, the session customer's newest bank-flagged charge not yet answered or reported, or null (`proactiveAlert`). The fraud score never reaches D1; only the flag | 200, 401, 422 (any query) |
 | `POST /alerts/answer` | customer session | Body exactly `{ transaction_id, answer }` (`mine` or `report`) on the customer's own flagged charge; the first answer stands, concurrent answers store one (`alertAnswer`). An admin acting as the customer answers as `admin`, which never silences the customer's alert | 200, 401, 404 (not the customer's flagged charge), 422 |
@@ -232,6 +233,7 @@ The client polls `GET …/suggestions` for at most about 15 s after such a recei
 | `INTAKE_AI_ENABLED` | var | `"1"` (on, ADR-012 amendment 1). Exactly `"1"` turns it on; anything else is off |
 | `INTAKE_AI_SHARE_B` | optional var | Share of eligible reports in arm B, from 0 to 1: `"1"` in the demo; anything else, or absent, is the pilot's 0.5 |
 | `VERTEX_PROJECT` | var | `factored-hackathon-arabica-ai` |
+| `VERTEX_LOCATION` | optional var | `us` (Google's US multi-region, `aiplatform.us.rep.googleapis.com`); also `eu` or `global` (the default when absent). Any other value builds no URL and the run records `config_error` |
 | `VERTEX_PROJECT_NUMBER` | var | `92397500240` (the provider audience) |
 | `VERTEX_SERVICE_ACCOUNT` | var | `arabica-worker-vertex@factored-hackathon-arabica-ai.iam.gserviceaccount.com` |
 | `VERTEX_WIF_ISSUER` | var | `https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev` |
@@ -241,6 +243,10 @@ The client polls `GET …/suggestions` for at most about 15 s after such a recei
 | `VERTEX_WIF_SIGNING_KEY` | **secret** | The Worker's PKCS#8 PEM private key: `npx wrangler secret put VERTEX_WIF_SIGNING_KEY`. Never a var; `predeploy.mjs` refuses it in `vars` |
 
 `VERTEX_TEST_ORIGIN` (honoured only for a loopback `http` origin) and `INTAKE_AI_TEST_ARM` are local test seams that `run-local.mjs` writes to `.dev.vars`; `predeploy.mjs` refuses both in `vars`.
+
+**Alerts.** Two Cloud Monitoring policies watch the model through Vertex's native metrics: 429/5xx responses, and a slow p95. Their files, thresholds and the way to attach a notification channel are in [`scripts/gcp/monitoring/`](../scripts/gcp/monitoring/README.md).
+
+**Retention, before any real customer data** ([ADR-012 amendment 1](../Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3)). Google's 24-hour in-memory cache is on for this project, and its prompt logging for abuse monitoring applies (standard terms, a non-invoiced billing account). Neither is disabled today. Both are listed as prerequisites in the amendment.
 
 **Tests.** `test/unit/ai-parity.test.js` replays the Python's request bytes, parsing, attempt loop and policy; `test/unit/ai-suggestions.test.js` covers every guard and fallback kind, the JWT, STS and cache, and that the switch off never calls `fetch` and leaves the handoff as before; `test/integration/suggestions.test.js` runs the Worker with the switch on against `test/support/google-mock.mjs`.
 
