@@ -31,6 +31,8 @@ About eleven customers a day report a charge they don't recognize, and the conta
 | First response to resolution, p50 / p90 | 14.4 / 25.9 days (n = 2,241) | 14.7 / 26.2 days |
 | Customer wait, creation to resolution, p50 / p90 | 15 / 27 days (n = 2,414) | 16 / 28 days |
 
+The first-response time is steady quarter by quarter, but 38.5% of unrecognized-charge complaints have no recorded first response at all ([appendix A](#a-first-response-by-quarter)).
+
 The two columns are nearly identical. A customer looking at a large charge they didn't make treats it as urgent ([DF-024](DATA_ENGINEERING.md#df-024-purchase-amounts-are-almost-flat-up-to-usd-509-with-no-high-value-tail)), yet nothing in today's handling sets these complaints apart from any other.
 
 The unresolved share is not a backlog that ages. Every creation quarter, from 2023 to late 2025, is 72–77% unresolved at the end of the data, so a complaint from 2023 is no more likely to be done than a recent one: the source sets each status once ([DF-028](DATA_ENGINEERING.md#df-028-complaint-statuses-are-fixed-labels-not-a-lifecycle)). The durations above therefore describe only the complaints that have both dates.
@@ -205,7 +207,34 @@ The table maps each question to a measure, gives the baseline in the supplied da
 - Complaint status is a fixed label ([DF-028](DATA_ENGINEERING.md#df-028-complaint-statuses-are-fixed-labels-not-a-lifecycle)), so history gives no backlog ageing, no time to escalate and no time-of-day effect.
 - The data is synthetic, and every association here is descriptive.
 
-## Metric dictionary: the product report
+## Appendix
+
+### A. First response by quarter
+
+![Line chart by creation quarter, 2023 Q2 to 2026 Q2: median hours from assignment to first response stays at 24 to 27 and the 90th percentile at 43 to 44 in every full quarter, each quarter with its sample size; a callout gives 38.5% of complaints with no recorded first response](../Evidence/business/charts/first-response-by-quarter.png)
+
+**Finding.** Among unrecognized-charge complaints with a recorded first response, the time from assignment to first response is about one day in every quarter: a median of 24–27 hours and a 90th percentile of 43–44 hours in every full quarter. But 38.5% of these complaints have no recorded first response.
+
+**Population and denominators.** `silver.fact_complaints` with `subcategory = 'Cargo no reconocido'`, every available quarter (2023-06-17 to 2026-06-18; the first and last quarters are partial):
+
+| | Complaints |
+|---|---|
+| All unrecognized-charge complaints | 12,297 |
+| With a recorded first response | 7,567 |
+| … of which charted (an assignment date too, and first response ≥ assignment) | 7,209 |
+| … left out: first response but no assignment date | 358 |
+| … left out: first response before assignment | 0 |
+| **No recorded first response** | **4,730 / 12,297 = 38.5%** |
+| … by status: Open / Escalated / In Process / Rejected / Resolved / Closed | 3,648 / 618 / 241 / 111 / 95 / 17 |
+
+**Method.** For each charted complaint, the hours from `assignment_date` to `first_response_date`, grouped by the quarter of `creation_date`; each quarter's median and 90th percentile are computed separately and never pooled. Each quarter's n is on the chart (75 in the partial 2023 Q2, 515–649 otherwise). The queries are [`FR-01`](../../data_foundation/queries/first_response/FR-01_by_quarter.sql) and [`FR-02`](../../data_foundation/queries/first_response/FR-02_coverage.sql); `python -m data_foundation.scripts.run_first_response --db <Silver DuckDB> --quality <its quality_results.json>` reruns them, checks that the counts reconcile, and writes the [aggregates](../Evidence/business/first-response-by-quarter.json) (no row-level data) and the chart. These figures come from Silver quality run `20261002T232200Z`. This is the full period, not the design window, so it includes the 2026 quarters; it is descriptive and informs no design choice (ADR-005).
+
+**Limits.**
+- **The data is synthetic.** These are recorded timestamps in a generated dataset, not observations of a bank's customers.
+- **No recorded first response is not the same as no response.** The field is empty, which says only that no first-response date was recorded. 112 of the 4,730 are Resolved or Closed, so something happened on cases with no recorded first response. And statuses are fixed labels in this data ([DF-028](DATA_ENGINEERING.md#df-028-complaint-statuses-are-fixed-labels-not-a-lifecycle)), so an Open complaint isn't one still waiting today.
+- **These hours are not an SLA.** About a day is what the source records, not a target the bank set, and it says nothing about our service's latency, which is measured separately ([EVALUATION.md §11](EVALUATION.md#11-other-measurements)).
+
+### B. Metric dictionary: the product report
 
 Every metric of the product report (the `PR` queries), with what it counts; the decision KPIs define theirs in their own section. "Window" is the design window unless it says *full period*; "UC" means `Cargo no reconocido` complaints created in that window. Queries are in [`data_foundation/queries/product/`](../../data_foundation/queries/product/).
 

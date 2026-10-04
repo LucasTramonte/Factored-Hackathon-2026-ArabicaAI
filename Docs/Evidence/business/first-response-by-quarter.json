@@ -1,0 +1,144 @@
+{
+  "population": "Cargo no reconocido complaints in silver.fact_complaints, full period",
+  "complaints": 12297,
+  "with_first_response": 7567,
+  "no_first_response": 4730,
+  "no_first_response_share": 0.3846,
+  "no_first_response_by_status": {
+    "Open": 3648,
+    "Escalated": 618,
+    "In Process": 241,
+    "Rejected": 111,
+    "Resolved": 95,
+    "Closed": 17
+  },
+  "excluded_no_assignment": 358,
+  "excluded_before_assignment": 0,
+  "charted": 7209,
+  "quarters": [
+    {
+      "year": 2023,
+      "quarter": 2,
+      "n": 75,
+      "median_hours": 27.0,
+      "p90_hours": 42.6,
+      "first_day": "2023-06-17",
+      "last_day": "2023-06-30"
+    },
+    {
+      "year": 2023,
+      "quarter": 3,
+      "n": 640,
+      "median_hours": 25.0,
+      "p90_hours": 44.0,
+      "first_day": "2023-07-01",
+      "last_day": "2023-09-30"
+    },
+    {
+      "year": 2023,
+      "quarter": 4,
+      "n": 538,
+      "median_hours": 24.0,
+      "p90_hours": 44.0,
+      "first_day": "2023-10-01",
+      "last_day": "2023-12-31"
+    },
+    {
+      "year": 2024,
+      "quarter": 1,
+      "n": 579,
+      "median_hours": 26.0,
+      "p90_hours": 44.0,
+      "first_day": "2024-01-01",
+      "last_day": "2024-03-31"
+    },
+    {
+      "year": 2024,
+      "quarter": 2,
+      "n": 587,
+      "median_hours": 25.0,
+      "p90_hours": 43.0,
+      "first_day": "2024-04-01",
+      "last_day": "2024-06-30"
+    },
+    {
+      "year": 2024,
+      "quarter": 3,
+      "n": 618,
+      "median_hours": 24.0,
+      "p90_hours": 43.0,
+      "first_day": "2024-07-01",
+      "last_day": "2024-09-30"
+    },
+    {
+      "year": 2024,
+      "quarter": 4,
+      "n": 597,
+      "median_hours": 25.0,
+      "p90_hours": 44.0,
+      "first_day": "2024-10-01",
+      "last_day": "2024-12-31"
+    },
+    {
+      "year": 2025,
+      "quarter": 1,
+      "n": 617,
+      "median_hours": 25.0,
+      "p90_hours": 43.0,
+      "first_day": "2025-01-01",
+      "last_day": "2025-03-31"
+    },
+    {
+      "year": 2025,
+      "quarter": 2,
+      "n": 583,
+      "median_hours": 25.0,
+      "p90_hours": 43.0,
+      "first_day": "2025-04-01",
+      "last_day": "2025-06-30"
+    },
+    {
+      "year": 2025,
+      "quarter": 3,
+      "n": 607,
+      "median_hours": 24.0,
+      "p90_hours": 44.0,
+      "first_day": "2025-07-01",
+      "last_day": "2025-09-30"
+    },
+    {
+      "year": 2025,
+      "quarter": 4,
+      "n": 604,
+      "median_hours": 25.0,
+      "p90_hours": 44.0,
+      "first_day": "2025-10-01",
+      "last_day": "2025-12-31"
+    },
+    {
+      "year": 2026,
+      "quarter": 1,
+      "n": 649,
+      "median_hours": 26.0,
+      "p90_hours": 44.0,
+      "first_day": "2026-01-01",
+      "last_day": "2026-03-31"
+    },
+    {
+      "year": 2026,
+      "quarter": 2,
+      "n": 515,
+      "median_hours": 25.0,
+      "p90_hours": 44.0,
+      "first_day": "2026-04-01",
+      "last_day": "2026-06-18"
+    }
+  ],
+  "manifest": {
+    "generated_at_utc": "2026-10-04T18:38:30.793218+00:00",
+    "quality_generated_at_utc": "2026-10-02T23:23:23.720177+00:00",
+    "quality_errors": 0,
+    "database": "latam_bank.duckdb",
+    "quality_run": "20261002T232200Z/quality_results.json"
+  }
+}
