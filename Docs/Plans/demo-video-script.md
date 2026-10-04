@@ -1,36 +1,87 @@
-# Demo video: script draft and shot list
+# Demo video and slides: the launch pitch
 
-For Lucas and Roberto, who own the video and the slides. A starting point to cut down, not a final script. The kickoff deck asks for "a short, mandatory video pitch" that shows the working solution and the core architecture decisions; it sets no length limit. The judging order is "first and foremost our solution should work", then rationale and documentation, AI engineering, data analytics, data engineering and ML (kickoff p. 20). This draft aims at about 5 minutes and leads with the product working.
+For Lucas and Roberto, who own the video and the slides. A draft to cut down, not a final script.
 
-Rules for the recording:
-- Only synthetic data on screen. Never a real email, token, account id or customer record.
-- Record on the deployed site after the merges, so every screen matches the submitted code.
-- Say what is measured and what is not: no claim of a frozen result before the frozen run happens.
-- Each scene lists what must be true before recording; check it the morning of the recording.
+## What the organizers asked for
 
-## Scenes
+- **Kickoff deck:** the video is "short" and mandatory, and shows the working solution and the core architecture decisions. The deck has 4–6 slides. No length limit is set. "First and foremost our solution should work" (judging, p. 20).
+- **André R (organizers), 2026-10-03:** "Pitch it like you're in front of a bank investor. You're not presenting a technical project. You're selling a product that solves a real problem."
+  - **Video: 90% product and creativity, 10% technical.** Why → What → How. Editing and delivery carry the most weight. Not a screen recording with narration: animations, transitions, mockups. It should feel like a product launch.
+  - **Slides: 60% product, 40% technical.** Show architecture, data and models, always tied back to the value delivered.
 
-| # | Time | On screen | Voice-over (draft) | Must be true before recording |
-|---|---|---|---|---|
-| 1 | 0:00–0:25 | Title slide, then the product report's KPI section (`data_foundation/reports/product-report.html`) | "LATAM bank customers who don't recognize a charge wait in the same queue as every other complaint: about 11 such complaints a day in the data, three quarters never resolved, and the same SLA breach rate as everything else. We built the intake for that one workflow." | Product report merged (#94, done) |
-| 2 | 0:25–1:10 | Customer view in Spanish: sign in with the email code, the home with recent charges, then the proactive banner "Notamos un cargo inusual…" | "The bank reaches the customer first. When its own fraud system flags a charge, the customer sees one question at sign-in. Here it's a 19-real streaming charge, not the big purchase above it: our data showed amount says nothing about fraud." | The proactive alert is merged and deployed, and the fictitious seed is reloaded on remote D1 (#106 human step) |
-| 3 | 1:10–2:10 | "No lo reconozco" opens the guided report: one-tap reason, short statement, pick the charge from the customer's own list, explicit confirmation, receipt with the reference, block-card line for a lost card | "Nothing is decided from free text. The customer picks the charge from their own list and confirms it. The reference appears only after the case is read back from the database. Nothing here refunds, blocks a card or decides fraud; a person reviews every report." | Deployed; Diego's flagged charge not yet answered on the recording account |
-| 4 | 2:10–2:40 | Switch to Portuguese and report through "?" ("I can't find the charge"); show the FAQ answer appearing in view | "Spanish and Portuguese end to end. When the charge isn't in the list, the customer says what they remember and the case goes to a person, marked incomplete." | FAQ fix (#99) and choice fix (#103) merged |
-| 5 | 2:40–3:20 | Agent view (opened with the same admin code): the urgent lane first, the flagged report marked high, the detail with the customer's words, the checks, the other reports; move it to "in review" | "Agents see urgent reports first, with what was verified and what is still open. Moving a status emails the customer and is kept in an audit trail." | Agent view deployed; one admin account for the recording |
-| 6 | 3:20–3:45 | Admin "View as another customer": pick a dataset customer by country | "Evaluators are admins. They can see the service from any customer's side; an ordinary customer can never even learn another customer exists, and every switch is audited by reference." | #95–#97 deployed (done) |
-| 7 | 3:45–4:30 | Architecture slide (`Docs/Evidence/diagrams/current-workflow.png`), then the evaluation table | "One runtime: a Cloudflare Worker and D1, a batch pipeline from S3 through Bronze, Silver and a quality gate into a reviewed Gold slice. The learned component, a gpt-oss-20b fact extractor, is evaluated offline against our rule checklist on held-out cases we wrote and froze. We keep it offline on purpose: the guided flow decides nothing from free text, and the model hasn't passed its own latency and stability gates yet." | Diagram current; decide the frozen-run wording from #98's ruling (run done, or "not run, and why") |
-| 8 | 4:30–5:00 | Closing slide: what's measured, what isn't, what's next | "What we measured, we report with denominators; what we didn't, we say. Next: the frozen comparison, persistent sessions, and the email channel for the proactive alert." | Final numbers from EVALUATION.md |
+We also follow Y Combinator's "A Guide to Demo Day Presentations" (Geoff Ralston, 2016):
+- say what it is in the first sentence;
+- build on 3–4 memorable points;
+- size the opportunity bottom-up;
+- one point per slide, few words;
+- **never exaggerate**;
+- practice until it's smooth;
+- one presenter.
 
-## Facts to quote, and where they come from
+## The four points everyone should remember (the "vertebrae")
 
-- About 11 unrecognized-charge complaints a day, unresolved share, SLA breach: `Docs/deliverables/PRODUCT_REPORT.md`.
-- Amount doesn't separate fraud, in any period: ADR-011.
-- Offline extractor results and gates: ADR-006 amendments 7–8 and `EVALUATION.md`.
-- AI kept offline, and the four conditions that would bring it online: ADR-012.
-- Live service figures (5 episodes; no rates): `EVALUATION.md` §9. Don't present them as rates.
+1. **"I don't recognize this charge" is the most anxious moment in banking, and today it waits in line.** In this bank's data, 11 such complaints a day are handled exactly like any other complaint: a first answer after about a day, and three in four still unresolved.
+2. **ArabicaAI turns that moment into one minute.** The customer picks the charge from their own list, confirms it, and gets a reference before they close the app. A person reviews every report.
+3. **The bank speaks first.** When the bank's own fraud system flags a charge, the customer is asked before they have to go looking. We tested the obvious trigger, "big amount", and the data showed it doesn't work.
+4. **AI where it earns its place, and nowhere else.** A model was tested against our rules on cases it never saw, with every result published, including the ones that didn't go our way.
+
+Answers to YC's four questions:
+
+| YC question | Our answer |
+|---|---|
+| What are we building, and for whom? | A guided "unrecognized charge" report for a LATAM bank's customers, in Spanish and Portuguese, and the agent queue that receives it |
+| Why hasn't this been done? | Banks treat it as one more complaint. The data shows the same handling, SLA and outcome as everything else |
+| Why is it hard? | Security (one customer must never see another), the bank's liability (nothing may refund, block or decide fraud on its own), two languages, and knowing when AI helps |
+| Why now? | Customers expect self-service in seconds, and the channel exists; what's missing is a flow designed for this moment |
+
+## Video: about 2½ minutes, Why → What → How
+
+Production rules:
+- **Product first: about 90% of the time on the customer's and the agent's experience.**
+- **No raw screen recording.** Put app captures inside phone and laptop mockups. Animate between states (Keynote Magic Move, Figma Smart Animate, or After Effects). Use kinetic text for the numbers, and music.
+- **One narrator, speaking slowly.** Record the voice separately and re-take it until it's smooth. Add subtitles in English.
+- **Only synthetic data on screen.** Capture from the deployed site after the merges, so the product shown is the product submitted.
+
+| # | Time | Beat | Picture (animated) | Voice-over (draft) | Must be true before capture |
+|---|---|---|---|---|---|
+| 1 | 0:00–0:15 | **Why** (hook) | Black screen. A phone buzzes: "Compra aprobada: 3.150,00 BRL". A thumb hovers. | "You open your bank app and there's a charge you've never seen. What do you do?" | — |
+| 2 | 0:15–0:35 | **Why** (the problem in numbers) | Kinetic numbers on a clean background: **11 a day**, **1 day to a first answer**, **3 in 4 still open**. Small caption: "LATAM bank dataset, 2023–2025". | "In this bank, that moment happens 11 times a day. Today it's a complaint like any other: a first answer after about a day, and three in four still open." | Product report (#94, merged) |
+| 3 | 0:35–0:45 | **What** (the name and promise) | Logo reveal: **ArabicaAI**. Tagline: "Report it in a minute. A person takes it from there." | "ArabicaAI turns that moment into one minute." | Name decided (open decision 1) |
+| 4 | 0:45–1:10 | **What** (the bank speaks first) | Phone mockup: sign in, then the home. The banner slides in: "Notamos un cargo inusual…" over a **19,90 BRL** charge, while the 3.150 BRL charge sits untouched above it. | "Before you even look, the bank asks you: do you recognize this? Not the biggest charge: the one the bank's own fraud system flagged. We tested 'flag big amounts', and the data said no." | #105 and #106 merged and deployed; the fictitious seed reloaded on remote D1 (#106's human step) |
+| 5 | 1:10–1:40 | **What** (the report in a minute) | Tap "No lo reconozco": one-tap reason, a short sentence, pick the charge from your own list, confirm, then the **reference** animates in. Switch the language to Portuguese for one shot. | "Pick the reason. Pick the charge from your own purchases. Confirm. You get a reference in seconds, in Spanish or Portuguese, and the status by email. Nothing is refunded or blocked by a machine: a person reviews every report." | #99 and #103 merged and deployed |
+| 6 | 1:40–2:00 | **What** (the agent side) | Laptop mockup: the agent queue, the flagged report at the top in red, the detail with what was verified and what's still open; click "In review". | "On the bank's side, urgent reports come first, already verified: which charge, which customer, what's still open. No re-asking." | Agent view deployed |
+| 7 | 2:00–2:20 | **How** (the 10% technical) | One animated architecture line: data lake → quality gate → reviewed slice → one secure service → customer and agent. The model sits in a box to the side marked "tested, not trusted blindly". | "Under the hood: a quality-gated data pipeline, one secure service where each customer only ever sees their own data, and an AI model we tested against our own rules on cases it never saw. It passed every gate we set in advance, and we publish all of it." | Wording depends on the frozen run: say "frozen comparison pending" if it hasn't run (#98) |
+| 8 | 2:20–2:35 | **Close** (the bang) | The four points, one by one, three words each: "Seconds, not days." "The bank speaks first." "AI, tested." "A person decides." Then the logo and the link. | "Seconds, not days. The bank speaks first. AI that is tested, not trusted blindly. And a person always decides. ArabicaAI." | Final link and name |
+
+## Slides: 5 slides, 60% product, 40% technical
+
+One point per slide, at most about 7 words of text, large type, a picture doing the work. Each slide is spoken over, never read.
+
+| # | One point (on the slide) | Picture | Spoken (product → technical, tied to value) |
+|---|---|---|---|
+| 1 | "A strange charge waits in line." | The three numbers from beat 2, huge | The problem and who has it; the data source |
+| 2 | "Report it in one minute." | Phone mockup of the flow, three frames | The product and the customer; the proactive alert |
+| 3 | "One service. Each customer sees only theirs." | The one-line architecture from beat 7 | Security and data engineering: the reviewed slice, the quality gate, the isolation tests |
+| 4 | "AI where it earns its place." | Our rules against the model, side by side, held-out cases | ML practice: the pre-registered gates, what passed, what's pending; why the live flow stays deterministic (ADR-012) |
+| 5 | "Seconds, not days. A person decides." | Logo, link, team | Next steps and the four points again |
+
+## What we can and cannot claim (YC: "Exaggerating the truth is a fatal error")
+
+| Claim | Status | Source |
+|---|---|---|
+| 11 unrecognized-charge complaints a day; three in four unresolved; first response after about a day (25 h at p50) | Yes, about the dataset bank | `PRODUCT_REPORT.md` |
+| "A reference in seconds" | Yes, as a description of the flow. The 5 live demo reports all reached a handoff within 15 s, but 5 is not a rate, so don't say "on average" | `EVALUATION.md` §9 |
+| "Big amounts don't mean fraud" | Yes, in this data, in every period | ADR-011 |
+| "The bank's fraud flag" in the demo | It's an authored flag on demo customers. Say "when the bank's fraud system flags a charge", not "we detect fraud" | ADR-011 |
+| "AI is X% better" | **No**, unless the frozen comparison has run | ADR-006, #98 |
+| Money saved, customers retained, satisfaction raised | **No.** No measured product effect exists | `PRODUCT_REPORT.md`: "every figure is descriptive" |
+| Market size in dollars | **No** dollar TAM. Bottom-up per bank: about 4,000 such complaints a year in a bank this size (11.16 × 365). Say exactly that | `PRODUCT_REPORT.md` |
+| Traction | Pre-traction: a working, deployed product with tests. Lean on the story and the rigor, as YC advises | — |
 
 ## Open decisions for Lucas and Roberto
 
-1. Narration language: English voice-over with the product in Spanish and Portuguese (recommended, since the judges read English), or Spanish voice-over with English subtitles.
-2. The scene 7 wording depends on Manoella's ruling in #98 and on whether the frozen run happens before recording.
-3. Slides (Roberto): 4–6. Suggested order, matching the scenes: problem with KPIs; the product working; architecture; data and ML practice; results and limits; next steps.
+1. **Name.** Keep **ArabicaAI**, the team name already on the app, the repository and the URL? A name that suggests factoring (for example "BrewFactor") would mislead: the product is dispute intake. Decide before the logo animation.
+2. **Narrator.** One voice, in English, with the product shown in Spanish and Portuguese. Pick whoever sounds the most natural; YC says the best presenter, not the most senior.
+3. **Scene 7's wording** depends on whether the frozen comparison has run (#98 merged, tag, run) before recording.
+4. **Tooling.** Keynote or Figma for the mockups and transitions is the fastest route to "launch event" polish. Budget for two or three takes of the voice.
+5. **Practice.** Run the 2½ minutes aloud at least five times before recording, and watch one recording back.
