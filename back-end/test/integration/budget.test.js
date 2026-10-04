@@ -34,6 +34,8 @@ const CEILING = {
   // POST /transactions/displayed: session, then one UPDATE … RETURNING; a replay rewrites the same row (COALESCE).
   displayed: [2, 5, 1, 2],
   logout: [2, 3, 3, 1],
+  // An admin's logout with both cookies: one revoke batch per presented session (customer and agent). Measured, no margin.
+  logoutBoth: [4, 6, 6, 2],
   create: [4, 12, 6, 4],
   agentLogin: [3, 6, 6, 1],
   // GET /audit/events (issue #69): no session read; one batch of two reads by primary key/rowid, at most limit + 1 rows each.
@@ -191,6 +193,13 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
     customer_statement: 'Budget probe: I do not recognize this charge.', customer_confirmed: true,
     idempotency_key: crypto.randomUUID() })).metrics);
   measured.logout = within('logout', (await c.call('/auth/logout', {})).metrics);
+  const adminToken = 'Bearer ' + await idToken('demo-diego', { groups: ['admin'] });
+  const adminCustomer = client({ authorization: adminToken }); const adminAgent = client({ authorization: adminToken });
+  assert.equal((await adminCustomer.call('/auth/session', {})).status, 200);
+  assert.equal((await adminAgent.call('/demo/agent-session', {})).status, 200);
+  const both = client(); both.cookie = `${adminCustomer.cookie}; ${adminAgent.cookie}`;
+  const loggedOut = await both.call('/auth/logout', {});
+  assert.equal(loggedOut.status, 204); measured.logoutBoth = within('logoutBoth', loggedOut.metrics);
   const agent = client();
   measured.agentLogin = within('agentLogin', (await agent.call('/demo/agent-session', {})).metrics);
   measured.agentEmailLogin = within('agentLogin', (await client({ authorization: 'Bearer ' + await idToken('agent@test', { groups: ['agent'] }) })

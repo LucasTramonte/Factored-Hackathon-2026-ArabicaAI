@@ -1,7 +1,7 @@
 /**
  * Notification email text in Spanish, Portuguese and English. Slots: ``{reference}``, ``{status}`` (``update`` only)
  * and ``{urgent}``. Bodies never carry the customer's statement and never call a report resolved: a person reviews
- * it and no refund has been started.
+ * it and no refund has been started. ``render`` returns the plain text and a branded HTML version of the same words.
  */
 const FOOTER = {
   es: 'No se ha iniciado ningún reembolso.\n\n--\nArabicaAI es una demostración con datos sintéticos; no es un servicio bancario real.',
@@ -13,6 +13,9 @@ const URGENT = {
   pt: 'Se você não reconhece esta cobrança e seu cartão continua ativo, ligue para o seu banco para bloqueá-lo. Este serviço não bloqueia cartões.\n\n',
   en: 'If you do not recognize this charge and your card is still active, call your bank to block it. This service does not block cards.\n\n'
 };
+/** The button under the body; it opens the app, where "Your reports" shows the status. */
+const CTA = { es: 'Ver mis reportes', pt: 'Ver meus relatos', en: 'See my reports' };
+const REFERENCE_LABEL = { es: 'Referencia', pt: 'Referência', en: 'Reference' };
 
 /** ``TEMPLATES[lang][template]`` is ``{ subject, body }``; the footer is appended by ``render``. */
 export const TEMPLATES = {
@@ -57,11 +60,57 @@ export const STATUS_TEXT = {
     en: 'Review finished; the bank will contact you through its usual channel' }
 };
 
-/** Render ``{ subject, text }``; only ``reference``, ``status`` and ``urgent`` are read, any other param is ignored. Throws on an unknown template or language. */
-export function render(template, lang, { reference, status = '', urgent = false }) {
+import { LOGO_CID } from './logo.js';
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+/** Design-system tokens (light theme, `front-end/src/styles.css`); email clients need them inline. */
+const C = { surface: '#f4f5f7', card: '#fcfcfd', line: '#e3e5ea', ink: '#121418', muted: '#5c6370', accent: '#2f55d4', onAccent: '#fbfcff', warn: '#935800', warnSoft: '#fbefd3' };
+const FONT = "Geist, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif";
+const MONO = "'Geist Mono', SFMono-Regular, Menlo, Consolas, monospace";
+
+/**
+ * The HTML version of a rendered email: logo header, body paragraphs, the reference in a mono box, the urgent note in a
+ * warning box, a button to the app and the demo disclaimer. Table layout and inline styles only, so every client renders
+ * it; no ``<style>`` block, so the markup carries no braces. The logo is the inline attachment ``cid:arabicaai-logo``
+ * (``logo.js``), so it shows without any hosted file; ``appUrl`` (optional, ``https://`` only) is only the button target,
+ * and without it there is no button.
+ */
+function html({ lang, subject, paragraphs, reference, urgent, appUrl }) {
+  let base = null;
+  try {
+    if (new URL(appUrl).protocol === 'https:') base = appUrl.replace(/\/+$/, '');
+  } catch {} // An absent or invalid URL simply omits the optional button.
+  const logo = `<img src="cid:${LOGO_CID}" width="32" height="32" alt="" style="display:block;width:32px;height:32px;border-radius:16px">`;
+  const p = text => `<p style="margin:0 0 14px;font:16px/24px ${FONT};color:${C.ink}">${esc(text)}</p>`;
+  const refBox = `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 20px"><tr><td style="padding:12px 16px;border:1px solid ${C.line};border-radius:12px;background:${C.surface}">`
+    + `<div style="font:12px/16px ${FONT};color:${C.muted};text-transform:uppercase;letter-spacing:.04em">${REFERENCE_LABEL[lang]}</div>`
+    + `<div style="font:600 24px/32px ${MONO};color:${C.ink}">${esc(reference)}</div></td></tr></table>`;
+  const urgentBox = urgent ? `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 20px"><tr><td style="padding:12px 16px;border-radius:12px;background:${C.warnSoft};font:14px/22px ${FONT};color:${C.warn}">${esc(URGENT[lang].trim())}</td></tr></table>` : '';
+  const button = base ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px 0 24px"><tr><td style="border-radius:999px;background:${C.accent}"><a href="${esc(base)}" style="display:inline-block;padding:12px 22px;font:600 15px/20px ${FONT};color:${C.onAccent};text-decoration:none">${CTA[lang]}</a></td></tr></table>` : '';
+  const lines = FOOTER[lang].split('\n'); const noRefund = lines[0], disclaimer = lines.at(-1);
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(subject)}</title></head>`
+    + `<body style="margin:0;padding:0;background:${C.surface}">`
+    + `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:${C.surface}"><tr><td align="center" style="padding:32px 16px">`
+    + `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;background:${C.card};border:1px solid ${C.line};border-radius:16px">`
+    + `<tr><td style="padding:24px 28px 8px"><table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="padding-right:10px">${logo}</td><td style="font:600 18px/24px ${FONT};color:${C.ink}">Arabica<span style="font-weight:400">AI</span></td></tr></table></td></tr>`
+    + `<tr><td style="padding:12px 28px 4px"><h1 style="margin:0 0 16px;font:600 22px/30px ${FONT};color:${C.ink}">${esc(subject)}</h1>${paragraphs.map(p).join('')}${refBox}${urgentBox}${button}`
+    + `<p style="margin:0 0 20px;font:600 14px/22px ${FONT};color:${C.ink}">${esc(noRefund)}</p></td></tr>`
+    + `<tr><td style="padding:16px 28px 24px;border-top:1px solid ${C.line};font:12px/18px ${FONT};color:${C.muted}">${esc(disclaimer)}</td></tr>`
+    + `</table></td></tr></table></body></html>`;
+}
+
+/**
+ * Render ``{ subject, text, html }``; only ``reference``, ``status``, ``urgent`` and ``appUrl`` are read, any other param is
+ * ignored. Throws on an unknown template or language.
+ */
+export function render(template, lang, { reference, status = '', urgent = false, appUrl = null }) {
   const t = TEMPLATES[lang]?.[template];
   if (!t) throw new Error('Unknown template or language');
   const slots = { reference, status, urgent: urgent ? URGENT[lang] : '' };
   const fill = text => text.replace(/\{(reference|status|urgent)\}/g, (_, name) => slots[name]);
-  return { subject: fill(t.subject), text: fill(t.body) + FOOTER[lang] };
+  const subject = fill(t.subject);
+  // The HTML body carries the sentences without the urgent paragraph (it gets its own box) and without the footer.
+  const paragraphs = fill(t.body.replace('{urgent}', '')).split('\n\n').map(s => s.trim()).filter(Boolean);
+  return { subject, text: fill(t.body) + FOOTER[lang], html: html({ lang, subject, paragraphs, reference, urgent, appUrl }) };
 }
