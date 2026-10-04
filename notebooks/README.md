@@ -24,7 +24,7 @@ If `python3 --version` is older than 3.11, use your installed newer Python execu
 
 ## Inputs
 
-Use the organizer-authorized AWS profile described in `Docs/deliverables/REPRODUCIBILITY.md`. The required tables are `call_center_interactions`, `transactions`, `complaints`, `customers` and `call_transcripts`. Finish their download before the final run; the input gate rejects missing, extra or differently sized CSV files. Never place keys in commands or notebook cells.
+Use the organizer-authorized AWS profile described in `Docs/deliverables/DATA_ENGINEERING.md`. The required tables are `call_center_interactions`, `transactions`, `complaints`, `customers` and `call_transcripts`. Finish their download before the final run; the input gate rejects missing, extra or differently sized CSV files. Never place keys in commands or notebook cells.
 
 Create a fresh inventory from S3 (no credentials are included in this output):
 

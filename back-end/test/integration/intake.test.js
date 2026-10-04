@@ -167,7 +167,8 @@ test('idle_close_and_export_keep_pending_and_unknown_visible on local D1',async 
   const python=scorerPython();
   const scored=JSON.parse(execFileSync(python,['-m','evals.intake.episodes',output],{cwd:root,encoding:'utf8'}));
   assert.deepEqual(scored,result.summary);
-  const pending=[...byEpisode.values()].filter(seq=>seq.at(-1).event!=='intake_ended').length;
+  // A suggestion run (ADR-012) follows intake_ended; the episode is ended whatever runs after it.
+  const pending=[...byEpisode.values()].filter(seq=>!seq.some(e=>e.event==='intake_ended')).length;
   assert.equal(scored.all.eligible_started,result.episodes);assert.equal(scored.all.outcomes.pending,pending);
   assert.equal(scored.all.safe_accepted,0,'production safety stays not_assessed');assert.equal(scored.all.not_assessed,result.episodes);
   // Guided episodes call no model: usage is measured zero, and only pending episodes have unknown usage.

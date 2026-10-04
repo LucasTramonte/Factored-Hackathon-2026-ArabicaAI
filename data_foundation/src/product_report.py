@@ -559,8 +559,8 @@ def render(report: dict, manifest: dict) -> str:
         body += f'<h3>By {esc(title.lower())} ({qid})</h3>' + _cut_table(title, rows, key)
     body += ('<h3>By language</h3><p>Language exists only in our live service. Its first export (2026-10-02, 5 team and reviewer '
              'episodes on the flow that calls no model) has 1 Spanish and 4 Portuguese reports, 4 accepted as complete handoffs and 1 routed, '
-             '0 recorded unsafe: counts, not rates. See <a href="../../Docs/deliverables/EVALUATION.md#9-live-service-as-measured">EVALUATION.md §9</a> '
-             'for the table and its method.</p><p class="muted">The held-out comparison of the learned component against the baseline is '
+             '0 recorded unsafe: counts, not rates. See <a href="../../Docs/deliverables/EVALUATION.md#11-other-measurements">EVALUATION.md §11</a> '
+             'for the export and its method.</p><p class="muted">The held-out comparison of the learned component against the baseline is '
              'reported separately and is not yet run.</p></section>')
 
     # --- 4. data trust and limits, appendix

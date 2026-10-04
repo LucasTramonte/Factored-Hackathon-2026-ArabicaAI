@@ -8,6 +8,7 @@ To trace a change, go from the release to its PRs, then from each PR to the ADR,
 |---|---|---|---|---|---|---|---|---|
 | `v0.1.0` Factored checkpoint baseline | 2026-10-01 | `518fe3c` | — (before milestones) | #1–#55 | ADR-002 to ADR-006 | [v0.1.0](#v010-factored-checkpoint-baseline) | Worker `77f72eb4`; D1 0001–0007; cohort `c32369c464eec13a`; extractor off | [v0.1.0](#v010-factored-checkpoint-baseline) |
 | `v0.2.0` Customer reporting and team access | 2026-10-03 | `64ae03a` | [`v0.2.0`](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/milestone/1?closed=1) | #56–#84 | ADR-007 to ADR-010; ADR-004 notes | [v0.2.0](#v020-customer-reporting-and-team-access) | Worker `f76c7f7b` (`main-64ae03a`); D1 0001–0017; extractor off | [v0.2.0](#v020-customer-reporting-and-team-access) |
+| `v0.3.0` Admin, alerts and the measured extractor | 2026-10-04 | `0a743bb` | [`v0.3.0`](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/milestone/2?closed=1) | #85–#113 | ADR-011 to ADR-014; ADR-006 amendments 6–9 | [v0.3.0](#v030-admin-alerts-and-the-measured-extractor) | Worker `22e99b3f` (`main-0a743bb`); D1 0001–0025; extractor and AI suggestions off | Extractor and AI suggestions off online; demo alert flags are authored; SES sandbox |
 
 `v1.0.0` is the final hackathon submission ([`CONTRIBUTING.md`](../../CONTRIBUTING.md#versioning)).
 
@@ -66,5 +67,58 @@ Tagged on `64ae03a` (#84) on 2026-10-03; [GitHub Release](https://github.com/Luc
 
 - Worker version `f76c7f7b-765d-4952-a22a-13263a8e060b`, tag `main-64ae03a`, deployed 2026-10-03 15:16 UTC by the GitHub Actions `deploy` workflow.
 - D1 migrations 0001–0017 on remote `arabica-intake-demo`.
-- Cohort: 796 dataset customers, `slice_version` `c32369c464eec13a` (one part, `4fe90381be8d8fef`), from the cohort manifest (`data/gold_cohort/2026-06-17/manifest.json`); remote `seed_loads` was not re-read at tag time. Fictitious seed: six identities.
+- Cohort: 796 dataset customers, `slice_version` `c32369c464eec13a` (one part, `4fe90381be8d8fef`), from the cohort manifest (`data/gold_cohort/2026-06-17/manifest.json`). Remote `seed_loads` holds that part, `4fe90381be8d8fef`, loaded 2026-10-01 12:45:10 (a person's read-only query, 2026-10-04).
+- Demo alert flags (#106): the fictitious seed's three `bank_flagged` updates (`demo-tx-015`, `-020`, `-025` for Diego, Elena and Marco) were missing on remote D1 and were applied by a person on 2026-10-04; a read-back shows all three set.
 - Extractor switch: off.
+
+## `v0.3.0`: Admin, alerts and the measured extractor
+
+Tagged on `0a743bb` (#113), the deployed `main`, on 2026-10-04; [GitHub Release](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.3.0). Prepared from #85–#110 in #112; #111 to #113 merged and deployed before the tag, so they are included.
+
+### Highlights
+
+- **The bank speaks first.** When the bank's own fraud flag marks a charge, the customer sees one in-app alert at sign-in and can report it in two taps; the report joins the urgent lane (#106, ADR-011). The data ruled out the charge amount as a trigger, and the demo's flags are authored on fictitious customers.
+- **Admins work as any customer.** One sign-in code opens the customer and agent views; an admin lists the demo customers and acts as any of them from the banner, with updates emailed to the admin, never to the customer (#95–#97, #101).
+- **Agents see more, customers lose less.** The agent detail shows the customer's other reports and when the case was first opened (#88); a receipt asks one thumbs question (#89); "Not resolved" on a closed report starts a new one citing it (#90); a reload keeps the session (#110).
+- **The extractor is measured.** On the frozen set it ran once: 53/60 correct against the checklist's 23/60, 0 unsafe in 180 runs (#111).
+- **AI suggestions are built, and ship off.** On "I can't find the charge", the model can suggest up to three of the customer's own charges after the reference is returned; the customer confirms, a person reviews. `INTAKE_AI_ENABLED` is `"0"` in production (#113, ADR-014).
+
+### Engineering
+
+- One open report per charge now holds under concurrent confirmations (#87).
+- Email: an update the customer asks for is reported as requested, and a failed send can be retried (#104); an admin's update goes to the admin (#101).
+- Client fixes: the sign-in code step names the sender (#92); FAQ answers scroll into view (#99); "I can't find the charge" clears an earlier pick (#103); demo identities are named on screen (#85).
+- AI suggestion path (#113): the run starts after the response, under a daily cap, a retirement date and a randomized 50/50 pilot arm, with Workload Identity Federation to Vertex AI (no Google key). Every failure falls back to today's incomplete handoff.
+- KPI read for dispute managers, with time indexes (#113).
+- D1 migrations 0018–0025, applied by the deploy.
+
+### Evaluation
+
+- The offline evaluation moved to Google Vertex AI after Bedrock proved blocked on the AWS Free plan (#91, #93, ADR-006 amendments 6–7).
+- At `reasoning_effort: "low"`, extractor v1 passes every development trigger: 18/18 by majority, 0 unsafe, p95 upper bound about 2,340 ms (#98, amendments 8–9).
+- Extractor v1 was pre-registered (#107) and tagged `extractor-v1` (`3ad34b5`). The frozen comparison ran once on 2026-10-04 (#111): 53/60 correct by majority of 3, against 23/60 for the checklist and 14/60 for always-handoff; 46/52 against 20/52 on the cases never exposed; 0 unsafe in 180 runs; pooled p95 2,048 ms. McNemar 32 vs 2 (p ≈ 7×10⁻⁸). Only aggregates are committed ([EVALUATION](../deliverables/EVALUATION.md)).
+- The online port matches the evaluated Python on 753/753 policy cases and 26/26 parse cases (#113).
+- The unrecognized-charge baseline report and DF-027 (#94).
+
+### Documentation
+
+- ADR-011 (proactive alert), ADR-012 (AI online only where the evidence shows it), ADR-013 (sessions and staff sign-in), ADR-014 (online AI suggestions, no fraud model), the launch-pitch script (#105, #107, #111).
+- The four deliverables consolidated (business outcomes, data engineering, system design, evaluation), the readiness program and the AI suggestion plan (#111).
+- The v0.2.0 release record and the KPI ideas (#86); this record (#112).
+
+### Known limitations
+
+- The extractor and AI suggestions are off online; every live path is deterministic.
+- The model endpoint behind AI suggestions retires on 2026-10-21; after that date the path records `retired` and falls back.
+- The alert's flags are authored; `fraud_score`'s provenance is unconfirmed, so no detection rate is claimed.
+- SES stays in the sandbox: only verified recipients receive email.
+- Five team episodes are the only live record; they support no rate.
+- The data is synthetic.
+
+### Deployed state
+
+- **Code deployment:** Worker version `22e99b3f-4652-41ed-8e53-a3d61999b296`, tag `main-0a743bb`, activated at 100% on 2026-10-04 13:29:40 UTC by the GitHub Actions `deploy` workflow (run on `0a743bb`, success). Read-only `npx wrangler deployments list`, 2026-10-04.
+- D1 migrations 0001–0025 on remote `arabica-intake-demo`: a read-only `wrangler d1 migrations list --remote` shows none pending.
+- Cohort: 796 dataset customers, `slice_version` `c32369c464eec13a` (one part, `4fe90381be8d8fef`), from the cohort manifest (`data/gold_cohort/2026-06-17/manifest.json`). Remote `seed_loads` holds that part, `4fe90381be8d8fef`, loaded 2026-10-01 12:45:10 (a person's read-only query, 2026-10-04).
+- Demo alert flags (#106): the fictitious seed's three `bank_flagged` updates (`demo-tx-015`, `-020`, `-025` for Diego, Elena and Marco) were missing on remote D1 and were applied by a person on 2026-10-04; a read-back shows all three set.
+- Switches: extractor off; `INTAKE_AI_ENABLED` `"0"`. The `VERTEX_WIF_SIGNING_KEY` secret is set but unused while the switch is off.

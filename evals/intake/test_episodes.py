@@ -260,3 +260,63 @@ class EpisodeCliTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def _v2(event):
+    return dict(event, version='2')
+
+
+INCOMPLETE = [_v2(ev('intake_started', 'g', 0)), _v2(ev('handoff_created', 'g', 1, kind='incomplete', case_ref='REF-G', tool_status='ok')),
+              dict(_v2(ended('g', 2, 'routed', safety='not_assessed', duration_ms=5000)), known_input_tokens=0, known_output_tokens=0,
+                   usage_unavailable_calls=0)]
+
+
+def suggestion(seq=3, case_id='g', **fields):
+    run = dict(case_ref='REF-G', arm='B', result='suggested', producer='extractor-v1@a270773600cf', llm_calls=1,
+               known_input_tokens=1840, known_output_tokens=84, usage_unavailable_calls=0, injection_flagged=False, suggestions=2)
+    run.update(fields)
+    return _v2(ev('suggestion_recorded', case_id, seq, **run))
+
+
+class SuggestionEventTests(unittest.TestCase):
+    """ADR-012: one suggestion run per incomplete handoff with details, after intake_ended; arm, kind and counts only."""
+
+    def test_runs_are_summarised_by_arm_and_result_without_changing_episode_kpis(self):
+        base = summarize(INCOMPLETE)['all']
+        s = summarize(INCOMPLETE + [suggestion()])['all']
+        self.assertEqual({k: v for k, v in s.items() if k != 'suggestions'}, {k: v for k, v in base.items() if k != 'suggestions'})
+        self.assertEqual(s['suggestions']['runs'], 1)
+        self.assertEqual(s['suggestions']['by_arm'], {'B': {'suggested': 1}})
+        self.assertEqual((s['suggestions']['llm_calls'], s['suggestions']['input_tokens']), (1, 1840))
+        self.assertEqual(base['suggestions']['runs'], 0)
+
+    def test_unknown_usage_keeps_suggestion_token_totals_null(self):
+        s = summarize(INCOMPLETE + [suggestion(result='timeout', suggestions=0, known_input_tokens=0, known_output_tokens=0,
+                                               usage_unavailable_calls=1, injection_flagged=None)])['all']['suggestions']
+        self.assertIsNone(s['input_tokens'])
+        self.assertEqual(s['usage_unavailable_calls'], 1)
+        off = summarize(INCOMPLETE + [suggestion(arm=None, result='off', producer=None, llm_calls=0, known_input_tokens=0,
+                                                 known_output_tokens=0, suggestions=0, injection_flagged=None)])['all']['suggestions']
+        self.assertEqual(off['by_arm'], {'None': {'off': 1}})
+        swept = summarize(INCOMPLETE + [suggestion(result='abandoned', suggestions=0, known_input_tokens=0, known_output_tokens=0,
+                                                   usage_unavailable_calls=1, injection_flagged=None)])['all']['suggestions']
+        self.assertEqual((swept['by_arm'], swept['input_tokens']), ({'B': {'abandoned': 1}}, None))
+        flagged = summarize(INCOMPLETE + [suggestion(injection_flagged=True)])['all']['suggestions']
+        self.assertEqual(flagged['injection_flagged'], 1)
+
+    def test_inconsistent_or_misplaced_runs_reject_the_log(self):
+        bad = [suggestion(arm='A'), suggestion(result='no_match'), suggestion(suggestions=4), suggestion(llm_calls=3),
+               suggestion(producer=None), suggestion(usage_unavailable_calls=2), suggestion(result='capped', suggestions=0),
+               suggestion(arm='C'), suggestion(result='decided'), suggestion(llm_calls=True), suggestion(seq=2),
+               suggestion(case_ref='OTHER'), suggestion(injection_flagged=1), suggestion(result='timeout', suggestions=0, injection_flagged=True),
+               suggestion(arm='A', result='abandoned', suggestions=0), dict(suggestion(), injection_flagged=None) | {'result': 'off', 'arm': 'A', 'llm_calls': 1}, dict(suggestion(), version='1'), dict(suggestion(), merchant='Uber'),
+               dict(suggestion(), language='pt')]
+        for event in bad:
+            with self.assertRaises(ValueError, msg=json.dumps(event)):
+                summarize(INCOMPLETE + [event])
+        with self.assertRaises(ValueError):
+            summarize(INCOMPLETE + [suggestion(), suggestion(seq=4)])
+        with self.assertRaises(ValueError):
+            summarize(INCOMPLETE[:2] + [suggestion(seq=2)])
+        with self.assertRaises(ValueError):
+            summarize(ACCEPTED + [suggestion(seq=6, case_id='a')])

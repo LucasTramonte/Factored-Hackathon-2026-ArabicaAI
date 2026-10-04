@@ -12,8 +12,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { client, idToken } from '../support/client.js';
+import { close } from '../support/close.js';
 import { assertContract } from '../support/contract.js';
 import { tokenHash } from '../../src/auth/session.js';
+import { exportPKCS8, generateKeyPair } from 'jose';
+import { readWranglerConfig } from '../../scripts/predeploy.mjs';
+import { runSuggestion } from '../../src/modules/intake/suggestions.js';
 
 // Ceilings per request: [queries, rows_read, rows_written, round_trips]. D1 Free allows 50 queries per invocation;
 // round trips drive latency (about 150 ms each when the Worker runs far from D1).
@@ -34,16 +38,26 @@ const CEILING = {
   agentLogin: [3, 6, 6, 1],
   // GET /audit/events (issue #69): no session read; one batch of two reads by primary key/rowid, at most limit + 1 rows each.
   audit: [2, 102, 0, 1],
+  // GET /auth/me (ADR-013 phase 0), one customer cookie: its session read and the context-card read; no write. A second
+  // (agent) cookie adds one session read. Measured, no margin.
+  authMe: [2, 1, 0, 2],
   // GET /admin/customers (ADR-007, decision 10): the session read, then the identities query above (every customers row:
   // 16 measured here, about 800 with the cohort loaded). POST /admin/act-as: session, customerSource and context card
   // reads, then actAsSession's single-use batch: its inserts each check a session by primary key (the presented admin
   // session, then the new one twice), which adds 4 reads over a plain rotation. Measured, no margin (ADR-004).
   adminCustomers: [2, 17, 0, 2],
   adminActAs: [8, 9, 8, 4],
+  // ADR-011. GET /alerts: the session read, then one read over the customer's own flagged charges (each checked against
+  // proactive_answers and cases by key). POST /alerts/answer: session, then one batch (a guarded insert and its read-back);
+  // the row and its primary key are the two writes, none on a replay. Measured, no margin.
+  alert: [2, 3, 0, 2],
+  // Migration 0025's index proactive_answers_time adds one write to the answer (2 -> 3; ADR-004, 2026-10-04 KPI note).
+  alertAnswer: [3, 3, 3, 2],
   // The CHECK on intake_episodes.reason (migration 0016, ADR-010) adds one counted read to each statement that writes an
   // episode row, as 0004's CHECKs did: start 8 -> 9 and replay 6 -> 7 rows read, measured with and without it (ADR-004).
-  // Migration 0018's index intake_episodes_owner_recent adds one write to the episode insert (11 -> 12).
-  intakeStart: [6, 9, 12, 2],
+  // Migration 0018's index intake_episodes_owner_recent adds one write to the episode insert (11 -> 12), and migration
+  // 0025's intake_episodes_created one more (12 -> 13), for the KPI window (ADR-004, 2026-10-04 KPI note).
+  intakeStart: [6, 9, 13, 2],
   intakeStartReplay: [6, 7, 2, 2],
   // The first acknowledgement queues one "received" email for a customer with a notification target (Task 3.2):
   // one more statement in the acknowledgement batch, 3 writes (row, primary key, email_outbox_recent).
@@ -76,19 +90,53 @@ const CEILING = {
   // intake_handoffs_urgent; closing it writes what a normal close writes, since D1 counts no write for leaving that index.
   // The confirm batch repeats the one-open-report check atomically (NOT EXISTS over cases_customer_transaction): +1 read.
   // Its earlier closed same-charge report makes those seven guards cost +42 reads (ADR-004).
-  intakeConfirmHigh: [21, 120, 28, 10],
+  // 120 -> 129 rows read (ADR-011): the proactive suite leaves one more closed high-urgency report in the shared store, and the
+  // urgent partial index grows with it. Measured on the same code with and without that suite (120 / 129); queries, writes
+  // and round trips are unchanged (ADR-004, 2026-10-04 note).
+  intakeConfirmHigh: [21, 129, 28, 10],
   agentTransitionHigh: [5, 26, 6, 2],
   // The detail batch (migration 0018): stamp the first open (1 write, once), the row, and the customer's newest 21
   // episodes (index intake_episodes_owner_recent) with at most 20 other reports, so reads are bounded by window size.
   // The raw window also keeps null pending/current slots internally so has_more cannot under-report a full window.
   // Linked follow-up fixtures fill more acknowledged slots: complete detail measures 82 reads (ADR-004).
-  completeDetail: [5, 82, 1, 3],
+  // Migration 0024 (ADR-012): the detail row also joins the suggestion run, the customer's answer, its charge and the
+  // agent's mark, each by primary key, in the same statement: +1 read on the complete detail (82 -> 83; ADR-004, 2026-10-04 note).
+  completeDetail: [5, 83, 1, 3],
   incompleteDetail: [5, 80, 1, 3],
+  // AI suggestions (ADR-012, migration 0024); measured, no margin (ADR-004, 2026-10-04 note). An incomplete handoff with
+  // details inserts its suggestion run (row and primary key) in the reservation batch: one more query, no round trip,
+  // whatever the switch, plus its entry in the pending-run partial index (20 -> 21 writes). GET suggestions: the session,
+  // then one batch: the first read that serves suggested charges stamps shown_at (1 write, once), and one owner-scoped read
+  // of the run, answer and at most three charges. Confirm and mark: the session, then one batch (a guarded insert and its
+  // read-back); a replay writes nothing. The after-response run (ctx.waitUntil, its own store): the atomic claim, the cap
+  // slot, the pre-recorded call, the customer's purchases (one batch of two reads, at most 200 charges) and the outcome
+  // batch (run, at most three suggestions, one event). Review fixes, 2026-10-04: claim and shown_at (ADR-004 note).
+  intakeIncompleteDetails: [16, 52, 21, 7],
+  suggestions: [3, 14, 1, 2],
+  suggestionConfirm: [3, 10, 2, 2],
+  suggestionDetail: [5, 83, 1, 3],
+  suggestionMark: [3, 7, 2, 2],
+  suggestionRun: [8, 31, 9, 5],
+  // The idle sweep's suggestion part (ADR-012): one atomic batch per page of at most 100 stale runs of acknowledged
+  // handoffs, both statements picking the page through the pending-run partial index: one event per run (its episode's
+  // next seq and a check that it has none yet: about 23 reads a run), then the update. Nothing due reads 7 rows.
+  // Measured on 100 fixture runs, no margin (ADR-004, 2026-10-04 note).
+  suggestionSweepPage: [2, 2300, 300, 1],
+  suggestionSweepNoop: [2, 7, 0, 1],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
   idleSweepPage: [2, 1210, 300, 1],
   idleSweepNoop: [2, 10, 0, 1],
-  idleDueProbe: [1, 3, 0, 1]
+  idleDueProbe: [1, 3, 0, 1],
+  // The dispute managers' KPI read (intakeKpis, scripts/intake-kpis.mjs): one batch of seven reads, one round trip, no
+  // write. The window is found through migration 0025's indexes, so an empty one costs a constant 32 rows (index probes and
+  // the empty intermediate results of the ranking and alert statements), whatever the store holds. KPI_FIXTURE acknowledged
+  // handoffs, one complete report and three alert answers cost 1,034 (about 46 an episode: each of five statements reads the
+  // episode's index entry, row, handoff and events, and the span and repeat statements count their materialized and ranked
+  // rows again; the alert statements read each answer, its charge and its charge's reports). Measured, no margin (ADR-004).
+  kpisEmpty: [7, 32, 0, 1],
+  kpisFixture: [7, 1034, 0, 1]
 };
+const KPI_FIXTURE = 20;
 // An export page reads about 2 rows per episode (its page entry and the look-ahead that ends its event range) plus
 // its events, so the ceiling is computed from the page actually read, with a small fixed slack. A scan of
 // intake_episodes or intake_events adds rows per retained episode or event and fails here even on a small store.
@@ -97,8 +145,9 @@ const EXPORT_SLACK = 2;
 const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
 // Customer requests of one guided episode (login + list?lang= + displayed + start + terminal request), as the client
 // sends them from ADR-009 on; ADR-004 sizes capacity on these.
-// Migration 0018's episode index adds one write to each episode's start (complete 46 -> 47, incomplete 37 -> 38).
-const EPISODE_CEILING = { complete: [37, 125, 47, 20], incomplete: [31, 75, 38, 17] };
+// Migration 0018's episode index adds one write to each episode's start (complete 46 -> 47, incomplete 37 -> 38), and
+// migration 0025's one more (complete 47 -> 48, incomplete 38 -> 39).
+const EPISODE_CEILING = { complete: [37, 125, 48, 20], incomplete: [31, 75, 39, 17] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);
@@ -138,12 +187,23 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
     .call('/demo/agent-session', {})).metrics);
   const audit = await client({ authorization: 'Bearer ' + await idToken('auditor@test', { groups: ['auditor'] }) }).call('/audit/events');
   assert.equal(audit.status, 200); measured.audit = within('audit', audit.metrics);
+  // ADR-013 phase 0: a reload with a live customer session restores it.
+  const reloaded = client(); assert.equal((await reloaded.call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
+  const restored = await reloaded.call('/auth/me');
+  assert.equal(restored.status, 200); measured.authMe = within('authMe', restored.metrics);
   const admin = client({ authorization: 'Bearer ' + await idToken('demo-diego', { groups: ['admin'] }) });
   assert.equal((await admin.call('/auth/session', {})).status, 200);
   const customers = await admin.call('/admin/customers');
   assert.equal(customers.status, 200); measured.adminCustomers = within('adminCustomers', customers.metrics);
   const actAs = await admin.call('/admin/act-as', { customer_id: 'demo-ana' });
   assert.equal(actAs.status, 200); measured.adminActAs = within('adminActAs', actAs.metrics);
+  // ADR-011: Elena's flagged charge (the proactive suite answers it only as an admin, so it is still shown to her).
+  const elena = client({ authorization: 'Bearer ' + await idToken('demo-elena') });
+  assert.equal((await elena.call('/auth/session', {})).status, 200);
+  const alert = await elena.call('/alerts');
+  assert.equal(alert.status, 200); measured.alert = within('alert', alert.metrics);
+  const answer = await elena.call('/alerts/answer', { transaction_id: 'demo-tx-020', answer: 'mine' });
+  assert.equal(answer.status, 200); measured.alertAnswer = within('alertAnswer', answer.metrics);
   const episode = sum(measured, ['login', 'list', 'create']);
   console.log('D1_BUDGET ' + JSON.stringify({ per_request: measured, customer_episode: episode }));
 });
@@ -211,6 +271,12 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   const update = await cohort.call('/reports/update', { protocol: cohortReceipt.body.protocol });
   assert.equal(update.status, 202); assertContract('updateQueued', update.body);
   measured.reportsUpdate = within('reportsUpdate', update.metrics);
+  // An admin acting as that customer asks too: same three statements, the target read is the admin's own (ADR-007, decision 10).
+  const admin = client({ authorization: 'Bearer ' + await idToken('demo-diego', { groups: ['admin'] }) });
+  assert.equal((await admin.call('/auth/session', {})).status, 200);
+  assert.equal((await admin.call('/admin/act-as', { customer_id: 'CLI-COHORT-2' })).status, 200);
+  const acting = await admin.call('/reports/update', { protocol: cohortReceipt.body.protocol });
+  assert.equal(acting.status, 202); measured.reportsUpdateActing = within('reportsUpdate', acting.metrics);
   const transition = await agent.call('/agent/intake-status', { protocol: cohortReceipt.body.protocol, status: 'in_review' });
   assert.equal(transition.status, 200); assertContract('intakeTransition', transition.body);
   measured.agentTransition = within('agentTransition', transition.metrics);
@@ -329,4 +395,132 @@ test('a dense acknowledged history qualifies detail reads with the current repor
   const replay = await agent.call('/agent/intake-detail?protocol=' + protocol);
   assert.equal(replay.status, 200); assert.equal(replay.metrics.rows_written, 0);
   console.log('D1_DENSE_HISTORY ' + JSON.stringify({ first: first.metrics, replay: replay.metrics }));
+});
+
+test('AI suggestion routes and the after-response run stay within their D1 budgets', async () => {
+  const measured = {};
+  const c = client(); assert.equal((await c.call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
+  const start = await c.call('/intake/start', startBody()); assert.equal(start.status, 201);
+  const details = 'Lembro só do mercado. FACTS={"merchant":"Mercado Demo"}';
+  const handoff = await c.call('/intake/handoff', { episode_id: start.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID(), details });
+  assert.equal(handoff.status, 201); assertContract('intakeReceipt', handoff.body);
+  measured.incompleteDetails = within('intakeIncompleteDetails', handoff.metrics);
+  const path = `/intake/handoff/${handoff.body.protocol}/suggestions`;
+  let shown;
+  for (const until = Date.now() + 15000; ;) {
+    shown = await c.call(path);
+    if (shown.body.status !== 'pending' || Date.now() > until) break;
+    await new Promise(done => setTimeout(done, 200));
+  }
+  assert.equal(shown.body.status, 'suggested'); assertContract('suggestionList', shown.body);
+  measured.suggestions = within('suggestions', shown.metrics);
+  const confirm = await c.call(path + '/confirm', { transaction_id: 'demo-tx-001' });
+  assert.equal(confirm.status, 200); measured.suggestionConfirm = within('suggestionConfirm', confirm.metrics);
+  measured.suggestionConfirmReplay = within('suggestionConfirm', (await c.call(path + '/confirm', { transaction_id: 'demo-tx-001' })).metrics);
+  const agent = client(); await agent.call('/demo/agent-session', {});
+  const detail = await agent.call('/agent/intake-detail?protocol=' + handoff.body.protocol);
+  assert.equal(detail.status, 200); assert.equal(detail.body.customer_suggestion.choice, 'confirmed');
+  measured.suggestionDetail = within('suggestionDetail', detail.metrics);
+  const mark = await agent.call('/agent/suggestion-mark', { protocol: handoff.body.protocol, mark: 'correct' });
+  assert.equal(mark.status, 200); measured.suggestionMark = within('suggestionMark', mark.metrics);
+  measured.suggestionMarkReplay = within('suggestionMark', (await agent.call('/agent/suggestion-mark', { protocol: handoff.body.protocol, mark: 'correct' })).metrics);
+  for (const status of ['in_review', 'closed']) assert.equal((await agent.call('/agent/intake-status', { protocol: handoff.body.protocol, status })).status, 200);
+  // The after-response run (ctx.waitUntil) uses a store of its own, so it is measured here on a store-built pending run,
+  // with Google faked in process: cap slot, pre-recorded call, the customer's purchases, and the outcome batch.
+  const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
+  const { vars } = await readWranglerConfig(config());
+  const { privateKey } = await generateKeyPair('RS256', { extractable: true });
+  const env = { ...vars, INTAKE_AI_ENABLED: '1', VERTEX_MODEL_RETIRES: '2099-01-01', VERTEX_WIF_SIGNING_KEY: await exportPKCS8(privateKey) };
+  const reply = body => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const fetcher = async url => String(url).endsWith('/v1/token') ? reply({ access_token: 'f' })
+    : String(url).endsWith(':generateAccessToken') ? reply({ accessToken: 'v', expireTime: new Date(Date.now() + 3600000).toISOString() })
+      : reply({ choices: [{ message: { content: JSON.stringify({ intent: 'report', stated_facts: { merchant: 'Mercado Demo' }, invalid: null, demand: null, injection: false }) } }],
+        usage: { prompt_tokens: 1840, completion_tokens: 84 } });
+  const now = Date.now(); const sessionHash = await tokenHash('suggestion-budget-' + crypto.randomUUID());
+  await withIntakeStore({ config: config() }, async store => {
+    await store.rotateSession({ now, oldHash: null, newHash: sessionHash, actor: 'customer', customerId: 'demo-ana', expiresAt: now + 3600000, requestId: 'suggestion-budget' });
+    const { episode } = await store.startIntake({ customerId: 'demo-ana', language: 'pt', statement: 'Não reconheço esta cobrança.', reason: 'not_mine', key: crypto.randomUUID(), now, expiresAt: now + 3600000 });
+    const { handoff: reserved } = await store.persistIntakeHandoff({ customerId: 'demo-ana', episodeId: episode.episode_id, turnKey: crypto.randomUUID(),
+      payloadHash: await tokenHash(JSON.stringify(['incomplete', null, details])), sessionHash, details, completeCase: null, kind: 'incomplete',
+      evidence: { transaction: null, tool_status: 'ok' }, actions: [], questions: ['matching_transaction', 'customer_confirmation'],
+      usage: { tool_calls: 0, operation_duration_ms: 0 }, now, suggestionArm: 'B' });
+    const receipt = await store.readIntakeReceipt('demo-ana', episode.episode_id, { sessionHash, now });
+    assert.equal((await store.finishIntakeHandoff({ customerId: 'demo-ana', episode, receipt, sessionHash, now, operationDuration: 0, toolCalls: 0 })).acknowledged, true);
+    const run = await storeCall(store, () => runSuggestion(env, store, { handoffId: reserved.handoff_id, customerId: 'demo-ana', arm: 'B', details, language: 'pt' }, { fetcher }));
+    assert.equal(run.result, 'suggested');
+    measured.suggestionRun = within('suggestionRun', run.metrics);
+    await close(store, reserved.handoff_id);
+  });
+  console.log('D1_AI_SUGGESTIONS ' + JSON.stringify(measured));
+});
+
+test('the idle sweep closes a page of 100 stale suggestion runs, and a sweep with nothing due, within their budgets', async () => {
+  const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
+  // Bounded fixture: 100 acknowledged incomplete handoffs with details whose runs were never started, 11 minutes old.
+  const now = Date.now(); const old = now - 660000; const sessionHash = await tokenHash('suggestion-sweep-' + crypto.randomUUID());
+  const details = 'Não lembro de nada, só que foi cobrado.';
+  const payloadHash = await tokenHash(JSON.stringify(['incomplete', null, details]));
+  const measured = {};
+  await withIntakeStore({ config: config() }, async store => {
+    await store.rotateSession({ now, oldHash: null, newHash: sessionHash, actor: 'customer', customerId: 'demo-bruno', expiresAt: now + 3600000, requestId: 'suggestion-sweep' });
+    const reserve = async () => {
+      const { episode } = await store.startIntake({ customerId: 'demo-bruno', language: 'pt', statement: 'Não reconheço esta cobrança.', reason: 'not_mine', key: crypto.randomUUID(), now: old, expiresAt: now + 3600000 });
+      await store.persistIntakeHandoff({ customerId: 'demo-bruno', episodeId: episode.episode_id, turnKey: crypto.randomUUID(), payloadHash, sessionHash, details,
+        completeCase: null, kind: 'incomplete', evidence: { transaction: null, tool_status: 'ok' }, actions: [], questions: ['matching_transaction', 'customer_confirmation'],
+        usage: { tool_calls: 0, operation_duration_ms: 0 }, now: old, suggestionArm: 'B' });
+      const receipt = await store.readIntakeReceipt('demo-bruno', episode.episode_id, { sessionHash, now });
+      assert.equal((await store.finishIntakeHandoff({ customerId: 'demo-bruno', episode, receipt, sessionHash, now, operationDuration: 0, toolCalls: 0 })).acknowledged, true);
+    };
+    for (let i = 0; i < 100; i += 20) await Promise.all(Array.from({ length: 20 }, reserve));
+    const page = await storeCall(store, () => store.closeStaleSuggestionRuns({ now, limit: 100 }));
+    assert.equal(page.result.length, 100, 'exactly the fixture page was due');
+    measured.page = within('suggestionSweepPage', page.metrics);
+    const noop = await storeCall(store, () => store.closeStaleSuggestionRuns({ now, limit: 100 }));
+    assert.equal(noop.result.length, 0);
+    measured.noop = within('suggestionSweepNoop', noop.metrics);
+  });
+  console.log('D1_SUGGESTION_SWEEP ' + JSON.stringify(measured));
+});
+
+test("the dispute managers' KPI read stays bounded by its window: a constant for an empty one, a fixed cost per episode in it", async () => {
+  const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
+  // Bounded fixture: 20 acknowledged incomplete handoffs started two years ago, a window no other suite writes to, then three
+  // alert answers by demo-carla on kpi_seed.sql's budget charges ("mine" later reported, "mine", "not mine") and that one
+  // complete report, so the alert statements are costed too. Runs last in this file, so its starts never meet the idle
+  // sweeps above (they are acknowledged, never due anyway).
+  const old = Date.now() - 2 * 365 * 86400000; const sessionHash = await tokenHash('kpi-budget-' + crypto.randomUUID());
+  const payloadHash = await tokenHash(JSON.stringify(['incomplete', null]));
+  const measured = {};
+  await withIntakeStore({ config: config() }, async store => {
+    await store.rotateSession({ now: Date.now(), oldHash: null, newHash: sessionHash, actor: 'customer', customerId: 'demo-bruno', expiresAt: Date.now() + 3600000, requestId: 'kpi-budget' });
+    for (let i = 0; i < KPI_FIXTURE; i++) {
+      const at = old + i;
+      const { episode } = await store.startIntake({ customerId: 'demo-bruno', language: 'pt', statement: 'Não reconheço esta cobrança.', reason: 'not_mine', key: crypto.randomUUID(), now: at, expiresAt: at + 3600000 });
+      await store.persistIntakeHandoff({ customerId: 'demo-bruno', episodeId: episode.episode_id, turnKey: crypto.randomUUID(), payloadHash, sessionHash,
+        completeCase: null, kind: 'incomplete', evidence: { transaction: null, tool_status: 'ok' }, actions: [], questions: ['matching_transaction', 'customer_confirmation'],
+        usage: { tool_calls: 0, operation_duration_ms: 0 }, now: at });
+      const receipt = await store.readIntakeReceipt('demo-bruno', episode.episode_id, { sessionHash, now: at });
+      assert.equal((await store.finishIntakeHandoff({ customerId: 'demo-bruno', episode, receipt, sessionHash, now: at, operationDuration: 0, toolCalls: 0 })).acknowledged, true);
+    }
+    const carlaHash = await tokenHash('kpi-budget-carla-' + crypto.randomUUID());
+    await store.rotateSession({ now: Date.now(), oldHash: null, newHash: carlaHash, actor: 'customer', customerId: 'demo-carla', expiresAt: Date.now() + 3600000, requestId: 'kpi-budget' });
+    for (const [i, transactionId, answer] of [[0, 'kpi-tx-04', 'mine'], [1, 'kpi-tx-05', 'mine'], [2, 'kpi-tx-06', 'report']])
+      assert.ok(await store.answerProactiveAlert({ customerId: 'demo-carla', transactionId, answeredBy: 'customer', answer, now: old + KPI_FIXTURE + i }));
+    const at = old + KPI_FIXTURE + 3;
+    const { episode } = await store.startIntake({ customerId: 'demo-carla', language: 'es', statement: 'No reconozco este cargo.', reason: 'not_mine', key: crypto.randomUUID(), now: at, expiresAt: at + 3600000 });
+    await store.persistIntakeHandoff({ customerId: 'demo-carla', episodeId: episode.episode_id, turnKey: crypto.randomUUID(), payloadHash: await tokenHash(JSON.stringify(['complete', 'kpi-tx-04'])),
+      sessionHash: carlaHash, completeCase: { transaction_id: 'kpi-tx-04' }, kind: 'complete', evidence: { transaction: null, tool_status: 'ok' }, actions: [], questions: [],
+      usage: { tool_calls: 0, operation_duration_ms: 0 }, now: at });
+    const receipt = await store.readIntakeReceipt('demo-carla', episode.episode_id, { sessionHash: carlaHash, now: at });
+    assert.equal((await store.finishIntakeHandoff({ customerId: 'demo-carla', episode, receipt, sessionHash: carlaHash, now: at, operationDuration: 0, toolCalls: 0 })).acknowledged, true);
+    const empty = await storeCall(store, () => store.intakeKpis({ sinceMs: old - 86400000, untilMs: old - 1 }));
+    assert.equal(empty.result.by_language.all.reports.started, 0);
+    measured.empty = within('kpisEmpty', empty.metrics);
+    const fixture = await storeCall(store, () => store.intakeKpis({ sinceMs: old, untilMs: at + 1 }));
+    assert.equal(fixture.result.by_language.all.reports.started, KPI_FIXTURE + 1, 'exactly the fixture is in the window');
+    assert.deepEqual([fixture.result.alerts.answered, fixture.result.alerts.recognized_then_reported, fixture.result.alerts.deflected], [3, 1, 1]);
+    await close(store, receipt.complete_case_id);
+    measured.fixture = within('kpisFixture', fixture.metrics);
+  });
+  console.log('D1_INTAKE_KPIS ' + JSON.stringify({ episodes: KPI_FIXTURE + 1, answers: 3, ...measured }));
 });

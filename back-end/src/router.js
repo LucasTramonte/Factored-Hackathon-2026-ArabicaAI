@@ -4,16 +4,18 @@
  */
 import { fail, json } from './http.js';
 import { GRANTED } from './auth/cognito.js';
-import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession } from './modules/customer/routes.js';
-import { startIntake, confirmIntake, handoffIntake, listReports, recordFeedback, requestUpdate } from './modules/intake/routes.js';
-import { listAgentIntakes, getAgentIntakeDetail, startAgentSession, transitionIntake } from './modules/agent/routes.js';
+import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession, whoAmI } from './modules/customer/routes.js';
+import { startIntake, confirmIntake, confirmSuggestion, getSuggestions, handoffIntake, listReports, recordFeedback, requestUpdate } from './modules/intake/routes.js';
+import { listAgentIntakes, getAgentIntakeDetail, markSuggestion, startAgentSession, transitionIntake } from './modules/agent/routes.js';
 import { listAuditEvents } from './modules/audit/routes.js';
 import { actAs, listCustomers } from './modules/admin/routes.js';
+import { answerAlert, getAlert } from './modules/proactive/routes.js';
 
 export const API_ROUTES = {
   '/demo/identities': { GET: listIdentities },
   '/demo/session': { POST: startCustomerSession },
   '/auth/session': { POST: startEmailSession },
+  '/auth/me': { GET: whoAmI },
   '/auth/logout': { POST: logout },
   '/transactions': { GET: listTransactions },
   '/transactions/displayed': { POST: acknowledgeDisplay },
@@ -28,10 +30,19 @@ export const API_ROUTES = {
   '/agent/intakes': { GET: listAgentIntakes },
   '/agent/intake-detail': { GET: getAgentIntakeDetail },
   '/agent/intake-status': { POST: transitionIntake },
+  '/agent/suggestion-mark': { POST: markSuggestion },
   '/audit/events': { GET: listAuditEvents },
   '/admin/customers': { GET: listCustomers },
-  '/admin/act-as': { POST: actAs }
+  '/admin/act-as': { POST: actAs },
+  '/alerts': { GET: getAlert },
+  '/alerts/answer': { POST: answerAlert },
+  '/intake/handoff/{reference}/suggestions': { GET: getSuggestions },
+  '/intake/handoff/{reference}/suggestions/confirm': { POST: confirmSuggestion }
 };
+/** Paths with one ``{reference}`` segment (no slash) and the table key each resolves to; the handler validates the segment. */
+const TEMPLATES = Object.keys(API_ROUTES).filter(path => path.includes('{')).map(path =>
+  [new RegExp('^' + path.replace('{reference}', '[^/]+') + '$'), path]);
+const templateOf = pathname => TEMPLATES.find(([pattern]) => pattern.test(pathname))?.[1];
 /** Who may call what. ``public`` needs no session; ``customer`` and ``agent`` need that actor's live session, which each
  *  handler reads itself; ``auditor`` needs a verified Cognito token on every call (no session). ``admin`` needs a customer
  *  session an admin token opened (its ``admin`` mark), read by the handler; ``hasRole`` also lets an admin start a
@@ -42,6 +53,7 @@ export const ROUTE_ROLES = {
   '/demo/identities': 'public',
   '/demo/session': 'public',
   '/auth/session': 'public',
+  '/auth/me': 'public',
   '/auth/logout': 'public',
   '/transactions': 'customer',
   '/transactions/displayed': 'customer',
@@ -56,12 +68,17 @@ export const ROUTE_ROLES = {
   '/agent/intakes': 'agent',
   '/agent/intake-detail': 'agent',
   '/agent/intake-status': 'agent',
+  '/agent/suggestion-mark': 'agent',
   '/audit/events': 'auditor',
   '/admin/customers': 'admin',
-  '/admin/act-as': 'admin'
+  '/admin/act-as': 'admin',
+  '/alerts': 'customer',
+  '/alerts/answer': 'customer',
+  '/intake/handoff/{reference}/suggestions': 'customer',
+  '/intake/handoff/{reference}/suggestions/confirm': 'customer'
 };
 for (const path of Object.keys(API_ROUTES)) if (!ROLES.includes(ROUTE_ROLES[path])) throw new Error(`Route ${path} has no role`);
-export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/audit/', '/admin/', '/transactions/', '/cases/', '/intake/', '/reports/'];
+export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/audit/', '/admin/', '/alerts/', '/transactions/', '/cases/', '/intake/', '/reports/'];
 /** Bare API namespace paths that have no handler but must still answer JSON 404. */
 export const API_NAMESPACES = new Set(['/intake', '/auth', '/audit', '/admin']);
 /** HTML documents the Worker sees first; all are public. Hashed bundles skip the Worker. */
@@ -75,7 +92,8 @@ export async function route(request, env, store, ctx) {
     await store.ping();
     return json({ status: 'ok' });
   }
-  const methods = API_ROUTES[pathname];
+  // A URL path never holds a literal brace (it arrives as %7B), so a template key can only be reached through its pattern.
+  const methods = API_ROUTES[pathname] ?? API_ROUTES[templateOf(pathname)];
   if (methods || API_NAMESPACES.has(pathname) || API_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
     // Public API paths cost a D1 read or a JWKS check per cookie or bearer, so they are limited per IP (ADR-004).
     // A missing binding (unit tests) allows the request.

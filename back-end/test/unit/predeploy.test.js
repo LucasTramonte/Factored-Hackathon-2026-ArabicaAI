@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { additiveProblems, assertNoLocalVars, localMigrations, pendingMigrations, appliedFromWranglerJson, readWranglerConfig } from '../../scripts/predeploy.mjs';
+import { additiveProblems, assertModelNotRetired, assertNoLocalVars, localMigrations, pendingMigrations, appliedFromWranglerJson, readWranglerConfig } from '../../scripts/predeploy.mjs';
 
 test('every local migration file is known to the guard, in order', async () => {
   const files = await localMigrations();
@@ -51,6 +51,22 @@ test('the guard refuses a config that would ship the local test JWKS or the demo
   assert.doesNotThrow(() => assertNoLocalVars({}));
   const shipped = await readWranglerConfig();
   assert.doesNotThrow(() => assertNoLocalVars(shipped));
+});
+
+test("the guard refuses the AI path's local test seams and its signing key in vars", () => {
+  for (const name of ['VERTEX_TEST_ORIGIN', 'INTAKE_AI_TEST_ARM']) assert.throws(() => assertNoLocalVars({ vars: { [name]: 'x' } }), new RegExp(name));
+  assert.throws(() => assertNoLocalVars({ vars: { VERTEX_WIF_SIGNING_KEY: '-----BEGIN PRIVATE KEY-----' } }), /secret put VERTEX_WIF_SIGNING_KEY/);
+});
+
+test('with the AI switch on, CI fails a day before the configured model retires; off, nothing is checked', async () => {
+  const day = Date.parse('2026-10-19T12:00:00Z');
+  const on = retires => ({ vars: { INTAKE_AI_ENABLED: '1', VERTEX_MODEL_RETIRES: retires } });
+  assert.doesNotThrow(() => assertModelNotRetired(on('2026-10-21'), day));
+  for (const retires of ['2026-10-20', '2026-10-19', '2026-01-01', 'soon', undefined]) assert.throws(() => assertModelNotRetired(on(retires), day), /VERTEX_MODEL_RETIRES/, String(retires));
+  for (const flag of ['0', undefined, 'true']) assert.doesNotThrow(() => assertModelNotRetired({ vars: { INTAKE_AI_ENABLED: flag, VERTEX_MODEL_RETIRES: '2000-01-01' } }, day));
+  const shipped = await readWranglerConfig();
+  assert.equal(shipped.vars.INTAKE_AI_ENABLED, '0', 'the switch ships off');
+  assert.doesNotThrow(() => assertModelNotRetired(shipped));
 });
 
 test('the deploy applies only additive migrations; anything that drops, renames or rebuilds is for a person', () => {

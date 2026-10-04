@@ -99,19 +99,36 @@ export function additiveProblems(sql) {
 
 /**
  * Throws when ``vars`` would ship a local-only variable: ``COGNITO_TEST_JWKS`` lets anyone holding its private key sign in,
- * and ``DEMO_PICKER`` lets anyone become any customer or agent without signing in. ``SES_FROM`` is a person's address,
- * so it is a secret, never a committed var (issue #70). Secrets are not checked here.
+ * and ``DEMO_PICKER`` lets anyone become any customer or agent without signing in; ``VERTEX_TEST_ORIGIN`` and
+ * ``INTAKE_AI_TEST_ARM`` point the AI suggestion path at a local mock and fix its pilot arm. ``SES_FROM`` is a person's
+ * address and ``VERTEX_WIF_SIGNING_KEY`` the Worker's private key, so both are secrets, never committed vars (issue #70).
+ * Secrets are not checked here.
  */
 export function assertNoLocalVars(config) {
-  for (const name of ['COGNITO_TEST_JWKS', 'DEMO_PICKER']) {
+  for (const name of ['COGNITO_TEST_JWKS', 'DEMO_PICKER', 'VERTEX_TEST_ORIGIN', 'INTAKE_AI_TEST_ARM']) {
     if (config.vars && name in config.vars) throw new Error(`wrangler.jsonc vars contain ${name} (local only); remove it before deploying`);
   }
-  if (config.vars && 'SES_FROM' in config.vars) throw new Error('wrangler.jsonc vars contain SES_FROM; set it with `wrangler secret put SES_FROM` instead');
+  for (const name of ['SES_FROM', 'VERTEX_WIF_SIGNING_KEY']) {
+    if (config.vars && name in config.vars) throw new Error(`wrangler.jsonc vars contain ${name}; set it with \`wrangler secret put ${name}\` instead`);
+  }
+}
+
+/**
+ * Throws when the AI suggestion switch is on (``INTAKE_AI_ENABLED`` is ``"1"``) and the configured model is past, or
+ * within a day of, its retirement date (``VERTEX_MODEL_RETIRES``, ADR-012): CI fails before the Worker would only record
+ * ``retired``. With the switch off nothing is checked.
+ */
+export function assertModelNotRetired(config, nowMs = Date.now()) {
+  if (config.vars?.INTAKE_AI_ENABLED !== '1') return;
+  const date = config.vars.VERTEX_MODEL_RETIRES;
+  const at = /^\d{4}-\d{2}-\d{2}$/.test(date ?? '') ? Date.parse(date + 'T00:00:00Z') : NaN;
+  if (!(nowMs + 86400000 < at)) throw new Error('The AI suggestion switch is on but VERTEX_MODEL_RETIRES is missing, invalid or within a day; turn the switch off or register the successor');
 }
 
 async function main() {
   const config = await readWranglerConfig();
   assertNoLocalVars(config);
+  assertModelNotRetired(config);
   const db = config.d1_databases?.[0];
   if (!db || db.database_id === '00000000-0000-0000-0000-000000000000') {
     throw new Error('Create the remote D1 database and replace the placeholder database_id before deployment');

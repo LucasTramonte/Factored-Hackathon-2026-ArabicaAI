@@ -18,7 +18,7 @@ async function setup(t) {
   const db = new DatabaseSync(':memory:'); t.after(() => db.close()); db.exec('PRAGMA foreign_keys=ON');
   const dir = new URL('../../migrations/', import.meta.url);
   for (const file of readdirSync(dir).sort()) db.exec(readFileSync(new URL(file, dir), 'utf8'));
-  db.exec("INSERT INTO customers(customer_id,display_name) VALUES('ana','Ana'),('bruno','Bruno'); INSERT INTO transactions VALUES('tx-ana','ana',NULL,'2026-06-17 12:00:00','Shop','10.00','ARS')");
+  db.exec("INSERT INTO customers(customer_id,display_name) VALUES('ana','Ana'),('bruno','Bruno'); INSERT INTO transactions(transaction_id,customer_id,occurred_at,source_occurred_at,merchant_name,amount,currency) VALUES('tx-ana','ana',NULL,'2026-06-17 12:00:00','Shop','10.00','ARS')");
   const store = createStore({ prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
     batch: async statements => { db.exec('BEGIN'); try { const result = statements.map(s => s.all()); db.exec('COMMIT'); return result; } catch(e) { db.exec('ROLLBACK'); throw e; } } });
   const start = async (now,expiresAt,customerId='ana') => (await store.startIntake({customerId,language:'es',statement:'No reconozco este cargo.',reason:'not_mine',key:crypto.randomUUID(),now,expiresAt})).episode;
@@ -258,14 +258,14 @@ test('housekeeping sweeps at one cutoff, one bounded atomic page at a time, and 
   const now = Date.parse('2026-09-30T12:00:00.000Z');
   for (let i = 0; i < 5; i++) await start(now - 600000 - i, now + 3600000);
   const {closeIdleIntakes} = await import('../../scripts/close-idle-intakes.mjs');
-  assert.deepEqual(Object.entries(await closeIdleIntakes(store,{now,limit:2})).filter(([k])=>k!=='metrics'),[['closed',2],['pages',1],['complete',false],['cutoff','2026-09-30T12:00:00.000Z']]);
+  assert.deepEqual(Object.entries(await closeIdleIntakes(store,{now,limit:2})).filter(([k])=>k!=='metrics'),[['closed',2],['pages',1],['complete',false],['cutoff','2026-09-30T12:00:00.000Z'],['suggestions_abandoned',0]]);
   const rest = await closeIdleIntakes(store,{now,limit:2,maxPages:5});
   assert.equal(rest.closed,3); assert.equal(rest.pages,2); assert.equal(rest.complete,true);
   const noop = await closeIdleIntakes(store,{now,limit:2,maxPages:5});
   assert.equal(noop.closed,0); assert.equal(noop.pages,1); assert.equal(noop.complete,true);
   for (const maxPages of [0,101,1.5]) await assert.rejects(closeIdleIntakes(store,{now,maxPages}),/Invalid closure bounds/);
   // complete comes from a due probe, not page size: a short page that leaves due work behind is not complete.
-  const stuck = { closeIdleIntakes: async () => [], hasDueIdleIntakes: async () => true, metrics: () => ({}) };
+  const stuck = { closeIdleIntakes: async () => [], hasDueIdleIntakes: async () => true, closeStaleSuggestionRuns: async () => [], metrics: () => ({}) };
   assert.equal((await closeIdleIntakes(stuck,{now,limit:2,maxPages:5})).complete,false);
 });
 

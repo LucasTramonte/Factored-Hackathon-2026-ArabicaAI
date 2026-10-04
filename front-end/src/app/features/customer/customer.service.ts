@@ -1,8 +1,9 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/http/api.service';
 import { LangService } from '../../shared/i18n/lang.service';
+import type { SessionState } from '../../shared/models/intake.model';
 import { ContextCard, CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeReceipt, IntakeStart, IntakeStartBody,
-  ReportList, Role, TransactionList } from '../../shared/models/intake.model';
+  ReportList, Role, SuggestionChoice, SuggestionList, TransactionList, AlertResponse } from '../../shared/models/intake.model';
 
 /** Customer calls: email sign-in (simulated in local development), own charges and the guided intake. */
 @Injectable({ providedIn: 'root' })
@@ -26,6 +27,31 @@ export class CustomerService {
   /** Exchange a verified Cognito ID token for the session cookie. POST with an empty JSON body: the token travels only in the header. */
   signInWithToken(idToken: string): Promise<CustomerSession> {
     return this.api.request<CustomerSession>('/auth/session', {}, { Authorization: 'Bearer ' + idToken });
+  }
+
+  /** The browser's live sessions (ADR-013, phase 0): a reload restores the signed-in state from the cookies. */
+  me(): Promise<SessionState> {
+    return this.api.request<SessionState>('/auth/me');
+  }
+
+  /** Admins only (ADR-007, decision 10): every customer an admin may act as; the server checks the session's admin mark. */
+  async adminCustomers(): Promise<Identity[]> {
+    return (await this.api.request<{ items: Identity[] }>('/admin/customers')).items;
+  }
+
+  /** Admins only: replace the session with one for ``customerId``; the response is a customer session (``admin_act_as``). */
+  actAs(customerId: string): Promise<CustomerSession> {
+    return this.api.request<CustomerSession>('/admin/act-as', { customer_id: customerId });
+  }
+
+  /** The proactive alert (ADR-011): at most one bank-flagged charge of this customer, not yet answered or reported. */
+  alert(): Promise<AlertResponse> {
+    return this.api.request<AlertResponse>('/alerts');
+  }
+
+  /** Answer the alert once: ``mine`` (recognized) or ``report`` (opening the guided report); the first answer stands. */
+  answerAlert(transactionId: string, answer: 'mine' | 'report'): Promise<unknown> {
+    return this.api.request('/alerts/answer', { transaction_id: transactionId, answer });
   }
 
   /** Revoke the browser's customer session cookie (always 204). */
@@ -52,7 +78,7 @@ export class CustomerService {
     return this.api.request('/reports/feedback', { protocol, easy });
   }
 
-  /** Ask for a status email about one of the customer's reports (202; 409 no email on file; 429 sent recently). */
+  /** Queue a status email for one own report (202; 409 no email; 429 another request is queued or recently accepted). */
   requestUpdate(protocol: string): Promise<{ queued: true }> {
     return this.api.request<{ queued: true }>('/reports/update', { protocol });
   }
@@ -67,5 +93,16 @@ export class CustomerService {
 
   handoffIntake(body: IntakeHandoffBody): Promise<IntakeReceipt> {
     return this.api.request<IntakeReceipt>('/intake/handoff', body);
+  }
+
+  /** Suggested charges for one own report (ADR-012): ``pending`` while the service reads the details, then ``none`` or up to three. */
+  suggestions(protocol: string): Promise<SuggestionList> {
+    return this.api.request<SuggestionList>(`/intake/handoff/${encodeURIComponent(protocol)}/suggestions`);
+  }
+
+  /** Answer the suggestions once: one suggested charge, or none of them; a different later answer is 409. Nothing is closed or decided. */
+  answerSuggestions(protocol: string, transactionId: string | null): Promise<SuggestionChoice> {
+    return this.api.request<SuggestionChoice>(`/intake/handoff/${encodeURIComponent(protocol)}/suggestions/confirm`,
+      transactionId ? { transaction_id: transactionId } : { none: true });
   }
 }

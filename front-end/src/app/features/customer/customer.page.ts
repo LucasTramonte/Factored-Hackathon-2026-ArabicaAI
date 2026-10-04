@@ -8,7 +8,7 @@ import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
-  REASONS, REASON_LABEL, Reason, Report, ReportList, Transaction } from '../../shared/models/intake.model';
+  REASONS, REASON_LABEL, Reason, Report, ReportList, SuggestedCharge, SuggestionAnswer, SuggestionList, Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { AgentService } from '../agent/agent.service';
@@ -34,6 +34,8 @@ type Frozen = { path: 'start'; body: IntakeStartBody } | { path: 'confirm'; body
 
 /** FAQ question → fixed answer. Only the dispute process; nothing is answered from free text. */
 export const FAQ = { faqNextQ: 'faqNextA', faqTimeQ: 'faqTimeA', faqMissingQ: 'faqMissingA' } as const;
+/** After a receipt for "I can't find it" with details, how long the client waits for suggestions (ADR-012). */
+export const SUGGESTION_WAIT_MS = 15000;
 /** Receipt title per server-decided kind. */
 const RECEIPT_TITLE = { complete: 'receiptComplete', incomplete: 'receiptIncomplete', technical: 'receiptTechnical' } as const;
 /** Reason → its one-line statement, filled in the report language. ``other`` has none. */
@@ -98,9 +100,23 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly feedbackRecorded = signal(false);
   readonly feedbackSending = signal(false);
   readonly feedbackFailed = signal(false);
+  /** Charges the service suggests for an "I can't find it" receipt (ADR-012), or null when there are none (yet). */
+  readonly suggestionList = signal<SuggestionList | null>(null);
+  /** The customer's stored answer to the suggestions; nothing is closed or decided by it. */
+  readonly suggestionAnswer = signal<SuggestionAnswer | null>(null);
+  readonly suggestionSending = signal(false);
+  readonly suggestionFailed = signal(false);
+  /** Milliseconds between suggestion checks; a test seam. */
+  suggestionPollMs = 1500;
+  /** Each watch gets a number; a newer receipt, a new report or leaving the page stops the older one. */
+  private suggestionWatch = 0;
+  private suggestionTimer: ReturnType<typeof setTimeout> | undefined;
   readonly ended = signal(false);
   readonly chatError = signal('');
   readonly log = signal<ChatLine[]>([{ from: 'bot', key: 'chatHello' }]);
+  /** FAQ questions and answers, kept apart from the report conversation and shown right above the FAQ buttons, so a new
+   *  answer appears where the customer clicked, and never becomes the guide's prompt for the current step. */
+  readonly faqLog = signal<ChatLine[]>([]);
   /** The guide spoke last, so its line (id `chat-prompt`) describes the step that just took focus. */
   readonly promptLast = computed(() => this.log().at(-1)?.from === 'bot');
   /** "I can't find it" was pressed: the guide asks once what the customer remembers before anything is sent. */
@@ -158,12 +174,14 @@ export class CustomerPage implements OnInit, OnDestroy {
     if (step === 'home') return 'disc disc--home';
     return this.booted() ? 'disc disc--top' : 'disc disc--boot';
   });
-  readonly displayName = computed(() => this.identities().find(i => i.customer_id === this.client())?.display_name ?? this.client());
+  /** A known identity for the signed-in customer: the admin list first (act-as), then the local demo list. */
+  private readonly known = computed(() => [...this.actAsIdentities(), ...this.identities()].find(i => i.customer_id === this.client()));
+  readonly displayName = computed(() => this.known()?.display_name ?? this.client());
   readonly initials = computed(() => initialsOf(this.displayName()) || 'AA');
   /** The customer's first name for the guide's greeting. */
   /** The customer's first name for the guide's greeting, or '' when none is known (never the customer id or a "(demo)" label). */
   readonly firstName = computed(() => this.card()?.first_name
-    || (this.identities().find(i => i.customer_id === this.client())?.display_name ?? '').replace(/\s*\(demo\)$/, ''));
+    || (this.known()?.display_name ?? '').replace(/\s*\(demo\)$/, ''));
 
   constructor() {
     // Move focus to the receipt, the choose step (it replaces the focused Send button), the details field (it replaces the
@@ -194,6 +212,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     // Outside the zone so the app (and tests) can be stable while it waits; the signal still schedules the render.
     this.introTimer = this.zone.runOutsideAngular(() => setTimeout(() => this.introDone.set(true), 6800)); // must outlast the intro word animation delays in styles.css
     if (this.client()) void this.resume();
+    else void this.restore();
     if (!this.demoPicker) return;
     this.identitiesLoading.set(true);
     try {
@@ -211,6 +230,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     clearTimeout(this.introTimer);
     if (this.narrowQuery) this.narrowQuery.onchange = null;
     this.cognito.forget();
+    this.suggestionWatch++;
+    clearTimeout(this.suggestionTimer);
   }
 
   start(): void {
@@ -274,6 +295,65 @@ export class CustomerPage implements OnInit, OnDestroy {
     } catch { /* unavailable: the agent view asks for its own code */ }
   }
 
+  /** The customer an admin picked to act as (ADR-007, decision 10). */
+  actAsChoice = '';
+  /** The customers an admin may act as, from the server; empty until loaded, and never the local demo list. */
+  readonly actAsIdentities = signal<Identity[]>([]);
+  /** The admin list is loading; its own flag, so a local demo list still loading never blocks it. */
+  readonly actAsLoading = signal(false);
+
+  /** The admin's "view as another customer" panel: the list loads the first time it opens (it is about 800 customers). */
+  async toggleActAs(open: boolean): Promise<void> {
+    if (!open || this.actAsIdentities().length || this.actAsLoading()) return;
+    this.actAsLoading.set(true);
+    this.error.set('');
+    try {
+      this.actAsIdentities.set(await this.service.adminCustomers());
+    } catch (e) {
+      this.fail(e);
+    } finally {
+      this.actAsLoading.set(false);
+    }
+  }
+
+  /** Act as the picked customer, then their home, through the same path as a sign-in. Refused while a report is open. */
+  actAs(): Promise<void> {
+    const customerId = this.actAsChoice;
+    if (!customerId || this.identityLocked() || !this.actAsIdentities().length) return Promise.resolve();
+    return this.enter(() => this.service.actAs(customerId), e => this.fail(e));
+  }
+
+  /** The bank-flagged charge to ask about (ADR-011), or null; a failed read just shows no alert. */
+  readonly alert = signal<Transaction | null>(null);
+  /** The short thanks after "it's mine", announced where the alert was. */
+  readonly alertNote = signal('');
+
+  private async loadAlert(): Promise<void> {
+    try {
+      this.alert.set((await this.service.alert()).alert);
+    } catch {
+      this.alert.set(null); // the alert is optional: the home works without it
+    }
+  }
+
+  /**
+   * Answer the alert. "It's mine" records it and thanks the customer; "I don't recognize it" records it and opens the
+   * guided report on that charge, the normal confirmation path. The banner goes either way; a failed record keeps it.
+   */
+  async answerAlert(answer: 'mine' | 'report'): Promise<void> {
+    const tx = this.alert();
+    if (!tx || this.busy()) return;
+    try {
+      await this.service.answerAlert(tx.transaction_id, answer);
+    } catch (e) {
+      this.fail(e);
+      return;
+    }
+    this.alert.set(null);
+    if (answer === 'mine') this.alertNote.set(this.t().alertThanks);
+    else this.openChat(tx.transaction_id);
+  }
+
   /** "Use another email". */
   anotherEmail(): void {
     this.error.set('');
@@ -325,6 +405,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       this.code = '';
       await this.loadTransactions();
       await this.loadReports();
+      void this.loadAlert();
       this.step.set('home');
     } catch (e) {
       onError(e);
@@ -340,11 +421,31 @@ export class CustomerPage implements OnInit, OnDestroy {
     return key ? this.t()[key] : errorText(this.t(), e);
   }
 
+  /**
+   * After a reload the tab has no state, but the session cookie may still be live (ADR-013, phase 0): restore it and go
+   * home, as a sign-in would. Nothing happens without a live session, or if a sign-in started meanwhile.
+   */
+  private async restore(): Promise<void> {
+    let state;
+    try {
+      state = await this.service.me();
+    } catch {
+      return; // no session information: the sign-in screen stays
+    }
+    // Never over a sign-in the person has started (the login step, a pending or sent code), even if it is not busy now.
+    if (!state?.customer || this.client() || this.busy() || this.step() !== 'intro' || this.codeSent()) return;
+    this.card.set(state.customer.context_card ?? null);
+    this.client.set(state.customer.customer_id);
+    this.roles.set(state.customer.roles);
+    await this.resume();
+  }
+
   /** Back from another in-app view in this tab: show the same customer's home again; the cookie still decides access. */
   private async resume(): Promise<void> {
     this.booted.set(true);
     this.step.set('home');
     void this.loadReports();
+    void this.loadAlert();
     try {
       await this.loadTransactions();
     } catch (e) {
@@ -369,7 +470,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
-  /** "Email me an update" on a report row; the button keeps focus and the answer is announced under the row. */
+  /** Queue "Email me an update" on a report row; never claim background delivery, and keep focus on the button. */
   async requestUpdate(protocol: string): Promise<void> {
     if (this.updating()) return;
     this.updating.set(protocol);
@@ -503,9 +604,14 @@ export class CustomerPage implements OnInit, OnDestroy {
     return STATEMENT_MAX - 1 - [...this.chatStatement.trim()].length;
   }
 
-  /** "I can't find it": nothing is sent yet; the guide asks once what the customer remembers (one extra turn, no more). */
+  /**
+   * "I can't find it": nothing is sent yet; the guide asks once what the customer remembers (one extra turn, no more).
+   * A charge picked before is dropped, so it never looks chosen beside the review without one.
+   */
   cannotFind(): Promise<void> | void {
     if (this.busy() || this.chatStep() !== 'choose' || this.frozen()) return;
+    this.choice = '';
+    this.chatConfirmed = false;
     if (this.room < 10) return this.handoff(); // no room for an answer: the statement already carries the detail
     this.asking.set(true);
     this.log.update(l => [...l, { from: 'me', key: 'chatCannotFind' }, { from: 'bot', key: 'chatDetailsPrompt' }]);
@@ -598,6 +704,11 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.feedbackRecorded.set(false);
     this.feedbackSending.set(false);
     this.feedbackFailed.set(false);
+    this.suggestionWatch++;
+    this.suggestionList.set(null);
+    this.suggestionAnswer.set(null);
+    this.suggestionSending.set(false);
+    this.suggestionFailed.set(false);
     this.ended.set(false);
     this.asking.set(false);
     this.chatError.set('');
@@ -608,6 +719,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.choice = '';
     this.chatConfirmed = false;
     this.log.set([{ from: 'bot', key: this.general() ? 'chatHelloGeneral' : 'chatHello' }]);
+    this.faqLog.set([]);
   }
 
   /** Guide lines are i18n keys; the greeting carries the customer's first name. */
@@ -620,7 +732,10 @@ export class CustomerPage implements OnInit, OnDestroy {
   ask(question: keyof typeof FAQ): void {
     const answer = FAQ[question];
     if (!answer) throw new Error('Unknown FAQ');
-    this.log.update(l => [...l, { from: 'me', key: question }, { from: 'bot', key: answer }]);
+    this.faqLog.update(l => [...l, { from: 'me', key: question }, { from: 'bot', key: answer }]);
+    // The charge list can push the panel's top out of view: bring the new answer into view, without moving focus.
+    afterNextRender(() => this.host.nativeElement.querySelector('.chat-faq-log li:last-child')?.scrollIntoView({ block: 'nearest' }),
+      { injector: this.injector });
   }
 
   /** Send the frozen request. One 401 renews the same customer and retries the same body; after that the manual Renew/Retry stays. */
@@ -652,7 +767,10 @@ export class CustomerPage implements OnInit, OnDestroy {
         this.log.update(l => [...l, { from: 'bot', key: 'chatChoose' }]);
       } else {
         this.intakeReceipt.set(result as IntakeReceipt);
+        // Only "I can't find it" with what the customer remembers can get suggestions; the receipt never waits for them.
+        if (frozen.path === 'handoff' && frozen.body.details && (result as IntakeReceipt).kind === 'incomplete') void this.watchSuggestions(result as IntakeReceipt);
         await this.loadReports();
+        void this.loadAlert(); // a report on the flagged charge ends its alert
       }
     } catch (e) {
       if (e instanceof ApiError && DEFINITIVE.has(e.status)) {
@@ -668,6 +786,73 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Check for suggestions for at most ``SUGGESTION_WAIT_MS`` after the receipt, then stop. Shown only for the receipt
+   * they belong to and only while unanswered; any failure simply shows nothing (the report already reached a person).
+   */
+  private async watchSuggestions(receipt: IntakeReceipt): Promise<void> {
+    const watch = ++this.suggestionWatch;
+    const until = Date.now() + SUGGESTION_WAIT_MS;
+    const current = () => watch === this.suggestionWatch && this.intakeReceipt() === receipt;
+    for (;;) {
+      let list: SuggestionList;
+      try { list = await this.service.suggestions(receipt.protocol); } catch { return; }
+      if (!current()) return;
+      if (list.status === 'suggested' && list.items.length) {
+        this.suggestionList.set(list);
+        this.suggestionAnswer.set(list.choice);
+        return;
+      }
+      if (list.status !== 'pending' || Date.now() + this.suggestionPollMs > until) return;
+      await new Promise(done => { this.suggestionTimer = setTimeout(done, this.suggestionPollMs); });
+      if (!current()) return;
+    }
+  }
+
+  /**
+   * The customer's one answer: a suggested charge, or none of them (null). On 409 (an answer is already stored, or an agent
+   * has started the review) the client reads the suggestions again and shows what the server holds, never its own attempt.
+   */
+  async answerSuggestion(transactionId: string | null): Promise<void> {
+    const receipt = this.intakeReceipt();
+    if (!receipt || !this.suggestionList()?.answerable || this.suggestionAnswer() || this.suggestionSending()) return;
+    this.suggestionSending.set(true);
+    this.suggestionFailed.set(false);
+    try {
+      const stored = await this.service.answerSuggestions(receipt.protocol, transactionId);
+      if (this.intakeReceipt() !== receipt) return;
+      this.suggestionAnswer.set(stored.choice);
+    } catch (e) {
+      if (this.intakeReceipt() !== receipt) return;
+      if (e instanceof ApiError && e.status === 409) {
+        try {
+          const fresh = await this.service.suggestions(receipt.protocol);
+          if (this.intakeReceipt() !== receipt) return;
+          if (fresh.status === 'suggested') this.suggestionList.set(fresh);
+          this.suggestionAnswer.set(fresh.choice);
+        } catch { this.suggestionFailed.set(true); }
+      } else this.suggestionFailed.set(true);
+    } finally {
+      if (this.intakeReceipt() === receipt) {
+        this.suggestionSending.set(false);
+        // The buttons are gone once answered: keep keyboard and screen-reader users on the confirmation.
+        if (this.suggestionAnswer() || !this.suggestionList()?.answerable) afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('.suggestion-thanks')?.focus(), { injector: this.injector });
+      }
+    }
+  }
+
+  /** When a suggested charge happened, as served: the timezone-free source time, else the UTC instant. */
+  chargeWhen(c: SuggestedCharge): string {
+    if (c.source_occurred_at) return this.sourceTime(c.source_occurred_at);
+    return c.occurred_at ? c.occurred_at.slice(0, 16).replace('T', ' ') + ' ' + this.t().utc : this.t().dateMissing;
+  }
+
+  /** The pick button's accessible name names the charge, since every button reads the same. */
+  suggestionLabel(c: SuggestedCharge): string {
+    return this.t().suggestPickLabel.replace('{merchant}', () => c.merchant_name || this.t().noMerchant).replace('{date}', () => this.chargeWhen(c))
+      .replace('{amount}', () => `${c.amount} ${c.currency}`);
+  }
+
   private call(f: Frozen): Promise<IntakeStart | IntakeReceipt> {
     return f.path === 'start' ? this.service.startIntake(f.body) : f.path === 'confirm' ? this.service.confirmIntake(f.body) : this.service.handoffIntake(f.body);
   }
@@ -677,6 +862,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   private reset(): void {
+    this.alert.set(null);
+    this.alertNote.set('');
     this.client.set('');
     this.roles.set([]);
     this.transactions.set([]);

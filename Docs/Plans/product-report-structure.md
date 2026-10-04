@@ -11,7 +11,7 @@ Submission closes on 2026-10-05. Nothing below is deleted; sections are only ord
   - section 0: KPIs 1–3 and the resolution gap (43.65% against 76.61%, design window; #86's 43.60% / 76.65% are *full period*), as reviewed `make report` aggregates with their SQL;
   - section 4, the "before" picture: unresolved share, SLA breaches, time to first response and to close (non-escalated), closed-case satisfaction (F5), contact-centre CSAT by resolution;
   - section 9's segment cut;
-  - F1 and the wait missingness registered as DF-027 in `DATA_QUALITY.md`;
+  - F1 and the wait missingness registered as DF-027 in `DATA_ENGINEERING.md`;
   - section 11, the limits.
 - **After 10-05, or only if time allows:**
   - sections 2 and 5 (critical customers and the priority order are stated policies, not demanded by the brief);
@@ -60,7 +60,7 @@ The evaluators asked for the problem explained "using KPIs and values", with lim
   - their **SLA breach rate against other complaint types**;
   - time to first response;
   - customers served;
-  - report-request p95 against the 2,000 ms target ([EVALUATION.md §10](../deliverables/EVALUATION.md#10-report-request-latency-evidence-still-incomplete));
+  - report-request p95 against the 2,000 ms target ([EVALUATION.md §11](../deliverables/EVALUATION.md#11-other-measurements));
   - recorded unsafe outcomes.
 - **Charts for KPIs 1–3:**
   - daily unrecognized-charge complaints with a p50/p95 band, plus their share of complaints per year (stable at 18.2–18.4%, DF-010);
@@ -181,7 +181,7 @@ Survey answers and comments are never charted as evidence of wait or quality (F1
 | Escalated cases: time open (substitute, since there is no closing date) | Status age of escalated complaints (section 4) | Lower | Product: in review → closed for reports a person escalates. Same metric, live |
 | CSAT holds | Contact-centre CSAT for complaint contacts (`Queja`), by resolution (F3, F4); closed-case complaint satisfaction (F5) | Hold | Not measurable until real users take part (the user test in the customer contract). In-app thumbs up/down is not CSAT |
 | **NPS holds** | Contact-centre NPS answers for complaint contacts against other reasons: the **distribution and mean** (63,668 NPS surveys overall). **The standard NPS score is degenerate here:** answers stop at 7 on the 0–10 scale, so no one is a promoter (9–10) and the score is almost entirely detractors. Report the distribution, and the formal NPS only with that caveat | Hold | Same as CSAT: needs real users |
-| **Report requests answered in under 2,000 ms, 95% of the time** (the project target, [EVALUATION.md §10](../deliverables/EVALUATION.md#10-report-request-latency-evidence-still-incomplete); it replaces an earlier 4 s) | Not in the data | **p95 < 2,000 ms** | Server time of `GET /transactions`, `POST /intake/start` and `POST /intake/confirm`. Known so far: about 1.4 s for one earlier episode, and confirm projected at about 1.2 s of D1 waiting (ADR-004). **Tool:** [`scripts/summarize_worker_latency.py`](../../scripts/summarize_worker_latency.py) (#91) summarizes exported Worker logs without headers, bodies or customer data. **To do:** a scripted run against the deployed Worker recording p50/p95 per request. The extractor is off the path (its own p95 is 3.58 s) |
+| **Report requests answered in under 2,000 ms, 95% of the time** (the project target, [EVALUATION.md §11](../deliverables/EVALUATION.md#11-other-measurements); it replaces an earlier 4 s) | Not in the data | **p95 < 2,000 ms** | Server time of `GET /transactions`, `POST /intake/start` and `POST /intake/confirm`. Known so far: about 1.4 s for one earlier episode, and confirm projected at about 1.2 s of D1 waiting (ADR-004). **Tool:** [`scripts/summarize_worker_latency.py`](../../scripts/summarize_worker_latency.py) (#91) summarizes exported Worker logs without headers, bodies or customer data. **To do:** a scripted run against the deployed Worker recording p50/p95 per request. The extractor is off the path (its own p95 is 3.58 s) |
 | Safe accepted intake | — | High, with 0 unsafe | Event export |
 
 **Chart:** one row per success metric, a "baseline → target → current" bullet chart, with "not yet measured" shown as an empty marker rather than a zero.
@@ -252,7 +252,7 @@ Survey answers and comments are never charted as evidence of wait or quality (F1
 
 ## Build order
 1. **Section 0, KPIs 1–3,** as reviewed aggregates in `make report`, with their SQL (insights report next steps 1–2).
-2. **Register F1** and the wait missingness in `DATA_QUALITY.md`, with a query (next step 3).
+2. **Register F1** and the wait missingness in `DATA_ENGINEERING.md`, with a query (next step 3).
 3. **Sections 1, 3, 4, 5 and 6** from Silver, with satisfaction shown only with its population (next step 4).
 4. **Section 9's segment cut** (next step 5), then sections 7 and 8 from the D1 export, plus the latency run.
 5. **Sections 10 and 11,** then the `/insights` page (section 12) with Roberto, once the aggregates are reviewed.
@@ -260,6 +260,6 @@ Survey answers and comments are never charted as evidence of wait or quality (F1
 The metric dictionary grows with each step: a metric is added to it when its query is written, not at the end.
 
 ## Open decisions
-1. **Report format:** the `make report` HTML hub only, or also a Markdown deliverable (`Docs/deliverables/PRODUCT_REPORT.md`) with static charts.
+1. **Report format:** the `make report` HTML hub only, or also a Markdown deliverable (`Docs/deliverables/BUSINESS_OUTCOMES.md`) with static charts.
 2. **Whether the critical-customer and priority definitions** stay report-only, or are proposed for the product.
 3. **Who runs the latency measurement** for the 2,000 ms target (the summarizer exists since #91; the run and log export need a person with the Cloudflare account), and who exports the D1 status history.

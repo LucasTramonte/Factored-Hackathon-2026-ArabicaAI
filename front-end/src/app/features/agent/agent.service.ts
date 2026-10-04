@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/http/api.service';
-import { AgentIntakeDetail, AgentIntakeList, AgentSession, IntakeTransition, Role } from '../../shared/models/intake.model';
+import { AgentIntakeDetail, AgentIntakeList, AgentSession, IntakeTransition, Role, SuggestionMark, SuggestionMarkValue } from '../../shared/models/intake.model';
 
 /** Agent calls: a separate session, read-only views and the one status step a person takes. Nothing refunds, blocks or decides. */
 @Injectable({ providedIn: 'root' })
@@ -26,5 +26,10 @@ export class AgentService {
   /** Move a report one step forward (received → in_review → closed); 409 when someone already moved it. */
   setStatus(protocol: string, status: IntakeTransition['status']): Promise<IntakeTransition> {
     return this.api.request<IntakeTransition>('/agent/intake-status', { protocol, status });
+  }
+
+  /** Mark the charge a customer confirmed from a suggestion as correct or wrong; the first mark stands (409 on a different one). */
+  markSuggestion(protocol: string, mark: SuggestionMarkValue): Promise<SuggestionMark> {
+    return this.api.request<SuggestionMark>('/agent/suggestion-mark', { protocol, mark });
   }
 }

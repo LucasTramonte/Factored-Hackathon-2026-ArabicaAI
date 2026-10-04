@@ -1,0 +1,319 @@
+{
+ "window": "holdout",
+ "quarters": 2,
+ "complaints_in_trend_quarters": 1924,
+ "complaints_in_window": 1924,
+ "rates": {
+  "rejected": {
+   "numerator": 9,
+   "denominator": 1924,
+   "rate": 0.004677754677754678,
+   "ci95": [
+    0.002462913312107067,
+    0.008866648203735315
+   ],
+   "first_quarter": 0.003838771593090211,
+   "last_quarter": 0.005668934240362812,
+   "trend": null
+  },
+  "escalated": {
+   "numerator": 104,
+   "denominator": 1924,
+   "rate": 0.05405405405405406,
+   "ci95": [
+    0.04480954617431699,
+    0.0650758303005967
+   ],
+   "first_quarter": 0.053742802303262956,
+   "last_quarter": 0.05442176870748299,
+   "trend": null
+  },
+  "mistyped": {
+   "numerator": 287,
+   "denominator": 1924,
+   "rate": 0.14916839916839916,
+   "ci95": [
+    0.1339490835475346,
+    0.1657859154274849
+   ],
+   "first_quarter": 0.14587332053742802,
+   "last_quarter": 0.15306122448979592,
+   "trend": null
+  },
+  "digital": {
+   "numerator": 479,
+   "denominator": 1924,
+   "rate": 0.24896049896049896,
+   "ci95": [
+    0.23015160972562237,
+    0.268769878429836
+   ],
+   "first_quarter": 0.2619961612284069,
+   "last_quarter": 0.23356009070294784,
+   "trend": null
+  },
+  "assigned": {
+   "numerator": 1312,
+   "denominator": 1924,
+   "rate": 0.681912681912682,
+   "ci95": [
+    0.6607568593817393,
+    0.7023435115201025
+   ],
+   "first_quarter": 0.699616122840691,
+   "last_quarter": 0.6609977324263039,
+   "trend": null
+  }
+ },
+ "repeat_reporters": {
+  "customers_by_count": {
+   "1": 1900,
+   "2": 12
+  },
+  "poisson": {
+   "lambda": 0.012826666666666667,
+   "observed_0_1_2plus": [
+    148088,
+    1900,
+    12
+   ],
+   "expected_0_1_2plus": [
+    148088.3,
+    1899.5,
+    12.2
+   ],
+   "chi2": 0.004628411379094389,
+   "df": 1,
+   "p": 0.9457598195657698
+  },
+  "gap_and_flag": [
+   {
+    "part": "gap",
+    "n": 12,
+    "median_days": 69.0,
+    "p10_days": 22.4,
+    "flag_true_history_single": null,
+    "flag_false_history_multiple": null
+   },
+   {
+    "part": "flag",
+    "n": 1924,
+    "median_days": null,
+    "p10_days": null,
+    "flag_true_history_single": 265,
+    "flag_false_history_multiple": 118
+   }
+  ]
+ },
+ "claimed_value": [
+  {
+   "outcome": "open_in_process_escalated",
+   "currency": "(none)",
+   "complaints": 964,
+   "with_amount": 24,
+   "median_amount": 1240.59,
+   "p25": 947.71,
+   "p75": 3112.0
+  },
+  {
+   "outcome": "open_in_process_escalated",
+   "currency": "COP",
+   "complaints": 126,
+   "with_amount": 125,
+   "median_amount": 2457.78,
+   "p25": 1271.98,
+   "p75": 4044.76
+  },
+  {
+   "outcome": "open_in_process_escalated",
+   "currency": "MXN",
+   "complaints": 119,
+   "with_amount": 111,
+   "median_amount": 2371.34,
+   "p25": 1145.84,
+   "p75": 3582.56
+  },
+  {
+   "outcome": "open_in_process_escalated",
+   "currency": "ARS",
+   "complaints": 118,
+   "with_amount": 112,
+   "median_amount": 2287.11,
+   "p25": 1237.14,
+   "p75": 3571.17
+  },
+  {
+   "outcome": "open_in_process_escalated",
+   "currency": "USD",
+   "complaints": 110,
+   "with_amount": 109,
+   "median_amount": 2491.04,
+   "p25": 1356.55,
+   "p75": 3615.85
+  },
+  {
+   "outcome": "rejected",
+   "currency": "(none)",
+   "complaints": 6,
+   "with_amount": 1,
+   "median_amount": 204.46,
+   "p25": 204.46,
+   "p75": 204.46
+  },
+  {
+   "outcome": "rejected",
+   "currency": "USD",
+   "complaints": 2,
+   "with_amount": 2,
+   "median_amount": 278.71,
+   "p25": 265.01,
+   "p75": 292.4
+  },
+  {
+   "outcome": "rejected",
+   "currency": "COP",
+   "complaints": 1,
+   "with_amount": 1,
+   "median_amount": 1160.42,
+   "p25": 1160.42,
+   "p75": 1160.42
+  },
+  {
+   "outcome": "resolved_compensated",
+   "currency": "(none)",
+   "complaints": 103,
+   "with_amount": 2,
+   "median_amount": 4027.65,
+   "p25": 3952.74,
+   "p75": 4102.55
+  },
+  {
+   "outcome": "resolved_compensated",
+   "currency": "MXN",
+   "complaints": 17,
+   "with_amount": 14,
+   "median_amount": 2798.94,
+   "p25": 1303.92,
+   "p75": 3404.01
+  },
+  {
+   "outcome": "resolved_compensated",
+   "currency": "COP",
+   "complaints": 15,
+   "with_amount": 15,
+   "median_amount": 2448.63,
+   "p25": 629.29,
+   "p75": 4038.66
+  },
+  {
+   "outcome": "resolved_compensated",
+   "currency": "USD",
+   "complaints": 12,
+   "with_amount": 12,
+   "median_amount": 2232.77,
+   "p25": 1205.24,
+   "p75": 3809.66
+  },
+  {
+   "outcome": "resolved_compensated",
+   "currency": "ARS",
+   "complaints": 7,
+   "with_amount": 7,
+   "median_amount": 1786.63,
+   "p25": 445.34,
+   "p75": 2514.39
+  },
+  {
+   "outcome": "resolved_no_compensation",
+   "currency": "(none)",
+   "complaints": 216,
+   "with_amount": 1,
+   "median_amount": 4181.44,
+   "p25": 4181.44,
+   "p75": 4181.44
+  },
+  {
+   "outcome": "resolved_no_compensation",
+   "currency": "ARS",
+   "complaints": 29,
+   "with_amount": 27,
+   "median_amount": 2372.63,
+   "p25": 865.97,
+   "p75": 3474.42
+  },
+  {
+   "outcome": "resolved_no_compensation",
+   "currency": "USD",
+   "complaints": 29,
+   "with_amount": 27,
+   "median_amount": 2670.81,
+   "p25": 1490.19,
+   "p75": 3715.75
+  },
+  {
+   "outcome": "resolved_no_compensation",
+   "currency": "COP",
+   "complaints": 27,
+   "with_amount": 26,
+   "median_amount": 2955.45,
+   "p25": 1449.72,
+   "p75": 3729.64
+  },
+  {
+   "outcome": "resolved_no_compensation",
+   "currency": "MXN",
+   "complaints": 23,
+   "with_amount": 23,
+   "median_amount": 2739.35,
+   "p25": 755.52,
+   "p75": 3414.79
+  }
+ ],
+ "familiar_merchant": {
+  "fraud_transactions": {
+   "first_time": {
+    "fraud": 132,
+    "transactions": 139013
+   },
+   "seen_before": {
+    "fraud": 7,
+    "transactions": 7051
+   }
+  },
+  "first_time_vs_seen_before": {
+   "rr": 0.9564696415854221,
+   "ci95": [
+    0.44738804600304655,
+    2.0448337487951482
+   ]
+  },
+  "by_year": [
+   {
+    "yr": 2026,
+    "familiarity": "first_time",
+    "transactions": 139013,
+    "fraud": 132
+   },
+   {
+    "yr": 2026,
+    "familiarity": "seen_before",
+    "transactions": 7051,
+    "fraud": 7
+   }
+  ]
+ },
+ "manifest": {
+  "generated_at_utc": "2026-10-04T10:53:45.333579+00:00",
+  "window": [
+   "2026-01-01",
+   "2026-06-18"
+  ],
+  "quality_generated_at_utc": "2026-09-30T03:11:03.695551+00:00",
+  "quality_checks": 391,
+  "quality_errors": 0,
+  "quality_warnings": 7,
+  "memory_model": "DuckDB projected scans, one window function, grouped SQL with disk spill; Python holds aggregates only",
+  "database": "latam_bank.duckdb",
+  "quality_run": "pr23-check/quality_results.json"
+ }
+}

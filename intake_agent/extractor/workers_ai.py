@@ -8,7 +8,7 @@ no transactions, no customer identifiers. It returns the five extraction fields 
 Invariants:
 - Credentials come from ``CLOUDFLARE_ACCOUNT_ID`` / ``CLOUDFLARE_API_TOKEN`` and are never logged.
 - The message text is never printed, logged or put in an exception message.
-- Temperature 0; a 10 s overall deadline raises ``TimeoutError``; one retry on invalid JSON or
+- Temperature 0, ``reasoning_effort: "low"`` (verified on the Vertex AI host only, ADR-006 amendments 8-9; not checked on Workers AI); a 10 s overall deadline raises ``TimeoutError``; one retry on invalid JSON or
   schema-invalid output, then ``ValueError``.
 - A service or network failure (HTTP 429/5xx, connection reset, truncated or non-JSON body) raises
   ``ConnectionError``, which the harness turns into a technical handoff. Any other HTTP 4xx is a
@@ -43,6 +43,8 @@ TIMEOUT_S = 10.0
 TEMPERATURE = 0
 # gpt-oss is a reasoning model: its reasoning tokens count against max_tokens (the documented default is 256).
 MAX_TOKENS = 2048
+# The lowest documented gpt-oss reasoning level, sent explicitly (ADR-006 amendments 2 and 8; sources in DEV_LOG.md).
+REASONING_EFFORT = "low"
 ATTEMPTS = 2  # the first call plus one retry
 MAX_IN_FLIGHT = 4  # HTTP workers alive at once, including abandoned ones still unwinding
 WORKER_NAME = "workers-ai-call"
@@ -73,7 +75,7 @@ def build_body(message: str, session_language, as_of, vocabulary: dict) -> dict:
     user = {"message": message, "session_language": session_language, "as_of": as_of, "vocabulary": vocabulary}
     return {"messages": [{"role": "system", "content": PROMPT_PATH.read_text(encoding="utf-8")},
                          {"role": "user", "content": json.dumps(user, ensure_ascii=False)}],
-            "temperature": TEMPERATURE, "max_tokens": MAX_TOKENS}
+            "temperature": TEMPERATURE, "max_tokens": MAX_TOKENS, "reasoning_effort": REASONING_EFFORT}
 
 
 def _set_read_timeout(response, seconds: float) -> None:

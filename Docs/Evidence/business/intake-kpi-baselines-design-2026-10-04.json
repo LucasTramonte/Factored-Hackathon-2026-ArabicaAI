@@ -1,0 +1,1609 @@
+{
+ "ce3_like_history": {
+  "fraud_transactions": {
+   "without_history": {
+    "fraud": 784,
+    "transactions": 775972
+   },
+   "with_history": {
+    "fraud": 28,
+    "transactions": 24036
+   }
+  },
+  "without_vs_with_history": {
+   "rr": 0.8673096451933834,
+   "ci95": [
+    0.5950545879107004,
+    1.2641294360684079
+   ]
+  },
+  "by_year": [
+   {
+    "yr": 2023,
+    "ce3_like_history": false,
+    "transactions": 171439,
+    "fraud": 186
+   },
+   {
+    "yr": 2023,
+    "ce3_like_history": true,
+    "transactions": 23,
+    "fraud": 0
+   },
+   {
+    "yr": 2024,
+    "ce3_like_history": false,
+    "transactions": 309770,
+    "fraud": 316
+   },
+   {
+    "yr": 2024,
+    "ce3_like_history": true,
+    "transactions": 4625,
+    "fraud": 6
+   },
+   {
+    "yr": 2025,
+    "ce3_like_history": false,
+    "transactions": 294763,
+    "fraud": 282
+   },
+   {
+    "yr": 2025,
+    "ce3_like_history": true,
+    "transactions": 19388,
+    "fraud": 22
+   }
+  ]
+ },
+ "weekly": [
+  {
+   "week": "2023-06-12",
+   "complaints": 13,
+   "rejected": 1,
+   "escalated": 1,
+   "mistyped": 2,
+   "assigned": 10
+  },
+  {
+   "week": "2023-06-19",
+   "complaints": 83,
+   "rejected": 0,
+   "escalated": 7,
+   "mistyped": 12,
+   "assigned": 52
+  },
+  {
+   "week": "2023-06-26",
+   "complaints": 71,
+   "rejected": 1,
+   "escalated": 2,
+   "mistyped": 11,
+   "assigned": 36
+  },
+  {
+   "week": "2023-07-03",
+   "complaints": 80,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 12,
+   "assigned": 62
+  },
+  {
+   "week": "2023-07-10",
+   "complaints": 78,
+   "rejected": 1,
+   "escalated": 4,
+   "mistyped": 7,
+   "assigned": 45
+  },
+  {
+   "week": "2023-07-17",
+   "complaints": 81,
+   "rejected": 1,
+   "escalated": 1,
+   "mistyped": 13,
+   "assigned": 52
+  },
+  {
+   "week": "2023-07-24",
+   "complaints": 84,
+   "rejected": 1,
+   "escalated": 2,
+   "mistyped": 9,
+   "assigned": 58
+  },
+  {
+   "week": "2023-07-31",
+   "complaints": 81,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 10,
+   "assigned": 60
+  },
+  {
+   "week": "2023-08-07",
+   "complaints": 97,
+   "rejected": 1,
+   "escalated": 4,
+   "mistyped": 16,
+   "assigned": 67
+  },
+  {
+   "week": "2023-08-14",
+   "complaints": 83,
+   "rejected": 2,
+   "escalated": 2,
+   "mistyped": 6,
+   "assigned": 49
+  },
+  {
+   "week": "2023-08-21",
+   "complaints": 83,
+   "rejected": 1,
+   "escalated": 1,
+   "mistyped": 8,
+   "assigned": 59
+  },
+  {
+   "week": "2023-08-28",
+   "complaints": 74,
+   "rejected": 0,
+   "escalated": 5,
+   "mistyped": 8,
+   "assigned": 46
+  },
+  {
+   "week": "2023-09-04",
+   "complaints": 86,
+   "rejected": 2,
+   "escalated": 2,
+   "mistyped": 12,
+   "assigned": 55
+  },
+  {
+   "week": "2023-09-11",
+   "complaints": 78,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 12,
+   "assigned": 50
+  },
+  {
+   "week": "2023-09-18",
+   "complaints": 79,
+   "rejected": 0,
+   "escalated": 3,
+   "mistyped": 9,
+   "assigned": 49
+  },
+  {
+   "week": "2023-09-25",
+   "complaints": 61,
+   "rejected": 0,
+   "escalated": 6,
+   "mistyped": 9,
+   "assigned": 37
+  },
+  {
+   "week": "2023-10-02",
+   "complaints": 69,
+   "rejected": 0,
+   "escalated": 6,
+   "mistyped": 11,
+   "assigned": 42
+  },
+  {
+   "week": "2023-10-09",
+   "complaints": 85,
+   "rejected": 3,
+   "escalated": 1,
+   "mistyped": 15,
+   "assigned": 50
+  },
+  {
+   "week": "2023-10-16",
+   "complaints": 79,
+   "rejected": 0,
+   "escalated": 7,
+   "mistyped": 14,
+   "assigned": 56
+  },
+  {
+   "week": "2023-10-23",
+   "complaints": 71,
+   "rejected": 0,
+   "escalated": 9,
+   "mistyped": 8,
+   "assigned": 47
+  },
+  {
+   "week": "2023-10-30",
+   "complaints": 76,
+   "rejected": 1,
+   "escalated": 3,
+   "mistyped": 11,
+   "assigned": 50
+  },
+  {
+   "week": "2023-11-06",
+   "complaints": 63,
+   "rejected": 2,
+   "escalated": 2,
+   "mistyped": 8,
+   "assigned": 43
+  },
+  {
+   "week": "2023-11-13",
+   "complaints": 82,
+   "rejected": 0,
+   "escalated": 5,
+   "mistyped": 14,
+   "assigned": 49
+  },
+  {
+   "week": "2023-11-20",
+   "complaints": 67,
+   "rejected": 0,
+   "escalated": 6,
+   "mistyped": 5,
+   "assigned": 44
+  },
+  {
+   "week": "2023-11-27",
+   "complaints": 79,
+   "rejected": 0,
+   "escalated": 8,
+   "mistyped": 15,
+   "assigned": 49
+  },
+  {
+   "week": "2023-12-04",
+   "complaints": 64,
+   "rejected": 1,
+   "escalated": 0,
+   "mistyped": 15,
+   "assigned": 41
+  },
+  {
+   "week": "2023-12-11",
+   "complaints": 89,
+   "rejected": 2,
+   "escalated": 1,
+   "mistyped": 13,
+   "assigned": 44
+  },
+  {
+   "week": "2023-12-18",
+   "complaints": 76,
+   "rejected": 1,
+   "escalated": 3,
+   "mistyped": 13,
+   "assigned": 42
+  },
+  {
+   "week": "2023-12-25",
+   "complaints": 87,
+   "rejected": 1,
+   "escalated": 4,
+   "mistyped": 13,
+   "assigned": 61
+  },
+  {
+   "week": "2024-01-01",
+   "complaints": 77,
+   "rejected": 1,
+   "escalated": 0,
+   "mistyped": 10,
+   "assigned": 47
+  },
+  {
+   "week": "2024-01-08",
+   "complaints": 81,
+   "rejected": 0,
+   "escalated": 7,
+   "mistyped": 8,
+   "assigned": 47
+  },
+  {
+   "week": "2024-01-15",
+   "complaints": 67,
+   "rejected": 1,
+   "escalated": 3,
+   "mistyped": 8,
+   "assigned": 49
+  },
+  {
+   "week": "2024-01-22",
+   "complaints": 79,
+   "rejected": 0,
+   "escalated": 3,
+   "mistyped": 14,
+   "assigned": 49
+  },
+  {
+   "week": "2024-01-29",
+   "complaints": 77,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 11,
+   "assigned": 45
+  },
+  {
+   "week": "2024-02-05",
+   "complaints": 77,
+   "rejected": 1,
+   "escalated": 4,
+   "mistyped": 11,
+   "assigned": 51
+  },
+  {
+   "week": "2024-02-12",
+   "complaints": 83,
+   "rejected": 0,
+   "escalated": 3,
+   "mistyped": 17,
+   "assigned": 58
+  },
+  {
+   "week": "2024-02-19",
+   "complaints": 72,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 8,
+   "assigned": 51
+  },
+  {
+   "week": "2024-02-26",
+   "complaints": 86,
+   "rejected": 2,
+   "escalated": 5,
+   "mistyped": 11,
+   "assigned": 69
+  },
+  {
+   "week": "2024-03-04",
+   "complaints": 75,
+   "rejected": 2,
+   "escalated": 2,
+   "mistyped": 10,
+   "assigned": 43
+  },
+  {
+   "week": "2024-03-11",
+   "complaints": 75,
+   "rejected": 1,
+   "escalated": 7,
+   "mistyped": 6,
+   "assigned": 54
+  },
+  {
+   "week": "2024-03-18",
+   "complaints": 78,
+   "rejected": 0,
+   "escalated": 2,
+   "mistyped": 13,
+   "assigned": 49
+  },
+  {
+   "week": "2024-03-25",
+   "complaints": 69,
+   "rejected": 1,
+   "escalated": 5,
+   "mistyped": 6,
+   "assigned": 41
+  },
+  {
+   "week": "2024-04-01",
+   "complaints": 97,
+   "rejected": 1,
+   "escalated": 5,
+   "mistyped": 19,
+   "assigned": 72
+  },
+  {
+   "week": "2024-04-08",
+   "complaints": 90,
+   "rejected": 1,
+   "escalated": 6,
+   "mistyped": 18,
+   "assigned": 64
+  },
+  {
+   "week": "2024-04-15",
+   "complaints": 81,
+   "rejected": 2,
+   "escalated": 7,
+   "mistyped": 8,
+   "assigned": 55
+  },
+  {
+   "week": "2024-04-22",
+   "complaints": 91,
+   "rejected": 0,
+   "escalated": 3,
+   "mistyped": 16,
+   "assigned": 54
+  },
+  {
+   "week": "2024-04-29",
+   "complaints": 80,
+   "rejected": 0,
+   "escalated": 6,
+   "mistyped": 16,
+   "assigned": 51
+  },
+  {
+   "week": "2024-05-06",
+   "complaints": 50,
+   "rejected": 0,
+   "escalated": 2,
+   "mistyped": 7,
+   "assigned": 30
+  },
+  {
+   "week": "2024-05-13",
+   "complaints": 93,
+   "rejected": 2,
+   "escalated": 1,
+   "mistyped": 11,
+   "assigned": 55
+  },
+  {
+   "week": "2024-05-20",
+   "complaints": 62,
+   "rejected": 2,
+   "escalated": 5,
+   "mistyped": 14,
+   "assigned": 37
+  },
+  {
+   "week": "2024-05-27",
+   "complaints": 73,
+   "rejected": 3,
+   "escalated": 6,
+   "mistyped": 12,
+   "assigned": 53
+  },
+  {
+   "week": "2024-06-03",
+   "complaints": 73,
+   "rejected": 1,
+   "escalated": 1,
+   "mistyped": 8,
+   "assigned": 53
+  },
+  {
+   "week": "2024-06-10",
+   "complaints": 71,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 10,
+   "assigned": 47
+  },
+  {
+   "week": "2024-06-17",
+   "complaints": 78,
+   "rejected": 2,
+   "escalated": 2,
+   "mistyped": 9,
+   "assigned": 56
+  },
+  {
+   "week": "2024-06-24",
+   "complaints": 73,
+   "rejected": 0,
+   "escalated": 3,
+   "mistyped": 15,
+   "assigned": 48
+  },
+  {
+   "week": "2024-07-01",
+   "complaints": 88,
+   "rejected": 0,
+   "escalated": 6,
+   "mistyped": 16,
+   "assigned": 56
+  },
+  {
+   "week": "2024-07-08",
+   "complaints": 65,
+   "rejected": 1,
+   "escalated": 8,
+   "mistyped": 9,
+   "assigned": 48
+  },
+  {
+   "week": "2024-07-15",
+   "complaints": 85,
+   "rejected": 1,
+   "escalated": 4,
+   "mistyped": 9,
+   "assigned": 59
+  },
+  {
+   "week": "2024-07-22",
+   "complaints": 87,
+   "rejected": 1,
+   "escalated": 2,
+   "mistyped": 15,
+   "assigned": 57
+  },
+  {
+   "week": "2024-07-29",
+   "complaints": 81,
+   "rejected": 1,
+   "escalated": 2,
+   "mistyped": 13,
+   "assigned": 57
+  },
+  {
+   "week": "2024-08-05",
+   "complaints": 73,
+   "rejected": 1,
+   "escalated": 1,
+   "mistyped": 11,
+   "assigned": 53
+  },
+  {
+   "week": "2024-08-12",
+   "complaints": 76,
+   "rejected": 3,
+   "escalated": 5,
+   "mistyped": 15,
+   "assigned": 49
+  },
+  {
+   "week": "2024-08-19",
+   "complaints": 63,
+   "rejected": 0,
+   "escalated": 3,
+   "mistyped": 8,
+   "assigned": 46
+  },
+  {
+   "week": "2024-08-26",
+   "complaints": 79,
+   "rejected": 1,
+   "escalated": 6,
+   "mistyped": 13,
+   "assigned": 54
+  },
+  {
+   "week": "2024-09-02",
+   "complaints": 76,
+   "rejected": 1,
+   "escalated": 5,
+   "mistyped": 9,
+   "assigned": 54
+  },
+  {
+   "week": "2024-09-09",
+   "complaints": 73,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 7,
+   "assigned": 50
+  },
+  {
+   "week": "2024-09-16",
+   "complaints": 91,
+   "rejected": 2,
+   "escalated": 2,
+   "mistyped": 13,
+   "assigned": 55
+  },
+  {
+   "week": "2024-09-23",
+   "complaints": 84,
+   "rejected": 0,
+   "escalated": 6,
+   "mistyped": 9,
+   "assigned": 54
+  },
+  {
+   "week": "2024-09-30",
+   "complaints": 75,
+   "rejected": 3,
+   "escalated": 5,
+   "mistyped": 10,
+   "assigned": 53
+  },
+  {
+   "week": "2024-10-07",
+   "complaints": 85,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 14,
+   "assigned": 58
+  },
+  {
+   "week": "2024-10-14",
+   "complaints": 80,
+   "rejected": 1,
+   "escalated": 3,
+   "mistyped": 10,
+   "assigned": 52
+  },
+  {
+   "week": "2024-10-21",
+   "complaints": 72,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 11,
+   "assigned": 52
+  },
+  {
+   "week": "2024-10-28",
+   "complaints": 86,
+   "rejected": 0,
+   "escalated": 6,
+   "mistyped": 9,
+   "assigned": 64
+  },
+  {
+   "week": "2024-11-04",
+   "complaints": 76,
+   "rejected": 1,
+   "escalated": 3,
+   "mistyped": 12,
+   "assigned": 52
+  },
+  {
+   "week": "2024-11-11",
+   "complaints": 69,
+   "rejected": 0,
+   "escalated": 2,
+   "mistyped": 12,
+   "assigned": 55
+  },
+  {
+   "week": "2024-11-18",
+   "complaints": 88,
+   "rejected": 1,
+   "escalated": 4,
+   "mistyped": 11,
+   "assigned": 60
+  },
+  {
+   "week": "2024-11-25",
+   "complaints": 77,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 11,
+   "assigned": 47
+  },
+  {
+   "week": "2024-12-02",
+   "complaints": 75,
+   "rejected": 2,
+   "escalated": 3,
+   "mistyped": 11,
+   "assigned": 53
+  },
+  {
+   "week": "2024-12-09",
+   "complaints": 74,
+   "rejected": 3,
+   "escalated": 1,
+   "mistyped": 14,
+   "assigned": 37
+  },
+  {
+   "week": "2024-12-16",
+   "complaints": 66,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 10,
+   "assigned": 39
+  },
+  {
+   "week": "2024-12-23",
+   "complaints": 77,
+   "rejected": 0,
+   "escalated": 5,
+   "mistyped": 9,
+   "assigned": 53
+  },
+  {
+   "week": "2024-12-30",
+   "complaints": 90,
+   "rejected": 1,
+   "escalated": 3,
+   "mistyped": 18,
+   "assigned": 62
+  },
+  {
+   "week": "2025-01-06",
+   "complaints": 88,
+   "rejected": 1,
+   "escalated": 5,
+   "mistyped": 18,
+   "assigned": 47
+  },
+  {
+   "week": "2025-01-13",
+   "complaints": 73,
+   "rejected": 0,
+   "escalated": 3,
+   "mistyped": 10,
+   "assigned": 52
+  },
+  {
+   "week": "2025-01-20",
+   "complaints": 74,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 7,
+   "assigned": 51
+  },
+  {
+   "week": "2025-01-27",
+   "complaints": 81,
+   "rejected": 0,
+   "escalated": 7,
+   "mistyped": 13,
+   "assigned": 53
+  },
+  {
+   "week": "2025-02-03",
+   "complaints": 74,
+   "rejected": 2,
+   "escalated": 3,
+   "mistyped": 10,
+   "assigned": 51
+  },
+  {
+   "week": "2025-02-10",
+   "complaints": 83,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 15,
+   "assigned": 67
+  },
+  {
+   "week": "2025-02-17",
+   "complaints": 81,
+   "rejected": 0,
+   "escalated": 1,
+   "mistyped": 9,
+   "assigned": 54
+  },
+  {
+   "week": "2025-02-24",
+   "complaints": 78,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 10,
+   "assigned": 56
+  },
+  {
+   "week": "2025-03-03",
+   "complaints": 82,
+   "rejected": 1,
+   "escalated": 3,
+   "mistyped": 17,
+   "assigned": 63
+  },
+  {
+   "week": "2025-03-10",
+   "complaints": 76,
+   "rejected": 1,
+   "escalated": 3,
+   "mistyped": 12,
+   "assigned": 51
+  },
+  {
+   "week": "2025-03-17",
+   "complaints": 76,
+   "rejected": 1,
+   "escalated": 8,
+   "mistyped": 10,
+   "assigned": 52
+  },
+  {
+   "week": "2025-03-24",
+   "complaints": 72,
+   "rejected": 1,
+   "escalated": 4,
+   "mistyped": 12,
+   "assigned": 43
+  },
+  {
+   "week": "2025-03-31",
+   "complaints": 77,
+   "rejected": 0,
+   "escalated": 6,
+   "mistyped": 12,
+   "assigned": 46
+  },
+  {
+   "week": "2025-04-07",
+   "complaints": 82,
+   "rejected": 0,
+   "escalated": 2,
+   "mistyped": 11,
+   "assigned": 54
+  },
+  {
+   "week": "2025-04-14",
+   "complaints": 90,
+   "rejected": 1,
+   "escalated": 5,
+   "mistyped": 13,
+   "assigned": 55
+  },
+  {
+   "week": "2025-04-21",
+   "complaints": 58,
+   "rejected": 1,
+   "escalated": 3,
+   "mistyped": 9,
+   "assigned": 33
+  },
+  {
+   "week": "2025-04-28",
+   "complaints": 81,
+   "rejected": 1,
+   "escalated": 3,
+   "mistyped": 10,
+   "assigned": 55
+  },
+  {
+   "week": "2025-05-05",
+   "complaints": 87,
+   "rejected": 0,
+   "escalated": 2,
+   "mistyped": 11,
+   "assigned": 59
+  },
+  {
+   "week": "2025-05-12",
+   "complaints": 79,
+   "rejected": 0,
+   "escalated": 2,
+   "mistyped": 9,
+   "assigned": 48
+  },
+  {
+   "week": "2025-05-19",
+   "complaints": 69,
+   "rejected": 0,
+   "escalated": 3,
+   "mistyped": 10,
+   "assigned": 47
+  },
+  {
+   "week": "2025-05-26",
+   "complaints": 73,
+   "rejected": 1,
+   "escalated": 4,
+   "mistyped": 9,
+   "assigned": 50
+  },
+  {
+   "week": "2025-06-02",
+   "complaints": 65,
+   "rejected": 1,
+   "escalated": 1,
+   "mistyped": 9,
+   "assigned": 44
+  },
+  {
+   "week": "2025-06-09",
+   "complaints": 79,
+   "rejected": 1,
+   "escalated": 4,
+   "mistyped": 8,
+   "assigned": 55
+  },
+  {
+   "week": "2025-06-16",
+   "complaints": 83,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 12,
+   "assigned": 52
+  },
+  {
+   "week": "2025-06-23",
+   "complaints": 79,
+   "rejected": 1,
+   "escalated": 5,
+   "mistyped": 16,
+   "assigned": 55
+  },
+  {
+   "week": "2025-06-30",
+   "complaints": 83,
+   "rejected": 1,
+   "escalated": 2,
+   "mistyped": 12,
+   "assigned": 56
+  },
+  {
+   "week": "2025-07-07",
+   "complaints": 76,
+   "rejected": 1,
+   "escalated": 1,
+   "mistyped": 9,
+   "assigned": 53
+  },
+  {
+   "week": "2025-07-14",
+   "complaints": 71,
+   "rejected": 1,
+   "escalated": 9,
+   "mistyped": 13,
+   "assigned": 50
+  },
+  {
+   "week": "2025-07-21",
+   "complaints": 82,
+   "rejected": 1,
+   "escalated": 7,
+   "mistyped": 19,
+   "assigned": 51
+  },
+  {
+   "week": "2025-07-28",
+   "complaints": 72,
+   "rejected": 1,
+   "escalated": 6,
+   "mistyped": 13,
+   "assigned": 46
+  },
+  {
+   "week": "2025-08-04",
+   "complaints": 83,
+   "rejected": 1,
+   "escalated": 5,
+   "mistyped": 13,
+   "assigned": 54
+  },
+  {
+   "week": "2025-08-11",
+   "complaints": 70,
+   "rejected": 0,
+   "escalated": 3,
+   "mistyped": 7,
+   "assigned": 50
+  },
+  {
+   "week": "2025-08-18",
+   "complaints": 93,
+   "rejected": 1,
+   "escalated": 3,
+   "mistyped": 16,
+   "assigned": 54
+  },
+  {
+   "week": "2025-08-25",
+   "complaints": 104,
+   "rejected": 2,
+   "escalated": 6,
+   "mistyped": 16,
+   "assigned": 67
+  },
+  {
+   "week": "2025-09-01",
+   "complaints": 77,
+   "rejected": 0,
+   "escalated": 2,
+   "mistyped": 18,
+   "assigned": 52
+  },
+  {
+   "week": "2025-09-08",
+   "complaints": 72,
+   "rejected": 2,
+   "escalated": 4,
+   "mistyped": 7,
+   "assigned": 49
+  },
+  {
+   "week": "2025-09-15",
+   "complaints": 80,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 17,
+   "assigned": 51
+  },
+  {
+   "week": "2025-09-22",
+   "complaints": 75,
+   "rejected": 0,
+   "escalated": 2,
+   "mistyped": 9,
+   "assigned": 51
+  },
+  {
+   "week": "2025-09-29",
+   "complaints": 76,
+   "rejected": 0,
+   "escalated": 7,
+   "mistyped": 9,
+   "assigned": 54
+  },
+  {
+   "week": "2025-10-06",
+   "complaints": 82,
+   "rejected": 0,
+   "escalated": 1,
+   "mistyped": 9,
+   "assigned": 53
+  },
+  {
+   "week": "2025-10-13",
+   "complaints": 74,
+   "rejected": 1,
+   "escalated": 4,
+   "mistyped": 7,
+   "assigned": 44
+  },
+  {
+   "week": "2025-10-20",
+   "complaints": 97,
+   "rejected": 1,
+   "escalated": 6,
+   "mistyped": 15,
+   "assigned": 63
+  },
+  {
+   "week": "2025-10-27",
+   "complaints": 80,
+   "rejected": 0,
+   "escalated": 3,
+   "mistyped": 15,
+   "assigned": 50
+  },
+  {
+   "week": "2025-11-03",
+   "complaints": 85,
+   "rejected": 1,
+   "escalated": 7,
+   "mistyped": 16,
+   "assigned": 54
+  },
+  {
+   "week": "2025-11-10",
+   "complaints": 79,
+   "rejected": 2,
+   "escalated": 2,
+   "mistyped": 8,
+   "assigned": 45
+  },
+  {
+   "week": "2025-11-17",
+   "complaints": 65,
+   "rejected": 0,
+   "escalated": 4,
+   "mistyped": 12,
+   "assigned": 40
+  },
+  {
+   "week": "2025-11-24",
+   "complaints": 71,
+   "rejected": 2,
+   "escalated": 2,
+   "mistyped": 12,
+   "assigned": 51
+  },
+  {
+   "week": "2025-12-01",
+   "complaints": 84,
+   "rejected": 0,
+   "escalated": 3,
+   "mistyped": 14,
+   "assigned": 53
+  },
+  {
+   "week": "2025-12-08",
+   "complaints": 83,
+   "rejected": 1,
+   "escalated": 3,
+   "mistyped": 17,
+   "assigned": 57
+  },
+  {
+   "week": "2025-12-15",
+   "complaints": 89,
+   "rejected": 0,
+   "escalated": 5,
+   "mistyped": 12,
+   "assigned": 56
+  },
+  {
+   "week": "2025-12-22",
+   "complaints": 63,
+   "rejected": 0,
+   "escalated": 7,
+   "mistyped": 13,
+   "assigned": 40
+  },
+  {
+   "week": "2025-12-29",
+   "complaints": 46,
+   "rejected": 0,
+   "escalated": 1,
+   "mistyped": 4,
+   "assigned": 28
+  }
+ ],
+ "quarterly": [
+  {
+   "quarter": "2023-04-01",
+   "complaints": 153,
+   "rejected": 2,
+   "escalated": 9,
+   "mistyped": 23,
+   "digital": 39,
+   "assigned": 89
+  },
+  {
+   "quarter": "2023-07-01",
+   "complaints": 1057,
+   "rejected": 9,
+   "escalated": 43,
+   "mistyped": 132,
+   "digital": 295,
+   "assigned": 697
+  },
+  {
+   "quarter": "2023-10-01",
+   "complaints": 989,
+   "rejected": 11,
+   "escalated": 55,
+   "mistyped": 156,
+   "digital": 253,
+   "assigned": 619
+  },
+  {
+   "quarter": "2024-01-01",
+   "complaints": 996,
+   "rejected": 9,
+   "escalated": 49,
+   "mistyped": 133,
+   "digital": 226,
+   "assigned": 653
+  },
+  {
+   "quarter": "2024-04-01",
+   "complaints": 1012,
+   "rejected": 14,
+   "escalated": 51,
+   "mistyped": 163,
+   "digital": 264,
+   "assigned": 675
+  },
+  {
+   "quarter": "2024-07-01",
+   "complaints": 1031,
+   "rejected": 12,
+   "escalated": 54,
+   "mistyped": 149,
+   "digital": 277,
+   "assigned": 699
+  },
+  {
+   "quarter": "2024-10-01",
+   "complaints": 1014,
+   "rejected": 12,
+   "escalated": 48,
+   "mistyped": 146,
+   "digital": 266,
+   "assigned": 679
+  },
+  {
+   "quarter": "2025-01-01",
+   "complaints": 1019,
+   "rejected": 7,
+   "escalated": 55,
+   "mistyped": 157,
+   "digital": 255,
+   "assigned": 703
+  },
+  {
+   "quarter": "2025-04-01",
+   "complaints": 998,
+   "rejected": 7,
+   "escalated": 41,
+   "mistyped": 140,
+   "digital": 237,
+   "assigned": 649
+  },
+  {
+   "quarter": "2025-07-01",
+   "complaints": 1052,
+   "rejected": 11,
+   "escalated": 56,
+   "mistyped": 172,
+   "digital": 256,
+   "assigned": 692
+  },
+  {
+   "quarter": "2025-10-01",
+   "complaints": 1049,
+   "rejected": 8,
+   "escalated": 53,
+   "mistyped": 159,
+   "digital": 259,
+   "assigned": 672
+  }
+ ],
+ "window": "design",
+ "quarters": 10,
+ "complaints_in_trend_quarters": 10217,
+ "complaints_in_window": 10370,
+ "rates": {
+  "rejected": {
+   "numerator": 100,
+   "denominator": 10217,
+   "rate": 0.00978760888714887,
+   "ci95": [
+    0.008054385604576495,
+    0.011889334098505492
+   ],
+   "first_quarter": 0.008514664143803218,
+   "last_quarter": 0.0076263107721639654,
+   "trend": {
+    "z": -0.761274574755439,
+    "p": 0.4464930835183312
+   }
+  },
+  "escalated": {
+   "numerator": 505,
+   "denominator": 10217,
+   "rate": 0.049427424880101795,
+   "ci95": [
+    0.04539104335375549,
+    0.0538025103356002
+   ],
+   "first_quarter": 0.04068117313150426,
+   "last_quarter": 0.05052430886558627,
+   "trend": {
+    "z": 0.3482880646823102,
+    "p": 0.7276238564067014
+   }
+  },
+  "mistyped": {
+   "numerator": 1507,
+   "denominator": 10217,
+   "rate": 0.14749926592933346,
+   "ci95": [
+    0.14075575948630378,
+    0.15450775384316603
+   ],
+   "first_quarter": 0.12488174077578051,
+   "last_quarter": 0.1515729265967588,
+   "trend": {
+    "z": 1.5097242613279767,
+    "p": 0.13111379793325006
+   }
+  },
+  "digital": {
+   "numerator": 2588,
+   "denominator": 10217,
+   "rate": 0.25330331799941275,
+   "ci95": [
+    0.24496402274516016,
+    0.2618280598168081
+   ],
+   "first_quarter": 0.27909176915799433,
+   "last_quarter": 0.2469018112488084,
+   "trend": {
+    "z": -1.5086987667246203,
+    "p": 0.1313757808560164
+   }
+  },
+  "assigned": {
+   "numerator": 6738,
+   "denominator": 10217,
+   "rate": 0.6594890868160909,
+   "ci95": [
+    0.65024176912161,
+    0.6686165135466196
+   ],
+   "first_quarter": 0.6594134342478714,
+   "last_quarter": 0.6406101048617732,
+   "trend": {
+    "z": 0.279858638084028,
+    "p": 0.779585961675338
+   }
+  }
+ },
+ "repeat_reporters": {
+  "customers_by_count": {
+   "1": 9663,
+   "2": 343,
+   "3": 7
+  },
+  "poisson": {
+   "lambda": 0.06913333333333334,
+   "observed_0_1_2plus": [
+    139987,
+    9663,
+    350
+   ],
+   "expected_0_1_2plus": [
+    139980.3,
+    9677.3,
+    342.4
+   ],
+   "chi2": 0.1921420801283752,
+   "df": 1,
+   "p": 0.661139730806545
+  },
+  "gap_and_flag": [
+   {
+    "part": "gap",
+    "n": 357,
+    "median_days": 280.0,
+    "p10_days": 51.400000000000006,
+    "flag_true_history_single": null,
+    "flag_false_history_multiple": null
+   },
+   {
+    "part": "flag",
+    "n": 10370,
+    "median_days": null,
+    "p10_days": null,
+    "flag_true_history_single": 1055,
+    "flag_false_history_multiple": 2858
+   }
+  ]
+ },
+ "claimed_value": [
+  {
+   "outcome": "open_in_process_escalated",
+   "currency": "(none)",
+   "complaints": 5178,
+   "with_amount": 109,
+   "median_amount": 2889.26,
+   "p25": 1697.47,
+   "p75": 4104.81
+  },
+  {
+   "outcome": "open_in_process_escalated",
+   "currency": "USD",
+   "complaints": 651,
+   "with_amount": 622,
+   "median_amount": 2548.07,
+   "p25": 1455.21,
+   "p75": 3870.48
+  },
+  {
+   "outcome": "open_in_process_escalated",
+   "currency": "ARS",
+   "complaints": 650,
+   "with_amount": 620,
+   "median_amount": 2524.06,
+   "p25": 1393.51,
+   "p75": 3757.24
+  },
+  {
+   "outcome": "open_in_process_escalated",
+   "currency": "MXN",
+   "complaints": 632,
+   "with_amount": 608,
+   "median_amount": 2756.99,
+   "p25": 1455.34,
+   "p75": 3835.34
+  },
+  {
+   "outcome": "open_in_process_escalated",
+   "currency": "COP",
+   "complaints": 622,
+   "with_amount": 598,
+   "median_amount": 2410.18,
+   "p25": 1212.37,
+   "p75": 3698.04
+  },
+  {
+   "outcome": "rejected",
+   "currency": "(none)",
+   "complaints": 63,
+   "with_amount": 2,
+   "median_amount": 2910.73,
+   "p25": 2724.86,
+   "p75": 3096.59
+  },
+  {
+   "outcome": "rejected",
+   "currency": "MXN",
+   "complaints": 13,
+   "with_amount": 13,
+   "median_amount": 2225.73,
+   "p25": 1743.64,
+   "p75": 3719.89
+  },
+  {
+   "outcome": "rejected",
+   "currency": "COP",
+   "complaints": 11,
+   "with_amount": 11,
+   "median_amount": 2148.31,
+   "p25": 1665.65,
+   "p75": 3154.67
+  },
+  {
+   "outcome": "rejected",
+   "currency": "ARS",
+   "complaints": 8,
+   "with_amount": 8,
+   "median_amount": 3350.25,
+   "p25": 1537.28,
+   "p75": 4480.51
+  },
+  {
+   "outcome": "rejected",
+   "currency": "USD",
+   "complaints": 7,
+   "with_amount": 7,
+   "median_amount": 4028.67,
+   "p25": 2357.22,
+   "p75": 4310.03
+  },
+  {
+   "outcome": "resolved_compensated",
+   "currency": "(none)",
+   "complaints": 511,
+   "with_amount": 13,
+   "median_amount": 3313.62,
+   "p25": 2019.31,
+   "p75": 4040.03
+  },
+  {
+   "outcome": "resolved_compensated",
+   "currency": "COP",
+   "complaints": 65,
+   "with_amount": 62,
+   "median_amount": 2266.94,
+   "p25": 1452.56,
+   "p75": 3378.3
+  },
+  {
+   "outcome": "resolved_compensated",
+   "currency": "MXN",
+   "complaints": 65,
+   "with_amount": 60,
+   "median_amount": 2621.09,
+   "p25": 1613.42,
+   "p75": 3815.44
+  },
+  {
+   "outcome": "resolved_compensated",
+   "currency": "USD",
+   "complaints": 58,
+   "with_amount": 56,
+   "median_amount": 2851.94,
+   "p25": 1435.84,
+   "p75": 3702.01
+  },
+  {
+   "outcome": "resolved_compensated",
+   "currency": "ARS",
+   "complaints": 55,
+   "with_amount": 53,
+   "median_amount": 2155.61,
+   "p25": 1101.64,
+   "p75": 3688.81
+  },
+  {
+   "outcome": "resolved_no_compensation",
+   "currency": "(none)",
+   "complaints": 1177,
+   "with_amount": 31,
+   "median_amount": 2080.12,
+   "p25": 1494.79,
+   "p75": 3620.87
+  },
+  {
+   "outcome": "resolved_no_compensation",
+   "currency": "MXN",
+   "complaints": 165,
+   "with_amount": 160,
+   "median_amount": 2621.66,
+   "p25": 1074.77,
+   "p75": 3784.66
+  },
+  {
+   "outcome": "resolved_no_compensation",
+   "currency": "USD",
+   "complaints": 155,
+   "with_amount": 150,
+   "median_amount": 2416.65,
+   "p25": 1185.31,
+   "p75": 3936.73
+  },
+  {
+   "outcome": "resolved_no_compensation",
+   "currency": "COP",
+   "complaints": 145,
+   "with_amount": 139,
+   "median_amount": 2204.9,
+   "p25": 1121.99,
+   "p75": 3405.83
+  },
+  {
+   "outcome": "resolved_no_compensation",
+   "currency": "ARS",
+   "complaints": 139,
+   "with_amount": 129,
+   "median_amount": 2524.63,
+   "p25": 1455.04,
+   "p75": 3613.12
+  }
+ ],
+ "familiar_merchant": {
+  "fraud_transactions": {
+   "first_time": {
+    "fraud": 638,
+    "transactions": 625310
+   },
+   "seen_before": {
+    "fraud": 174,
+    "transactions": 174698
+   }
+  },
+  "first_time_vs_seen_before": {
+   "rr": 1.0243868374619522,
+   "ci95": [
+    0.8663634028750522,
+    1.2112335185015208
+   ]
+  },
+  "by_year": [
+   {
+    "yr": 2023,
+    "familiarity": "first_time",
+    "transactions": 161941,
+    "fraud": 178
+   },
+   {
+    "yr": 2023,
+    "familiarity": "seen_before",
+    "transactions": 9521,
+    "fraud": 8
+   },
+   {
+    "yr": 2024,
+    "familiarity": "first_time",
+    "transactions": 253983,
+    "fraud": 272
+   },
+   {
+    "yr": 2024,
+    "familiarity": "seen_before",
+    "transactions": 60412,
+    "fraud": 50
+   },
+   {
+    "yr": 2025,
+    "familiarity": "first_time",
+    "transactions": 209386,
+    "fraud": 188
+   },
+   {
+    "yr": 2025,
+    "familiarity": "seen_before",
+    "transactions": 104765,
+    "fraud": 116
+   }
+  ]
+ },
+ "manifest": {
+  "generated_at_utc": "2026-10-04T11:00:56.878406+00:00",
+  "window": [
+   "2023-06-17",
+   "2026-01-01"
+  ],
+  "quality_generated_at_utc": "2026-09-30T03:11:03.695551+00:00",
+  "quality_checks": 391,
+  "quality_errors": 0,
+  "quality_warnings": 7,
+  "memory_model": "DuckDB projected scans, one window function, grouped SQL with disk spill; Python holds aggregates only",
+  "database": "latam_bank.duckdb",
+  "quality_run": "pr23-check/quality_results.json"
+ }
+}

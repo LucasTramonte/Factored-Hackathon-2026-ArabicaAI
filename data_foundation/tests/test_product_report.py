@@ -152,7 +152,7 @@ def test_country_and_channel_cuts_count_the_window_and_suppress_small_cells(repo
         for r in rows:
             assert [r[k] for k in ('unresolved', 'sla_breached', 'closed_score_sum', 'first_response_h_p50')] == [None] * 4
     html = render(report, {'database': 'x', 'quality_run': 'y'})
-    assert 'By channel (PR-12)' in html and 'EVALUATION.md#9-live-service-as-measured' in html
+    assert 'By channel (PR-12)' in html and 'EVALUATION.md#11-other-measurements' in html
 
 
 def test_a_large_segment_still_hides_a_small_closed_case_mean():

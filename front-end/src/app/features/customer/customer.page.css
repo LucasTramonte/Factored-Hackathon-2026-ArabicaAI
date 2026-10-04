@@ -35,3 +35,18 @@
 
 /* The receipt's one feedback question: wraps on narrow screens, never a horizontal scroll. */
 .receipt-feedback { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
+
+/* Admins only (ADR-007, decision 10): the act-as panel takes the banner's full width under its text. */
+.act-as { flex-basis: 100%; }
+.act-as summary { cursor: pointer; font-weight: 600; }
+.act-as[open] summary { margin-bottom: 12px; }
+
+/* ADR-011: the proactive alert sits above the greeting; one at a time. */
+.proactive-alert { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.proactive-alert p { margin: 0; }
+.alert-note { margin: 0 0 12px; }
+/* AI suggestions on "I can't find it" (ADR-012): each charge with its own pick button, then "none of these". */
+.suggestions { margin-top: 12px; }
+.suggestion-list { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-direction: column; gap: 8px; }
+.suggestion-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.suggestion-charge { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }

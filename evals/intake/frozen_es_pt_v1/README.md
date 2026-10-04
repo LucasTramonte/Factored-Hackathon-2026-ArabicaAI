@@ -1,6 +1,8 @@
 # Frozen ES/PT evaluation set (`frozen_es_pt_v1`)
 
-This is the blind, held-out set on which the checklist baseline and the learned extractor are compared, once each. It has 60 single-turn decision points (30 per session language), 30 paired ES/PT situations, 4 synthetic customers and 32 approved card purchases. It is a coverage set, not a prevalence sample. The protocol is [ADR-005](../../../Docs/ADRs/ADR-005-evaluation-data-protocol.md), and the data facts behind the fixture come from the design window of the [data quality register](../../../Docs/deliverables/DATA_QUALITY.md).
+This is the blind, held-out set on which the checklist baseline and the learned extractor are compared, once each. It has 60 single-turn decision points (30 per session language), 30 paired ES/PT situations, 4 synthetic customers and 32 approved card purchases. It is a coverage set, not a prevalence sample. The protocol is [ADR-005](../../../Docs/ADRs/ADR-005-evaluation-data-protocol.md), and the data facts behind the fixture come from the design window of the [data quality register](../../../Docs/deliverables/DATA_ENGINEERING.md).
+
+**Status (2026-10-04):** used once, for extractor v1 (53/60 against the checklist's 23/60; [results](../../../Docs/deliverables/EVALUATION.md#1-the-result)). A later system version is reported here as post-exposure, or evaluated on a new held-out set.
 
 **Status (2026-09-29):**
 - Built and verified.
@@ -39,10 +41,10 @@ python evals/intake/frozen_es_pt_v1/continue_review.py show              # next 
 python evals/intake/frozen_es_pt_v1/continue_review.py roberto-message   # Spanish review message (local only)
 python evals/intake/frozen_es_pt_v1/continue_review.py roberto-answers "1b 2a ..."
 python evals/intake/frozen_es_pt_v1/rehearse_publication.py       # local: verify hashes, export, validate, draft manifest (no scoring)
-python -m evals.intake.run --cases evals/intake/frozen_es_pt_v1.json --output data_foundation/runs/frozen-v1/checklist.json   # after the freeze, once
-python -m evals.intake.run --cases evals/intake/frozen_es_pt_v1.json --repetitions 3 \
-  --system extractor-v1=intake_agent.extractor.workers_ai:extract \
-  --preregistration extractor-v1=evals/intake/preregistration/extractor-v1.md --output data_foundation/runs/frozen-v1/extractor-v1.json
+# once, after the extractor-v1 tag; scores the checklist and the always-handoff reference alongside the model
+python -m evals.intake.run --cases evals/intake/frozen_es_pt_v1.candidate.json --repetitions 3 \
+  --system extractor-v1=intake_agent.extractor.vertex:extract \
+  --preregistration extractor-v1=evals/intake/preregistration/extractor-v1.md --output data/frozen-run/results.json
 ```
 
 ## Known limitations

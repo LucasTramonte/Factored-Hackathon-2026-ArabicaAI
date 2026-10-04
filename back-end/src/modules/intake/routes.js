@@ -1,33 +1,32 @@
-/** Guided reports use authenticated ownership and durable start receipts; the extractor switch (off by default) only records a shadow call. */
+/**
+ * Guided reports use authenticated ownership and durable start receipts. An incomplete handoff with details may get AI
+ * suggestions after its response (``suggestions.js``, switch off by default); the customer reads and answers them here.
+ */
 import { SESSION_MS, requireSession, tokenHash } from '../../auth/session.js';
 import { fail, json, readJsonBody, readCookies } from '../../http.js';
 import { UUID, validateStartRequest, validateHandoffRequest } from './validation.js';
-import { APPROVED_EXTRACTOR, UNKNOWN, extractShadow, readyExtractor } from './ai-transport.js';
-import { UPDATE_EVERY_MS, createStore } from '../../store/d1.js';
+import { newArm, runSuggestion } from './suggestions.js';
+import { EMAIL_FAILURE_RETRY_MS, SHORT_REFERENCE, UPDATE_EVERY_MS, createStore } from '../../store/d1.js';
 import { deliver } from '../../notify/dispatch.js';
 import { STATUS_TEXT } from '../../notify/templates.js';
 import { urgencyOf } from './urgency.js';
 import URGENCY from '../../config/urgency.json' with { type: 'json' };
 
 /**
- * POST /intake/start: start or replay an explicit guided report; never return a case protocol. With the switch on,
- * a new start also makes one shadow extraction call (at most 10 s) and records only its usage; the response is
- * the guided one whatever the call returns. ``ctx`` is the Worker context, so the shadow call runs in waitUntil after
- * the response; ``approved`` is a test seam: the router never passes it. Optional previous_protocol links a new
- * episode to this customer's acknowledged closed report; ownership and closed state are rechecked in the write.
+ * POST /intake/start: start or replay an explicit guided report; never return a case protocol. Optional previous_protocol
+ * links a new episode to this customer's acknowledged closed report; ownership and closed state are rechecked in the write.
  */
-export async function startIntake(request, env, store, ctx, approved = APPROVED_EXTRACTOR) {
+export async function startIntake(request, env, store) {
   const current = await requireSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
   const body = await readJsonBody(request);
   if (body.error) return body.error;
   const checked = validateStartRequest(body.value);
   if (checked.error) return fail(checked.error.status, checked.error.detail);
-  const extractor = await readyExtractor(env, approved);
   let result;
   try {
     result = await store.startIntake({ ...checked.value, customerId: current.customer_id,
-      now: Date.now(), expiresAt: current.expires_at, ...(extractor && { producer: extractor.modelVersion }),
+      now: Date.now(), expiresAt: current.expires_at,
       ...(checked.value.previousProtocol && { sessionHash: await tokenHash(readCookies(request).demo_session) }) });
   } catch {
     return fail(503, 'Start not confirmed; retry with the same idempotency key');
@@ -42,38 +41,24 @@ export async function startIntake(request, env, store, ctx, approved = APPROVED_
   }
   const { episode, replayed } = result;
   if (!episode) return fail(503, 'Start not confirmed; retry with the same idempotency key');
-  if (extractor && !replayed) await inShadow(ctx, async () => {
-    const { usage } = await extractShadow(env, extractor, checked.value);
-    // The start already recorded one call with unknown usage; a failed write leaves it.
-    await store.recordIntakeExtraction({ customerId: current.customer_id, episodeId: episode.episode_id, producer: extractor.modelVersion, usage });
-  });
   return json({ ...JSON.parse(episode.response_json), replayed }, replayed ? 200 : 201);
-}
-
-/**
- * Shadow only: the answer is discarded, so the customer never waits for it. In the Worker it runs after the response,
- * in ctx.waitUntil; without a ctx (direct calls in tests) it runs inline. Never throws.
- */
-async function inShadow(ctx, work) {
-  const run = () => work().catch(() => {});
-  if (ctx?.waitUntil) ctx.waitUntil(run());
-  else await run();
 }
 
 /** POST /intake/confirm: confirm current owned evidence, then verify the durable receipt. */
 export const confirmIntake = (request, env, store, ctx) => finishIntake(request, env, store, ctx, true);
 /**
- * POST /intake/handoff: explicitly request human review without inventing a confirmed transaction. With the switch on,
- * a new handoff with ``details`` also makes one shadow call on them (as the start does on the statement) and adds only
- * its usage; ``approved`` is the same test seam as in ``startIntake``.
+ * POST /intake/handoff: explicitly request human review without inventing a confirmed transaction. A new handoff with
+ * ``details`` gets a suggestion run (its pilot arm) in its reservation batch only while the switch is on; after the
+ * acknowledged response, the Worker schedules ``runSuggestion`` in ctx.waitUntil (no ctx, as in direct unit calls:
+ * nothing is scheduled). The response is the same whatever the switch or the run does.
  */
-export const handoffIntake = (request, env, store, ctx, approved = APPROVED_EXTRACTOR) => finishIntake(request, env, store, ctx, false, approved);
+export const handoffIntake = (request, env, store, ctx) => finishIntake(request, env, store, ctx, false);
 
 /**
  * Reserve immutable handoff content; a failed write/read keeps the original key and never promises a reference.
  * The first acknowledgement may queue a "received" email; it is sent in ctx.waitUntil after the response.
  */
-async function finishIntake(request, env, store, ctx, complete, approved = null) {
+async function finishIntake(request, env, store, ctx, complete) {
   const started = performance.now();
   const current = await requireSession(request, store, 'customer');
   if (!current) return fail(401, 'Start a demo session first');
@@ -111,15 +96,19 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
   // lost card reported without a listed charge still heads the queue; otherwise only a confirmed charge is ranked, by the
   // p95 of the customer's most recent 21 served purchases (newest first), without the chosen one. A failed read leaves
   // only the fixed amount; the report is still accepted.
-  if (!prior) urgency = URGENCY.high_reasons.includes(episode.reason) ? 'high' : kind !== 'complete' ? 'normal'
+  // A charge the bank itself flagged (ADR-011: the bank's input, not an inference of ours) is high too.
+  if (!prior) urgency = URGENCY.high_reasons.includes(episode.reason) || evidence?.bank_flagged === 1 ? 'high' : kind !== 'complete' ? 'normal'
     : urgencyOf(evidence, (await store.listTransactions(customerId, 21).catch(() => [])).filter(t => t.transaction_id !== transactionId), URGENCY);
+  // The flag decides urgency only; the stored evidence keeps the charge's own fields, as before.
+  if (evidence) delete evidence.bank_flagged;
   const live = await requireSession(request, store, 'customer');
   if (!live || live.customer_id !== customerId) return fail(401, 'Start a demo session first');
   const sessionHash = await tokenHash(readCookies(request).demo_session);
   try {
     toolCalls++;
+    const suggestionArm = !complete && details ? newArm(env) : undefined;
     const result = await store.persistIntakeHandoff({ customerId, episodeId, turnKey, payloadHash,
-      sessionHash, details, urgency,
+      sessionHash, details, urgency, suggestionArm,
       completeCase: kind === 'complete' ? evidence : null, kind,
       evidence: { transaction: evidence, tool_status: kind === 'technical' ? 'failed' : 'ok' },
       actions: kind === 'complete' ? ['owned_transaction_retrieved', 'customer_confirmation_recorded'] : kind === 'technical' ? ['transaction_lookup_failed'] : [],
@@ -139,17 +128,11 @@ async function finishIntake(request, env, store, ctx, complete, approved = null)
       return fail(401, 'Session expired; renew the same customer session and retry with the same idempotency key');
     }
     const protocol = receipt.complete_case_id ?? receipt.handoff_id;
-    // Only an episode the same extractor started; its events already carry that producer. A replay never calls again.
-    const extractor = details && !result.replayed ? await readyExtractor(env, approved) : null;
-    if (extractor && JSON.parse(episode.usage_json ?? '{}').model_version === extractor.modelVersion) await inShadow(ctx, async () => {
-      // Counted as one unknown call before it runs, so an interrupted Worker never makes it free; then measured − unknown.
-      // A store of its own, so these writes never count in this response's metrics.
-      const shadowStore = createStore(env.DB);
-      const record = usage => shadowStore.recordDetailsExtraction({ customerId, episodeId, producer: extractor.modelVersion, usage });
-      await record(UNKNOWN);
-      const { usage } = await extractShadow(env, extractor, { statement: details, language: episode.language });
-      await record(Object.fromEntries(Object.keys(UNKNOWN).map(k => [k, usage[k] - UNKNOWN[k]])));
-    });
+    // After the response, never in it; a store of its own, so its queries never count in this response's metrics. A replay
+    // schedules it too: the run's atomic claim lets only one runner read a run, so a first request whose Worker stopped
+    // before the run started is finished by its replay, and a run already claimed is left alone.
+    if (suggestionArm !== undefined && ctx?.waitUntil) ctx.waitUntil(runSuggestion(env, createStore(env.DB),
+      { handoffId: receipt.handoff_id, customerId, details, language: episode.language }));
     // A store of its own, so the send's queries never count in this response's metrics; skipped without a ctx.
     if (emailId && ctx?.waitUntil) ctx.waitUntil(deliver(env, createStore(env.DB),
       { messageId: emailId, customerId, language: episode.language, reference: receipt.reference_short ?? protocol, urgent: receipt.urgency === 'high' }));
@@ -226,7 +209,9 @@ export async function listReports(request, env, store) {
 
 /**
  * POST /reports/update ``{ protocol }``: email the session customer the status of one of their acknowledged reports.
- * Foreign and missing reports get the same 404; no target 409; one ``update`` email per report per 5 minutes (429).
+ * Foreign and missing reports get the same 404; no target 409; one queued or SES-accepted ``update`` email per report
+ * per 5 minutes (429). A failed or skipped attempt stays auditable in the outbox and can be retried after 10 seconds.
+ * On an act-as session the email (and its outbox row and window) is the signed-in admin's own, never the customer's.
  */
 export async function requestUpdate(request, env, store, ctx) {
   const current = await requireSession(request, store, 'customer');
@@ -236,8 +221,9 @@ export async function requestUpdate(request, env, store, ctx) {
   const value = body.value;
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).join() !== 'protocol'
     || typeof value.protocol !== 'string' || !UUID.test(value.protocol)) return fail(422, 'Invalid protocol');
-  const customerId = current.customer_id;
-  const report = await store.findCustomerReport(customerId, value.protocol.toLowerCase());
+  // An admin acting as a customer asked for this update, so it goes to the admin's own address (ADR-007, decision 10).
+  const customerId = current.acting_admin_customer_id ?? current.customer_id;
+  const report = await store.findCustomerReport(current.customer_id, value.protocol.toLowerCase(), customerId);
   if (!report) return fail(404, 'Report not found');
   if (!report.has_target) return fail(409, 'No email on file for this sign-in');
   const reference = report.reference_short ?? report.protocol;
@@ -245,10 +231,83 @@ export async function requestUpdate(request, env, store, ctx) {
   const messageId = crypto.randomUUID();
   // The window is checked inside the insert, so concurrent requests queue one; only a refusal reads the newest row.
   if (!(await store.enqueueEmail({ messageId, now, customerId, template: 'update', language: report.language, reference })).length) {
-    const { latest } = await store.recentEmails(customerId, reference, now - UPDATE_EVERY_MS, 'update');
-    return fail(429, 'An update was sent recently', { 'Retry-After': String(Math.max(1, Math.ceil(((latest ?? now) + UPDATE_EVERY_MS - now) / 1000))) });
+    const retryAt = await store.recentEmailRetryAt(customerId, reference, now - UPDATE_EVERY_MS);
+    return fail(429, 'An update request is already in progress or was accepted recently',
+      { 'Retry-After': String(Math.max(1, Math.ceil(((retryAt ?? now + EMAIL_FAILURE_RETRY_MS) - now) / 1000))) });
   }
   ctx?.waitUntil?.(deliver(env, createStore(env.DB), { messageId, customerId, language: report.language, reference,
     template: 'update', status: STATUS_TEXT[report.status][report.language] }));
   return json({ queued: true }, 202);
+}
+
+/** The report a suggestion path names: a protocol (UUID, any case) or a short reference; anything else is null. */
+function reportRef(request, suffix) {
+  const segment = new URL(request.url).pathname.slice('/intake/handoff/'.length, -suffix.length);
+  if (UUID.test(segment)) return { protocol: segment.toLowerCase(), short: '' };
+  return SHORT_REFERENCE.test(segment) ? { protocol: '', short: segment } : null;
+}
+const charge = ({ transaction_id, merchant_name, amount, currency, occurred_at, source_occurred_at }) =>
+  ({ transaction_id, merchant_name, amount, currency, occurred_at, source_occurred_at });
+
+/**
+ * GET /intake/handoff/{protocol or short reference}/suggestions: for the session customer's own acknowledged report,
+ * ``status`` ``pending`` (the run has not finished), ``none`` (no run, or any outcome but ``suggested``) or
+ * ``suggested`` with up to three of their own charges as stored, plus the customer's answer if any. A missing or
+ * another customer's report is the same 404. Never the model's output, the outcome kind or any usage.
+ */
+export async function getSuggestions(request, env, store) {
+  const current = await requireSession(request, store, 'customer');
+  if (!current) return fail(401, 'Start a demo session first');
+  if (new URL(request.url).search) return fail(422, 'Unexpected parameters');
+  const ref = reportRef(request, '/suggestions');
+  // The first read that serves suggested charges stamps shown_at in the same round trip (``not_shown`` is its absence).
+  const found = ref && await store.findCustomerSuggestions(current.customer_id, ref.protocol, ref.short, { shownAt: Date.now() });
+  if (!found) return fail(404, 'Report not found');
+  const status = found.outcome === null ? 'pending' : found.outcome === 'suggested' && found.items.length ? 'suggested' : 'none';
+  // The charges are served only while they can be answered, or with the answer given: once an agent opened an unanswered
+  // report, the status stays 'suggested' but nothing is shown (and shown_at is not stamped).
+  const answerable = status === 'suggested' && found.choice === null && found.answerable;
+  return json({ status, items: answerable || (status === 'suggested' && found.choice !== null) ? found.items.map(charge) : [], choice: found.choice,
+    chosen_transaction_id: found.chosen_transaction_id, answerable });
+}
+
+const validTransactionId = v => typeof v === 'string' && v.length > 0 && v.length <= 100 && v.isWellFormed() && !v.includes('\u0000');
+
+/**
+ * POST /intake/handoff/{protocol or short reference}/suggestions/confirm with exactly ``{ transaction_id }`` (one of the
+ * charges suggested for that report) or ``{ none: true }``. The first answer stands: the same answer again is 200, a
+ * different one 409. A charge that was not suggested for it is 422, never stored; a missing or another customer's
+ * report, or one without suggestions, is 404. Once an agent has opened the report (or moved it on), a first answer is
+ * 409 with ``code: already_in_review`` and stores nothing, so the agent never reviews an answer that arrived mid-review.
+ * It records the customer's answer only; nothing closes or is decided.
+ */
+export async function confirmSuggestion(request, env, store) {
+  const current = await requireSession(request, store, 'customer');
+  if (!current) return fail(401, 'Start a demo session first');
+  const body = await readJsonBody(request);
+  if (body.error) return body.error;
+  const value = body.value;
+  const keys = value !== null && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).join() : '';
+  if (!(keys === 'transaction_id' && validTransactionId(value.transaction_id)) && !(keys === 'none' && value.none === true)) {
+    return fail(422, 'Provide exactly a suggested transaction_id or none: true');
+  }
+  const ref = reportRef(request, '/suggestions/confirm');
+  if (!ref) return fail(404, 'Report not found');
+  const transactionId = keys === 'none' ? null : value.transaction_id;
+  const now = Date.now();
+  const stored = await store.confirmSuggestion({ customerId: current.customer_id, protocol: ref.protocol, short: ref.short, transactionId, now,
+    sessionHash: await tokenHash(readCookies(request).demo_session) });
+  if (!stored) {
+    const live = await requireSession(request, store, 'customer');
+    if (!live || live.customer_id !== current.customer_id) return fail(401, 'Start a demo session first');
+    const found = await store.findCustomerSuggestions(current.customer_id, ref.protocol, ref.short);
+    if (!found) return fail(404, 'Report not found');
+    if (found.outcome !== 'suggested' || !found.items.length) return fail(404, 'No suggestions for this report');
+    if (transactionId !== null && !found.items.some(c => c.transaction_id === transactionId)) return fail(422, 'Not one of the suggested charges');
+    return json({ detail: 'An agent is already reviewing this report; the answer can no longer be added', code: 'already_in_review' }, 409);
+  }
+  if ((stored.choice === 'none') !== (transactionId === null) || (transactionId !== null && stored.transaction_id !== transactionId)) {
+    return fail(409, 'An answer is already recorded for these suggestions');
+  }
+  return json({ choice: stored.choice, transaction_id: stored.transaction_id ?? null, chosen_at: new Date(stored.chosen_at).toISOString() });
 }

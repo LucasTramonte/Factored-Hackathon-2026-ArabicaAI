@@ -1,43 +1,43 @@
 # ArabicaAI — Factored Hackathon 2026
 
-A customer reports a card charge they don't recognize, confirms which of their own transactions they mean, and gets a reference once the case is stored for human review. That is the V1 workflow ([ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). It is intake with a human handoff: no fraud verdicts, refunds or card blocks. The deployed flow is deterministic. A learned extractor is built for offline comparison, with its frozen evaluation still pending.
+A customer reports a card charge they don't recognize, confirms which of their own transactions they mean, and gets a reference once the case is stored for human review. That is the V1 workflow ([ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). It is intake with a human handoff: no fraud verdicts, refunds or card blocks. The deployed flow is deterministic. A learned extractor was compared offline with hand-written rules on 60 held-out Spanish and Portuguese cases we wrote: by the majority of 3 runs it got 53 right against the checklist's 23, with 0 unsafe outcomes in 180 runs, and 46 of 52 on the cases whose content never leaked during the build ([evaluation](Docs/deliverables/EVALUATION.md)). Whether and where it goes online is [ADR-012](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md), and how is the [AI suggestion plan](Docs/Plans/ai-suggestion-plan.md).
 
 The data is a synthetic LATAM banking dataset. Descriptive counts from it are not measured bank outcomes.
 
 **Evaluators: start with [`SYSTEM_DESIGN.md`](Docs/deliverables/SYSTEM_DESIGN.md).** It tells the whole story in one narrative: the customer and the problem, what we built, how it works, how we know it works, what it costs, and what is missing. The [reading guide](Docs/README.md) then maps each point of the brief to the document that answers it.
 
-![Deployed architecture: Angular, Cloudflare Worker and D1 with Cognito email sign-in and SES sandbox notifications, deployed from GitHub Actions after CI; a read-only S3, Bronze, Silver, quality and Gold batch produces a reviewed D1 seed. The offline evaluation calls Vertex AI and has not run on the frozen set; the online extractor is off. The Lambda and PostgreSQL AWS target was never deployed.](Docs/Evidence/diagrams/current-workflow.png)
+![Deployed architecture: Angular, Cloudflare Worker and D1 with Cognito email sign-in and SES sandbox notifications, deployed from GitHub Actions after CI; a read-only S3, Bronze, Silver, quality and Gold batch produces a reviewed D1 seed. The offline evaluation calls Vertex AI and ran once on the frozen set; the online extractor is off. The Lambda and PostgreSQL AWS target was never deployed.](Docs/Evidence/diagrams/current-workflow.png)
 
-*Deployed state: main `79c324b`, Worker `79aa39a9` (`main-79c324b`), deployed 2026-10-03 by the GitHub Actions deploy workflow, D1 migrations 0001–0020, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0); the app changes of #87–#92 are deployed but not yet tagged. Solid paths are deployed; dashed paths are the offline evaluation, not run on the frozen set.*
+*Deployed state: main `a47b2e1`, Worker `d8da20c6`, deployed 2026-10-04 by the GitHub Actions deploy workflow, D1 migrations 0001–0023, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0); #87–#106 and #110 are deployed but not yet tagged. Solid paths are deployed; dashed paths are the offline evaluation, which ran once on the frozen set on 2026-10-04 (the diagram's label predates that run).*
 
 ## Contents
 
 - [Deliverables](#deliverables)
 - [Repository layout](#repository-layout)
 - [How it fits together](#how-it-fits-together)
+- [Where the AI goes online](#where-the-ai-goes-online)
 - [Data pipeline: start here](#data-pipeline-start-here)
 - [Offline baseline from supplied CSVs](#offline-baseline-from-supplied-csvs)
 - [Common commands](#common-commands)
 - [Where to look next](#where-to-look-next)
 - [About us](#about-us)
-- [Appendix: AWS production target](#appendix-aws-production-target)
+- [Appendix: production targets on AWS and GCP](#appendix-production-targets-on-aws-and-gcp)
 
 ## Deliverables
 
 | Deliverable | Document |
 |---|---|
-| **System design:** customer, problem, solution, architecture, results, cost and risks, in one narrative | [`SYSTEM_DESIGN.md`](Docs/deliverables/SYSTEM_DESIGN.md) |
-| **Evaluation:** how the model is compared with a baseline, the test sets we built ourselves, how data leakage is prevented, and every option we considered | [`EVALUATION.md`](Docs/deliverables/EVALUATION.md) |
-| **Product report:** the problem sized with KPIs, how disputes are handled today, satisfaction with its populations, and the segment cut | [`PRODUCT_REPORT.md`](Docs/deliverables/PRODUCT_REPORT.md) |
-| **Data quality:** every finding that changes or limits a decision, each with its query | [`DATA_QUALITY.md`](Docs/deliverables/DATA_QUALITY.md) |
-| **Data engineering:** contracts, the quality gate, lineage from S3 to the served row, the update and freshness policy with its test fixture, and the stack with its trade-offs | [`DATA_ENGINEERING.md`](Docs/deliverables/DATA_ENGINEERING.md) |
+| **System design:** the customer, the problem, what we built, the architecture and security, the AI decision, results, cost and risks | [`SYSTEM_DESIGN.md`](Docs/deliverables/SYSTEM_DESIGN.md) |
+| **Business outcomes:** the unrecognized-charge problem in numbers, how it's handled today, satisfaction, and what we will and won't claim | [`BUSINESS_OUTCOMES.md`](Docs/deliverables/BUSINESS_OUTCOMES.md) |
+| **Data engineering:** the pipeline, contracts, quality gate, lineage, update policy, the findings register (each with its query) and how to reproduce it all | [`DATA_ENGINEERING.md`](Docs/deliverables/DATA_ENGINEERING.md) |
+| **Evaluation:** how the model is compared with a baseline, the test sets we built, how leakage is prevented, and the options we considered | [`EVALUATION.md`](Docs/deliverables/EVALUATION.md) |
 | **Capacity and cost:** where each layer runs and why, the Cloudflare limits, and a priced AWS production target ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)) | [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) |
 
 ## Repository layout
 
 | Folder | What it holds | Who needs it |
 |---|---|---|
-| [`Docs/deliverables/`](Docs/deliverables/) | The documents the brief asks for: system design, data engineering, data quality, evaluation, plus architecture, business outcomes and reproduction | Evaluators, first |
+| [`Docs/deliverables/`](Docs/deliverables/) | The four documents the brief asks for: system design, business outcomes, data engineering and evaluation | Evaluators, first |
 | [`Docs/`](Docs/README.md) | Decisions ([`ADRs/`](Docs/ADRs/README.md)), workflow contracts ([`intake/`](Docs/intake/)), runbooks and roadmaps ([`Plans/`](Docs/Plans/)), cost evidence ([`Costs/`](Docs/Costs/README.md)), accessibility evidence and diagrams ([`Evidence/`](Docs/Evidence/)), release history ([`releases/`](Docs/releases/README.md)), the organizers' originals ([`sources/`](Docs/sources/README.md)) and dated working notes ([`archive/`](Docs/archive/)) | Anyone checking why a decision was made |
 | [`data_pipelines/`](data_pipelines/) | The batch path: S3 → `bronze/` → `silver/` → `quality/` → `gold/` (the reviewed serving slice and cohort), Python and DuckDB | Data engineering |
 | [`data_profiles/`](data_profiles/) | The findings register's queries (`findings/queries/DF-*.sql`) and their runner and tests | Data quality |
@@ -68,7 +68,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 
 The Worker and D1 remain the single runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito proves who signs in, and the Worker issues its own session from the verified token. SES only delivers email; cases stay in D1. These integrations are deployed, with Cognito replacing the former shared gates ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). SES remains in the sandbox, so only verified recipients receive email.
 
-The app changes of #87–#92 (atomic one-open-report, the customer history and first-open time for agents, receipt feedback, "Not resolved" links, the sign-in code help) are merged and deployed. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan). The frozen comparison still needs Manoella's approval of amendment 7, a checked pre-registration and a human tag ([evaluation status](Docs/deliverables/EVALUATION.md)).
+Everything merged through #106 and #110 is deployed, including the in-app alert when the bank flags a charge (ADR-011) and session restore on reload. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan). Extractor v1 was registered, tagged and run once on the frozen set on 2026-10-04: 88% correct against 38% for the rules, 0 unsafe, p95 2,048 ms ([results and limits](Docs/deliverables/EVALUATION.md#1-the-result)).
 
 | Component | Path | What it does |
 |---|---|---|
@@ -77,8 +77,19 @@ The app changes of #87–#92 (atomic one-open-report, the customer history and f
 | Intake API | `back-end/` | One online runtime: sessions from Cognito sign-in, customer-scoped retrieval, idempotent cases, reference after commit, the customer's reports, review status, notification emails, agent view |
 | Web client | `front-end/` | Customer and agent views; API contracts in `front-end/contracts/` |
 | Evaluation | `evals/intake`, [`EVALUATION.md`](Docs/deliverables/EVALUATION.md) | Team-built ES/PT test sets, checklist baseline, learned-component harness, episode KPI scorer |
-| Data quality register | [`DATA_QUALITY.md`](Docs/deliverables/DATA_QUALITY.md), `data_profiles/findings/` | Every dataset finding that changes or limits a decision, with its query, impact and handling |
+| Data quality register | [`DATA_ENGINEERING.md`](Docs/deliverables/DATA_ENGINEERING.md), `data_profiles/findings/` | Every dataset finding that changes or limits a decision, with its query, impact and handling |
 | Decisions | `Docs/ADRs/` | Scope, runtime, capacity, cost and cloud placement, each with its limitations and exit triggers |
+
+## Where the AI goes online
+
+The model reads better than our rules on held-out cases (53 of 60 against 23 by majority of 3 runs; 46 of 52 against 20 on the never-exposed cases), but the guided flow only needs to read free text in one place: when a customer can't find the charge in their own list. That is where it goes online, behind a switch that is off today ([ADR-012](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md), [plan](Docs/Plans/ai-suggestion-plan.md)).
+
+![Target workflow: the customer's request stays deterministic; for "I can't find it", Vertex AI reads the description after the reference, code suggests up to three of the customer's own charges, the customer confirms and a person reviews; every failure falls back to today's handoff; events feed the pilot measures and the offline evaluation](Docs/Evidence/diagrams/target-workflow.png)
+
+- **The customer never waits for the model.** The reference comes back first; the model runs after the response.
+- **The model reads, code decides, a person reviews.** Suggestions come only from the customer's own charges.
+- **Every failure is today's flow.** Timeout, provider error, invalid output, no match or a retired model all leave the incomplete handoff as it is.
+- **It is measured and can switch itself off.** A randomized pilot measures how often the path is used and how often agents mark suggestions correct. Fixed rules turn it off on any unsafe outcome.
 
 **Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Customers, agents and evaluators sign in with an email one-time code from Amazon Cognito; ask the team to enrol your email. There is no team password ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md), [auth runbook](Docs/Plans/auth-runbook.md)).
 
@@ -143,14 +154,14 @@ If the CSVs are installed locally, run `make setup` and `make pipeline-local`. O
 | `make intake-setup` / `make intake-test` | Install and test the intake service: Gold slice, Angular specs, and Worker unit and local-D1 tests. |
 | `make intake-sample-slice` | Build the reviewed D1 seed from the one-day quality-gated sample (see the intake runbook). |
 
-Docker reuses cached build layers on later runs. For a smaller first S3 check, follow the targeted commands in [REPRODUCIBILITY.md](Docs/deliverables/REPRODUCIBILITY.md). CI runs offline tests and compilation without S3 credentials. Docker checks remain available with `make docker-test`.
+Docker reuses cached build layers on later runs. For a smaller first S3 check, follow the targeted commands in [DATA_ENGINEERING.md](Docs/deliverables/DATA_ENGINEERING.md#11-reproducing-it). CI runs offline tests and compilation without S3 credentials. Docker checks remain available with `make docker-test`.
 
 ## Where to look next
 
 - [Data dictionary](Docs/LATAM_BANK_DATA_DICTIONARY.md): exact table, column, and relationship names.
 - [Dataset overview](Docs/LATAM_BANK_DATASET.md) and [hackathon brief](Docs/FACTORED_HACKATHON_2026.md): source scope and challenge context.
-- [Architecture](Docs/deliverables/ARCHITECTURE.md) and [reproduction guide](Docs/deliverables/REPRODUCIBILITY.md): pipeline behavior, memory limits, Docker, and troubleshooting commands.
-- [Data quality and findings register](Docs/deliverables/DATA_QUALITY.md): what the data can and can't support, each finding backed by a reproducible query, and the evaluation data protocol ([ADR-005](Docs/ADRs/ADR-005-evaluation-data-protocol.md)).
+- [Reproducing the pipeline](Docs/deliverables/DATA_ENGINEERING.md#11-reproducing-it): memory limits, Docker, and troubleshooting commands.
+- [Findings register](Docs/deliverables/DATA_ENGINEERING.md#10-findings-register): what the data can and can't support, each finding backed by a reproducible query, and the evaluation data protocol ([ADR-005](Docs/ADRs/ADR-005-evaluation-data-protocol.md)).
 - [Quality parity record](data_pipelines/quality/PARITY.md): the 13-table audit, observed warnings, and comparison with the former CSV scanner.
 - [Decision records](Docs/ADRs/README.md): workflow scope, runtime, and capacity and cost, with their limitations.
 - [Silver transcript verification](Docs/archive/2026-09-27-silver-transcript-verification.md): the dated record of the 2026-09-27 transcript reconciliation. `notebooks/07_silver_transcript_verification.ipynb` has a network-free readout. Older notebooks and reports are dated historical evidence.
@@ -170,8 +181,19 @@ We are three engineers from two coffee countries, Brazil and Colombia, and the n
 | **Roberto** ([@Robertzu43](https://github.com/Robertzu43)) | AI engineer | Colombia | The intake evaluation harness and event contract, the guided intake backend, the Angular client and agent view, and the accessibility audit; the native Spanish review of the frozen set |
 | **Lucas** ([@LucasTramonte](https://github.com/LucasTramonte)) | Machine learning engineer | Limeira, São Paulo, Brazil | The quality gate and findings register, the Worker and D1 runtime, the ADRs, the capacity and cost record, the learned extractor, the evaluation deliverable and the Gold cohort |
 
-## Appendix: AWS production target
+## Appendix: production targets on AWS and GCP
+
+Design only, never deployed: what this workflow would run on if a bank required private networking, a standby database and its own keys. Both are written as code, drawn from that code and priced at list price for the same volumes.
+
+| | AWS ([`aws-target/`](Docs/Costs/aws-target/)) | GCP ([`gcp-target/`](Docs/Costs/gcp-target/)) |
+|---|---|---|
+| Written as | CloudFormation, passes `cfn-lint` | Terraform, passes `terraform validate` |
+| API and model | Lambda; Bedrock gpt-oss-20b through PrivateLink | Cloud Run; Vertex AI Gemini 3.5 Flash-Lite in the `us` multi-region, after the response through Cloud Tasks |
+| Database | RDS PostgreSQL Multi-AZ | Cloud SQL PostgreSQL regional HA |
+| Per month | $86.36 ([ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) section 3) | $96.08 ([line by line](Docs/Costs/gcp-target/README.md)) |
+
+On both, the standby database is about 60% of the bill. Load would never require it: at 100× the dataset's busiest day the database sees about 145 writes a second, around 1% of what one PostgreSQL primary handles. The [capacity estimate](Docs/deliverables/SYSTEM_DESIGN.md#capacity-the-numbers-before-the-boxes) shows the arithmetic.
 
 ![AWS production target: CloudFront and WAF at the edge, HTTP API and Lambda in a two-AZ VPC with RDS PostgreSQL Multi-AZ and a Bedrock endpoint, a daily Fargate batch into an S3 lake](Docs/Costs/aws-target/architecture.png)
 
-*Design only, never deployed: what this workflow would run on if a bank required private networking, a standby database and its own keys. It is priced at $86.36 a month, service by service, in [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) section 3. Templates and diagram source: [`Docs/Costs/aws-target/`](Docs/Costs/aws-target/).*
+![GCP production target: global HTTPS load balancer with Cloud Armor and Cloud CDN, Cloud Run API with Cloud Tasks for the AI suggestion, Cloud SQL PostgreSQL regional HA on a private IP, Vertex AI in the US multi-region, a daily Cloud Run job into a CMEK lake](Docs/Costs/gcp-target/architecture.png)

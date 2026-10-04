@@ -100,8 +100,34 @@
             <aside class="role-banner" [attr.aria-label]="t().adminChip">
               <span class="ar-chip">{{ t().adminChip }}</span><span>{{ t().adminOnCustomer }}</span>
               <a [routerLink]="frozen() ? null : '/agent'">{{ t().agentView }}</a>
+              <details class="act-as" (toggle)="toggleActAs($any($event.target).open)">
+                <summary>{{ t().actAsTitle }}</summary>
+                @if (actAsLoading()) { <p class="status-line" role="status">{{ t().working }}</p> }
+                @if (identityLocked()) { <p class="ar-small" id="act-as-locked">{{ t().actAsLocked }}</p> }
+                <!-- Only the server's admin list, and only once it has loaded: never the local demo choices. -->
+                <app-customer-picker [identities]="actAsIdentities()" [disabled]="busy() || identityLocked() || !actAsIdentities().length" [(value)]="actAsChoice" />
+                <div class="login-actions">
+                  <button type="button" class="ar-btn ar-btn-secondary" id="act-as" (click)="actAs()"
+                    [disabled]="busy() || identityLocked() || !actAsIdentities().length || !actAsChoice || actAsChoice === client()">{{ t().actAsButton }}</button>
+                </div>
+              </details>
             </aside>
           }
+          @if (alert(); as a) {
+            <!-- ADR-011: the bank's fraud flag on one of the customer's charges; at most one, answered once. -->
+            <section class="ar-panel ar-panel-warn proactive-alert" aria-labelledby="alert-title">
+              <h2 class="ar-panel-title" id="alert-title">{{ t().alertTitle }}</h2>
+              <p><strong>{{ a.merchant_name || t().noMerchant }}</strong> · <span class="ar-mono">{{ a.amount }} {{ a.currency }}</span> ·
+                @if (a.source_occurred_at) { {{ sourceTime(a.source_occurred_at) }} } @else if (a.occurred_at) { {{ a.occurred_at | date:'yyyy-MM-dd HH:mm':'UTC' }} {{ t().utc }} }</p>
+              <p>{{ t().alertBody }}</p>
+              <div class="report-actions">
+                <button type="button" class="ar-btn" (click)="answerAlert('report')" [disabled]="busy()">{{ t().alertReport }}</button>
+                <button type="button" class="ar-btn ar-btn-secondary" (click)="answerAlert('mine')" [disabled]="busy()">{{ t().alertMine }}</button>
+              </div>
+            </section>
+          }
+          <p class="sr-only" role="status">{{ alertNote() }}</p>
+          @if (alertNote()) { <p class="ar-small alert-note" aria-hidden="true">{{ alertNote() }}</p> }
           <div class="topbar">
             <div style="display: flex; flex-direction: column; gap: 4px">
               <h1 class="ar-h1" tabindex="-1">{{ t().hello }}, {{ card()?.first_name || displayName() }}</h1>
@@ -268,6 +294,27 @@
                     </div>
                   </div>
                 }
+                @if (suggestionList(); as s) {
+                  <section class="ar-panel suggestions" id="suggestions" aria-labelledby="suggestions-title">
+                    <h4 id="suggestions-title">{{ t().suggestTitle }}</h4>
+                    @if (!suggestionAnswer() && s.answerable) {
+                      <p class="ar-small">{{ t().suggestIntro }}</p>
+                      <ul class="suggestion-list">
+                        @for (c of s.items; track c.transaction_id) {
+                          <li>
+                            <span class="suggestion-charge"><span>{{ c.merchant_name || t().noMerchant }}</span> <span class="ar-small">{{ chargeWhen(c) }}</span>
+                              <span class="ar-amount">{{ c.amount }} {{ c.currency }}</span></span>
+                            <button type="button" class="ar-btn ar-btn-sm suggestion-pick" (click)="answerSuggestion(c.transaction_id)" [attr.aria-disabled]="suggestionSending()" [attr.aria-label]="suggestionLabel(c)">{{ t().suggestPick }}</button>
+                          </li>
+                        }
+                      </ul>
+                      <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm suggestion-none" (click)="answerSuggestion(null)" [attr.aria-disabled]="suggestionSending()">{{ t().suggestNone }}</button>
+                      @if (suggestionFailed()) { <p class="ar-small" role="alert">{{ t().suggestFailed }}</p> }
+                    }
+                    <p class="suggestion-thanks" role="status" tabindex="-1">{{ suggestionAnswer() === 'confirmed' ? t().suggestThanksConfirmed : suggestionAnswer() === 'none' ? t().suggestThanksNone : !s.answerable ? t().suggestInReview : '' }}</p>
+                  </section>
+                }
+                <p class="sr-only suggestion-announce" aria-live="polite">{{ suggestionList()?.answerable && !suggestionAnswer() ? t().suggestFound : '' }}</p>
                 <div class="report-actions chat-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="newReport()">{{ t().chatNew }}</button></div>
               }
               @case ('ended') {
@@ -279,6 +326,11 @@
               <div class="report-actions"><button type="button" class="ar-btn ar-btn-secondary" (click)="renew()" [disabled]="busy()">{{ t().renew }}</button></div>
             }
             @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
+            <ol class="chat-log chat-faq-log" role="log" aria-live="polite" [attr.aria-label]="t().chatFaq">
+              @for (line of faqLog(); track $index) {
+                <li [class]="'chat-' + line.from"><span class="sr-only">{{ line.from === 'me' ? t().chatYou : t().chatGuide }}: </span>{{ lineText(line) }}</li>
+              }
+            </ol>
             <div class="chat-faq" role="group" [attr.aria-label]="t().chatFaq">
               @for (q of faqs; track q) { <button type="button" class="link-btn" (click)="ask(q)">{{ t()[q] }}</button> }
             </div>

@@ -18,7 +18,9 @@ describe('CustomerPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed', 'sendFeedback'], { client: signal(''), card: signal(null), roles: signal([]) });
+      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed', 'sendFeedback', 'suggestions', 'answerSuggestions'],
+      { client: signal(''), card: signal(null), roles: signal([]) });
+    service.suggestions.and.resolveTo({ status: 'none', items: [], choice: null, chosen_transaction_id: null, answerable: false });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
       { customer_id: 'demo-bruno', display_name: 'Bruno (demo)' }]);
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'simulated_login', context_card: null, roles: ['customer'] });
@@ -34,6 +36,35 @@ describe('CustomerPage', () => {
       { provide: CognitoService, useValue: cognito }, provideRouter([])] })
       .compileComponents();
     page = TestBed.createComponent(CustomerPage).componentInstance;
+  });
+
+  it('a reload restores a live customer session from the cookie and goes home; without one the sign-in stays (ADR-013)', async () => {
+    const me = jasmine.createSpy('me').and.resolveTo({ customer: { customer_id: 'demo-ana', roles: ['admin'], context_card: null }, agent: false });
+    Object.assign(service, { me });
+    const p = TestBed.createComponent(CustomerPage).componentInstance;
+    await p.ngOnInit();
+    await new Promise(r => setTimeout(r));
+    expect(me).toHaveBeenCalledTimes(1);
+    expect([p.client(), p.step(), p.roles()]).toEqual(['demo-ana', 'home', ['admin']]);
+    expect(service.signIn).not.toHaveBeenCalled();
+    service.client.set(''); service.roles.set([]);
+    me.and.resolveTo({ customer: null, agent: false });
+    const fresh = TestBed.createComponent(CustomerPage).componentInstance;
+    await fresh.ngOnInit();
+    await new Promise(r => setTimeout(r));
+    expect([fresh.client(), fresh.step()]).toEqual(['', 'intro']);
+  });
+
+  it('a late session restore never replaces a sign-in the person has started', async () => {
+    let answer!: (s: unknown) => void;
+    Object.assign(service, { me: jasmine.createSpy('me').and.returnValue(new Promise(r => answer = r)) });
+    const p = TestBed.createComponent(CustomerPage).componentInstance;
+    void p.ngOnInit();
+    p.start();
+    expect(p.step()).toBe('login');
+    answer({ customer: { customer_id: 'demo-ana', roles: ['customer'], context_card: null }, agent: false });
+    await new Promise(r => setTimeout(r));
+    expect([p.client(), p.step()]).toEqual(['', 'login']);
   });
 
   it('starts on the intro, moves to sign-in on start, and to the home once charges are loaded', async () => {
@@ -633,6 +664,159 @@ describe('CustomerPage', () => {
       expect(page.identityLocked()).toBeFalse();
     });
 
+    describe('suggestions on "I can\'t find it" (ADR-012)', () => {
+      const charge: Transaction = { transaction_id: 'demo-tx-001', merchant_name: 'Mercado Demo', occurred_at: '2026-09-25T14:00:00+00:00', source_occurred_at: null, amount: '125.50', currency: 'BRL' };
+      const other: Transaction = { transaction_id: 'demo-tx-004', merchant_name: '', occurred_at: null, source_occurred_at: '2026-09-27T10:30:00', amount: '47.30', currency: 'BRL' };
+      const incomplete: IntakeReceipt = { ...intakeReceipt, kind: 'incomplete', actions_taken: [], unresolved_questions: ['matching_transaction', 'customer_confirmation'] };
+      const pending = { status: 'pending' as const, items: [], choice: null, chosen_transaction_id: null, answerable: false };
+      const shown = { status: 'suggested' as const, items: [charge, other], choice: null, chosen_transaction_id: null, answerable: true };
+      const settle = () => new Promise(r => setTimeout(r, 20));
+      // Waits for a state, not a guessed delay: on a loaded CI ChromeHeadless 20 ms may not cover several poll turns.
+      // performance.now, because some tests here fake Date.now.
+      const until = async (done: () => boolean) => {
+        for (const end = performance.now() + 2000; !done() && performance.now() < end;) await new Promise(r => setTimeout(r, 5));
+      };
+
+      beforeEach(() => { page.suggestionPollMs = 1; });
+
+      it('checks after the receipt until the service has read the details, then offers its charges; the receipt never waits', async () => {
+        service.suggestions.and.returnValues(Promise.resolve(pending), Promise.resolve(pending), Promise.resolve(shown));
+        service.handoffIntake.and.resolveTo(incomplete);
+        await startEpisode();
+        await review();
+        expect(page.chatStep()).toBe('receipt');
+        await until(() => page.suggestionList() !== null);
+        expect(service.suggestions.calls.allArgs()).toEqual([[incomplete.protocol], [incomplete.protocol], [incomplete.protocol]]);
+        expect(page.suggestionList()?.items.map(c => c.transaction_id)).toEqual(['demo-tx-001', 'demo-tx-004']);
+      });
+
+      it('never checks without details or for another kind of receipt, and shows nothing for none', async () => {
+        service.handoffIntake.and.resolveTo(incomplete);
+        await startEpisode();
+        service.startIntake.and.resolveTo(started);
+        page.chatStatement = 'x'.repeat(1991); // no room left for details: the handoff goes without the question
+        page.newReport(); page.reason.set('not_mine'); page.chatStatement = 'x'.repeat(1991); await page.send();
+        await page.cannotFind();
+        await settle();
+        expect(service.suggestions).not.toHaveBeenCalled();
+        page.newReport(); await startEpisode();
+        service.confirmIntake.and.resolveTo(intakeReceipt);
+        page.choice = 'demo-tx-001'; page.chatConfirmed = true; await page.confirmCharge();
+        await settle();
+        expect(service.suggestions).not.toHaveBeenCalled();
+        page.newReport(); await startEpisode(); await review(); await settle();
+        expect(service.suggestions).toHaveBeenCalledTimes(1);
+        expect(page.suggestionList()).toBeNull();
+      });
+
+      it('stops checking after about 15 seconds, and a new report stops a watch in flight', async () => {
+        service.suggestions.and.resolveTo(pending);
+        service.handoffIntake.and.resolveTo(incomplete);
+        await startEpisode();
+        let clock = 1_000_000;
+        spyOn(Date, 'now').and.callFake(() => clock += 4000);
+        await review();
+        await settle();
+        const calls = service.suggestions.calls.count();
+        expect(calls).toBeGreaterThan(0);
+        expect(calls).toBeLessThanOrEqual(4);
+        expect(page.suggestionList()).toBeNull();
+        (Date.now as jasmine.Spy).and.callThrough();
+        let answer!: (l: typeof shown) => void;
+        service.suggestions.and.returnValue(new Promise(r => answer = r));
+        page.newReport(); await startEpisode(); await review();
+        page.newReport();
+        answer(shown); await settle();
+        expect(page.suggestionList()).toBeNull();
+      });
+
+      it('picking a charge sends only its id, once; "none of these" sends none; a 409 or a failure behaves', async () => {
+        service.suggestions.and.resolveTo(shown);
+        service.handoffIntake.and.resolveTo(incomplete);
+        await startEpisode(); await review(); await settle();
+        service.answerSuggestions.and.resolveTo({ choice: 'confirmed', transaction_id: 'demo-tx-004', chosen_at: '2026-10-04T12:00:00.000Z' });
+        await page.answerSuggestion('demo-tx-004');
+        await page.answerSuggestion(null);
+        expect(service.answerSuggestions.calls.allArgs()).toEqual([[incomplete.protocol, 'demo-tx-004']]);
+        expect(page.suggestionAnswer()).toBe('confirmed');
+        page.newReport(); await startEpisode(); await review(); await settle();
+        expect([page.suggestionAnswer(), page.suggestionFailed()]).toEqual([null, false]);
+        service.answerSuggestions.and.rejectWith(new ApiError(503, 'x'));
+        await page.answerSuggestion(null);
+        expect([page.suggestionAnswer(), page.suggestionFailed()]).toEqual([null, true]);
+        // 409: the server already holds an answer (here from another tab); the client shows that one, not its own attempt.
+        service.answerSuggestions.and.rejectWith(new ApiError(409, 'x'));
+        service.suggestions.and.resolveTo({ ...shown, choice: 'confirmed', chosen_transaction_id: 'demo-tx-001', answerable: false });
+        await page.answerSuggestion(null);
+        expect([page.suggestionAnswer(), page.suggestionFailed()]).toEqual(['confirmed', false]);
+        expect(page.suggestionList()?.chosen_transaction_id).toBe('demo-tx-001');
+        expect(service.answerSuggestions.calls.mostRecent().args).toEqual([incomplete.protocol, null]);
+      });
+
+      it('once an agent has opened the report (409 already_in_review), the buttons go and the customer is told a person is on it', async () => {
+        service.suggestions.and.resolveTo(shown);
+        service.handoffIntake.and.resolveTo(incomplete);
+        const fixture = TestBed.createComponent(CustomerPage);
+        const p = fixture.componentInstance;
+        p.suggestionPollMs = 1;
+        p.identity = 'demo-ana'; await p.login(); p.openChat();
+        service.startIntake.and.resolveTo(started);
+        p.chatStatement = 'No reconozco este cargo.'; p.reason.set('not_mine'); await p.send();
+        p.cannotFind(); p.chatDetails = 'Lembro só do mercado, uns 125 reais.'; await p.handoff();
+        await settle(); fixture.detectChanges();
+        const el = fixture.nativeElement as HTMLElement;
+        expect(el.querySelectorAll('#suggestions .suggestion-pick').length).toBe(2);
+        service.answerSuggestions.and.rejectWith(new ApiError(409, 'already_in_review'));
+        service.suggestions.and.resolveTo({ ...shown, answerable: false });
+        el.querySelector<HTMLButtonElement>('.suggestion-pick')!.click();
+        await fixture.whenStable(); fixture.detectChanges(); await fixture.whenStable();
+        expect(p.suggestionAnswer()).toBeNull();
+        expect(el.querySelectorAll('#suggestions button').length).toBe(0);
+        const status = el.querySelector<HTMLElement>('.suggestion-thanks')!;
+        expect(status.textContent!.trim()).toBe(p.t().suggestInReview);
+        expect(document.activeElement).toBe(status);
+        await p.answerSuggestion(null);
+        expect(service.answerSuggestions).toHaveBeenCalledTimes(1);
+      });
+
+      it('renders each charge with its own named pick button and "none of these", announces them politely, then thanks with focus', async () => {
+        service.suggestions.and.resolveTo(shown);
+        service.handoffIntake.and.resolveTo(incomplete);
+        const fixture = TestBed.createComponent(CustomerPage);
+        const p = fixture.componentInstance;
+        p.suggestionPollMs = 1;
+        p.identity = 'demo-ana'; await p.login(); p.openChat();
+        service.startIntake.and.resolveTo(started);
+        p.chatStatement = 'No reconozco este cargo.'; p.reason.set('not_mine'); await p.send();
+        p.cannotFind(); p.chatDetails = 'Lembro só do mercado, uns 125 reais.'; await p.handoff();
+        await settle(); fixture.detectChanges(); await fixture.whenStable();
+        const el = fixture.nativeElement as HTMLElement;
+        for (const code of ['es', 'pt', 'en'] as const) {
+          lang.set(code); fixture.detectChanges();
+          const box = el.querySelector<HTMLElement>('#suggestions')!;
+          expect(box.querySelector('h4')!.textContent!.trim()).toBe(p.t().suggestTitle);
+          expect(box.getAttribute('aria-labelledby')).toBe('suggestions-title');
+          const picks = [...box.querySelectorAll<HTMLButtonElement>('.suggestion-pick')];
+          expect(picks.map(b => b.getAttribute('aria-label'))).toEqual([
+            p.t().suggestPickLabel.replace('{merchant}', 'Mercado Demo').replace('{date}', '2026-09-25 14:00 ' + p.t().utc).replace('{amount}', '125.50 BRL'),
+            p.t().suggestPickLabel.replace('{merchant}', p.t().noMerchant).replace('{date}', '2026-09-27 10:30:00').replace('{amount}', '47.30 BRL')]);
+          expect(picks.every(b => b.type === 'button' && b.textContent!.trim() === p.t().suggestPick)).toBeTrue();
+          expect(box.querySelector('.suggestion-none')!.textContent!.trim()).toBe(p.t().suggestNone);
+          const live = el.querySelector('.suggestion-announce')!;
+          expect([live.getAttribute('aria-live'), live.textContent!.trim()]).toEqual(['polite', p.t().suggestFound]);
+        }
+        service.answerSuggestions.and.resolveTo({ choice: 'none', transaction_id: null, chosen_at: '2026-10-04T12:00:00.000Z' });
+        el.querySelector<HTMLButtonElement>('.suggestion-none')!.click();
+        await fixture.whenStable(); fixture.detectChanges(); await fixture.whenStable();
+        expect(el.querySelectorAll('#suggestions button').length).toBe(0);
+        const thanks = el.querySelector<HTMLElement>('.suggestion-thanks')!;
+        expect([thanks.getAttribute('role'), thanks.textContent!.trim()]).toEqual(['status', p.t().suggestThanksNone]);
+        expect(document.activeElement).toBe(thanks);
+        expect(el.querySelector('.suggestion-announce')!.textContent!.trim()).toBe('');
+        lang.set('es');
+      });
+    });
+
     it('the details field cannot outgrow the statement column, and with no room left the handoff goes without the question', async () => {
       service.startIntake.and.resolveTo(started);
       page.chatStatement = 'x'.repeat(1991);
@@ -779,10 +963,39 @@ describe('CustomerPage', () => {
       expect(page.reportOf('demo-tx-001')).toBeUndefined();
     });
 
-    it('answers FAQs from fixed translated text only', () => {
+    it('answers FAQs from fixed translated text only, apart from the report conversation', () => {
+      const before = page.log();
       page.ask('faqTimeQ');
-      expect(page.log().slice(-2)).toEqual([{ from: 'me', key: 'faqTimeQ' }, { from: 'bot', key: 'faqTimeA' }]);
+      expect(page.faqLog()).toEqual([{ from: 'me', key: 'faqTimeQ' }, { from: 'bot', key: 'faqTimeA' }]);
+      expect(page.log()).toEqual(before, 'a FAQ never becomes the prompt for the current step');
       expect(() => page.ask('nope' as never)).toThrow();
+    });
+
+    it('shows a new FAQ answer right above the FAQ buttons and scrolls it into view, even below a long charge list', async () => {
+      const fixture = TestBed.createComponent(CustomerPage);
+      const p = fixture.componentInstance;
+      const el = fixture.nativeElement as HTMLElement;
+      document.body.appendChild(el);
+      p.identity = 'demo-ana';
+      await p.login();
+      p.openChat();
+      fixture.detectChanges();
+      const scrolled = spyOn(Element.prototype, 'scrollIntoView');
+      const button = el.querySelector<HTMLButtonElement>('.chat-faq button')!;
+      button.focus();
+      expect(document.activeElement).toBe(button);
+      button.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const answer = el.querySelector('.chat-faq-log li:last-child')!;
+      expect(answer.textContent).toContain(p.t().faqNextA);
+      expect(answer.closest('.chat-faq-log')!.nextElementSibling!.classList).toContain('chat-faq');
+      expect(scrolled.calls.mostRecent().object).toBe(answer);
+      expect(document.activeElement).toBe(button, 'scrolling the answer never moves keyboard focus');
+      p.newReport();
+      fixture.detectChanges();
+      expect(el.querySelectorAll('.chat-faq-log li').length).toBe(0, 'a new report starts without old answers');
+      el.remove();
     });
 
     it('titles the receipt by the server kind', async () => {
@@ -808,6 +1021,61 @@ describe('CustomerPage', () => {
       return { fixture, p, el: fixture.nativeElement as HTMLElement };
     }
 
+    describe('proactive alert (ADR-011)', () => {
+      const flagged: Transaction = { transaction_id: 'demo-tx-001', merchant_name: 'Mercado', occurred_at: null,
+        source_occurred_at: '2026-02-26T13:21:51', amount: '125.50', currency: 'BRL' };
+      const withAlert = (alert: Transaction | null) => Object.assign(service, {
+        alert: jasmine.createSpy('alert').and.resolveTo({ alert }), answerAlert: jasmine.createSpy('answerAlert').and.resolveTo({}) }) as never as {
+        alert: jasmine.Spy; answerAlert: jasmine.Spy };
+      const settle = async (fixture: { whenStable(): Promise<unknown>; detectChanges(): void }) => { await fixture.whenStable(); fixture.detectChanges(); };
+
+      it('shows no banner without a flagged charge, nor when the alert read fails', async () => {
+        withAlert(null);
+        let { fixture, el } = await home(); await settle(fixture);
+        expect(el.querySelector('.proactive-alert')).toBeNull();
+        withAlert(null).alert.and.rejectWith(new ApiError(503));
+        ({ fixture, el } = await home()); await settle(fixture);
+        expect(el.querySelector('.proactive-alert')).toBeNull('the home works without the alert');
+      });
+
+      it('"it\'s mine" records the answer once, removes the banner and thanks the customer', async () => {
+        const spies = withAlert(flagged);
+        const { fixture, p, el } = await home(); await settle(fixture);
+        const banner = el.querySelector('.proactive-alert')!;
+        expect(banner.textContent).toContain('Mercado');
+        expect(banner.textContent).toContain('125.50 BRL');
+        expect(banner.textContent).toContain(p.t().alertTitle);
+        expect(banner.textContent).not.toMatch(/fraude|bloque|reembols/i);
+        banner.querySelectorAll<HTMLButtonElement>('button')[1].click();
+        await settle(fixture);
+        expect(spies.answerAlert).toHaveBeenCalledOnceWith('demo-tx-001', 'mine');
+        expect(el.querySelector('.proactive-alert')).toBeNull();
+        expect(el.querySelector('[role="status"]')!.textContent).toContain(p.t().alertThanks);
+        expect(p.chatOpen()).toBeFalse();
+      });
+
+      it('"I don\'t recognize it" records the answer and opens the guided report on that charge', async () => {
+        const spies = withAlert(flagged);
+        const { fixture, p, el } = await home(); await settle(fixture);
+        el.querySelector<HTMLButtonElement>('.proactive-alert button')!.click();
+        await settle(fixture);
+        expect(spies.answerAlert).toHaveBeenCalledOnceWith('demo-tx-001', 'report');
+        expect(p.chatOpen()).toBeTrue();
+        expect(el.querySelector('.proactive-alert')).toBeNull();
+      });
+
+      it('a failed answer keeps the banner and says why', async () => {
+        const spies = withAlert(flagged);
+        spies.answerAlert.and.rejectWith(new ApiError(503));
+        const { fixture, p, el } = await home(); await settle(fixture);
+        el.querySelector<HTMLButtonElement>('.proactive-alert button')!.click();
+        await settle(fixture);
+        expect(el.querySelector('.proactive-alert')).not.toBeNull();
+        expect(p.chatOpen()).toBeFalse();
+        expect(p.error()).not.toBe('');
+      });
+    });
+
     it('greets by the context card name and lists products with last4, showing missing fields as missing', async () => {
       const { el } = await home({ version: 1, snapshot_at: '2026-06-01', first_name: 'Ana', locale_hint: 'es-CO',
         products: [{ product_type: 'credit_card', last4: '1234', currency: 'COP' }, { product_type: null, last4: null, currency: null }] });
@@ -817,10 +1085,120 @@ describe('CustomerPage', () => {
       expect(products[1]).toContain(TestBed.inject(LangService).t().notListed);
     });
 
+    it('"can\'t find the charge" clears the selected charge and its confirmation', async () => {
+      const { fixture, p, el } = await home();
+      p.openChat();
+      service.startIntake.and.resolveTo({ episode_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', state: 'selection_required', language: 'es', mode: 'guided', replayed: false });
+      p.chatStatement = 'No reconozco este cargo.';
+      p.reason.set('not_mine');
+      await p.send();
+      fixture.detectChanges(); await fixture.whenStable();
+      el.querySelector<HTMLInputElement>('input[name="chat-choice"]')!.click();
+      p.chatConfirmed = true;
+      fixture.detectChanges(); await fixture.whenStable();
+      expect(p.choice).toBe('demo-tx-001');
+      p.cannotFind();
+      fixture.detectChanges(); await fixture.whenStable();
+      expect(p.choice).toBe('');
+      expect(p.chatConfirmed).toBeFalse();
+      p.openChat('demo-tx-001'); // found it after all: back to choosing, that charge selected
+      fixture.detectChanges(); await fixture.whenStable();
+      expect(p.choice).toBe('demo-tx-001');
+      expect(el.querySelectorAll('input[name="chat-choice"]:checked').length).toBe(1); // the only charge, checked again
+    });
+
     it('falls back to the display name without a context card', async () => {
       const { el } = await home(null);
       expect(el.querySelector('h1')?.textContent).toContain('Ana (demo)');
       expect(el.querySelector('.products')).toBeNull();
+    });
+
+    it('lets an administrator, and only them, act as another customer through the panel: open, wait for the list, pick, switch', async () => {
+      const ids: Identity[] = [{ customer_id: 'demo-ana', display_name: 'Ana (demo)', country: null },
+        { customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' }];
+      let release!: (ids: Identity[]) => void;
+      const admin = jasmine.createSpy('adminCustomers').and.returnValue(new Promise<Identity[]>(r => release = r));
+      const actAs = jasmine.createSpy('actAs').and.resolveTo({ customer_id: 'CLI-COHORT-1', mode: 'admin_act_as', context_card: null, roles: ['admin'] });
+      Object.assign(service, { adminCustomers: admin, actAs });
+      const fixture = TestBed.createComponent(CustomerPage);
+      const p = fixture.componentInstance;
+      const el = fixture.nativeElement as HTMLElement;
+      document.body.appendChild(el);
+      const settle = async () => { await new Promise(r => setTimeout(r)); await fixture.whenStable(); fixture.detectChanges(); };
+      service.signIn.and.resolveTo({ customer_id: 'demo-bruno', mode: 'email_otp', context_card: null, roles: ['customer'] });
+      p.identity = 'demo-bruno';
+      await p.login();
+      fixture.detectChanges();
+      expect(el.querySelector('details.act-as')).toBeNull();
+      service.signIn.and.resolveTo({ customer_id: 'demo-ana', mode: 'email_otp', context_card: null, roles: ['admin'] });
+      p.identity = 'demo-ana';
+      await p.login();
+      fixture.detectChanges();
+      const summary = el.querySelector<HTMLElement>('aside.role-banner details.act-as summary')!;
+      expect(summary.textContent!.trim()).toBe(p.t().actAsTitle);
+      summary.click();
+      await settle();
+      expect(admin).toHaveBeenCalledTimes(1);
+      const fieldset = () => el.querySelector<HTMLFieldSetElement>('details.act-as fieldset.picker')!;
+      const button = () => el.querySelector<HTMLButtonElement>('#act-as')!;
+      expect([fieldset().disabled, button().disabled]).toEqual([true, true]);
+      expect(el.querySelectorAll('details.act-as input[type=radio]').length).toBe(0, 'never the local demo choices while loading');
+      release(ids);
+      await settle();
+      expect(fieldset().disabled).toBeFalse();
+      el.querySelector<HTMLInputElement>('details.act-as input[type=radio][value="CLI-COHORT-1"]')!.click();
+      fixture.detectChanges();
+      expect(button().disabled).toBeFalse();
+      button().click();
+      await settle();
+      expect(actAs).toHaveBeenCalledOnceWith('CLI-COHORT-1');
+      expect([p.client(), p.step(), p.displayName()]).toEqual(['CLI-COHORT-1', 'home', 'Zoë O.']);
+      expect(el.querySelector('aside.role-banner')).not.toBeNull();
+      actAs.calls.reset();
+      p.frozen.set({} as never);
+      fixture.detectChanges();
+      expect(el.querySelector('#act-as-locked')).not.toBeNull();
+      expect(button().disabled).toBeTrue();
+      p.frozen.set(null);
+      actAs.and.rejectWith(new ApiError(403));
+      p.actAsChoice = 'demo-ana';
+      await p.actAs();
+      expect(p.client()).toBe('CLI-COHORT-1');
+      expect(p.error()).not.toBe('');
+      el.remove();
+    });
+
+    it('a failed admin list keeps the panel disabled; a retry that succeeds clears the old error', async () => {
+      const ids: Identity[] = [{ customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' }];
+      const admin = jasmine.createSpy('adminCustomers').and.rejectWith(new ApiError(503));
+      Object.assign(service, { adminCustomers: admin });
+      const p = TestBed.createComponent(CustomerPage).componentInstance;
+      await p.toggleActAs(true);
+      expect([p.actAsIdentities(), p.error() !== '']).toEqual([[], true]);
+      admin.and.resolveTo(ids);
+      await p.toggleActAs(true);
+      expect([p.actAsIdentities(), p.error()]).toEqual([ids, '']);
+    });
+
+    it('loads the admin list even while the local demo list is still loading, and keeps the two lists apart', async () => {
+      let release!: (ids: Identity[]) => void;
+      service.identities.and.returnValue(new Promise<Identity[]>(r => release = r));
+      const adminIds: Identity[] = [{ customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' }];
+      const admin = jasmine.createSpy('adminCustomers').and.resolveTo(adminIds);
+      Object.assign(service, { adminCustomers: admin });
+      const fixture = TestBed.createComponent(CustomerPage);
+      const p = fixture.componentInstance;
+      const init = p.ngOnInit();
+      expect(p.identitiesLoading()).toBeTrue();
+      await p.toggleActAs(true);
+      expect(admin).toHaveBeenCalledTimes(1);
+      expect(p.actAsIdentities()).toEqual(adminIds);
+      const local = [{ customer_id: 'demo-ana', display_name: 'Ana (demo)', country: null }];
+      release(local);
+      await init;
+      expect([p.actAsIdentities(), p.identities()]).toEqual([adminIds, local]);
+      expect([p.actAsLoading(), p.identitiesLoading()]).toEqual([false, false]);
+      fixture.destroy();
     });
 
     it('shows an administrator, and only them, a banner linking the agent view; reset clears the roles', async () => {
@@ -1531,4 +1909,3 @@ describe('CustomerPage', () => {
     });
   });
 });
-
