@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { formatSourceTime } from '../../shared/format/source-time.util';
 import { formatMoney } from '../../shared/format/money.util';
-import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
+import { LangService, STATUS_CHIP, Strings, checkText, errorText, messageErrorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
 import { MessageThreadView } from '../../shared/messages/message-thread.component';
@@ -488,8 +488,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly messageSending = signal(false);
   readonly messageFailed = signal('');
   readonly messagesSent = signal(0);
-  /** One key per message text: a retry of the same text reuses it (one stored message); new text gets a new key. */
-  private messageKey: { body: string; key: string } | null = null;
+  /** Retry keys belong to each report and text, so changing reports preserves an unconfirmed send. */
+  private readonly messageKeys = new Map<string, { body: string; key: string }>();
 
   /** Open or close one own report's messages with the agent. */
   async toggleMessages(protocol: string): Promise<void> {
@@ -509,16 +509,20 @@ export class CustomerPage implements OnInit, OnDestroy {
   async sendMessage(body: string): Promise<void> {
     const protocol = this.openThread();
     if (!protocol || this.messageSending()) return;
-    if (this.messageKey?.body !== body) this.messageKey = { body, key: crypto.randomUUID() };
+    let messageKey = this.messageKeys.get(protocol);
+    if (messageKey?.body !== body) {
+      messageKey = { body, key: crypto.randomUUID() };
+      this.messageKeys.set(protocol, messageKey);
+    }
     this.messageSending.set(true);
     this.messageFailed.set('');
     try {
-      await this.service.postMessage(protocol, body, this.messageKey.key);
-      this.messageKey = null;
-      this.messagesSent.update(n => n + 1);
+      await this.service.postMessage(protocol, body, messageKey.key);
+      this.messageKeys.delete(protocol);
+      if (this.openThread() === protocol) this.messagesSent.update(n => n + 1);
     } catch (e) {
-      this.messageFailed.set(e instanceof ApiError && e.status === 409 ? this.t().messagesClosed : errorText(this.t(), e));
-      if (e instanceof ApiError && e.status === 409) this.messageKey = null;
+      if (this.openThread() === protocol) this.messageFailed.set(messageErrorText(this.t(), e));
+      if (e instanceof ApiError && e.status === 409) this.messageKeys.delete(protocol);
     } finally {
       this.messageSending.set(false);
     }

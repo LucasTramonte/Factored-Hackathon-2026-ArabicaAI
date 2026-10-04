@@ -8,7 +8,7 @@ import { CognitoService } from '../../core/auth/cognito.service';
 import { demoPicker } from '../../core/auth/cognito.config';
 import { formatSourceTime } from '../../shared/format/source-time.util';
 import { formatMoney } from '../../shared/format/money.util';
-import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
+import { LangService, STATUS_CHIP, Strings, checkText, errorText, messageErrorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
 import { MessageThreadView } from '../../shared/messages/message-thread.component';
@@ -310,9 +310,9 @@ export class AgentPage {
     try {
       await this.service.postMessage(protocol, body, this.messageKey.key);
       this.messageKey = null;
-      this.messagesSent.update(n => n + 1);
+      if (this.detail()?.protocol === protocol) this.messagesSent.update(n => n + 1);
     } catch (e) {
-      this.messageFailed.set(e instanceof ApiError && e.status === 409 ? this.t().messagesClosed : errorText(this.t(), e));
+      if (this.detail()?.protocol === protocol) this.messageFailed.set(messageErrorText(this.t(), e));
       if (e instanceof ApiError && e.status === 409) this.messageKey = null;
     } finally {
       this.messageSending.set(false);

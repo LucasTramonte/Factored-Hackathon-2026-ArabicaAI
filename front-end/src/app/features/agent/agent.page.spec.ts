@@ -564,9 +564,44 @@ describe('AgentPage', () => {
       expect(service.postMessage.calls.mostRecent().args.slice(0, 2)).toEqual([P1, 'Hola']);
       expect(page.messagesSent()).toBe(1);
       expect(service.messages).toHaveBeenCalledTimes(2);
-      service.postMessage.and.rejectWith(new ApiError(409, 'x'));
+      service.postMessage.and.rejectWith(new ApiError(409, 'x', false, 'closed-thread'));
       await page.sendMessage('Otra');
       expect(page.messageFailed()).toBe(t().messagesClosed);
+    });
+
+    for (const failure of [false, true]) it(`ignores a late message ${failure ? 'failure' : 'success'} after switching reports`, async () => {
+      page.detail.set(detail(P1));
+      let complete!: () => void;
+      service.postMessage.and.returnValue(new Promise((resolve, reject) => {
+        complete = () => failure ? reject(new ApiError(503)) : resolve({ message_id: P1, author: 'agent', body: 'Hola', created_at: 'x' });
+      }));
+      const pending = page.sendMessage('Hola');
+      expect(page.messageSending()).toBeTrue();
+      page.detail.set(detail(P2));
+      page.messageFailed.set('current report state');
+      complete();
+      await pending;
+      expect(page.messagesSent()).toBe(0);
+      expect(page.messageFailed()).toBe('current report state');
+      expect(page.messageSending()).toBeFalse();
+    });
+
+    it('maps message conflicts by reason and preserves the usual error fallback', async () => {
+      page.detail.set(detail(P1));
+      for (const lang of ['es', 'pt', 'en'] as const) {
+        TestBed.inject(LangService).set(lang);
+        for (const [reason, expected] of [
+          ['closed-thread', t().messagesClosed], ['full-thread', t().messagesFull],
+          ['key-conflict', t().messagesConflict], ['unknown', t().err409]
+        ] as const) {
+          service.postMessage.and.rejectWith(new ApiError(409, undefined, false, reason));
+          await page.sendMessage('Hola');
+          expect(page.messageFailed()).toBe(expected);
+        }
+        service.postMessage.and.rejectWith(new ApiError(503));
+        await page.sendMessage('Hola');
+        expect(page.messageFailed()).toBe(t().err503);
+      }
     });
 
     it('disables the action while the change is pending', async () => {

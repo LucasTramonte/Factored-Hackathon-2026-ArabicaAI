@@ -81,9 +81,9 @@ const CEILING = {
   // Measured 2026-10-04: 2 queries, 7 rows read, 0 written, 2 round trips.
   serviceTimes: [2, 7, 0, 2],
   // ADR-015: the session, then one batch. A post inserts guarded by the report's state and count, then reads back the
-  // key; a read returns the report status and at most 51 messages through handoff_messages_thread. Rows read measure one
-  // more in the full suite than alone (post 10/11, read 7/8); the ceilings take the full suite's.
-  messagePost: [3, 11, 4, 2],
+  // key; both statements revalidate the live customer session (12–13 rows read; ceiling 13). A read returns the report status and at
+  // most 51 messages through handoff_messages_thread (7/8 rows read alone/in the full suite; ceiling 8).
+  messagePost: [3, 13, 4, 2],
   messageThread: [3, 8, 0, 2],
   // Session, owned report with its target flag, the outbox insert that checks the 5-minute window itself (row, primary
   // key, email_outbox_recent); the send marks the row from its own store after the response (Task 3.3).

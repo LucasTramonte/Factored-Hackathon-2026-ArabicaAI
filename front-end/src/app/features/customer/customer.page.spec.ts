@@ -1361,10 +1361,55 @@ describe('CustomerPage', () => {
         expect(p.messagesSent()).toBe(1);
         await p.sendMessage('Otra cosa');
         expect(service.postMessage.calls.mostRecent().args[2]).not.toBe(first[2]);
-        service.postMessage.and.rejectWith(new ApiError(409, 'x'));
+        service.postMessage.and.rejectWith(new ApiError(409, 'x', false, 'closed-thread'));
         await p.sendMessage('Gracias');
         expect(p.messageFailed()).toBe(p.t().messagesClosed);
         expect(service.messages.calls.count()).toBeGreaterThan(1, 'the stored thread is read again after each post');
+      });
+    });
+
+    describe('message completion and retry isolation', () => {
+      it('keeps each report retry key through another report success or conflict', async () => {
+        const { p } = await home();
+        service.messages.and.resolveTo({ status: 'received', can_post: true, items: [] });
+        for (const conflict of [false, true]) {
+          p.openThread.set('report-a');
+          service.postMessage.and.rejectWith(new ApiError(503));
+          await p.sendMessage('Same text');
+          const keyA = service.postMessage.calls.mostRecent().args[2];
+          p.openThread.set('report-b');
+          await p.sendMessage('Same text');
+          const keyB = service.postMessage.calls.mostRecent().args[2];
+          expect(keyB).not.toBe(keyA);
+          if (conflict) service.postMessage.and.rejectWith(new ApiError(409, undefined, false, 'full-thread'));
+          else service.postMessage.and.resolveTo({ message_id: 'id', author: 'customer', body: 'Same text', created_at: 'x' });
+          await p.sendMessage('Same text');
+          expect(service.postMessage.calls.mostRecent().args[2]).toBe(keyB);
+          service.postMessage.and.rejectWith(new ApiError(503));
+          await p.sendMessage('Same text');
+          expect(service.postMessage.calls.mostRecent().args[2]).not.toBe(keyB);
+          p.openThread.set('report-a');
+          await p.sendMessage('Same text');
+          expect(service.postMessage.calls.mostRecent().args[2]).toBe(keyA);
+        }
+      });
+
+      for (const failure of [false, true]) it(`ignores a late message ${failure ? 'failure' : 'success'} for another report`, async () => {
+        const { p } = await home();
+        p.openThread.set('report-a');
+        service.messages.and.resolveTo({ status: 'received', can_post: true, items: [] });
+        let complete!: () => void;
+        service.postMessage.and.returnValue(new Promise((resolve, reject) => {
+          complete = () => failure ? reject(new ApiError(503)) : resolve({ message_id: 'id', author: 'customer', body: 'Hola', created_at: 'x' });
+        }));
+        const pending = p.sendMessage('Hola');
+        p.openThread.set('report-b');
+        p.messageFailed.set('current report state');
+        complete();
+        await pending;
+        expect(p.messagesSent()).toBe(0);
+        expect(p.messageFailed()).toBe('current report state');
+        expect(p.messageSending()).toBeFalse();
       });
     });
 

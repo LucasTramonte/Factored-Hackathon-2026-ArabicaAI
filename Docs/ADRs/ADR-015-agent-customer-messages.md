@@ -34,13 +34,13 @@ Email isn't a substitute today:
 
 - **+** The agent can ask for what's missing and explain the next step. The customer answers on the same report.
 - **+** The design follows the existing patterns: SQL only in `d1.js`, roles in the route table, ownership checked in SQL, adversarial tests, contracts and budgets.
-- **+** Measured D1 work: a post is `3 / 10 / 4 / 2` and a read `3 / 7 / 0 / 2` (ADR-004 note).
+- **+** Measured D1 work: a customer post is `3 / 12–13 / 4 / 2` and a read `3 / 7 / 0 / 2` (ADR-004 note).
 - **−** The customer learns about a new message only by opening the report until email-on-message exists.
 - **−** Free text from an agent can promise what the bank can't deliver. The agent's training and the demo banner cover this; there is no automated check.
 
 ## Alternatives considered
 
-- **Email the message body.** Rejected: SES sandbox, the template `CHECK`, and statements and messages are kept out of email bodies by design.
-- **Fixed message templates only** (closing reasons, "please send the merchant"). Safer wording, but too rigid for the questions agents actually ask. Reopen if wording risk shows up in review.
-- **An AI assistant that writes to the customer.** Rejected for now (ADR-012). The agent-assist step (a model drafts, a person edits and sends) can build on this thread later, under its own ADR.
-- **A chat channel per customer instead of per report.** Rejected: a dispute is about one charge, and isolation and review are per report.
+- **Email the message body.** Rejected: SES sandbox restrictions, the template `CHECK`, and the policy keeping statements and messages out of email bodies prevent this. Reopen only if SES production access is granted, a person applies the template migration, and a superseding ADR explicitly permits message content in email.
+- **Fixed message templates only** (closing reasons, "please send the merchant"). Rejected: templates cannot cover the follow-up questions agents need to ask. Reopen if a reviewed agent message promises a refund, card block or fraud decision outside the agent's authority; require approved Spanish and Portuguese templates covering the observed questions before adopting this alternative.
+- **An AI assistant that writes to the customer.** Rejected: there is no evaluated, approved customer-facing generation workflow (ADR-012). Reopen after a separate ADR defines the permitted messages, human approval requirement and evaluation thresholds, and a Spanish/Portuguese pilot meets those thresholds. A model drafting text for a person to edit and send also needs that ADR.
+- **A chat channel per customer instead of per report.** Rejected: a dispute concerns one charge, and ownership and review are enforced per report. Reopen if a documented support workflow requires one conversation across multiple reports and a superseding ADR defines report links, authorization and closure behavior for that conversation.

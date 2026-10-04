@@ -289,7 +289,7 @@ export async function postMessage(request, env, store) {
   if (checked.error) return checked.error;
   const messageId = crypto.randomUUID();
   const found = await store.postMessage({ customerId: current.customer_id, ...ref, author: 'customer', body: checked.value.body,
-    key: checked.value.key, now: Date.now(), messageId });
+    key: checked.value.key, now: Date.now(), messageId, sessionHash: await tokenHash(readCookies(request).demo_session) });
   return postOutcome(found, messageId, checked.value.body);
 }
 

@@ -774,11 +774,16 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /**
      * Post one message in one statement: only on an acknowledged report that isn't closed and has fewer than
      * ``MESSAGES_PER_REPORT`` messages, once per (report, author, idempotency key). Then read back what that key holds.
+     * Customer writes and readbacks both require the supplied session to remain live and owned by that customer.
      * Resolves null when the report isn't found for this caller, else ``{ status, total, message }`` (``message`` null when
      * nothing was stored for the key: closed or full).
      */
-    postMessage: async ({ customerId = null, protocol, short = '', author, body, key, now, agentSessionRef = null, messageId }) => {
-      const [where, params] = messageScope(customerId, protocol, short);
+    postMessage: async ({ customerId = null, protocol, short = '', author, body, key, now, agentSessionRef = null, messageId, sessionHash }) => {
+      let [where, params] = messageScope(customerId, protocol, short);
+      if (customerId !== null) {
+        where += " AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=? AND expires_at>?)";
+        params = [...params, sessionHash, customerId, now];
+      }
       const [, read] = await batch([
         ['INSERT INTO handoff_messages(message_id,handoff_id,author,body,idempotency_key,created_at,agent_session_ref) '
           + 'SELECT ?,h.handoff_id,?,?,?,?,? FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE ' + where
