@@ -68,11 +68,12 @@ Tagged on `64ae03a` (#84) on 2026-10-03; [GitHub Release](https://github.com/Luc
 - Worker version `f76c7f7b-765d-4952-a22a-13263a8e060b`, tag `main-64ae03a`, deployed 2026-10-03 15:16 UTC by the GitHub Actions `deploy` workflow.
 - D1 migrations 0001–0017 on remote `arabica-intake-demo`.
 - Cohort: 796 dataset customers, `slice_version` `c32369c464eec13a` (one part, `4fe90381be8d8fef`), from the cohort manifest (`data/gold_cohort/2026-06-17/manifest.json`); remote `seed_loads` was not re-read at tag time. Fictitious seed: six identities.
+- Cohort: 796 dataset customers, `slice_version` `c32369c464eec13a` (one part, `4fe90381be8d8fef`), from the cohort manifest (`data/gold_cohort/2026-06-17/manifest.json`). Remote `seed_loads`, and the fictitious seed's alert flags from #106, were not re-read: agents don't run `--remote`. The tagging person checks both with the read-only queries in the PR and records them here.
 - Extractor switch: off.
 
 ## `v0.3.0`: Admin, alerts and the measured extractor
 
-Prepared 2026-10-04 from what merged after `v0.2.0` (#85–#110). The tag goes on `3669b00`, the deployed `main`, after a person's go-ahead; the date and the GitHub Release link are filled in then.
+Prepared 2026-10-04 from what merged after `v0.2.0` (#85–#110). The tag goes on `3669b00`, the deployed `main`, after a person's go-ahead; the date and the GitHub Release link are filled in then. Check #111's state just before tagging (`gh pr view 111 --json state,mergedAt,mergeCommit`). If it has merged and been deployed, tag its squash commit instead and move the frozen-comparison line below from "not part of this release" to Evaluation; if not, tag `3669b00` as written.
 
 ### Highlights
 
@@ -109,7 +110,9 @@ Prepared 2026-10-04 from what merged after `v0.2.0` (#85–#110). The tag goes o
 
 ### Deployed state
 
-- Worker version `c8f83379-ff1a-4a7b-9a60-8de3021f94bc` (a secret change on 2026-10-04 04:40 UTC on top of `d4266792…`, tag `main-3669b00`, deployed 02:39 UTC by the GitHub Actions `deploy` workflow).
+- **Code deployment:** Worker version `d4266792-8eb7-4f33-ac28-ab7b87f02d5a`, tag `main-3669b00`, activated at 100% on 2026-10-04 02:39:10 UTC by the GitHub Actions `deploy` workflow (run on `3669b00`, success).
+- **Later secret change, same code:** version `c8f83379-ff1a-4a7b-9a60-8de3021f94bc`, created and activated at 100% on 2026-10-04 04:40:49 UTC by `wrangler secret put VERTEX_WIF_SIGNING_KEY`. It is the live version; it changes no code. (Both from a read-only `npx wrangler deployments list`.)
 - D1 migrations 0001–0023 on remote `arabica-intake-demo`, applied by the deploy (not re-listed at preparation; agents don't run `--remote`).
+- Cohort: 796 dataset customers, `slice_version` `c32369c464eec13a` (one part, `4fe90381be8d8fef`), from the cohort manifest (`data/gold_cohort/2026-06-17/manifest.json`). Remote `seed_loads`, and the fictitious seed's alert flags from #106, were not re-read: agents don't run `--remote`. The tagging person checks both with the read-only queries in the PR and records them here.
 - Extractor switch: off. The new `VERTEX_WIF_SIGNING_KEY` secret is unused until the AI suggestion path ships.
 
