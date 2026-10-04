@@ -208,7 +208,7 @@
                       [attr.aria-expanded]="openThread() === r.protocol" [attr.aria-label]="t().messagesTitle + ': ' + (r.reference_short ?? r.protocol)">{{ t().messagesTitle }}</button>
                     <span class="ar-caption" role="status">@if (updateNote()?.protocol === r.protocol) { {{ updateNote()!.text }} }</span>
                     @if (openThread() === r.protocol) {
-                      <app-message-thread viewer="customer" idPrefix="customer-messages" [thread]="thread()" [sending]="messageSending()"
+                      <app-message-thread viewer="customer" idPrefix="customer-messages" [scope]="r.protocol" [thread]="thread()" [sending]="messageSending() === r.protocol"
                         [failed]="messageFailed()" [sent]="messagesSent()" (send)="sendMessage($event)" />
                     }</li>
                 }</ul>

@@ -136,7 +136,7 @@
             </section>
           }
 
-          <app-message-thread viewer="agent" idPrefix="agent-messages" [thread]="thread()" [sending]="messageSending()"
+          <app-message-thread viewer="agent" idPrefix="agent-messages" [scope]="d.protocol" [thread]="thread()" [sending]="messageSending() === d.protocol"
             [failed]="messageFailed()" [sent]="messagesSent()" (send)="sendMessage($event)" />
           <h3>{{ t().statement }}</h3>
           <p class="case-statement" [attr.lang]="d.language">{{ d.customer_statement }}</p>

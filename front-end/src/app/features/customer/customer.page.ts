@@ -485,10 +485,11 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** The report whose messages are open under "Your reports" (ADR-015), its thread, and the state of a post. */
   readonly openThread = signal<string | null>(null);
   readonly thread = signal<MessageThread | null>(null);
-  readonly messageSending = signal(false);
+  /** The protocol whose post is in flight, so only that report's send button waits. */
+  readonly messageSending = signal<string | null>(null);
   readonly messageFailed = signal('');
   readonly messagesSent = signal(0);
-  /** Retry keys belong to each report and text, so changing reports preserves an unconfirmed send. */
+  /** Per report, one key per message text: a retry of the same text reuses it (one stored message); new text gets a new key. */
   private readonly messageKeys = new Map<string, { body: string; key: string }>();
 
   /** Open or close one own report's messages with the agent. */
@@ -508,24 +509,24 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** Post the customer's message on the open report, then show the stored thread. */
   async sendMessage(body: string): Promise<void> {
     const protocol = this.openThread();
-    if (!protocol || this.messageSending()) return;
-    let messageKey = this.messageKeys.get(protocol);
-    if (messageKey?.body !== body) {
-      messageKey = { body, key: crypto.randomUUID() };
-      this.messageKeys.set(protocol, messageKey);
-    }
-    this.messageSending.set(true);
+    if (!protocol || this.messageSending() === protocol) return;
+    let key = this.messageKeys.get(protocol);
+    if (key?.body !== body) this.messageKeys.set(protocol, key = { body, key: crypto.randomUUID() });
+    this.messageSending.set(protocol);
     this.messageFailed.set('');
+    // The result belongs to the report that posted; if the customer opened another one meanwhile, it touches nothing there.
+    const stillOpen = () => this.openThread() === protocol;
     try {
-      await this.service.postMessage(protocol, body, messageKey.key);
+      await this.service.postMessage(protocol, body, key.key);
       this.messageKeys.delete(protocol);
-      if (this.openThread() === protocol) this.messagesSent.update(n => n + 1);
+      if (stillOpen()) this.messagesSent.update(n => n + 1);
     } catch (e) {
-      if (this.openThread() === protocol) this.messageFailed.set(messageErrorText(this.t(), e));
       if (e instanceof ApiError && e.status === 409) this.messageKeys.delete(protocol);
+      if (stillOpen()) this.messageFailed.set(messageErrorText(this.t(), e));
     } finally {
-      this.messageSending.set(false);
+      if (this.messageSending() === protocol) this.messageSending.set(null);
     }
+    if (!stillOpen()) return;
     try {
       const thread = await this.service.messages(protocol);
       if (this.openThread() === protocol) this.thread.set(thread);

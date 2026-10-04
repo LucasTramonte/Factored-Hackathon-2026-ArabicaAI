@@ -55,14 +55,16 @@ export class MessageThreadView {
   readonly idPrefix = input('messages');
   readonly sending = input(false);
   readonly failed = input('');
-  /** Bumped by the page after a successful post, which clears the draft. */
+  /** Bumped by the page after a successful post on this report, which clears the draft. */
   readonly sent = input(0);
+  /** The report shown (its protocol): a different report never inherits the previous one's draft. */
+  readonly scope = input('');
   readonly send = output<string>();
   draft = '';
   empty = false;
 
   constructor() {
-    effect(() => { if (this.sent()) untracked(() => { this.draft = ''; this.empty = false; }); });
+    effect(() => { this.sent(); this.scope(); untracked(() => { this.draft = ''; this.empty = false; }); });
   }
 
   submit(): void {

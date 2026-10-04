@@ -43,6 +43,14 @@ describe('MessageThreadView', () => {
     expect(c.draft).toBe('');
   });
 
+  it('a different report never inherits the previous one\'s draft', () => {
+    const { fixture, c } = render(THREAD);
+    fixture.componentRef.setInput('scope', 'report-a'); fixture.detectChanges();
+    c.draft = 'para A';
+    fixture.componentRef.setInput('scope', 'report-b'); fixture.detectChanges();
+    expect(c.draft).toBe('');
+  });
+
   it('is read-only once the report is closed or the thread is full, and says which', () => {
     let { el } = render({ ...THREAD, status: 'closed', can_post: false });
     expect(el.querySelector('textarea')).toBeNull();

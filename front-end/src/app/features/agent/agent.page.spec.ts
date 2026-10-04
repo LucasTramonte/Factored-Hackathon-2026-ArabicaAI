@@ -556,6 +556,19 @@ describe('AgentPage', () => {
       expect(el().querySelector('#agent-messages-draft')).toBeNull();
     });
 
+    it('a post on report A that ends after B is opened touches nothing in B', async () => {
+      service.intakeDetail.and.callFake(async protocol => detail(protocol));
+      await loadAndOpen(P1);
+      let finish!: (m: never) => void;
+      service.postMessage.and.returnValue(new Promise(r => (finish = r)));
+      const pending = page.sendMessage('para A');
+      await loadAndOpen(P2);
+      finish({ message_id: 'aaaaaaaa-1111-4111-8111-111111111111', author: 'agent', body: 'para A', created_at: 'x' } as never);
+      await pending;
+      expect([page.messagesSent(), page.messageFailed(), page.messageSending()]).toEqual([0, '', null]);
+      expect(service.messages.calls.allArgs().map(a => a[0])).toEqual([P1, P2], 'A\'s thread is not reloaded into B');
+    });
+
     it('the agent writes to the customer: one key per text, the thread read again, a 409 explained', async () => {
       service.intakeDetail.and.resolveTo(detail(P1));
       await loadAndOpen();
@@ -576,14 +589,14 @@ describe('AgentPage', () => {
         complete = () => failure ? reject(new ApiError(503)) : resolve({ message_id: P1, author: 'agent', body: 'Hola', created_at: 'x' });
       }));
       const pending = page.sendMessage('Hola');
-      expect(page.messageSending()).toBeTrue();
+      expect(page.messageSending()).toBe(P1); // only report A waits
       page.detail.set(detail(P2));
       page.messageFailed.set('current report state');
       complete();
       await pending;
       expect(page.messagesSent()).toBe(0);
       expect(page.messageFailed()).toBe('current report state');
-      expect(page.messageSending()).toBeFalse();
+      expect(page.messageSending()).toBeNull();
     });
 
     it('maps message conflicts by reason and preserves the usual error fallback', async () => {

@@ -71,15 +71,6 @@ Prices are list prices from the Cloud Billing Catalog API, read 2026-10-04. "Per
 | Workers AI binding (the same gpt-oss-20b weights on Cloudflare) | $0 | About $0.0005 at the default level (ADR-004) | p95 3,582 ms at the default level; `low` never verified there | Lowest: no GCP identity | Low | Deferred: the host wasn't evaluated at `low` (ADR-012 decision 4) |
 | Self-deployed weights on a regional Vertex endpoint | About $800 a month always on (one GPU) | ~$0 marginal | Regional | High | Low (open weights) | Only if a bank requires the text to stay in one region; no Flash-Lite offers that today |
 
-**Implementation note (2026-10-04): how "deterministic code picks" works, checked against the code** ([details](../Plans/ai-suggestion-plan.md#how-a-suggestion-is-found-as-implemented-checked-against-the-code-2026-10-04)).
-- The code takes at most 200 of the customer's newest approved purchases from D1, with no date window.
-- Every fact the model extracted must fit: merchant, category, amount (exact, or within 10% if "about"), currency and date.
-- 1–3 fits are shown in `transaction_id` order. That is not a ranking: nothing is scored by likelihood, and no fraud field is read.
-- More than 3 is `ambiguous` and shows nothing; 0 is `no_match`.
-- D1 has no card, last-four or country data, so a description that states one of those matches nothing online. This is a known gap, pinned by a test.
-- No end-to-end accuracy is claimed: no dataset links a complaint to its transaction. The pilot's agent marks are the first such labels.
-- A learned ranker is not justified until those labels exist.
-
 ## Consequences
 
 - **+** The brief's learned component is in the product, not only in the evaluation, while every decision stays deterministic.
@@ -105,3 +96,12 @@ Prices are list prices from the Cloud Billing Catalog API, read 2026-10-04. "Per
   - created by a person: the service account `arabica-worker-vertex` (Vertex AI User only), the pool `arabica-worker`, and the OIDC provider `cloudflare-worker` (condition `assertion.sub == 'arabica-intake-worker'`, the Worker's JWKS uploaded, no Google key);
   - the provider's configuration was checked read-only;
   - the Worker's signing key is a Worker secret. The end-to-end token exchange is not verified yet, because it needs the implementation deployed.
+
+**Implementation note (2026-10-04): how "deterministic code picks" works, checked against the code** ([details](../Plans/ai-suggestion-plan.md#how-a-suggestion-is-found-as-implemented-checked-against-the-code-2026-10-04)).
+- The code takes at most 200 of the customer's newest approved purchases from D1, with no date window.
+- Every fact the model extracted must fit: merchant, category, amount (exact, or within 10% if "about"), currency and date.
+- 1–3 fits are shown in `transaction_id` order. That is not a ranking: nothing is scored by likelihood, and no fraud field is read.
+- More than 3 is `ambiguous` and shows nothing; 0 is `no_match`.
+- D1 has no card, last-four or country data, so a description that states one of those matches nothing online. This is a known gap, pinned by a test.
+- No end-to-end accuracy is claimed: no dataset links a complaint to its transaction. The pilot's agent marks are the first such labels.
+- A learned ranker is not justified until those labels exist.

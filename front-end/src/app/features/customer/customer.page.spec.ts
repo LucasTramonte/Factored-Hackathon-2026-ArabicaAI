@@ -1409,8 +1409,30 @@ describe('CustomerPage', () => {
         await pending;
         expect(p.messagesSent()).toBe(0);
         expect(p.messageFailed()).toBe('current report state');
-        expect(p.messageSending()).toBeFalse();
+        expect(p.messageSending()).toBeNull();
       });
+    });
+
+    it('a post on report A that ends after B is opened touches nothing in B; each report keeps its own retry key', async () => {
+      const A = '99999999-8888-4777-8666-555555555555', B = '11111111-2222-4333-8444-555555555555';
+      service.reports.and.resolveTo({ items: [report('incomplete', 'AR-AAAA-BBBB'), report('incomplete', 'AR-CCCC-DDDD', undefined, B)], has_more: false });
+      service.messages.and.resolveTo({ status: 'in_review', can_post: true, items: [] });
+      const { p } = await home();
+      await p.toggleMessages(A);
+      let fail!: (e: unknown) => void;
+      service.postMessage.and.returnValue(new Promise((_, reject) => (fail = reject)));
+      const pending = p.sendMessage('para A');
+      await p.toggleMessages(B);
+      fail(new ApiError(503, 'x')); await pending;
+      expect([p.messageFailed(), p.messagesSent(), p.messageSending()]).toEqual(['', 0, null]);
+      service.postMessage.and.resolveTo({ message_id: 'aaaaaaaa-1111-4111-8111-111111111111', author: 'customer', body: 'para B', created_at: '2026-10-04T18:00:00.000Z' });
+      await p.sendMessage('para B');
+      const [[, , keyA], [, , keyB]] = service.postMessage.calls.allArgs();
+      expect(keyB).not.toBe(keyA);
+      expect(p.messagesSent()).toBe(1);
+      await p.toggleMessages(A);
+      await p.sendMessage('para A');
+      expect(service.postMessage.calls.mostRecent().args[2]).toBe(keyA, 'A\'s failed text keeps its key for the retry');
     });
 
     describe('validation errors appear where the click was, and focus the field to fix', () => {
