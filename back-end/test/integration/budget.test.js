@@ -12,8 +12,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { client, idToken } from '../support/client.js';
+import { close } from '../support/close.js';
 import { assertContract } from '../support/contract.js';
 import { tokenHash } from '../../src/auth/session.js';
+import { exportPKCS8, generateKeyPair } from 'jose';
+import { readWranglerConfig } from '../../scripts/predeploy.mjs';
+import { runSuggestion } from '../../src/modules/intake/suggestions.js';
 
 // Ceilings per request: [queries, rows_read, rows_written, round_trips]. D1 Free allows 50 queries per invocation;
 // round trips drive latency (about 150 ms each when the Worker runs far from D1).
@@ -93,8 +97,22 @@ const CEILING = {
   // episodes (index intake_episodes_owner_recent) with at most 20 other reports, so reads are bounded by window size.
   // The raw window also keeps null pending/current slots internally so has_more cannot under-report a full window.
   // Linked follow-up fixtures fill more acknowledged slots: complete detail measures 82 reads (ADR-004).
-  completeDetail: [5, 82, 1, 3],
+  // Migration 0024 (ADR-012): the detail row also joins the suggestion run, the customer's answer, its charge and the
+  // agent's mark, each by primary key, in the same statement: +1 read on the complete detail (82 -> 83; ADR-004, 2026-10-04 note).
+  completeDetail: [5, 83, 1, 3],
   incompleteDetail: [5, 80, 1, 3],
+  // AI suggestions (ADR-012, migration 0024); measured, no margin (ADR-004, 2026-10-04 note). An incomplete handoff with
+  // details inserts its suggestion run (row and primary key) in the reservation batch: one more query, no round trip,
+  // whatever the switch. GET suggestions: the session, then one owner-scoped read of the run, answer and at most three
+  // charges. Confirm and mark: the session, then one batch (a guarded insert and its read-back); a replay writes nothing.
+  // The after-response run (ctx.waitUntil, its own store): the cap slot, the pre-recorded call, the customer's purchases
+  // (one batch of two reads, at most 200 charges) and the outcome batch (run, at most three suggestions, one event).
+  intakeIncompleteDetails: [16, 52, 20, 7],
+  suggestions: [2, 10, 0, 2],
+  suggestionConfirm: [3, 10, 2, 2],
+  suggestionDetail: [5, 83, 1, 3],
+  suggestionMark: [3, 7, 2, 2],
+  suggestionRun: [7, 29, 8, 4],
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
   idleSweepPage: [2, 1210, 300, 1],
   idleSweepNoop: [2, 10, 0, 1],
@@ -357,4 +375,61 @@ test('a dense acknowledged history qualifies detail reads with the current repor
   const replay = await agent.call('/agent/intake-detail?protocol=' + protocol);
   assert.equal(replay.status, 200); assert.equal(replay.metrics.rows_written, 0);
   console.log('D1_DENSE_HISTORY ' + JSON.stringify({ first: first.metrics, replay: replay.metrics }));
+});
+
+test('AI suggestion routes and the after-response run stay within their D1 budgets', async () => {
+  const measured = {};
+  const c = client(); assert.equal((await c.call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
+  const start = await c.call('/intake/start', startBody()); assert.equal(start.status, 201);
+  const details = 'Lembro só do mercado. FACTS={"merchant":"Mercado Demo"}';
+  const handoff = await c.call('/intake/handoff', { episode_id: start.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID(), details });
+  assert.equal(handoff.status, 201); assertContract('intakeReceipt', handoff.body);
+  measured.incompleteDetails = within('intakeIncompleteDetails', handoff.metrics);
+  const path = `/intake/handoff/${handoff.body.protocol}/suggestions`;
+  let shown;
+  for (const until = Date.now() + 15000; ;) {
+    shown = await c.call(path);
+    if (shown.body.status !== 'pending' || Date.now() > until) break;
+    await new Promise(done => setTimeout(done, 200));
+  }
+  assert.equal(shown.body.status, 'suggested'); assertContract('suggestionList', shown.body);
+  measured.suggestions = within('suggestions', shown.metrics);
+  const confirm = await c.call(path + '/confirm', { transaction_id: 'demo-tx-001' });
+  assert.equal(confirm.status, 200); measured.suggestionConfirm = within('suggestionConfirm', confirm.metrics);
+  measured.suggestionConfirmReplay = within('suggestionConfirm', (await c.call(path + '/confirm', { transaction_id: 'demo-tx-001' })).metrics);
+  const agent = client(); await agent.call('/demo/agent-session', {});
+  const detail = await agent.call('/agent/intake-detail?protocol=' + handoff.body.protocol);
+  assert.equal(detail.status, 200); assert.equal(detail.body.customer_suggestion.choice, 'confirmed');
+  measured.suggestionDetail = within('suggestionDetail', detail.metrics);
+  const mark = await agent.call('/agent/suggestion-mark', { protocol: handoff.body.protocol, mark: 'correct' });
+  assert.equal(mark.status, 200); measured.suggestionMark = within('suggestionMark', mark.metrics);
+  measured.suggestionMarkReplay = within('suggestionMark', (await agent.call('/agent/suggestion-mark', { protocol: handoff.body.protocol, mark: 'correct' })).metrics);
+  for (const status of ['in_review', 'closed']) assert.equal((await agent.call('/agent/intake-status', { protocol: handoff.body.protocol, status })).status, 200);
+  // The after-response run (ctx.waitUntil) uses a store of its own, so it is measured here on a store-built pending run,
+  // with Google faked in process: cap slot, pre-recorded call, the customer's purchases, and the outcome batch.
+  const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
+  const { vars } = await readWranglerConfig(config());
+  const { privateKey } = await generateKeyPair('RS256', { extractable: true });
+  const env = { ...vars, INTAKE_AI_ENABLED: '1', VERTEX_MODEL_RETIRES: '2099-01-01', VERTEX_WIF_SIGNING_KEY: await exportPKCS8(privateKey) };
+  const reply = body => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  const fetcher = async url => String(url).endsWith('/v1/token') ? reply({ access_token: 'f' })
+    : String(url).endsWith(':generateAccessToken') ? reply({ accessToken: 'v', expireTime: new Date(Date.now() + 3600000).toISOString() })
+      : reply({ choices: [{ message: { content: JSON.stringify({ intent: 'report', stated_facts: { merchant: 'Mercado Demo' }, invalid: null, demand: null, injection: false }) } }],
+        usage: { prompt_tokens: 1840, completion_tokens: 84 } });
+  const now = Date.now(); const sessionHash = await tokenHash('suggestion-budget-' + crypto.randomUUID());
+  await withIntakeStore({ config: config() }, async store => {
+    await store.rotateSession({ now, oldHash: null, newHash: sessionHash, actor: 'customer', customerId: 'demo-ana', expiresAt: now + 3600000, requestId: 'suggestion-budget' });
+    const { episode } = await store.startIntake({ customerId: 'demo-ana', language: 'pt', statement: 'Não reconheço esta cobrança.', reason: 'not_mine', key: crypto.randomUUID(), now, expiresAt: now + 3600000 });
+    const { handoff: reserved } = await store.persistIntakeHandoff({ customerId: 'demo-ana', episodeId: episode.episode_id, turnKey: crypto.randomUUID(),
+      payloadHash: await tokenHash(JSON.stringify(['incomplete', null, details])), sessionHash, details, completeCase: null, kind: 'incomplete',
+      evidence: { transaction: null, tool_status: 'ok' }, actions: [], questions: ['matching_transaction', 'customer_confirmation'],
+      usage: { tool_calls: 0, operation_duration_ms: 0 }, now, suggestionArm: 'B' });
+    const receipt = await store.readIntakeReceipt('demo-ana', episode.episode_id, { sessionHash, now });
+    assert.equal((await store.finishIntakeHandoff({ customerId: 'demo-ana', episode, receipt, sessionHash, now, operationDuration: 0, toolCalls: 0 })).acknowledged, true);
+    const run = await storeCall(store, () => runSuggestion(env, store, { handoffId: reserved.handoff_id, customerId: 'demo-ana', arm: 'B', details, language: 'pt' }, { fetcher }));
+    assert.equal(run.result, 'suggested');
+    measured.suggestionRun = within('suggestionRun', run.metrics);
+    await close(store, reserved.handoff_id);
+  });
+  console.log('D1_AI_SUGGESTIONS ' + JSON.stringify(measured));
 });
