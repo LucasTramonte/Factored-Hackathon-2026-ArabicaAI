@@ -10,7 +10,10 @@ test('pages are public; customers are isolated; replay and handoff work', async 
     assert.equal(page.status, 200, path);
     assert.match(await page.text(), /<app-root/);
   }
-  assert.equal((await fetch(base + '/favicon.svg')).status, 200, 'static files are served without the Worker');
+  const favicon = await fetch(base + '/favicon.svg');
+  assert.equal(favicon.status, 200, 'static files are served without the Worker');
+  assert.match(favicon.headers.get('content-type') ?? '', /image\/svg\+xml/i);
+  assert.match(await favicon.text(), /<svg(?:\s|>)/i, 'the asset is SVG, not the SPA fallback');
   assert.equal((await client().call('/transactions')).status, 401);
 
   const ids = await client().call('/demo/identities');

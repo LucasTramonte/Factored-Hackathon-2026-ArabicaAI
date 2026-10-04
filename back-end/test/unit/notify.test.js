@@ -49,6 +49,8 @@ test('every template in every language names the reference, says no refund start
   }
   // Without an app URL, or with one that is not https, there is no button; the inline logo stays; the reference is escaped like any other value.
   assert.ok(!render('received', 'en', { reference: 'R', appUrl: 'http://demo.example' }).html.includes('<a '));
+  assert.ok(!render('received', 'en', { reference: 'R', appUrl: 'not a URL' }).html.includes('<a '));
+  assert.ok(render('received', 'en', { reference: 'R', appUrl: 'HTTPS://demo.example/' }).html.includes('href="HTTPS://demo.example"'));
   const bare = render('received', 'en', { reference: 'AR-<X>&"1"' }).html;
   assert.ok(bare.includes(`cid:${LOGO_CID}`) && !bare.includes('<a ') && bare.includes('AR-&lt;X&gt;&amp;&quot;1&quot;'));
   assert.ok(render('received', 'es', { reference: 'R', urgent: true }).text.includes('Este servicio no bloquea tarjetas.'));

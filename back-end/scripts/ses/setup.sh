@@ -42,16 +42,18 @@ aws sns "${P[@]}" --region "$REGION" list-subscriptions-by-topic --topic-arn "$t
 "${SES[@]}" get-configuration-set --configuration-set-name "$CONFIG_SET" >/dev/null 2>&1 \
   || "${SES[@]}" create-configuration-set --configuration-set-name "$CONFIG_SET" >/dev/null
 destination="{\"Enabled\": true, \"MatchingEventTypes\": [\"BOUNCE\", \"COMPLAINT\"], \"SnsDestination\": {\"TopicArn\": \"$topic_arn\"}}"
-"${SES[@]}" get-configuration-set-event-destinations --configuration-set-name "$CONFIG_SET" --query "EventDestinations[?Name=='$TOPIC'].Name" | grep -q . \
-  && "${SES[@]}" update-configuration-set-event-destination --configuration-set-name "$CONFIG_SET" --event-destination-name "$TOPIC" --event-destination "$destination" \
-  || "${SES[@]}" create-configuration-set-event-destination --configuration-set-name "$CONFIG_SET" --event-destination-name "$TOPIC" --event-destination "$destination"
+if "${SES[@]}" get-configuration-set-event-destinations --configuration-set-name "$CONFIG_SET" --query "EventDestinations[?Name=='$TOPIC'].Name" | grep -q .; then
+  "${SES[@]}" update-configuration-set-event-destination --configuration-set-name "$CONFIG_SET" --event-destination-name "$TOPIC" --event-destination "$destination"
+else
+  "${SES[@]}" create-configuration-set-event-destination --configuration-set-name "$CONFIG_SET" --event-destination-name "$TOPIC" --event-destination "$destination"
+fi
 "${SES[@]}" put-email-identity-configuration-set-attributes --email-identity "$IDENTITY" --configuration-set-name "$CONFIG_SET"
 for triple in "bounce-rate Reputation.BounceRate 0.02" "complaint-rate Reputation.ComplaintRate 0.0005"; do
-  set -- $triple; name=$1; shift
-  "${CW[@]}" put-metric-alarm --alarm-name "arabicaai-ses-$name" --namespace AWS/SES --metric-name "$1" \
-    --statistic Average --period 3600 --evaluation-periods 1 --threshold "$2" --comparison-operator GreaterThanThreshold \
+  read -r name metric threshold <<< "$triple"
+  "${CW[@]}" put-metric-alarm --alarm-name "arabicaai-ses-$name" --namespace AWS/SES --metric-name "$metric" \
+    --statistic Average --period 3600 --evaluation-periods 1 --threshold "$threshold" --comparison-operator GreaterThanThreshold \
     --treat-missing-data notBreaching --alarm-actions "$topic_arn" \
-    --alarm-description "SES account $1 over $2 (AWS reviews at 5% bounce, 0.1% complaint). Docs/Plans/intake-demo.md"
+    --alarm-description "SES account $metric over $threshold (AWS reviews at 5% bounce, 0.1% complaint). Docs/Plans/intake-demo.md"
 done
 
 echo "SES_IDENTITY=$IDENTITY verified=$("${SES[@]}" get-email-identity --email-identity "$IDENTITY" --query VerifiedForSendingStatus) config_set=$CONFIG_SET"

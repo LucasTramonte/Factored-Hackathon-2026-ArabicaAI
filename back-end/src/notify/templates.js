@@ -77,7 +77,10 @@ const MONO = "'Geist Mono', SFMono-Regular, Menlo, Consolas, monospace";
  * and without it there is no button.
  */
 function html({ lang, subject, paragraphs, reference, urgent, appUrl }) {
-  const base = /^https:\/\//.test(appUrl ?? '') ? appUrl.replace(/\/+$/, '') : null;  // only an https link becomes a button
+  let base = null;
+  try {
+    if (new URL(appUrl).protocol === 'https:') base = appUrl.replace(/\/+$/, '');
+  } catch {} // An absent or invalid URL simply omits the optional button.
   const logo = `<img src="cid:${LOGO_CID}" width="32" height="32" alt="" style="display:block;width:32px;height:32px;border-radius:16px">`;
   const p = text => `<p style="margin:0 0 14px;font:16px/24px ${FONT};color:${C.ink}">${esc(text)}</p>`;
   const refBox = `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 20px"><tr><td style="padding:12px 16px;border:1px solid ${C.line};border-radius:12px;background:${C.surface}">`

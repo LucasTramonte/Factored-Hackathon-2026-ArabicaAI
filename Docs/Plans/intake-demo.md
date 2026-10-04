@@ -108,7 +108,7 @@ Both use `--profile ${AWS_PROFILE:-arabica}` and can be rerun. Judges' and teamm
 
 ### Notification email (SES)
 
-The Worker will send notification emails through Amazon SES v2 (`us-east-2`, account `arabica`) from a teammate's address; the team has no verified domain, so the sender is a single verified email identity. `SES_REGION` is a plain var in `back-end/wrangler.jsonc`; `SES_FROM` (`ArabicaAI demo <address>`) is a Worker secret, because no personal address is committed (issue #70), and the deploy guard refuses it in `vars`. The IAM user `arabicaai-worker-ses` has one inline policy, `ses-send-only`, allowing only `ses:SendEmail` on that one sender identity, and no managed policies.
+The Worker sends notification emails through Amazon SES v2 (`us-east-2`, account `arabica`) from `ArabicaAI <noreply@arabicaai-demo.com>`. The `arabicaai-demo.com` domain identity is verified with Easy DKIM and a custom MAIL FROM. `SES_REGION` is a plain var in `back-end/wrangler.jsonc`; `SES_FROM` is a Worker secret, and the deploy guard refuses it in `vars`. The IAM user `arabicaai-worker-ses` has one inline policy, `ses-send-only`, allowing only `ses:SendEmail` on that domain identity, and no managed policies.
 
 The account has SES production access (granted after a second request; checked 2026-10-04: `ProductionAccessEnabled` true, 50,000 emails a day, 14 a second), so any address can receive mail. The first request of 2026-10-02 had been denied. Check it with `aws sesv2 get-account --profile arabica --region us-east-2 --query '[ProductionAccessEnabled,SendQuota]'`. What still bounces is a sender whose domain publishes DMARC `p=reject` while only the address, not the domain, is verified in SES: SES then signs nothing for that domain and strict receivers drop the mail (seen 2026-10-04 with a company address). Send from a verified domain with DKIM, or from an address whose domain does not reject.
 
@@ -134,7 +134,7 @@ Human steps (the access key never passes through an agent or the repository):
    ```
 
 3. Judges need no SES verification: production access is on. Enrol their email in Cognito (auth runbook, section 6).
-4. Before the demo, sign in as that customer, request one report update, confirm the message arrives in that verified mailbox, and have an operator check the corresponding reference-only outbox row. Agents do not run the remote query or inspect a person's inbox. SES delivery-event tracking is not configured, so mailbox receipt is the delivery proof; the stored provider message id proves only SES acceptance.
+4. Before the demo, sign in as that customer, request one report update, confirm the message arrives in that mailbox, and have an operator check the corresponding reference-only outbox row. Agents do not run the remote query or inspect a person's inbox. Bounce and complaint events are tracked; delivery events are not. Mailbox receipt is the delivery proof, while the stored provider message id proves only SES acceptance.
 
 ## Known limits
 
