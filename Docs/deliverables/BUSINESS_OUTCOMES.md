@@ -133,6 +133,19 @@ The table maps each question to a measure, gives the baseline in the supplied da
      - repeat reporting is confirmed when the holdout Poisson fit has p ≥ 0.01;
      - the merchant-familiarity result is confirmed when the holdout risk-ratio interval includes 1.
    - Any baseline that fails is reported as unstable and not used as a reference.
+   - **Result (run once on 2026-10-04, after the rule was committed in `478a7a7`).** The holdout window has 1,924 complaints, 2 quarters ([aggregates](../Evidence/business/intake-kpi-baselines-holdout-2026-10-04.json)). Every baseline is confirmed:
+
+     | Baseline | Holdout | Test against design | Verdict |
+     |---|---|---|---|
+     | Rejected | 0.47% (9 / 1,924; 0.25–0.89%) | p = 0.029 | Confirmed, but the lowest margin: watch it |
+     | Escalated | 5.41% (4.48–6.51%) | p = 0.39 | Confirmed |
+     | Mis-recorded | 14.92% (13.39–16.58%) | p = 0.85 | Confirmed |
+     | Digital channel | 24.90% (23.02–26.88%) | p = 0.69 | Confirmed |
+     | Assigned to an agent | 68.19% (66.08–70.23%) | p = 0.056 | Confirmed |
+     | Repeat reporters | Poisson fit (1,900 and 12 observed against 1,899.5 and 12.2 expected) | p = 0.95 | Confirmed |
+     | Familiar merchant | Risk ratio 0.96 (0.45–2.04) | Interval includes 1 | Confirmed. The interval is wide because a short window has few repeat purchases (7,051) |
+
+     The repeat flag disagrees with the history again: 265 flagged without another complaint, 118 not flagged with one.
 2. **Service KPIs after deploy.**
    - The first 30 started reports, or 4 weeks, whichever comes later, form the service's own baseline. No change to the flow is made during it.
    - After that, each rate is tracked on a p-chart with 3σ limits from the baseline. A point outside the limits is a signal to investigate, not a conclusion.
