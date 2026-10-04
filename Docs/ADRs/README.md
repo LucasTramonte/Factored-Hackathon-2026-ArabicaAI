@@ -20,6 +20,7 @@ Technical and product-scope decisions for the ArabicaAI hackathon solution. Each
 | [012](ADR-012-ai-online-only-where-evidence-shows.md) | AI online only where the evidence shows the deterministic flow falls short: not yet | Proposed (2026-10-04); amendment 1 turns AI suggestions on in the demo |
 | [013](ADR-013-gcp-sso-and-persistent-sessions.md) | Persistent sessions and Google sign-in for staff on GCP | Proposed (2026-10-04) |
 | [014](ADR-014-online-ai-suggestions-and-no-fraud-model.md) | Online AI only for "I can't find it" suggestions, off until a pilot; no fraud model | Proposed (2026-10-04) |
+| [015](ADR-015-agent-customer-messages.md) | Messages between the reviewing agent and the customer, on one report | Proposed (2026-10-04) |
 
 ## Format
 

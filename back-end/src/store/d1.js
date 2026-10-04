@@ -53,6 +53,12 @@ const STILL_OPEN = "oh.status<>'closed' AND (oe.state='complete_handoff' OR (oe.
 
 /** A report by public protocol (the case id of a complete one, else the handoff id) or by short reference ('' never matches). */
 const REPORT_REF = '(h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?) OR h.reference_short=?)';
+/** At most this many messages per report (ADR-015): a thread about one charge, not a chat channel. */
+export const MESSAGES_PER_REPORT = 50;
+/** WHERE clause and params for a message thread: the customer's own acknowledged report, or (agent) any acknowledged one. */
+const messageScope = (customerId, protocol, short) => customerId === null
+  ? ["e.state=h.kind||'_handoff' AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))", [protocol, protocol]]
+  : ["e.customer_id=? AND e.state=h.kind||'_handoff' AND " + REPORT_REF, [customerId, protocol, protocol, short]];
 /** A suggestion run still pending this long (ms) is closed as ``abandoned`` by the idle sweep. */
 const SUGGESTION_STALE_MS = 600000;
 /**
@@ -750,6 +756,49 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     serviceTiming: () => all(
       'SELECT version,published_on,metric,unit,p50,p90,n,missing,negative,population,subcategory,window_start,window_end_exclusive,source '
       + 'FROM service_timing WHERE version=(SELECT version FROM service_timing ORDER BY published_on DESC,version DESC LIMIT 1) ORDER BY metric'),
+    /**
+     * One report's message thread (migration 0028, ADR-015), oldest first, at most ``MESSAGES_PER_REPORT`` + 1 rows so an
+     * overflow is visible. ``customerId`` scopes it to that customer's own acknowledged report (a protocol or a short
+     * reference); without it, the agent reads any acknowledged report by protocol. Resolves ``{ status, items }`` or null.
+     */
+    listMessages: async ({ customerId = null, protocol, short = '' }) => {
+      const [where, params] = messageScope(customerId, protocol, short);
+      const [head, items] = await batch([
+        ['SELECT h.status FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE ' + where, ...params],
+        ['SELECT m.message_id,m.author,m.body,m.created_at FROM handoff_messages m WHERE m.handoff_id=(SELECT h.handoff_id '
+          + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE ' + where + ') ORDER BY m.created_at,m.rowid LIMIT ?',
+          ...params, MESSAGES_PER_REPORT + 1]]);
+      const row = head.results[0];
+      return row ? { status: row.status, items: items.results } : null;
+    },
+    /**
+     * Post one message in one statement: only on an acknowledged report that isn't closed and has fewer than
+     * ``MESSAGES_PER_REPORT`` messages, once per (report, author, idempotency key). Then read back what that key holds.
+     * Customer writes and readbacks both require the supplied session to remain live and owned by that customer.
+     * Resolves null when the report isn't found for this caller, else ``{ status, total, message }`` (``message`` null when
+     * nothing was stored for the key: closed or full).
+     */
+    postMessage: async ({ customerId = null, protocol, short = '', author, body, key, now, agentSessionRef = null, messageId, sessionHash }) => {
+      let [where, params] = messageScope(customerId, protocol, short);
+      if (customerId !== null) {
+        where += " AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=? AND expires_at>?)";
+        params = [...params, sessionHash, customerId, now];
+      }
+      const [, read] = await batch([
+        ['INSERT INTO handoff_messages(message_id,handoff_id,author,body,idempotency_key,created_at,agent_session_ref) '
+          + 'SELECT ?,h.handoff_id,?,?,?,?,? FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE ' + where
+          + " AND h.status<>'closed' AND (SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id)<? "
+          + 'ON CONFLICT(handoff_id,author,idempotency_key) DO NOTHING',
+          messageId, author, body, key, now, agentSessionRef, ...params, MESSAGES_PER_REPORT],
+        ['SELECT h.status,(SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id) AS total,'
+          + 'm.message_id,m.author,m.body,m.created_at FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
+          + 'LEFT JOIN handoff_messages m ON m.handoff_id=h.handoff_id AND m.author=? AND m.idempotency_key=? WHERE ' + where,
+          author, key, ...params]]);
+      const row = read.results[0];
+      if (!row) return null;
+      const { status, total, message_id, created_at } = row;
+      return { status, total, message: message_id ? { message_id, author: row.author, body: row.body, created_at } : null };
+    },
     /** Count the call before it runs as one call with unknown usage, so a Worker stopped mid-call never makes it free. */
     startSuggestionCall: ({ handoffId, producer }) => all(
       'UPDATE handoff_suggestion_runs SET producer=?,llm_calls=1,usage_unavailable_calls=1 WHERE handoff_id=? AND outcome IS NULL', producer, handoffId),

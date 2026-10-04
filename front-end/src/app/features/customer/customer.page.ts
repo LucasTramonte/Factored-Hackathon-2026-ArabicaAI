@@ -4,12 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { formatSourceTime } from '../../shared/format/source-time.util';
 import { formatMoney } from '../../shared/format/money.util';
-import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
+import { LangService, STATUS_CHIP, Strings, checkText, errorText, messageErrorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { CustomerPicker } from '../../shared/customer-picker/customer-picker.component';
+import { MessageThreadView } from '../../shared/messages/message-thread.component';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
-  REASONS, REASON_LABEL, Reason, Report, ReportList, ServiceTimes, SuggestedCharge, SuggestionAnswer, SuggestionList, Transaction } from '../../shared/models/intake.model';
+  MessageThread, REASONS, REASON_LABEL, Reason, Report, ReportList, ServiceTimes, SuggestedCharge, SuggestionAnswer, SuggestionList, Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { AgentService } from '../agent/agent.service';
@@ -45,7 +46,7 @@ const REASON_FILL = { not_mine: 'reasonFillNotMine', duplicate: 'reasonFillDupli
 
 @Component({
   selector: 'app-customer-page',
-  imports: [DatePipe, FormsModule, RouterLink, LangSwitch, CustomerPicker],
+  imports: [DatePipe, FormsModule, RouterLink, LangSwitch, CustomerPicker, MessageThreadView],
   templateUrl: './customer.page.html',
   styleUrl: './customer.page.css'
 })
@@ -530,6 +531,57 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   /** Queue "Email me an update" on a report row; never claim background delivery, and keep focus on the button. */
+  /** The report whose messages are open under "Your reports" (ADR-015), its thread, and the state of a post. */
+  readonly openThread = signal<string | null>(null);
+  readonly thread = signal<MessageThread | null>(null);
+  /** The protocol whose post is in flight, so only that report's send button waits. */
+  readonly messageSending = signal<string | null>(null);
+  readonly messageFailed = signal('');
+  readonly messagesSent = signal(0);
+  /** Per report, one key per message text: a retry of the same text reuses it (one stored message); new text gets a new key. */
+  private readonly messageKeys = new Map<string, { body: string; key: string }>();
+
+  /** Open or close one own report's messages with the agent. */
+  async toggleMessages(protocol: string): Promise<void> {
+    if (this.openThread() === protocol) { this.openThread.set(null); return; }
+    this.openThread.set(protocol);
+    this.thread.set(null);
+    this.messageFailed.set('');
+    try {
+      const thread = await this.service.messages(protocol);
+      if (this.openThread() === protocol) this.thread.set(thread);
+    } catch (e) {
+      if (this.openThread() === protocol) this.messageFailed.set(errorText(this.t(), e));
+    }
+  }
+
+  /** Post the customer's message on the open report, then show the stored thread. */
+  async sendMessage(body: string): Promise<void> {
+    const protocol = this.openThread();
+    if (!protocol || this.messageSending() === protocol) return;
+    let key = this.messageKeys.get(protocol);
+    if (key?.body !== body) this.messageKeys.set(protocol, key = { body, key: crypto.randomUUID() });
+    this.messageSending.set(protocol);
+    this.messageFailed.set('');
+    // The result belongs to the report that posted; if the customer opened another one meanwhile, it touches nothing there.
+    const stillOpen = () => this.openThread() === protocol;
+    try {
+      await this.service.postMessage(protocol, body, key.key);
+      this.messageKeys.delete(protocol);
+      if (stillOpen()) this.messagesSent.update(n => n + 1);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) this.messageKeys.delete(protocol);
+      if (stillOpen()) this.messageFailed.set(messageErrorText(this.t(), e));
+    } finally {
+      if (this.messageSending() === protocol) this.messageSending.set(null);
+    }
+    if (!stillOpen()) return;
+    try {
+      const thread = await this.service.messages(protocol);
+      if (this.openThread() === protocol) this.thread.set(thread);
+    } catch { /* the post's own result is already shown */ }
+  }
+
   async requestUpdate(protocol: string): Promise<void> {
     if (this.updating()) return;
     this.updating.set(protocol);
@@ -626,12 +678,14 @@ export class CustomerPage implements OnInit, OnDestroy {
       const reason = this.reason();
       if (!reason) {
         this.chatError.set(this.t().chatReasonValidation);
+        this.focusInvalid('.chat-reasons input');
         return;
       }
       const statement = this.chatStatement.trim();
       const language = this.reportLang();
       if ([...statement].length < 10) {
         this.chatError.set(this.t().chatValidationShort);
+        this.focusInvalid('#chat-statement');
         return;
       }
       this.frozen.set({ path: 'start', body: { customer_statement: statement, idempotency_key: crypto.randomUUID(), language,
@@ -649,6 +703,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       const tx = this.choosable().find(t => t.transaction_id === this.choice);
       if (!tx || !this.chatConfirmed) {
         this.chatError.set(this.t().chatChooseValidation);
+        this.focusInvalid(tx ? 'input[name="chat-confirmed"]' : 'input[name="chat-choice"]');
         return;
       }
       this.frozen.set({ path: 'confirm', body: { customer_confirmed: true, episode_id: episode.episode_id,
@@ -684,6 +739,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       const details = this.asking() ? this.chatDetails.trim() : '';
       if (this.asking() && [...details].length < 10) {
         this.chatError.set(this.t().chatValidationShort);
+        this.focusInvalid('#chat-details');
         return;
       }
       this.frozen.set({ path: 'handoff', body: { ...(details && { details }), episode_id: episode.episode_id, idempotency_key: crypto.randomUUID(), kind: 'incomplete' } });
@@ -779,6 +835,18 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.chatConfirmed = false;
     this.log.set([{ from: 'bot', key: this.general() ? 'chatHelloGeneral' : 'chatHello' }]);
     this.faqLog.set([]);
+  }
+
+  /**
+   * After a validation error, move focus to the first invalid field (GOV.UK's error pattern; WCAG 3.3.1): the browser
+   * scrolls it into view and a screen reader reads its error, so a click that "does nothing" always shows why.
+   */
+  private focusInvalid(selector: string): void {
+    afterNextRender(() => {
+      const field = this.host.nativeElement.querySelector<HTMLElement>(selector);
+      field?.focus();
+      field?.scrollIntoView?.({ block: 'center' });
+    }, { injector: this.injector });
   }
 
   /** Guide lines are i18n keys; the greeting carries the customer's first name. */

@@ -3,7 +3,7 @@ import { ApiService } from '../../core/http/api.service';
 import { LangService } from '../../shared/i18n/lang.service';
 import type { SessionState } from '../../shared/models/intake.model';
 import { ContextCard, CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeReceipt, IntakeStart, IntakeStartBody,
-  ReportList, Role, SuggestionChoice, SuggestionList, TransactionList, AlertResponse, ServiceTimes } from '../../shared/models/intake.model';
+  ReportList, Role, SuggestionChoice, SuggestionList, TransactionList, AlertResponse, ServiceTimes, MessageThread, ReportMessage } from '../../shared/models/intake.model';
 
 /** Customer calls: email sign-in (simulated in local development), own charges and the guided intake. */
 @Injectable({ providedIn: 'root' })
@@ -71,6 +71,16 @@ export class CustomerService {
 
   reports(): Promise<ReportList> {
     return this.api.request<ReportList>('/reports');
+  }
+
+  /** One own report's message thread with the agent (ADR-015), by protocol or short reference. */
+  messages(reference: string): Promise<MessageThread> {
+    return this.api.request<MessageThread>(`/intake/handoff/${encodeURIComponent(reference)}/messages`);
+  }
+
+  /** Write to the agent on an own report; the same ``key`` on a retry stores one message (409 once it is closed). */
+  postMessage(reference: string, body: string, key: string): Promise<ReportMessage> {
+    return this.api.request<ReportMessage>(`/intake/handoff/${encodeURIComponent(reference)}/messages`, { body, idempotency_key: key });
   }
 
   /** This bank's historical response times for unrecognized-charge reports (a reviewed aggregate, the same for everyone). */

@@ -295,6 +295,10 @@ The guided flow is unaffected: the customer picks from their own list, currency 
 
 *`DF-027_wait_missingness.sql` · design · Medium · accepted limitation.* Run `20261003T182506Z`, 580,546 contacts and their surveys (at most one per contact). `wait_time_seconds` is present on 406,622 of 493,375 Phone contacts and on 0 of 87,171 contacts in other channels, whose surveys still hold 9,805 wait answers. Over the 45,919 Phone answers paired with a measured wait, the correlation is 0.000. No "time saved waiting" claim comes from history; the [product report](BUSINESS_OUTCOMES.md) shows wait only for Phone, labelled, and our service times itself from case status history.
 
+### DF-028 Complaint statuses are fixed labels, not a lifecycle
+
+*`DF-028_frozen_status.sql` · design · High · accepted limitation.* Run `20261004T165636Z`, 10,370 unrecognized-charge complaints, read at the data end. Every creation quarter from 2023 Q2 (from 17 June) to 2025 Q4 is 72.4–76.8% unresolved, with no trend: a 2023 complaint is no more likely to be done than one from late 2025, as IK-01's flat quarterly rates also show. None of the 514 escalated complaints has a first response, resolution or closing date. None of the 3,105 Open or 102 Rejected complaints has an assigned agent, so agent fields mostly separate Open from In Process and can't be read as agent performance. All 398 closed complaints with both dates close at the same hour, minute and second they were created. The status is set once, not advanced by a process, so the history gives no time to resolution for most complaints, no time escalated cases stay open (their age only reflects when they were created), and no time-of-day effect. Our service's own status history is the only source of those; the [product report](BUSINESS_OUTCOMES.md) uses the historical durations only for complaints that have both dates.
+
 ### Disclosure and adding a finding
 
 On 2026-09-29, before ADR-005 set the design window, Lucas and an AI assistant profiled several facts once over the full period. Every fact used in evaluation design agrees with its design-window value to one decimal place, so the holdout changed no design choice.

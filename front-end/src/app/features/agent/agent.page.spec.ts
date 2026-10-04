@@ -33,7 +33,8 @@ describe('AgentPage', () => {
   const el = () => fixture.nativeElement as HTMLElement;
 
   beforeEach(async () => {
-    service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'intakes', 'intakeDetail', 'setStatus', 'markSuggestion'], { roles: signal([]) });
+    service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'intakes', 'intakeDetail', 'setStatus', 'markSuggestion', 'messages', 'postMessage'], { roles: signal([]) });
+    service.messages.and.resolveTo({ status: 'received', can_post: true, items: [] });
     service.signIn.and.resolveTo(agentSession);
     cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
     cognito.requestCode.and.resolveTo();
@@ -537,6 +538,83 @@ describe('AgentPage', () => {
       expect(statusText().textContent).toContain(t().chipClosed);
       expect(document.activeElement).toBe(statusText());
       el().remove();
+    });
+
+    it('the title names the kind (no charge confirmed), the status has its own label, and closing turns the thread read-only', async () => {
+      service.intakeDetail.and.resolveTo(detail(P1, { kind: 'incomplete' }));
+      service.setStatus.and.callFake(async (protocol, status) => ({ protocol, status, changed_at: '2026-10-02T10:00:00.000Z' }));
+      await loadAndOpen();
+      fixture.detectChanges();
+      expect(el().querySelector('#intake-detail-title')!.textContent).toContain('No charge confirmed');
+      expect(el().querySelector('.status-bar')!.textContent).toContain(t().statusPrefix);
+      expect(service.messages).toHaveBeenCalledOnceWith(P1);
+      service.messages.and.resolveTo({ status: 'closed', can_post: false, items: [] });
+      action()[0].click(); await fixture.whenStable(); fixture.detectChanges();
+      action()[0].click(); await fixture.whenStable(); fixture.detectChanges();
+      expect(service.messages).toHaveBeenCalledTimes(2);
+      expect(el().querySelector('.messages-readonly')?.textContent).toContain(t().messagesClosed);
+      expect(el().querySelector('#agent-messages-draft')).toBeNull();
+    });
+
+    it('a post on report A that ends after B is opened touches nothing in B', async () => {
+      service.intakeDetail.and.callFake(async protocol => detail(protocol));
+      await loadAndOpen(P1);
+      let finish!: (m: never) => void;
+      service.postMessage.and.returnValue(new Promise(r => (finish = r)));
+      const pending = page.sendMessage('para A');
+      await loadAndOpen(P2);
+      finish({ message_id: 'aaaaaaaa-1111-4111-8111-111111111111', author: 'agent', body: 'para A', created_at: 'x' } as never);
+      await pending;
+      expect([page.messagesSent(), page.messageFailed(), page.messageSending()]).toEqual([0, '', null]);
+      expect(service.messages.calls.allArgs().map(a => a[0])).toEqual([P1, P2], 'A\'s thread is not reloaded into B');
+    });
+
+    it('the agent writes to the customer: one key per text, the thread read again, a 409 explained', async () => {
+      service.intakeDetail.and.resolveTo(detail(P1));
+      await loadAndOpen();
+      service.postMessage.and.resolveTo({ message_id: 'aaaaaaaa-1111-4111-8111-111111111111', author: 'agent', body: 'Hola', created_at: '2026-10-04T18:00:00.000Z' });
+      await page.sendMessage('Hola');
+      expect(service.postMessage.calls.mostRecent().args.slice(0, 2)).toEqual([P1, 'Hola']);
+      expect(page.messagesSent()).toBe(1);
+      expect(service.messages).toHaveBeenCalledTimes(2);
+      service.postMessage.and.rejectWith(new ApiError(409, 'x', false, 'closed-thread'));
+      await page.sendMessage('Otra');
+      expect(page.messageFailed()).toBe(t().messagesClosed);
+    });
+
+    for (const failure of [false, true]) it(`ignores a late message ${failure ? 'failure' : 'success'} after switching reports`, async () => {
+      page.detail.set(detail(P1));
+      let complete!: () => void;
+      service.postMessage.and.returnValue(new Promise((resolve, reject) => {
+        complete = () => failure ? reject(new ApiError(503)) : resolve({ message_id: P1, author: 'agent', body: 'Hola', created_at: 'x' });
+      }));
+      const pending = page.sendMessage('Hola');
+      expect(page.messageSending()).toBe(P1); // only report A waits
+      page.detail.set(detail(P2));
+      page.messageFailed.set('current report state');
+      complete();
+      await pending;
+      expect(page.messagesSent()).toBe(0);
+      expect(page.messageFailed()).toBe('current report state');
+      expect(page.messageSending()).toBeNull();
+    });
+
+    it('maps message conflicts by reason and preserves the usual error fallback', async () => {
+      page.detail.set(detail(P1));
+      for (const lang of ['es', 'pt', 'en'] as const) {
+        TestBed.inject(LangService).set(lang);
+        for (const [reason, expected] of [
+          ['closed-thread', t().messagesClosed], ['full-thread', t().messagesFull],
+          ['key-conflict', t().messagesConflict], ['unknown', t().err409]
+        ] as const) {
+          service.postMessage.and.rejectWith(new ApiError(409, undefined, false, reason));
+          await page.sendMessage('Hola');
+          expect(page.messageFailed()).toBe(expected);
+        }
+        service.postMessage.and.rejectWith(new ApiError(503));
+        await page.sendMessage('Hola');
+        expect(page.messageFailed()).toBe(t().err503);
+      }
     });
 
     it('disables the action while the change is pending', async () => {
