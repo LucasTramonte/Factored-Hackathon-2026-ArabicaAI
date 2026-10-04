@@ -132,13 +132,12 @@ test("switch off: fetch is never called and the handoff, its response and its D1
     assert.deepEqual(off.metrics, today.metrics);
     assertContract('intakeReceipt', off.receipt);
     await Promise.all(off.pending);
-    assert.deepEqual({ ...ctx.one('SELECT arm,outcome,llm_calls,producer FROM handoff_suggestion_runs WHERE handoff_id=?', off.receipt.protocol) },
-      { arm: null, outcome: 'off', llm_calls: 0, producer: null });
-    const recorded = ctx.events(off.episode_id).at(-1);
-    assert.deepEqual([recorded.event, recorded.result, recorded.arm, recorded.llm_calls, recorded.suggestions], ['suggestion_recorded', 'off', null, 0, 0]);
+    assert.equal(off.pending.length, 0);
+    assert.equal(ctx.one('SELECT count(*) n FROM handoff_suggestion_runs WHERE handoff_id=?', off.receipt.protocol).n, 0);
+    assert.deepEqual(ctx.events(off.episode_id).map(e => e.event), ['intake_started', 'handoff_created', 'intake_ended']);
   }
   await Promise.all(today.pending);
-  assert.deepEqual(ctx.events(today.episode_id).map(e => e.event), ['intake_started', 'handoff_created', 'intake_ended', 'suggestion_recorded']);
+  assert.deepEqual(ctx.events(today.episode_id).map(e => e.event), ['intake_started', 'handoff_created', 'intake_ended']);
   const plain = await handoff(ctx, { ...ON_B }, { details: null });
   assert.equal(plain.pending.length, 0, 'a handoff without details is never read');
   assert.equal(ctx.one('SELECT count(*) n FROM handoff_suggestion_runs WHERE handoff_id=?', plain.receipt.protocol).n, 0);
@@ -228,7 +227,7 @@ async function run(t, env, mocked = google(), { arm = 'B', now } = {}) {
   return { ctx, outcome, row, suggested, recorded, calls: mocked.calls, vertexCalls: mocked.vertexCalls() };
 }
 
-test('guards that stop before any call: off (switch, control arm, credential), retired; no fetch', async t => {
+test('guards that stop before any call: off (switch, control arm, credential), retired, capped; no fetch', async t => {
   const silent = { fetcher: noFetch, calls: [], vertexCalls: () => [] };
   for (const [label, env, opts, expected] of [
     ['switch off', { ...CREDS, INTAKE_AI_ENABLED: '0' }, {}, 'off'],
@@ -276,7 +275,7 @@ test('the retirement guard can only move earlier than 2026-10-21, the built-in d
   assert.equal(asOfAt(Date.parse('2026-10-05T23:30:12.345Z')), '2026-10-05T23:30:12');
 });
 
-test('token exchange failures are auth_error, with no model call or daily cap reservation', async t => {
+test('token exchange failures are auth_error, with no model call and nothing cached', async t => {
   for (const [label, mocked] of [
     ['STS 403', google({ sts: () => json({ error: 'denied' }, 403) })],
     ['STS unreachable', google({ sts: () => { throw new TypeError('network'); } })],
@@ -295,7 +294,6 @@ test('token exchange failures are auth_error, with no model call or daily cap re
   const malformed = await run(t, { ...ON, VERTEX_SERVICE_ACCOUNT: 'someone@evil.example/../x' }, google());
   assert.equal(malformed.outcome, 'auth_error');
   assert.equal(malformed.calls.length, 0, 'a malformed account never reaches a Google path');
-  assert.equal(malformed.ctx.one('SELECT count(*) n FROM ai_daily_calls').n, 0);
 });
 
 test('model failures fall back with honest usage: config_error, provider_error (no retry), invalid_output (one retry)', async t => {
@@ -407,7 +405,7 @@ test('the endpoint is the global OpenAI-compatible one; the test origin is honou
   for (const origin of ['http://127.0.0.1:8787', 'http://localhost:1']) assert.equal(testOrigin({ VERTEX_TEST_ORIGIN: origin }), origin);
   for (const origin of ['https://evil.example', 'http://127.0.0.1.evil.example:1', 'http://127.0.0.1:1/path', 'https://127.0.0.1:1', undefined])
     assert.equal(testOrigin({ VERTEX_TEST_ORIGIN: origin }), null, String(origin));
-  assert.equal(newArm({ INTAKE_AI_ENABLED: '0', INTAKE_AI_TEST_ARM: 'B', VERTEX_TEST_ORIGIN: 'http://127.0.0.1:1' }), null);
+  assert.equal(newArm({ INTAKE_AI_ENABLED: '0', INTAKE_AI_TEST_ARM: 'B', VERTEX_TEST_ORIGIN: 'http://127.0.0.1:1' }), undefined);
   assert.equal(newArm({ ...ON_B, INTAKE_AI_TEST_ARM: 'A' }), 'A');
   const arms = Array.from({ length: 400 }, () => newArm({ ...ON, INTAKE_AI_TEST_ARM: 'B' }));
   const b = arms.filter(a => a === 'B').length;
@@ -418,13 +416,13 @@ test('the endpoint is the global OpenAI-compatible one; the test origin is honou
 test('suggestion runs export with references and counts only, and the scorer summarises them by arm', async t => {
   const ctx = await setup(t);
   t.mock.method(globalThis, 'fetch', google().fetcher);
-  for (const env of [{}, ON_B, { ...ON_B, INTAKE_AI_TEST_ARM: 'A' }]) await Promise.all((await handoff(ctx, env)).pending);
+  for (const env of [ON_B, { ...ON_B, INTAKE_AI_TEST_ARM: 'A' }]) await Promise.all((await handoff(ctx, env)).pending);
   const dir = resolve(import.meta.dirname, '../../../data/intake-events', crypto.randomUUID());
   await mkdir(dir, { recursive: true }); t.after(() => rm(dir, { recursive: true, force: true }));
   const output = resolve(dir, 'events.jsonl');
   const result = await exportIntakeEvents(ctx.store(), { output, python: scorerPython() });
-  assert.equal(result.summary.all.suggestions.runs, 3);
-  assert.deepEqual(result.summary.all.suggestions.by_arm, { None: { off: 1 }, A: { off: 1 }, B: { suggested: 1 } });
+  assert.equal(result.summary.all.suggestions.runs, 2);
+  assert.deepEqual(result.summary.all.suggestions.by_arm, { A: { off: 1 }, B: { suggested: 1 } });
   assert.equal(result.summary.all.suggestions.llm_calls, 1);
   const text = await readFile(output, 'utf8');
   for (const leak of [DETAILS, 'Farmacia', 'tx-a1', '"ana"', 'stated_facts']) assert.ok(!text.includes(leak), leak);

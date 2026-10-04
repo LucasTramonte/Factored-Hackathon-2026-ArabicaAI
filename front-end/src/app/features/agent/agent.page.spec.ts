@@ -615,6 +615,7 @@ describe('AgentPage', () => {
       expect(box.textContent).toContain('125.50 BRL');
       expect(el().textContent).toContain(t().noEvidence);
       expect(box.querySelector('.mark-bar')!.getAttribute('role')).toBe('group');
+      expect(box.querySelector('.mark-bar')!.getAttribute('aria-labelledby')).toBe('suggestion-mark-question');
       expect([...box.querySelectorAll('.mark-bar button')].map(b => b.textContent!.trim())).toEqual([t().suggestionMarkCorrect, t().suggestionMarkWrong]);
       for (const code of ['es', 'pt'] as const) {
         TestBed.inject(LangService).set(code); fixture.detectChanges();

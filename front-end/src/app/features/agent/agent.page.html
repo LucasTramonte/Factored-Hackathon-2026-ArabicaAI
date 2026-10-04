@@ -121,16 +121,16 @@
                     @else { {{ t().dateMissing }} }
                   </dd></div>
                 </dl>
-                <div class="mark-bar" role="group">
+                <div class="mark-bar" role="group" aria-labelledby="suggestion-mark-question">
                   @if (!cs.mark) {
-                    <span>{{ t().suggestionMarkQuestion }}</span>
+                    <span id="suggestion-mark-question">{{ t().suggestionMarkQuestion }}</span>
                     <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm mark-correct" (click)="mark(d, 'correct')" [attr.aria-disabled]="marking()">{{ t().suggestionMarkCorrect }}</button>
                     <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm mark-wrong" (click)="mark(d, 'wrong')" [attr.aria-disabled]="marking()">{{ t().suggestionMarkWrong }}</button>
                     @if (markFailed()) { <span class="ar-small" role="alert">{{ t().suggestionMarkFailed }}</span> }
                   }
                   <span #markStatus class="mark-status" role="status" tabindex="-1">{{ cs.mark === 'correct' ? t().suggestionMarkedCorrect : cs.mark === 'wrong' ? t().suggestionMarkedWrong : '' }}</span>
                 </div>
-              } @else { <p class="status-line">{{ t().suggestionNoneChosen }}</p> }
+              } @else if (cs.choice === 'none') { <p class="status-line">{{ t().suggestionNoneChosen }}</p> }
             </section>
           }
 

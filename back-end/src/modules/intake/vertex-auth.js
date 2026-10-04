@@ -60,6 +60,8 @@ async function postJson(fetcher, url, body, signal, headers = {}) {
  * ``origin`` replaces both Google origins (local tests only; ``suggestions.js`` decides when).
  */
 export async function accessToken(config, { fetcher = fetch, now = Date.now, origin = null } = {}) {
+  // Include stable account and audience fields in the cache key. A kid or issuer rotation may reuse the already-issued
+  // Google token until its normal early refresh; that token remains valid and expires within the hour.
   const key = config.serviceAccount + '|' + config.projectNumber + '|' + (origin ?? '');
   if (cached?.key === key && cached.expiresAt - RENEW_BEFORE_MS > now()) return cached.token;
   // The account and number go into a Google path and audience, so only their documented shapes are accepted.

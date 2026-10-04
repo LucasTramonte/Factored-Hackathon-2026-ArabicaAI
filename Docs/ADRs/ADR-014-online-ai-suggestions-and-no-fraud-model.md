@@ -31,7 +31,7 @@ We also re-examined fraud detection. It is the most visible ML use case in the d
 | **Security and privacy** | Unchanged | The model gets only the description, the session language and a closed vocabulary. Suggestions come only from the customer's own charges, enforced in SQL. No Google key exists (federation). The text leaves for Google's `global` endpoint | Offline: synthetic messages only | Would score every customer's transactions |
 | **Failure and abstention** | — | Every failure leaves today's incomplete handoff and is recorded as a kind. No match or more than 3 matches means no suggestion | — | A false positive alarms a customer; a false negative is invisible |
 | **Evaluation** | Exists | Frozen offline (done); the randomized pilot with fixed decision rules (the plan) | Done | Not possible: see the decision |
-| **Latency and cost** | — | 0 ms added to the request (the call runs after the response). About US$0.00015 per call on v1; under 1 cent a day at the dataset bank's volume | Offline: US$0.027 per frozen run | — |
+| **Latency and cost** | — | 0 ms added to the request (the call runs after the response). About US$0.00021 per call on v1 at the ADR-004 envelope (2,106 input, 266 output tokens); under 1 cent a day at the dataset bank's volume | Offline: US$0.027 per frozen run | — |
 | **Operations** | — | One secret, five vars, a daily cap, and a model retirement date the Worker enforces | — | A model to monitor for drift with no ground truth |
 | **Rollback** | — | Set `INTAKE_AI_ENABLED` to `0` and deploy. The migration is additive and unused when off | — | — |
 | **New ADR needed** | No | **Yes, this one** | No | Yes, and it would fail ADR-005 |
@@ -63,7 +63,7 @@ Prices are list prices from the Cloud Billing Catalog API, read 2026-10-04. "Per
 
 | Option | Fixed / idle | Per call | Latency | Complexity | Lock-in | Verdict |
 |---|---|---|---|---|---|---|
-| **Worker calls Vertex directly (federation)** | $0 | v1 about $0.00021 ($0.07 / $0.25 per M); Gemini 3.5 Flash-Lite about $0.0013 ($0.30 / $2.50 per M) | p95 2,048 ms, after the response | JWT, STS and impersonation in the Worker, about 150 lines | Low: OpenAI-compatible endpoint | **Chosen.** Keeps one online runtime (ADR-003) |
+| **Worker calls Vertex directly (federation)** | $0 | At 2,106 input and 266 output tokens: v1 about $0.00021 ($0.07 / $0.25 per M); Gemini 3.5 Flash-Lite about $0.0013 ($0.30 / $2.50 per M) | p95 2,048 ms, after the response | JWT, STS and impersonation in the Worker, about 150 lines | Low: OpenAI-compatible endpoint | **Chosen.** Keeps one online runtime (ADR-003) |
 | A Cloud Run proxy in GCP | $0 with scale to zero, plus cold starts of 1–3 s | The same, plus Cloud Run time | Adds a hop and cold starts | A second API to secure and deploy | Medium | Rejected: a second online runtime, contrary to ADR-003 |
 | Vertex batch prediction or BigQuery | $0 | About half the online price | Minutes to hours | Low | Medium | Offline evaluation only; the customer is gone by then |
 | Workers AI binding (the same gpt-oss-20b weights on Cloudflare) | $0 | About $0.0005 at the default level (ADR-004) | p95 3,582 ms at the default level; `low` never verified there | Lowest: no GCP identity | Low | Deferred: the host wasn't evaluated at `low` (ADR-012 decision 4) |

@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import pandas as pd  # noqa: E402
 import seaborn as sns  # noqa: E402
 
-from data_foundation.scripts.run_intake_kpis import wilson  # noqa: E402
+from data_foundation.scripts.intake_kpi_stats import wilson  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "Docs" / "Evidence" / "business"
@@ -28,7 +28,7 @@ LABELS = {"rejected": "Rejected after review", "escalated": "Escalated", "mistyp
           "digital": "Filed in app or web", "assigned": "Assigned to an agent"}
 PALETTE = sns.color_palette("colorblind")
 SOURCE = ("Source: Silver, quality run pr23-check (READY); unrecognized-charge complaints; synthetic data. "
-          "Design window 2023-06-17 to 2025-12-31; holdout 2026-01-01 to 2026-06-17.")
+          "Design window 2023-06-17 to 2025-12-31; holdout [2026-01-01, 2026-06-18).")
 
 
 def _caption(fig, text: str) -> None:
