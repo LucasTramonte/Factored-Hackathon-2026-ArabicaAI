@@ -69,13 +69,14 @@ export class CustomerService {
     return this.api.request('/transactions/displayed', { view_ref: viewRef });
   }
 
-  reports(): Promise<ReportList> {
-    return this.api.request<ReportList>('/reports');
+  /** Own saved reports; an optional signal cancels only this read. */
+  reports(signal?: AbortSignal): Promise<ReportList> {
+    return this.api.request<ReportList>('/reports', undefined, {}, signal);
   }
 
   /** One own report's message thread with the agent (ADR-015), by protocol or short reference. */
-  messages(reference: string): Promise<MessageThread> {
-    return this.api.request<MessageThread>(`/intake/handoff/${encodeURIComponent(reference)}/messages`);
+  messages(reference: string, signal?: AbortSignal): Promise<MessageThread> {
+    return this.api.request<MessageThread>(`/intake/handoff/${encodeURIComponent(reference)}/messages`, undefined, {}, signal);
   }
 
   /** Write to the agent on an own report; the same ``key`` on a retry stores one message (409 once it is closed). */

@@ -16,10 +16,10 @@ function conflictReason(detail: unknown): ConflictReason {
 /**
  * A failed API call. ``status`` is 0 when the request never got an answer. The UI maps the status to text
  * (``errorText``) and server text is never kept or shown. ``reason`` identifies known 409 conflicts;
- * ``openReport`` preserves the existing charge-report conflict flag.
+ * ``openReport`` preserves the existing charge-report conflict flag. ``retryAfterSeconds`` keeps only numeric delays up to five minutes.
  */
 export class ApiError extends Error {
-  constructor(readonly status: number, message = `HTTP ${status}`, readonly openReport = false, readonly reason: ConflictReason = 'unknown') {
+  constructor(readonly status: number, message = `HTTP ${status}`, readonly openReport = false, readonly reason: ConflictReason = 'unknown', readonly retryAfterSeconds?: number) {
     super(message);
     this.name = 'ApiError';
   }
@@ -29,12 +29,12 @@ export class ApiError extends Error {
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   /** ``headers`` are merged over the defaults (e.g. ``Authorization`` for the sign-in token). */
-  async request<T>(path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
+  async request<T>(path: string, body?: unknown, headers: Record<string, string> = {}, signal?: AbortSignal): Promise<T> {
     let response: Response;
     try {
       response = await fetch(path, {
         method: body === undefined ? 'GET' : 'POST',
-        credentials: 'same-origin',
+        credentials: 'same-origin', signal,
         headers: { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
         body: body === undefined ? undefined : JSON.stringify(body)
       });
@@ -44,7 +44,10 @@ export class ApiService {
     if (!response.ok) {
       const reason = response.status === 409
         ? conflictReason((await response.json().catch(() => null))?.detail) : 'unknown';
-      throw new ApiError(response.status, undefined, reason === 'open-report', reason);
+      const retry = response.headers.get('Retry-After');
+      const seconds = retry !== null && /^\d{1,3}$/.test(retry) ? Number(retry) : NaN;
+      throw new ApiError(response.status, undefined, reason === 'open-report', reason,
+        Number.isFinite(seconds) && seconds <= 300 ? seconds : undefined);
     }
     if (response.status === 204) return undefined as T; // no body (logout)
     return response.json() as Promise<T>;

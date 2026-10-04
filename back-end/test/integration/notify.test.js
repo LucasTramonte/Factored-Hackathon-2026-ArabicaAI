@@ -125,3 +125,47 @@ test('two concurrent update requests for one report queue exactly one email', as
     assert.equal((await store.findEmails('demo-ana', receipt.reference_short)).filter(r => r.template === 'update').length, 1);
   });
 });
+
+test('queued and SES-accepted updates wait five minutes; audited failed/skipped rows allow retry at ten seconds', async () => {
+  const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
+  await withIntakeStore({ config: resolve(process.cwd(), 'wrangler.jsonc') }, async store => {
+    for (const status of ['queued', 'sent', 'failed', 'skipped']) {
+      const reference = 'AR-' + crypto.randomUUID(), now = Date.now(), messageId = crypto.randomUUID();
+      const enqueue = at => store.enqueueEmail({ messageId: crypto.randomUUID(), now: at, customerId: 'demo-ana', template: 'update', language: 'pt', reference });
+      await store.enqueueEmail({ messageId, now, customerId: 'demo-ana', template: 'update', language: 'pt', reference });
+      if (status !== 'queued') await store.markEmail(messageId, status, status === 'sent' ? 'ses-mock' : null);
+      const delay = status === 'failed' || status === 'skipped' ? 10000 : 300000;
+      assert.equal(await store.recentEmailRetryAt('demo-ana', reference, now - 1), now + delay);
+      assert.deepEqual(await enqueue(now + delay - 1), [], status + ' suppressed before eligibility');
+      assert.equal((await enqueue(now + delay)).length, 1, status + ' eligible at boundary');
+      const rows = await store.findEmails('demo-ana', reference);
+      assert.deepEqual(rows.map(r => r.provider_status), [status, 'queued'], 'the previous outcome stays auditable');
+    }
+  });
+});
+
+test('admin act-as queues the requested customer report only in the admin notification outbox', async () => {
+  const { client, idToken } = await import('../support/client.js');
+  const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
+  const bruno = client(); await bruno.call('/demo/session', { customer_id: 'demo-bruno' });
+  const episode = (await bruno.call('/intake/start', { language: 'pt', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
+    customer_statement: 'Não reconheço esta cobrança.', idempotency_key: crypto.randomUUID() })).body.episode_id;
+  const receipt = (await bruno.call('/intake/handoff', { episode_id: episode, kind: 'incomplete', idempotency_key: crypto.randomUUID() })).body;
+  const admin = client({ authorization: 'Bearer ' + await idToken('demo-ana', { groups: ['admin'] }) });
+  assert.equal((await admin.call('/auth/session', {})).status, 200);
+  assert.equal((await admin.call('/admin/act-as', { customer_id: 'demo-bruno' })).status, 200);
+  const queued = await admin.call('/reports/update', { protocol: receipt.protocol });
+  assert.equal(queued.status, 202); assert.deepEqual(queued.body, { queued: true });
+  const duplicate = await admin.call('/reports/update', { protocol: receipt.protocol }); assert.equal(duplicate.status, 429);
+  assert.ok(Number(duplicate.headers.get('Retry-After')) > 0);
+  await withIntakeStore({ config: resolve(process.cwd(), 'wrangler.jsonc') }, async store => {
+    let rows = [];
+    for (let i = 0; i < 40; i++) {
+      rows = (await store.findEmails('demo-ana', receipt.reference_short)).filter(row => row.template === 'update');
+      if (rows.length && rows[0].provider_status !== 'queued') break;
+      await new Promise(done => setTimeout(done, 100));
+    }
+    assert.deepEqual(rows, [{ template: 'update', language: 'pt', provider_status: 'skipped' }], 'missing SES stays skipped, never delivered');
+    assert.deepEqual((await store.findEmails('demo-bruno', receipt.reference_short)).filter(row => row.template === 'update'), []);
+  });
+});

@@ -65,6 +65,17 @@ describe('ApiService', () => {
     }
   });
 
+  it('keeps only finite bounded numeric Retry-After seconds', async () => {
+    for (const [header, expected] of [['10', 10], ['300', 300], ['0', 0], ['301', undefined], ['-1', undefined],
+      ['1.5', undefined], ['Infinity', undefined], ['NaN', undefined], ['1e2', undefined], ['', undefined], [null, undefined],
+      ['Sun, 04 Oct 2026 20:30:00 GMT', undefined]] as const) {
+      fetchSpy.and.resolveTo(new Response('{}', { status: 429, headers: header === null ? {} : { 'Retry-After': header } }));
+      const error = await api.request('/reports/update', { protocol: 'P' }).catch(e => e) as ApiError & { retryAfterSeconds?: number };
+      expect(error.retryAfterSeconds).withContext(String(header)).toBe(expected);
+      expect(error.message).toBe('HTTP 429');
+    }
+  });
+
   it('a 204 resolves without reading a body', async () => {
     fetchSpy.and.returnValue(Promise.resolve(new Response(null, { status: 204 })));
     expect(await api.request('/auth/logout', {})).toBeUndefined();
@@ -97,5 +108,15 @@ describe('ApiService', () => {
     fetchSpy.and.returnValue(Promise.reject(new TypeError('Failed to fetch')));
     const e = await api.request('/cases', {}).then(() => null, (x: unknown) => x);
     expect(e instanceof ApiError && e.status).toBe(0);
+  });
+
+  it('forwards cancellation to the physical fetch and maps an aborted read to an unconfirmed error', async () => {
+    const controller = new AbortController();
+    fetchSpy.and.callFake((_path: string, options: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      options.signal!.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    }));
+    const read = api.request('/reports', undefined, {}, controller.signal).catch(e => e);
+    expect(fetchSpy.calls.mostRecent().args[1].signal).toBe(controller.signal); controller.abort();
+    const error = await read; expect(error instanceof ApiError).toBeTrue(); expect((error as ApiError).status).toBe(0);
   });
 });

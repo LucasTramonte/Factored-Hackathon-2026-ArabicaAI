@@ -116,6 +116,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** The report whose update request is in flight (one at a time: every row's button waits), and the last answer shown under its row. */
   readonly updating = signal<string | null>(null);
   readonly updateNote = signal<{ protocol: string; text: string } | null>(null);
+  private readonly updateCooldowns = signal<Record<string, number>>({});
+  private readonly updateTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly transactions = signal<Transaction[]>([]);
   readonly hasMore = signal(false);
   readonly identities = signal<Identity[]>([]);
@@ -147,7 +149,18 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly feedbackRecorded = signal(false);
   readonly feedbackSending = signal(false);
   readonly feedbackFailed = signal(false);
-  /** Charges the service suggests for an "I can't find it" receipt (ADR-012), or null when there are none (yet). */
+  /** A saved report reopened for its stored suggestion state, without inventing a new receipt. */
+  readonly suggestionReport = signal<Report | null>(null);
+  readonly suggestionTimedOut = signal(false);
+  private readonly suggestionContext = computed(() => this.suggestionReport() ?? this.intakeReceipt());
+  readonly suggestionMessage = computed(() => {
+    const s = this.suggestionList(), t = this.t();
+    if (!s) return '';
+    if (s.reason === 'review_started') return t.suggestInReview;
+    if (s.status === 'pending') return this.suggestionTimedOut() ? t.suggestStillPending : t.suggestPending;
+    return s.reason === 'no_clear_match' ? t.suggestNoMatch : s.reason === 'unavailable' ? t.suggestUnavailable : t.suggestLegacy;
+  });
+  /** Stored search state for the current saved report (ADR-012). */
   readonly suggestionList = signal<SuggestionList | null>(null);
   /** The customer's stored answer to the suggestions; nothing is closed or decided by it. */
   readonly suggestionAnswer = signal<SuggestionAnswer | null>(null);
@@ -158,6 +171,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   /** Each watch gets a number; a newer receipt, a new report or leaving the page stops the older one. */
   private suggestionWatch = 0;
   private suggestionTimer: ReturnType<typeof setTimeout> | undefined;
+  private suggestionDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
   readonly ended = signal(false);
   readonly chatError = signal('');
   readonly log = signal<ChatLine[]>([{ from: 'bot', key: 'chatHello' }]);
@@ -168,7 +182,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly promptLast = computed(() => this.log().at(-1)?.from === 'bot');
   /** "I can't find it" was pressed: the guide asks once what the customer remembers before anything is sent. */
   readonly asking = signal(false);
-  readonly chatStep = computed<ChatStep>(() => this.intakeReceipt() ? 'receipt' : this.ended() ? 'ended' : !this.episode() ? 'describe' : this.asking() ? 'details' : 'choose');
+  readonly chatStep = computed<ChatStep>(() => (this.intakeReceipt() || this.suggestionReport()) ? 'receipt' : this.ended() ? 'ended' : !this.episode() ? 'describe' : this.asking() ? 'details' : 'choose');
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
   /** A charge whose newest server report is still open is not offered again (the server refuses it with 409). */
@@ -269,11 +283,11 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Leave the receipt for its saved report; a failed list load falls back to the reports heading. */
   viewMyReport(): void {
-    const receipt = this.intakeReceipt();
+    const receipt = this.suggestionContext();
     if (!receipt || this.busy() || this.frozen()) return;
     this.chatOpen.set(false);
     afterNextRender(() => {
-      if (this.intakeReceipt() !== receipt || this.step() !== 'home' || this.chatOpen()) return;
+      if (this.suggestionContext() !== receipt || this.step() !== 'home' || this.chatOpen()) return;
       const report = [...this.host.nativeElement.querySelectorAll<HTMLElement>('[data-report-protocol]')]
         .find(el => el.dataset['reportProtocol'] === receipt.protocol);
       const target = report ?? this.host.nativeElement.querySelector<HTMLElement>('#your-reports-title');
@@ -286,13 +300,16 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Load the identity choices from the API; they come from the same config as the server allowlist. */
   async ngOnInit(): Promise<void> {
+    document.addEventListener('visibilitychange', this.refreshVisibility);
+    window.addEventListener('online', this.refreshVisibility);
+    window.addEventListener('offline', this.refreshVisibility);
+    window.addEventListener('focus', this.refreshVisibility);
     this.bootTimer = setTimeout(() => this.booted.set(true), 2400);
     if (this.narrowQuery) this.narrowQuery.onchange = e => this.narrow.set(e.matches);
     // Outside the zone so the app (and tests) can be stable while it waits; the signal still schedules the render.
     this.introTimer = this.zone.runOutsideAngular(() => setTimeout(() => this.introDone.set(true), 6800)); // must outlast the intro word animation delays in styles.css
-    if (this.client()) void this.resume();
-    else void this.restore();
-    if (!this.demoPicker) return;
+    const restoring = this.client() ? this.resume() : this.restore();
+    if (!this.demoPicker) { await restoring; return; }
     this.identitiesLoading.set(true);
     try {
       this.identities.set(await this.service.identities());
@@ -302,10 +319,17 @@ export class CustomerPage implements OnInit, OnDestroy {
     } finally {
       this.identitiesLoading.set(false);
     }
+    await restoring;
   }
 
   ngOnDestroy(): void {
     this.generation++;
+    this.clearUpdates();
+    this.stopRefresh();
+    document.removeEventListener('visibilitychange', this.refreshVisibility);
+    window.removeEventListener('online', this.refreshVisibility);
+    window.removeEventListener('offline', this.refreshVisibility);
+    window.removeEventListener('focus', this.refreshVisibility);
     this.tour.set(null);
     clearTimeout(this.bootTimer);
     clearTimeout(this.introTimer);
@@ -313,6 +337,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.cognito.forget();
     this.suggestionWatch++;
     clearTimeout(this.suggestionTimer);
+    clearTimeout(this.suggestionDeadlineTimer);
   }
 
   start(): void {
@@ -506,19 +531,25 @@ export class CustomerPage implements OnInit, OnDestroy {
    */
   private async enter(session: () => Promise<CustomerSession>, onError: (e: unknown) => void): Promise<void> {
     if (this.busy()) return;
+    const generation = this.generation;
+    let acceptedGeneration = generation;
     this.busy.set(true);
     this.error.set('');
     try {
       const s = await session();
+      if (generation !== this.generation) return;
       if (this.identityLocked() && s.customer_id !== this.client()) {
         // That sign-in set the other customer's cookie: drop it before anything else can be sent with it. If that
         // fails the cookie may remain, so the open report is dropped too and nothing can go out under it.
         this.backToEmail();
         try {
           await this.service.logout();
+          if (acceptedGeneration !== this.generation) return;
           this.agent.roles.set([]); // logout also ended the agent session
         } catch (e) {
+          if (acceptedGeneration !== this.generation) return;
           this.reset();
+          acceptedGeneration = this.generation;
           this.fail(e);
           return;
         }
@@ -526,22 +557,28 @@ export class CustomerPage implements OnInit, OnDestroy {
         return;
       }
       if (s.customer_id !== this.client()) this.reset();
+      acceptedGeneration = this.generation;
       this.card.set(s.context_card ?? null);
       this.client.set(s.customer_id);
       this.roles.set(s.roles);
+      this.refreshUnauthorized = false;
       this.codeSent.set(false);
       this.code = '';
       await this.loadTransactions();
+      if (acceptedGeneration !== this.generation) return;
       await this.loadReports();
+      if (acceptedGeneration !== this.generation) return;
       this.step.set('home');
+      this.scheduleReports();
+      this.scheduleThread();
       const g = this.generation;
       void this.loadAlert().then(() => {
         if (g === this.generation) afterNextRender(() => { if (g === this.generation) this.offerTour(); }, { injector: this.injector });
       });
     } catch (e) {
-      onError(e);
+      if (acceptedGeneration === this.generation) onError(e);
     } finally {
-      this.busy.set(false);
+      if (acceptedGeneration === this.generation) this.busy.set(false);
     }
   }
 
@@ -557,6 +594,7 @@ export class CustomerPage implements OnInit, OnDestroy {
    * home, as a sign-in would. Nothing happens without a live session, or if a sign-in started meanwhile.
    */
   private async restore(): Promise<void> {
+    const generation = this.generation;
     let state;
     try {
       state = await this.service.me();
@@ -564,7 +602,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       return; // no session information: the sign-in screen stays
     }
     // Never over a sign-in the person has started (the login step, a pending or sent code), even if it is not busy now.
-    if (!state?.customer || this.client() || this.busy() || this.step() !== 'intro' || this.codeSent()) return;
+    if (generation !== this.generation || !state?.customer || this.client() || this.busy() || this.step() !== 'intro' || this.codeSent()) return;
     this.card.set(state.customer.context_card ?? null);
     this.client.set(state.customer.customer_id);
     this.roles.set(state.customer.roles);
@@ -593,20 +631,162 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.viewRef.set(list.view_ref);
   }
 
-  /** Never throws: a failed load leaves the home usable with one muted line. */
-  private async loadReports(): Promise<void> {
-    const g = this.generation;
-    try {
-      const list = await this.service.reports();
-      if (g !== this.generation) return;
-      this.reports.set(list);
-      this.reportsFailed.set(false);
-    } catch {
-      if (g === this.generation) this.reportsFailed.set(true);
-    }
+  readonly reportsChecked = signal<number | null>(null);
+  readonly threadChecked = signal<number | null>(null);
+  readonly threadFailed = signal(false);
+  readonly reportsRefreshing = signal(false);
+  readonly changeNotices = signal<{ protocol: string; key: 'reportEnteredReview' | 'reportReviewFinished'; reference: string }[]>([]);
+  readonly agentReplyNotice = signal(false);
+  private reportTimer: ReturnType<typeof setTimeout> | undefined;
+  private threadTimer: ReturnType<typeof setTimeout> | undefined;
+  private reportRead: Promise<void> | null = null;
+  private threadRead: Promise<void> | null = null;
+  private reportAbort: AbortController | null = null;
+  private threadAbort: AbortController | null = null;
+  private reportDelay = 30000;
+  private threadDelay = 30000;
+  private reportStarted = -Infinity;
+  private threadStarted = -Infinity;
+  private threadWatch = 0;
+  private refreshUnauthorized = false;
+
+  private canRefresh(): boolean {
+    return !!this.client() && this.step() === 'home' && document.visibilityState !== 'hidden' && navigator.onLine && !this.refreshUnauthorized;
   }
 
-  /** Queue "Email me an update" on a report row; never claim background delivery, and keep focus on the button. */
+  /** Coalesce tab-return and manual triggers with an outstanding or just completed read. */
+  refreshReports(): void {
+    if (!this.canRefresh()) return;
+    if (Date.now() - this.reportStarted >= 1000) void this.loadReports();
+    if (this.openThread() && Date.now() - this.threadStarted >= 1000) void this.loadThread();
+  }
+
+  private readonly refreshVisibility = (): void => {
+    clearTimeout(this.reportTimer); clearTimeout(this.threadTimer);
+    if (this.canRefresh()) { this.refreshReports(); this.scheduleReports(); this.scheduleThread(); }
+  };
+
+  private scheduleReports(): void {
+    clearTimeout(this.reportTimer);
+    if (this.canRefresh() && !this.reportRead) this.reportTimer = this.zone.runOutsideAngular(() => setTimeout(() => void this.loadReports(), this.reportDelay));
+  }
+
+  private scheduleThread(): void {
+    clearTimeout(this.threadTimer);
+    if (this.canRefresh() && this.openThread() && !this.threadRead) this.threadTimer = this.zone.runOutsideAngular(() => setTimeout(() => void this.loadThread(), this.threadDelay));
+  }
+
+  /** Abort actual fetch and expire the UI read even if a transport never settles. */
+  private async boundedRead<T>(controller: AbortController, read: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort!: () => void;
+    const deadline = new Promise<never>((_, reject) => {
+      onAbort = () => reject(new ApiError(0));
+      controller.signal.addEventListener('abort', onAbort, { once: true });
+      timer = this.zone.runOutsideAngular(() => setTimeout(() => controller.abort(), 10000));
+    });
+    try { return await Promise.race([read(controller.signal), deadline]); }
+    finally { clearTimeout(timer); controller.signal.removeEventListener('abort', onAbort); }
+  }
+
+  /** Never throws; failures keep the last confirmed snapshot and back off. */
+  private loadReports(): Promise<void> {
+    if (this.refreshUnauthorized) return Promise.resolve();
+    if (this.reportRead) return this.reportRead;
+    clearTimeout(this.reportTimer);
+    const g = this.generation, controller = this.reportAbort = new AbortController();
+    this.reportStarted = Date.now(); this.reportsRefreshing.set(true);
+    const read = (async () => {
+      try {
+        const list = await this.boundedRead(controller, signal => this.service.reports(signal));
+        if (g !== this.generation) return;
+        const previous = this.reports();
+        if (previous) for (const report of list.items) {
+          const old = previous.items.find(r => r.protocol === report.protocol);
+          if (old && old.status !== report.status && report.status !== 'received') {
+            this.changeNotices.update(notices => [...notices.filter(n => n.protocol !== report.protocol), {
+              protocol: report.protocol, reference: report.reference_short ?? report.protocol,
+              key: report.status === 'in_review' ? 'reportEnteredReview' as const : 'reportReviewFinished' as const }].slice(-20));
+          }
+        }
+        this.reports.set(list); this.reportsFailed.set(false); this.reportsChecked.set(Date.now()); this.reportDelay = 30000;
+      } catch (e) {
+        if (g !== this.generation) return;
+        this.reportsFailed.set(true); this.reportDelay = Math.min(120000, this.reportDelay * 2);
+        if (e instanceof ApiError && e.status === 401) this.pauseUnauthorized();
+      } finally {
+        if (g === this.generation && this.reportAbort === controller) {
+          this.reportRead = null; this.reportAbort = null; this.reportsRefreshing.set(false); this.scheduleReports();
+        }
+      }
+    })();
+    this.reportRead = read;
+    return read;
+  }
+
+  /** Only the exact open-thread instance may update its snapshot, including close/reopen of one report. */
+  private loadThread(): Promise<void> {
+    if (this.refreshUnauthorized) return Promise.resolve();
+    if (this.threadRead) return this.threadRead;
+    const protocol = this.openThread();
+    if (!protocol) return Promise.resolve();
+    clearTimeout(this.threadTimer);
+    const g = this.generation, watch = this.threadWatch, controller = this.threadAbort = new AbortController();
+    const current = () => g === this.generation && watch === this.threadWatch && this.openThread() === protocol;
+    this.threadStarted = Date.now();
+    const read = (async () => {
+      try {
+        const thread = await this.boundedRead(controller, signal => this.service.messages(protocol, signal));
+        if (!current()) return;
+        const previous = this.thread();
+        if (previous && thread.items.some(m => m.author === 'agent' && !previous.items.some(old => old.message_id === m.message_id))) this.agentReplyNotice.set(true);
+        this.thread.set(thread); this.threadFailed.set(false); this.threadChecked.set(Date.now()); this.threadDelay = 30000;
+      } catch (e) {
+        if (!current()) return;
+        this.threadFailed.set(true); this.threadDelay = Math.min(120000, this.threadDelay * 2);
+        if (e instanceof ApiError && e.status === 401) this.pauseUnauthorized();
+      } finally {
+        if (current() && this.threadAbort === controller) {
+          this.threadRead = null; this.threadAbort = null; this.scheduleThread();
+        }
+      }
+    })();
+    this.threadRead = read;
+    return read;
+  }
+
+  private pauseUnauthorized(): void {
+    this.refreshUnauthorized = true;
+    clearTimeout(this.reportTimer); clearTimeout(this.threadTimer);
+    this.error.set(this.t().err401);
+  }
+
+  private stopThreadRefresh(): void {
+    this.threadWatch++; clearTimeout(this.threadTimer); this.threadAbort?.abort();
+    this.threadAbort = null; this.threadRead = null; this.threadDelay = 30000; this.threadStarted = -Infinity;
+    this.threadChecked.set(null); this.threadFailed.set(false); this.agentReplyNotice.set(false);
+  }
+
+  private stopRefresh(): void {
+    clearTimeout(this.reportTimer); this.reportAbort?.abort(); this.reportAbort = null; this.reportRead = null;
+    this.stopThreadRefresh(); this.reportDelay = 30000; this.reportStarted = -Infinity;
+    this.reportsRefreshing.set(false); this.reportsChecked.set(null); this.changeNotices.set([]);
+  }
+
+  /** Dismiss only the transient notice; saved progress stays visible. */
+  dismissNotice(protocol: string): void { this.changeNotices.update(notices => notices.filter(n => n.protocol !== protocol)); }
+
+  /** Explicitly view a change without automatic focus movement. */
+  viewUpdate(protocol: string): void {
+    const target = [...this.host.nativeElement.querySelectorAll<HTMLElement>('[data-report-protocol]')].find(el => el.dataset['reportProtocol'] === protocol);
+    target?.focus(); target?.scrollIntoView({ block: 'nearest' });
+  }
+
+  /** Localized notice from a confirmed saved-status change, never customer text. */
+  noticeText(notice: { key: 'reportEnteredReview' | 'reportReviewFinished'; reference: string }): string {
+    return this.t()[notice.key].replace('{ref}', () => notice.reference);
+  }
+
   /** The report whose messages are open under "Your reports" (ADR-015), its thread, and the state of a post. */
   readonly openThread = signal<string | null>(null);
   readonly thread = signal<MessageThread | null>(null);
@@ -619,17 +799,11 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   /** Open or close one own report's messages with the agent. */
   async toggleMessages(protocol: string): Promise<void> {
-    if (this.openThread() === protocol) { this.openThread.set(null); return; }
-    const g = this.generation;
-    this.openThread.set(protocol);
-    this.thread.set(null);
-    this.messageFailed.set('');
-    try {
-      const thread = await this.service.messages(protocol);
-      if (g === this.generation && this.openThread() === protocol) this.thread.set(thread);
-    } catch (e) {
-      if (g === this.generation && this.openThread() === protocol) this.messageFailed.set(errorText(this.t(), e));
-    }
+    const closing = this.openThread() === protocol;
+    this.stopThreadRefresh();
+    this.openThread.set(closing ? null : protocol);
+    this.thread.set(null); this.messageFailed.set('');
+    if (!closing) await this.loadThread();
   }
 
   /** Post the customer's message on the open report, then show the stored thread. */
@@ -641,7 +815,8 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.messageSending.set(protocol);
     this.messageFailed.set('');
     // The result belongs to the report that posted; if the customer opened another one meanwhile, it touches nothing there.
-    const stillOpen = () => this.openThread() === protocol;
+    const g = this.generation, watch = this.threadWatch;
+    const stillOpen = () => g === this.generation && watch === this.threadWatch && this.openThread() === protocol;
     try {
       await this.service.postMessage(protocol, body, key.key);
       this.messageKeys.delete(protocol);
@@ -653,27 +828,48 @@ export class CustomerPage implements OnInit, OnDestroy {
       if (this.messageSending() === protocol) this.messageSending.set(null);
     }
     if (!stillOpen()) return;
-    try {
-      const thread = await this.service.messages(protocol);
-      if (this.openThread() === protocol) this.thread.set(thread);
-    } catch { /* the post's own result is already shown */ }
+    // A poll begun before the post may hold an older snapshot; settle it before the authoritative read-back.
+    await this.threadRead;
+    if (!stillOpen()) return;
+    await this.loadThread();
   }
 
+  /** Keep the focused button available to keyboards while refusing pending or server-timed duplicate requests. */
+  updateUnavailable(protocol: string): boolean {
+    return this.updating() !== null || (this.updateCooldowns()[protocol] ?? 0) > Date.now();
+  }
+
+  /** Queue one report snapshot; responses and timers belong only to the signed-in customer generation. */
   async requestUpdate(protocol: string): Promise<void> {
-    if (this.updating()) return;
+    if (this.updateUnavailable(protocol)) return;
+    const generation = this.generation;
     this.updating.set(protocol);
-    this.updateNote.set(null); // cleared while the request runs, so the same answer is announced again
-    let text: string;
+    this.updateNote.set(null);
     try {
       await this.service.requestUpdate(protocol);
-      text = this.t().updateSent;
+      if (generation === this.generation) this.updateNote.set({ protocol, text: this.t().updateSent });
     } catch (e) {
+      if (generation !== this.generation) return;
       const status = e instanceof ApiError ? e.status : -1;
-      text = status === 429 ? this.t().updateRecent : status === 409 ? this.t().updateNoEmail : errorText(this.t(), e);
+      if (status === 429 && e instanceof ApiError && e.retryAfterSeconds) {
+        this.updateCooldowns.update(cooldowns => ({ ...cooldowns, [protocol]: Date.now() + e.retryAfterSeconds! * 1000 }));
+        clearTimeout(this.updateTimers.get(protocol));
+        this.updateTimers.set(protocol, this.zone.runOutsideAngular(() => setTimeout(() => {
+          if (generation !== this.generation) return;
+          this.updateCooldowns.update(cooldowns => { const next = { ...cooldowns }; delete next[protocol]; return next; });
+          this.updateTimers.delete(protocol);
+        }, e.retryAfterSeconds! * 1000)));
+      }
+      this.updateNote.set({ protocol, text: status === 429 ? this.t().updateRecent : status === 409 ? this.t().updateNoEmail
+        : status === 401 ? this.t().err401 : this.t().updateFailed });
     } finally {
-      this.updating.set(null);
+      if (generation === this.generation) this.updating.set(null);
     }
-    this.updateNote.set({ protocol, text });
+  }
+
+  private clearUpdates(): void {
+    for (const timer of this.updateTimers.values()) clearTimeout(timer);
+    this.updateTimers.clear(); this.updateCooldowns.set({}); this.updating.set(null); this.updateNote.set(null);
   }
 
   /**
@@ -897,6 +1093,9 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.feedbackSending.set(false);
     this.feedbackFailed.set(false);
     this.suggestionWatch++;
+    clearTimeout(this.suggestionDeadlineTimer);
+    this.suggestionReport.set(null);
+    this.suggestionTimedOut.set(false);
     this.suggestionList.set(null);
     this.suggestionAnswer.set(null);
     this.suggestionSending.set(false);
@@ -1018,26 +1217,52 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * Check for suggestions for at most ``SUGGESTION_WAIT_MS`` after the receipt, then stop. Shown only for the receipt
-   * they belong to and only while unanswered; any failure simply shows nothing (the report already reached a person).
-   */
-  private async watchSuggestions(receipt: IntakeReceipt): Promise<void> {
+  /** Reopen one listed incomplete report and read its stored suggestions through the owned endpoint. */
+  reopenSuggestions(report: Report): void {
+    if (this.busy() || this.frozen() || report.kind !== 'incomplete' || !this.reports()?.items.includes(report)) return;
+    this.opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    this.clearChat();
+    this.suggestionReport.set(report);
+    this.log.set([]);
+    this.chatOpen.set(true);
+    void this.watchSuggestions(report);
+  }
+
+  /** Poll the stored run for 15 seconds; the deadline stops this watch, never the server's run. */
+  private async watchSuggestions(receipt: IntakeReceipt | Report): Promise<void> {
     const watch = ++this.suggestionWatch;
+    const generation = this.generation;
     const until = Date.now() + SUGGESTION_WAIT_MS;
-    const current = () => watch === this.suggestionWatch && this.intakeReceipt() === receipt;
-    for (;;) {
-      let list: SuggestionList;
-      try { list = await this.service.suggestions(receipt.protocol); } catch { return; }
-      if (!current()) return;
-      if (list.status === 'suggested' && list.items.length) {
+    const current = () => generation === this.generation && watch === this.suggestionWatch && this.suggestionContext() === receipt;
+    this.suggestionTimedOut.set(false);
+    this.suggestionList.set({ status: 'pending', items: [], choice: null, chosen_transaction_id: null, answerable: false });
+    // Transport has no timeout: this independent UI deadline also invalidates any outstanding read.
+    const deadline = this.suggestionDeadlineTimer = setTimeout(() => {
+      if (current()) { this.suggestionTimedOut.set(true); this.suggestionWatch++; }
+    }, SUGGESTION_WAIT_MS);
+    const expired = () => {
+      if (Date.now() < until) return false;
+      this.suggestionTimedOut.set(true);
+      return true;
+    };
+    try {
+      for (;;) {
+        // A background tab can resume its poll timer after the wall-clock deadline.
+        if (!current() || expired()) return;
+        let list: SuggestionList;
+        try { list = await this.service.suggestions(receipt.protocol); }
+        catch {
+          if (current() && !expired()) this.suggestionList.set({ status: 'none', reason: 'unavailable', items: [], choice: null, chosen_transaction_id: null, answerable: false });
+          return;
+        }
+        if (!current() || expired()) return;
         this.suggestionList.set(list);
         this.suggestionAnswer.set(list.choice);
-        return;
+        if (list.status !== 'pending' || list.reason === 'review_started') return;
+        await new Promise(done => { this.suggestionTimer = setTimeout(done, Math.min(this.suggestionPollMs, Math.max(0, until - Date.now()))); });
       }
-      if (list.status !== 'pending' || Date.now() + this.suggestionPollMs > until) return;
-      await new Promise(done => { this.suggestionTimer = setTimeout(done, this.suggestionPollMs); });
-      if (!current()) return;
+    } finally {
+      clearTimeout(deadline);
     }
   }
 
@@ -1046,29 +1271,31 @@ export class CustomerPage implements OnInit, OnDestroy {
    * has started the review) the client reads the suggestions again and shows what the server holds, never its own attempt.
    */
   async answerSuggestion(transactionId: string | null): Promise<void> {
-    const receipt = this.intakeReceipt();
+    const receipt = this.suggestionContext();
     if (!receipt || !this.suggestionList()?.answerable || this.suggestionAnswer() || this.suggestionSending()) return;
+    const generation = this.generation;
+    const current = () => generation === this.generation && this.suggestionContext() === receipt;
     this.suggestionSending.set(true);
     this.suggestionFailed.set(false);
     try {
       const stored = await this.service.answerSuggestions(receipt.protocol, transactionId);
-      if (this.intakeReceipt() !== receipt) return;
+      if (!current()) return;
       this.suggestionAnswer.set(stored.choice);
     } catch (e) {
-      if (this.intakeReceipt() !== receipt) return;
+      if (!current()) return;
       if (e instanceof ApiError && e.status === 409) {
         try {
           const fresh = await this.service.suggestions(receipt.protocol);
-          if (this.intakeReceipt() !== receipt) return;
-          if (fresh.status === 'suggested') this.suggestionList.set(fresh);
+          if (!current()) return;
+          this.suggestionList.set(fresh);
           this.suggestionAnswer.set(fresh.choice);
-        } catch { this.suggestionFailed.set(true); }
+        } catch { if (current()) this.suggestionFailed.set(true); }
       } else this.suggestionFailed.set(true);
     } finally {
-      if (this.intakeReceipt() === receipt) {
+      if (current()) {
         this.suggestionSending.set(false);
         // The buttons are gone once answered: keep keyboard and screen-reader users on the confirmation.
-        if (this.suggestionAnswer() || !this.suggestionList()?.answerable) afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('.suggestion-thanks')?.focus(), { injector: this.injector });
+        if (this.suggestionAnswer() || !this.suggestionList()?.answerable) afterNextRender(() => { if (current()) this.host.nativeElement.querySelector<HTMLElement>('.suggestion-thanks')?.focus(); }, { injector: this.injector });
       }
     }
   }
@@ -1098,6 +1325,9 @@ export class CustomerPage implements OnInit, OnDestroy {
 
   private reset(): void {
     this.generation++;
+    this.clearUpdates();
+    this.stopRefresh();
+    this.refreshUnauthorized = false;
     this.tour.set(null);
     this.alert.set(null);
     this.alertNote.set('');

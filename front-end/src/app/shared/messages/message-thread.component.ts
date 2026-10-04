@@ -24,15 +24,16 @@ import { MessageThread } from '../models/intake.model';
             <p>{{ m.body }}</p>
           </li>
         } @empty {
-          <li class="ar-caption messages-empty">{{ thread() ? t().messagesNone : t().messagesLoading }}</li>
+          <li class="ar-caption messages-empty">{{ thread() ? t().messagesNone : failed() ? '' : t().messagesLoading }}</li>
         }
       </ol>
-      @if (thread()?.can_post) {
+      @if (thread()?.can_post || draft) {
         <label class="ar-field" [for]="idPrefix() + '-draft'"><span class="ar-field-label">{{ t().messageLabel }}</span></label>
-        <textarea class="ar-textarea" [id]="idPrefix() + '-draft'" [(ngModel)]="draft" rows="3" maxlength="2000"
+        <textarea class="ar-textarea" [id]="idPrefix() + '-draft'" [(ngModel)]="draft" rows="3" maxlength="2000" [readOnly]="!thread()?.can_post"
           [attr.aria-invalid]="empty ? true : null" [attr.aria-describedby]="empty || failed() ? idPrefix() + '-error' : null"></textarea>
-        <div class="report-actions"><button type="button" class="ar-btn ar-btn-sm message-send" (click)="submit()" [attr.aria-disabled]="sending()">{{ t().messageSend }}</button></div>
-      } @else if (thread()) {
+        <div class="report-actions"><button type="button" class="ar-btn ar-btn-sm message-send" (click)="submit()" [disabled]="!thread()?.can_post" [attr.aria-disabled]="sending() || !thread()?.can_post">{{ t().messageSend }}</button></div>
+      }
+      @if (thread() && !thread()!.can_post) {
         <p class="ar-caption messages-readonly">{{ thread()!.status === 'closed' ? t().messagesClosed : t().messagesFull }}</p>
       }
       @if (empty || failed()) { <p class="ar-small" role="alert" [id]="idPrefix() + '-error'">{{ empty ? t().messageEmpty : failed() }}</p> }
@@ -68,7 +69,7 @@ export class MessageThreadView {
   }
 
   submit(): void {
-    if (this.sending()) return;
+    if (this.sending() || !this.thread()?.can_post) return;
     const body = this.draft.trim();
     this.empty = !body;
     if (body) this.send.emit(body);

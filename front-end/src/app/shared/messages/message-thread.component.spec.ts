@@ -60,4 +60,14 @@ describe('MessageThreadView', () => {
     ({ el } = render({ status: 'received', can_post: true, items: [] }));
     expect(el.querySelector('.messages-empty')?.textContent).toContain('No messages yet.');
   });
+
+  for (const status of ['closed', 'in_review'] as const) it(`retains a focused draft read-only when refreshed ${status} prevents posting`, async () => {
+    const { fixture, el, c } = render(THREAD); document.body.append(el); await fixture.whenStable();
+    c.draft = 'Keep my unsent details'; fixture.detectChanges(); await fixture.whenStable();
+    const area = el.querySelector<HTMLTextAreaElement>('textarea')!; area.focus(); const sent: string[] = []; c.send.subscribe(body => sent.push(body));
+    fixture.componentRef.setInput('thread', { ...THREAD, status, can_post: false }); fixture.detectChanges(); await fixture.whenStable();
+    expect(el.querySelector('textarea')).toBe(area); expect(document.activeElement).toBe(area); expect(area.value).toBe('Keep my unsent details'); expect(area.readOnly).toBeTrue();
+    expect(el.querySelector('.messages-readonly')?.textContent).toBe(c.t()[status === 'closed' ? 'messagesClosed' : 'messagesFull']);
+    el.querySelector<HTMLButtonElement>('.message-send')!.click(); c.submit(); expect(sent).toEqual([]); fixture.destroy();
+  });
 });

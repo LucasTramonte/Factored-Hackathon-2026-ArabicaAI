@@ -1,5 +1,5 @@
 import { signal } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { TestBed, fakeAsync, flushMicrotasks, tick } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerPage, initialsOf } from './customer.page';
@@ -847,12 +847,12 @@ describe('CustomerPage', () => {
         await startEpisode();
         await review();
         expect(page.chatStep()).toBe('receipt');
-        await until(() => page.suggestionList() !== null);
+        await until(() => page.suggestionList()?.status === 'suggested');
         expect(service.suggestions.calls.allArgs()).toEqual([[incomplete.protocol], [incomplete.protocol], [incomplete.protocol]]);
         expect(page.suggestionList()?.items.map(c => c.transaction_id)).toEqual(['demo-tx-001', 'demo-tx-004']);
       });
 
-      it('never checks without details or for another kind of receipt, and shows nothing for none', async () => {
+      it('never checks without details or for another kind of receipt, and keeps the legacy outcome neutral', async () => {
         service.handoffIntake.and.resolveTo(incomplete);
         await startEpisode();
         service.startIntake.and.resolveTo(started);
@@ -868,7 +868,7 @@ describe('CustomerPage', () => {
         expect(service.suggestions).not.toHaveBeenCalled();
         page.newReport(); await startEpisode(); await review(); await settle();
         expect(service.suggestions).toHaveBeenCalledTimes(1);
-        expect(page.suggestionList()).toBeNull();
+        expect(page.suggestionList()?.status).toBe('none');
       });
 
       it('stops checking after about 15 seconds, and a new report stops a watch in flight', async () => {
@@ -882,14 +882,119 @@ describe('CustomerPage', () => {
         const calls = service.suggestions.calls.count();
         expect(calls).toBeGreaterThan(0);
         expect(calls).toBeLessThanOrEqual(4);
-        expect(page.suggestionList()).toBeNull();
+        expect(page.suggestionList()?.status).toBe('pending');
+        expect(page.suggestionMessage()).toBe(page.t().suggestStillPending);
         (Date.now as jasmine.Spy).and.callThrough();
+        const saved: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete', status: 'received',
+          next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+        page.reports.set({ items: [saved], has_more: false });
+        service.suggestions.and.resolveTo(shown);
+        page.reopenSuggestions(saved); await settle();
+        expect(page.suggestionList()?.status).toBe('suggested');
+        expect(page.suggestionTimedOut()).toBeFalse();
+        expect(service.suggestions.calls.mostRecent().args).toEqual([saved.protocol]);
         let answer!: (l: typeof shown) => void;
         service.suggestions.and.returnValue(new Promise(r => answer = r));
         page.newReport(); await startEpisode(); await review();
         page.newReport();
         answer(shown); await settle();
         expect(page.suggestionList()).toBeNull();
+      });
+
+      it('ends the UI wait at 15 seconds even while its GET is unresolved, and ignores its late result', fakeAsync(() => {
+        const saved: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete', status: 'received',
+          next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+        page.reports.set({ items: [saved], has_more: false });
+        let finish!: (list: typeof shown) => void;
+        service.suggestions.and.returnValue(new Promise(resolve => finish = resolve));
+        page.reopenSuggestions(saved);
+        tick(14999); expect(page.suggestionTimedOut()).toBeFalse();
+        tick(1); expect(page.suggestionTimedOut()).toBeTrue();
+        expect(page.suggestionMessage()).toBe(page.t().suggestStillPending);
+        finish(shown); flushMicrotasks();
+        expect(page.suggestionList()?.status).toBe('pending');
+        expect(service.suggestions).toHaveBeenCalledTimes(1);
+        page.newReport();
+      }));
+
+      it('does not start a new GET when a delayed poll timer resumes beyond the deadline', fakeAsync(() => {
+        const saved: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete', status: 'received',
+          next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+        page.reports.set({ items: [saved], has_more: false }); page.suggestionPollMs = 1500;
+        let now = 0; spyOn(Date, 'now').and.callFake(() => now);
+        service.suggestions.and.resolveTo(pending);
+        page.reopenSuggestions(saved); flushMicrotasks();
+        now = 20000; tick(1500); flushMicrotasks();
+        expect(service.suggestions).toHaveBeenCalledTimes(1);
+        expect(page.suggestionTimedOut()).toBeTrue();
+        page.newReport(); tick(15000);
+      }));
+
+      it('shows recorded no-match, unavailable, pending and legacy states in every language', async () => {
+        const fixture = TestBed.createComponent(CustomerPage), p = fixture.componentInstance;
+        p.step.set('home'); p.chatOpen.set(true); p.intakeReceipt.set(incomplete);
+        for (const code of ['es', 'pt', 'en'] as const) {
+          lang.set(code);
+          for (const [list, key] of [
+            [{ ...pending }, 'suggestPending'],
+            [{ ...pending, status: 'none', reason: 'no_clear_match' }, 'suggestNoMatch'],
+            [{ ...pending, status: 'none', reason: 'unavailable' }, 'suggestUnavailable'],
+            [{ ...pending, status: 'none' }, 'suggestLegacy'],
+            [{ ...shown, answerable: false, reason: 'review_started' }, 'suggestInReview']
+          ] as const) {
+            p.suggestionList.set(list); fixture.detectChanges();
+            expect(fixture.nativeElement.querySelector('.suggestion-thanks').textContent.trim()).toBe(p.t()[key]);
+            expect(fixture.nativeElement.querySelectorAll('#suggestions button').length).toBe(0);
+          }
+          p.suggestionList.set(pending); p.suggestionTimedOut.set(true); fixture.detectChanges();
+          expect(fixture.nativeElement.querySelector('.suggestion-thanks').textContent.trim()).toBe(p.t().suggestStillPending);
+          p.suggestionTimedOut.set(false);
+        }
+        lang.set('es');
+      });
+
+      it('a request failure leaves the immediate saved receipt and an unavailable search', async () => {
+        service.suggestions.and.rejectWith(new ApiError(503, 'provider detail'));
+        service.handoffIntake.and.resolveTo(incomplete);
+        await startEpisode(); await review(); await settle();
+        expect(page.intakeReceipt()).toBe(incomplete);
+        expect(page.suggestionList()?.reason).toBe('unavailable');
+        expect(page.suggestionMessage()).toBe(page.t().suggestUnavailable);
+      });
+
+      it('reopens a listed report through the owned endpoint without making another receipt, and ignores an old report response', async () => {
+        const r: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete',
+          status: 'received', next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+        const later = { ...r, protocol: 'other-report' };
+        page.reports.set({ items: [r, later], has_more: false });
+        let old!: (l: typeof shown) => void;
+        service.suggestions.and.returnValue(new Promise(resolve => old = resolve));
+        page.reopenSuggestions(r);
+        expect(page.chatStep()).toBe('receipt'); expect(page.intakeReceipt()).toBeNull();
+        service.suggestions.and.resolveTo({ ...shown, choice: 'none', answerable: false });
+        page.reopenSuggestions(later); await settle(); old(shown); await settle();
+        expect(page.suggestionReport()).toBe(later); expect(page.suggestionAnswer()).toBe('none');
+        expect(service.suggestions.calls.allArgs()).toEqual([[r.protocol], [later.protocol]]);
+        expect(service.handoffIntake).not.toHaveBeenCalled();
+        page.reopenSuggestions({ ...r, protocol: 'unlisted' });
+        expect(page.suggestionReport()).toBe(later);
+      });
+
+      it('an identity reset ignores both a late saved-report read and a late confirmation', async () => {
+        const r: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete',
+          status: 'received', next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+        page.reports.set({ items: [r], has_more: false });
+        let old!: (l: typeof shown) => void;
+        service.suggestions.and.returnValue(new Promise(resolve => old = resolve));
+        page.reopenSuggestions(r); await page.signOut(); old(shown); await settle();
+        expect(page.suggestionList()).toBeNull(); expect(page.suggestionReport()).toBeNull();
+        page.reports.set({ items: [r], has_more: false }); service.suggestions.and.resolveTo(shown);
+        page.reopenSuggestions(r); await settle();
+        let answer!: (v: { choice: 'confirmed'; transaction_id: string; chosen_at: string }) => void;
+        service.answerSuggestions.and.returnValue(new Promise(resolve => answer = resolve));
+        const confirmation = page.answerSuggestion('demo-tx-001');
+        await page.signOut(); answer({ choice: 'confirmed', transaction_id: 'demo-tx-001', chosen_at: 'now' }); await confirmation;
+        expect(page.suggestionAnswer()).toBeNull(); expect(page.suggestionList()).toBeNull();
       });
 
       it('picking a charge sends only its id, once; "none of these" sends none; a 409 or a failure behaves', async () => {
@@ -929,7 +1034,7 @@ describe('CustomerPage', () => {
         const el = fixture.nativeElement as HTMLElement;
         expect(el.querySelectorAll('#suggestions .suggestion-pick').length).toBe(2);
         service.answerSuggestions.and.rejectWith(new ApiError(409, 'already_in_review'));
-        service.suggestions.and.resolveTo({ ...shown, answerable: false });
+        service.suggestions.and.resolveTo({ ...shown, answerable: false, reason: 'review_started' });
         el.querySelector<HTMLButtonElement>('.suggestion-pick')!.click();
         await fixture.whenStable(); fixture.detectChanges(); await fixture.whenStable();
         expect(p.suggestionAnswer()).toBeNull();
@@ -1499,7 +1604,7 @@ describe('CustomerPage', () => {
 
       it('opens one report\'s thread from "Your reports" and shows the agent\'s question', async () => {
         const { el, p } = await openThread();
-        expect(service.messages).toHaveBeenCalledOnceWith('99999999-8888-4777-8666-555555555555');
+        expect(service.messages).toHaveBeenCalledOnceWith('99999999-8888-4777-8666-555555555555', jasmine.any(AbortSignal));
         expect(el.querySelector('.messages-btn')!.getAttribute('aria-expanded')).toBe('true');
         expect(el.querySelector('.message-agent')?.textContent).toContain('¿Recuerdas el comercio?');
         expect(el.querySelector('.message-agent')?.textContent).toContain(p.t().messageAgent);
@@ -1918,11 +2023,11 @@ describe('CustomerPage', () => {
       expect(document.activeElement).toBe(buttons[0]);
       const status = (row = 0) => el.querySelectorAll('.your-reports [role="status"]')[row]?.textContent?.trim();
       expect(status()).toBe(p.t().updateSent);
-      for (const [error, key] of [[429, 'updateRecent'], [409, 'updateNoEmail'], [503, null]] as const) {
+      for (const [error, key] of [[429, 'updateRecent'], [409, 'updateNoEmail'], [503, 'updateFailed']] as const) {
         service.requestUpdate.and.rejectWith(new ApiError(error, 'x'));
         await p.requestUpdate('11111111-2222-4333-8444-555555555555'); fixture.detectChanges();
         expect(status(0)).toBe('', 'the answer belongs to the other row');
-        expect(status(1)).toBe(key ? p.t()[key] : errorText(p.t(), new ApiError(error, 'x')));
+        expect(status(1)).toBe(p.t()[key]);
       }
     });
 

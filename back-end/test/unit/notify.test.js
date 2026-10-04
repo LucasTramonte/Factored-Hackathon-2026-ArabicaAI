@@ -153,3 +153,56 @@ test('a send never throws: non-2xx and network errors fail, missing config skips
     assert.equal(called, false);
   }
 });
+
+test('update route preserves request-time reference/status/language and sends act-as only to the admin', async t => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const { readdirSync, readFileSync } = await import('node:fs');
+  const { createStore } = await import('../../src/store/d1.js');
+  const { route } = await import('../../src/router.js');
+  const { tokenHash } = await import('../../src/auth/session.js');
+  const db = new DatabaseSync(':memory:'); t.after(() => db.close()); db.exec('PRAGMA foreign_keys=ON');
+  const migrations = new URL('../../migrations/', import.meta.url);
+  for (const file of readdirSync(migrations).sort()) db.exec(readFileSync(new URL(file, migrations), 'utf8'));
+  db.exec("INSERT INTO customers(customer_id,display_name) VALUES('ana','Ana'),('bruno','Bruno')");
+  const ownToken = 'a'.repeat(64), otherToken = 'b'.repeat(64), adminToken = 'c'.repeat(64);
+  for (const [token, owner, admin, acting] of [[ownToken, 'ana', 0, null], [otherToken, 'bruno', 0, null], [adminToken, 'bruno', 1, 'ana']])
+    db.prepare('INSERT INTO sessions(token_hash,actor,customer_id,expires_at,admin,acting_admin_customer_id) VALUES(?,?,?,?,?,?)')
+      .run(await tokenHash(token), 'customer', owner, Date.now() + 3600000, admin, acting);
+  for (const [owner, address] of [['ana', 'ana@example.com'], ['bruno', 'bruno@example.com']])
+    db.prepare('INSERT INTO notification_targets VALUES(?,?,?)').run(owner, await encrypt(address, env), Date.now());
+  let releaseTarget, targetGate = Promise.resolve();
+  const DB = { prepare: sql => ({ bind: (...params) => ({ all: async () => {
+    if (sql.startsWith('SELECT email_enc')) await targetGate;
+    return { results: db.prepare(sql).all(...params) };
+  } }) }), batch: async statements => {
+    db.exec('BEGIN'); try { const results = await Promise.all(statements.map(s => s.all())); db.exec('COMMIT'); return results; }
+    catch (error) { db.exec('ROLLBACK'); throw error; }
+  } };
+  const workerEnv = { ...env, ...ses, DB, APP_URL: 'https://demo.example/customer' }, store = createStore(DB), sent = [];
+  t.mock.method(globalThis, 'fetch', async request => { sent.push(await request.json()); return Response.json({ MessageId: 'accepted-mock' }); });
+  const call = (token, path, body, ctx) => route(new Request('https://demo.example' + path,
+    { method: 'POST', headers: { Cookie: `demo_session=${token}` }, body: JSON.stringify(body) }), workerEnv, store, ctx);
+  const decoded = (raw, type) => Buffer.from(raw.split(`Content-Type: ${type}; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n`)[1]
+    .split('\r\n--')[0].replace(/\r\n/g, ''), 'base64').toString('utf8');
+  for (const language of ['es', 'pt', 'en']) for (const status of ['received', 'in_review', 'closed']) for (const acting of [false, true]) {
+    const ownerToken = acting ? otherToken : ownToken;
+    const start = await (await call(ownerToken, '/intake/start', { language, mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
+      customer_statement: 'SECRET CUSTOMER STATEMENT', idempotency_key: crypto.randomUUID() })).json();
+    const receipt = await (await call(ownerToken, '/intake/handoff', { episode_id: start.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() })).json();
+    db.prepare('UPDATE intake_handoffs SET status=? WHERE episode_id=?').run(status, start.episode_id);
+    targetGate = new Promise(resolve => releaseTarget = resolve); const jobs = [];
+    const response = await call(acting ? adminToken : ownToken, '/reports/update', { protocol: receipt.protocol }, { waitUntil: job => jobs.push(job) });
+    assert.equal(response.status, 202); assert.deepEqual(await response.json(), { queued: true });
+    db.prepare('UPDATE intake_handoffs SET status=? WHERE episode_id=?').run(status === 'closed' ? 'received' : 'closed', start.episode_id);
+    releaseTarget(); await Promise.all(jobs);
+    const payload = sent.at(-1); assert.deepEqual(payload.Destination.ToAddresses, ['ana@example.com']);
+    const raw = Buffer.from(payload.Content.Raw.Data, 'base64').toString('utf8'), text = decoded(raw, 'text/plain'), html = decoded(raw, 'text/html');
+    assert.ok(text.includes(receipt.reference_short) && html.includes(receipt.reference_short));
+    assert.ok(text.includes(STATUS_TEXT[status][language]) && html.includes(STATUS_TEXT[status][language]));
+    assert.ok(html.includes(`lang="${language}"`) && html.includes('href="https://demo.example/customer"'));
+    assert.doesNotMatch(text + html, /SECRET CUSTOMER STATEMENT|bruno@example|AR-FOREIGN/);
+    assert.equal(db.prepare("SELECT provider_status FROM email_outbox WHERE reference=? AND template='update'").get(receipt.reference_short).provider_status, 'sent');
+    assert.equal((await call(acting ? ownToken : otherToken, '/reports/update', { protocol: receipt.protocol })).status, 404);
+  }
+  assert.equal(sent.length, 18);
+});
