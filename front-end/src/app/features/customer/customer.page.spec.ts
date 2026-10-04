@@ -1374,8 +1374,15 @@ describe('CustomerPage', () => {
         const map = el.querySelector('.your-reports .report-progress')!;
         expect(map.getAttribute('aria-label')).toBe(p.t().reportProgress);
         const steps = [...map.querySelectorAll('li')];
-        expect(steps.map(s => s.textContent!.replace(/\s+/g, ' ').trim())).toEqual(['✓' + p.t().statusReceived, p.t().inReview, p.t().chipClosed]);
+        expect(steps.map(s => s.textContent!.replace(/\s+/g, ' ').trim())).toEqual([`✓${p.t().stepDone}: ${p.t().statusReceived}`, p.t().inReview, p.t().chipClosed]);
         expect(steps.map(s => [s.classList.contains('done'), s.getAttribute('aria-current')])).toEqual([[true, null], [false, 'step'], [false, null]]);
+      });
+
+      it('"Your reports" maps a closed report as complete: all three steps done, closed current', async () => {
+        listed('closed');
+        const { el } = await home();
+        const steps = [...el.querySelectorAll('.your-reports .report-progress li')];
+        expect(steps.map(s => [s.classList.contains('done'), s.getAttribute('aria-current')])).toEqual([[true, null], [true, null], [true, 'step']]);
       });
 
       it('"Your reports" names the charge by merchant and amount', async () => {
