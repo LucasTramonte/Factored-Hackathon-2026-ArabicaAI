@@ -89,6 +89,8 @@ try {
     join(project, 'test/integration/sample_seed.sql')]);
   run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file',
     join(project, 'test/integration/cohort_seed.sql')]);
+  run(['d1', 'execute', 'arabica-intake-demo', '--local', '--file',
+    join(project, 'test/integration/kpi_seed.sql')]);
   // A customer session that expired long ago, so tests can prove expiry is enforced server-side.
   const expiredToken = 'e'.repeat(64);
   const expiredHash = createHash('sha256').update(expiredToken).digest('hex');

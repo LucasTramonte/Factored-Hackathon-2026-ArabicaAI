@@ -1,0 +1,764 @@
+{
+  "description": "Authored journeys for the dispute-manager KPI instrumentation test (kpi-instrumentation.test.js). Fictitious demo customers only; kpi_seed.sql adds three bank-flagged charges for demo-carla. Phase 1 runs, then one idle sweep 11 minutes ahead closes its starts, then phase 2. Every expected value was counted by hand from the journeys; \"from_events\" marks a wall-clock duration, which the test takes from the episode scorer (evals/intake/episodes.py) and requires the store to equal. The test tests the measurement, not the customers.",
+  "journeys": [
+    {
+      "id": "J05",
+      "phase": 1,
+      "customer": "demo-marco",
+      "language": "pt",
+      "story": "Starts a report and leaves; the idle sweep closes it.",
+      "steps": [
+        {
+          "do": "start"
+        },
+        {
+          "do": "idle"
+        }
+      ]
+    },
+    {
+      "id": "J06",
+      "phase": 1,
+      "customer": "demo-elena",
+      "language": "es",
+      "story": "Starts, sees the charges list (the client picks one), never confirms; the idle sweep closes it.",
+      "steps": [
+        {
+          "do": "start"
+        },
+        {
+          "do": "view_charges"
+        },
+        {
+          "do": "idle"
+        }
+      ]
+    },
+    {
+      "id": "J01",
+      "phase": 2,
+      "customer": "demo-carla",
+      "language": "es",
+      "story": "Complete report; an agent opens it at once, reviews and closes it.",
+      "steps": [
+        {
+          "do": "start"
+        },
+        {
+          "do": "confirm",
+          "transaction": "demo-tx-007"
+        },
+        {
+          "do": "agent_open"
+        },
+        {
+          "do": "agent_status",
+          "status": "in_review"
+        },
+        {
+          "do": "agent_status",
+          "status": "closed"
+        }
+      ]
+    },
+    {
+      "id": "J02",
+      "phase": 2,
+      "customer": "demo-bruno",
+      "language": "pt",
+      "story": "Complete report; an agent first opens it 25 hours after acceptance.",
+      "steps": [
+        {
+          "do": "start"
+        },
+        {
+          "do": "confirm",
+          "transaction": "demo-tx-003"
+        },
+        {
+          "do": "agent_open_late",
+          "hours": 25
+        }
+      ]
+    },
+    {
+      "id": "J03",
+      "phase": 2,
+      "customer": "demo-carla",
+      "language": "en",
+      "story": "Complete report in English; an agent opens it and moves it to in review.",
+      "steps": [
+        {
+          "do": "start"
+        },
+        {
+          "do": "confirm",
+          "transaction": "demo-tx-008"
+        },
+        {
+          "do": "agent_open"
+        },
+        {
+          "do": "agent_status",
+          "status": "in_review"
+        }
+      ]
+    },
+    {
+      "id": "J04",
+      "phase": 2,
+      "customer": "demo-diego",
+      "language": "es",
+      "story": "\"I can't find it\" with details the model reads but no charge matches (AI switch on, mocked Google).",
+      "steps": [
+        {
+          "do": "start"
+        },
+        {
+          "do": "cant_find",
+          "details": "No recuerdo el comercio ni el día."
+        },
+        {
+          "do": "await_suggestions",
+          "expect": "none"
+        }
+      ]
+    },
+    {
+      "id": "J07",
+      "phase": 2,
+      "customer": "demo-ana",
+      "language": "en",
+      "story": "Confirms a charge while the lookup fails: a technical handoff (the route with a failing lookup, as the unit suites force it).",
+      "steps": [
+        {
+          "do": "start"
+        },
+        {
+          "do": "technical",
+          "transaction": "demo-tx-004"
+        }
+      ]
+    },
+    {
+      "id": "J08",
+      "phase": 2,
+      "customer": "demo-carla",
+      "language": null,
+      "story": "Answers the bank's alert \"Yes, it's mine\": deflected by explanation, no report.",
+      "steps": [
+        {
+          "do": "alert",
+          "transaction": "kpi-tx-01",
+          "answer": "mine"
+        }
+      ]
+    },
+    {
+      "id": "J09",
+      "phase": 2,
+      "customer": "demo-carla",
+      "language": "es",
+      "story": "Answers \"Yes, it's mine\" on an alert, then reports that same charge anyway.",
+      "steps": [
+        {
+          "do": "alert",
+          "transaction": "kpi-tx-02",
+          "answer": "mine"
+        },
+        {
+          "do": "start"
+        },
+        {
+          "do": "confirm",
+          "transaction": "kpi-tx-02"
+        }
+      ]
+    },
+    {
+      "id": "J10",
+      "phase": 2,
+      "customer": "demo-carla",
+      "language": "pt",
+      "story": "Answers \"I don't recognize it, report it\" and reports the USD charge.",
+      "steps": [
+        {
+          "do": "alert",
+          "transaction": "kpi-tx-03",
+          "answer": "report"
+        },
+        {
+          "do": "start"
+        },
+        {
+          "do": "confirm",
+          "transaction": "kpi-tx-03"
+        }
+      ]
+    },
+    {
+      "id": "J11",
+      "phase": 2,
+      "customer": "demo-bruno",
+      "language": "en",
+      "story": "Second report by the same customer within 90 days: \"I can't find it\" without details (no suggestion run).",
+      "steps": [
+        {
+          "do": "start"
+        },
+        {
+          "do": "cant_find"
+        }
+      ]
+    },
+    {
+      "id": "J12",
+      "phase": 2,
+      "customer": "demo-ana",
+      "language": "pt",
+      "story": "\"I can't find it\" with details; a charge is suggested and the customer answers \"none of these\".",
+      "steps": [
+        {
+          "do": "start"
+        },
+        {
+          "do": "cant_find",
+          "details": "Lembro só do mercado. FACTS={\"merchant\":\"Mercado Demo\"}"
+        },
+        {
+          "do": "await_suggestions",
+          "expect": "suggested"
+        },
+        {
+          "do": "suggestion_answer",
+          "none": true
+        }
+      ]
+    },
+    {
+      "id": "J13",
+      "phase": 2,
+      "customer": "demo-ana",
+      "language": "es",
+      "story": "A suggested charge is confirmed by the customer; an agent opens the report and marks the suggestion wrong.",
+      "steps": [
+        {
+          "do": "start"
+        },
+        {
+          "do": "cant_find",
+          "details": "Solo recuerdo el mercado. FACTS={\"merchant\":\"Mercado Demo\"}"
+        },
+        {
+          "do": "await_suggestions",
+          "expect": "suggested"
+        },
+        {
+          "do": "suggestion_answer",
+          "transaction": "demo-tx-001"
+        },
+        {
+          "do": "agent_open"
+        },
+        {
+          "do": "agent_mark",
+          "mark": "wrong"
+        }
+      ]
+    },
+    {
+      "id": "J14",
+      "phase": 2,
+      "customer": "demo-diego",
+      "language": "en",
+      "story": "Starts a report and is still choosing when the KPIs are read: pending.",
+      "steps": [
+        {
+          "do": "start"
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "by_language": {
+      "all": {
+        "reports": {
+          "started": 13,
+          "outcomes": {
+            "complete_handoff": 5,
+            "incomplete_handoff": 4,
+            "technical_handoff": 1,
+            "abandoned": 2,
+            "pending": 1
+          },
+          "not_complete_handoff": {
+            "numerator": 8,
+            "denominator": 13,
+            "rate": 0.6153846153846154
+          }
+        },
+        "workload": {
+          "handoffs": {
+            "numerator": 10,
+            "denominator": 13,
+            "rate": 0.7692307692307693
+          },
+          "opened_within_24h": {
+            "numerator": 3,
+            "denominator": 10,
+            "rate": 0.3
+          },
+          "unopened": 6,
+          "status": {
+            "received": 8,
+            "in_review": 1,
+            "closed": 1
+          }
+        },
+        "friction": {
+          "funnel": {
+            "transaction_confirmed": {
+              "numerator": 5,
+              "denominator": 13,
+              "rate": 0.38461538461538464
+            },
+            "cant_find": {
+              "numerator": 4,
+              "denominator": 13,
+              "rate": 0.3076923076923077
+            },
+            "handoff_created": {
+              "numerator": 10,
+              "denominator": 13,
+              "rate": 0.7692307692307693
+            },
+            "acknowledged": {
+              "numerator": 10,
+              "denominator": 13,
+              "rate": 0.7692307692307693
+            }
+          },
+          "clarifications_per_episode": {
+            "numerator": 0,
+            "denominator": 13,
+            "rate": 0
+          },
+          "span_ms": {
+            "ended": 12,
+            "p50": "from_events",
+            "p95": "from_events"
+          }
+        },
+        "suggestions": {
+          "runs": 3,
+          "pending": 0,
+          "by_arm": {
+            "B": {
+              "no_match": 1,
+              "suggested": 2
+            }
+          },
+          "shown": 2,
+          "confirmed": 1,
+          "none_of_these": 1,
+          "marked_correct": 0,
+          "marked_wrong": 1
+        },
+        "persistence": {
+          "none_of_these_still_handoff": {
+            "numerator": 1,
+            "denominator": 2,
+            "rate": 0.5
+          },
+          "confirmed_suggestion_marked_wrong": {
+            "numerator": 1,
+            "denominator": 1,
+            "rate": 1
+          }
+        },
+        "repeat_reporters": {
+          "numerator": 3,
+          "denominator": 4,
+          "rate": 0.75
+        },
+        "value_at_stake": {
+          "complete_handoffs": {
+            "BRL": {
+              "n": 4,
+              "p25": "32.00",
+              "p50": "58.00",
+              "p75": "96.00"
+            },
+            "USD": {
+              "n": 1,
+              "p25": "230.00",
+              "p50": "230.00",
+              "p75": "230.00"
+            }
+          },
+          "no_amount": 5
+        }
+      },
+      "es": {
+        "reports": {
+          "started": 5,
+          "outcomes": {
+            "complete_handoff": 2,
+            "incomplete_handoff": 2,
+            "technical_handoff": 0,
+            "abandoned": 1,
+            "pending": 0
+          },
+          "not_complete_handoff": {
+            "numerator": 3,
+            "denominator": 5,
+            "rate": 0.6
+          }
+        },
+        "workload": {
+          "handoffs": {
+            "numerator": 4,
+            "denominator": 5,
+            "rate": 0.8
+          },
+          "opened_within_24h": {
+            "numerator": 2,
+            "denominator": 4,
+            "rate": 0.5
+          },
+          "unopened": 2,
+          "status": {
+            "received": 3,
+            "in_review": 0,
+            "closed": 1
+          }
+        },
+        "friction": {
+          "funnel": {
+            "transaction_confirmed": {
+              "numerator": 2,
+              "denominator": 5,
+              "rate": 0.4
+            },
+            "cant_find": {
+              "numerator": 2,
+              "denominator": 5,
+              "rate": 0.4
+            },
+            "handoff_created": {
+              "numerator": 4,
+              "denominator": 5,
+              "rate": 0.8
+            },
+            "acknowledged": {
+              "numerator": 4,
+              "denominator": 5,
+              "rate": 0.8
+            }
+          },
+          "clarifications_per_episode": {
+            "numerator": 0,
+            "denominator": 5,
+            "rate": 0
+          },
+          "span_ms": {
+            "ended": 5,
+            "p50": "from_events",
+            "p95": "from_events"
+          }
+        },
+        "suggestions": {
+          "runs": 2,
+          "pending": 0,
+          "by_arm": {
+            "B": {
+              "no_match": 1,
+              "suggested": 1
+            }
+          },
+          "shown": 1,
+          "confirmed": 1,
+          "none_of_these": 0,
+          "marked_correct": 0,
+          "marked_wrong": 1
+        },
+        "persistence": {
+          "none_of_these_still_handoff": {
+            "numerator": 0,
+            "denominator": 1,
+            "rate": 0
+          },
+          "confirmed_suggestion_marked_wrong": {
+            "numerator": 1,
+            "denominator": 1,
+            "rate": 1
+          }
+        },
+        "repeat_reporters": {
+          "numerator": 1,
+          "denominator": 3,
+          "rate": 0.3333333333333333
+        },
+        "value_at_stake": {
+          "complete_handoffs": {
+            "BRL": {
+              "n": 2,
+              "p25": "58.00",
+              "p50": "58.00",
+              "p75": "142.80"
+            }
+          },
+          "no_amount": 2
+        }
+      },
+      "pt": {
+        "reports": {
+          "started": 4,
+          "outcomes": {
+            "complete_handoff": 2,
+            "incomplete_handoff": 1,
+            "technical_handoff": 0,
+            "abandoned": 1,
+            "pending": 0
+          },
+          "not_complete_handoff": {
+            "numerator": 2,
+            "denominator": 4,
+            "rate": 0.5
+          }
+        },
+        "workload": {
+          "handoffs": {
+            "numerator": 3,
+            "denominator": 4,
+            "rate": 0.75
+          },
+          "opened_within_24h": {
+            "numerator": 0,
+            "denominator": 3,
+            "rate": 0
+          },
+          "unopened": 2,
+          "status": {
+            "received": 3,
+            "in_review": 0,
+            "closed": 0
+          }
+        },
+        "friction": {
+          "funnel": {
+            "transaction_confirmed": {
+              "numerator": 2,
+              "denominator": 4,
+              "rate": 0.5
+            },
+            "cant_find": {
+              "numerator": 1,
+              "denominator": 4,
+              "rate": 0.25
+            },
+            "handoff_created": {
+              "numerator": 3,
+              "denominator": 4,
+              "rate": 0.75
+            },
+            "acknowledged": {
+              "numerator": 3,
+              "denominator": 4,
+              "rate": 0.75
+            }
+          },
+          "clarifications_per_episode": {
+            "numerator": 0,
+            "denominator": 4,
+            "rate": 0
+          },
+          "span_ms": {
+            "ended": 4,
+            "p50": "from_events",
+            "p95": "from_events"
+          }
+        },
+        "suggestions": {
+          "runs": 1,
+          "pending": 0,
+          "by_arm": {
+            "B": {
+              "suggested": 1
+            }
+          },
+          "shown": 1,
+          "confirmed": 0,
+          "none_of_these": 1,
+          "marked_correct": 0,
+          "marked_wrong": 0
+        },
+        "persistence": {
+          "none_of_these_still_handoff": {
+            "numerator": 1,
+            "denominator": 1,
+            "rate": 1
+          },
+          "confirmed_suggestion_marked_wrong": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null
+          }
+        },
+        "repeat_reporters": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0
+        },
+        "value_at_stake": {
+          "complete_handoffs": {
+            "BRL": {
+              "n": 1,
+              "p25": "32.00",
+              "p50": "32.00",
+              "p75": "32.00"
+            },
+            "USD": {
+              "n": 1,
+              "p25": "230.00",
+              "p50": "230.00",
+              "p75": "230.00"
+            }
+          },
+          "no_amount": 1
+        }
+      },
+      "en": {
+        "reports": {
+          "started": 4,
+          "outcomes": {
+            "complete_handoff": 1,
+            "incomplete_handoff": 1,
+            "technical_handoff": 1,
+            "abandoned": 0,
+            "pending": 1
+          },
+          "not_complete_handoff": {
+            "numerator": 3,
+            "denominator": 4,
+            "rate": 0.75
+          }
+        },
+        "workload": {
+          "handoffs": {
+            "numerator": 3,
+            "denominator": 4,
+            "rate": 0.75
+          },
+          "opened_within_24h": {
+            "numerator": 1,
+            "denominator": 3,
+            "rate": 0.3333333333333333
+          },
+          "unopened": 2,
+          "status": {
+            "received": 2,
+            "in_review": 1,
+            "closed": 0
+          }
+        },
+        "friction": {
+          "funnel": {
+            "transaction_confirmed": {
+              "numerator": 1,
+              "denominator": 4,
+              "rate": 0.25
+            },
+            "cant_find": {
+              "numerator": 1,
+              "denominator": 4,
+              "rate": 0.25
+            },
+            "handoff_created": {
+              "numerator": 3,
+              "denominator": 4,
+              "rate": 0.75
+            },
+            "acknowledged": {
+              "numerator": 3,
+              "denominator": 4,
+              "rate": 0.75
+            }
+          },
+          "clarifications_per_episode": {
+            "numerator": 0,
+            "denominator": 4,
+            "rate": 0
+          },
+          "span_ms": {
+            "ended": 3,
+            "p50": "from_events",
+            "p95": "from_events"
+          }
+        },
+        "suggestions": {
+          "runs": 0,
+          "pending": 0,
+          "by_arm": {},
+          "shown": 0,
+          "confirmed": 0,
+          "none_of_these": 0,
+          "marked_correct": 0,
+          "marked_wrong": 0
+        },
+        "persistence": {
+          "none_of_these_still_handoff": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null
+          },
+          "confirmed_suggestion_marked_wrong": {
+            "numerator": 0,
+            "denominator": 0,
+            "rate": null
+          }
+        },
+        "repeat_reporters": {
+          "numerator": 0,
+          "denominator": 3,
+          "rate": 0
+        },
+        "value_at_stake": {
+          "complete_handoffs": {
+            "BRL": {
+              "n": 1,
+              "p25": "96.00",
+              "p50": "96.00",
+              "p75": "96.00"
+            }
+          },
+          "no_amount": 2
+        }
+      }
+    },
+    "alerts": {
+      "answered": 3,
+      "recognized": 2,
+      "not_mine": 1,
+      "reported": 2,
+      "deflected_by_explanation": {
+        "numerator": 2,
+        "denominator": 3,
+        "rate": 0.6666666666666666
+      },
+      "persistence_recognized_then_reported": {
+        "numerator": 1,
+        "denominator": 2,
+        "rate": 0.5
+      },
+      "value_at_stake_deflected": {
+        "BRL": {
+          "n": 2,
+          "p25": "12.40",
+          "p50": "12.40",
+          "p75": "58.00"
+        }
+      }
+    }
+  }
+}
