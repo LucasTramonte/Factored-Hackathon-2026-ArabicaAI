@@ -50,7 +50,7 @@ The risk is not that the app will “crash a system,” but that trust and autho
 
 ### In the current context
 
-In the current code, `requireSession(...)` validates the cookie token and returns the live session row, whose stored `customer_id` scopes customer routes. The code also checks ownership when listing and creating cases. For a picker-created session, these checks enforce demo session scoping without establishing real customer identity.
+In the current code, `requireSession(...)` validates the cookie token and returns the live session row, whose stored `customer_id` scopes customer routes. Case creation verifies that the session customer owns the transaction; no customer case-list/read route exists. For a picker-created session, these checks enforce demo session scoping without establishing real customer identity.
 
 So the honest answer is:
 
