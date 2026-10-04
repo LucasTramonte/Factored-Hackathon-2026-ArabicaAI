@@ -151,7 +151,7 @@ test('POST /agent/intake-status validates its body, moves forward one step only 
   for (const cookie of [`demo_session=${customerToken}`, `demo_agent_session=${'f'.repeat(64)}`, 'x=1'])
     assert.equal((await post({ protocol: p, status: 'in_review' }, cookie)).status, 401);
   assert.equal((await post({ protocol: crypto.randomUUID(), status: 'in_review' })).status, 404);
-  assert.equal((await post({ protocol: p, status: 'closed' })).status, 409, 'no skipping');
+  assert.equal((await post({ protocol: p, status: 'closed', closing_note: 'Review explanation' })).status, 409, 'no skipping');
   const first = await post({ protocol: p.toUpperCase(), status: 'in_review' });
   assert.equal(first.status, 200); const body = await first.json(); assertContract('intakeTransition', body);
   assert.equal(body.protocol, p); assert.equal(body.status, 'in_review');
@@ -159,7 +159,7 @@ test('POST /agent/intake-status validates its body, moves forward one step only 
   const replay = await post({ protocol: p, status: 'in_review' });
   assert.equal(replay.status, 200); assert.deepEqual(await replay.json(), body);
   assert.equal(db.prepare('SELECT total_changes() AS n').get().n, writes, 'a replay writes nothing');
-  assert.equal((await post({ protocol: p, status: 'closed' })).status, 200);
+  assert.equal((await post({ protocol: p, status: 'closed', closing_note: 'Review explanation' })).status, 200);
   assert.equal((await post({ protocol: p, status: 'in_review' })).status, 409, 'never backwards');
   const history = db.prepare('SELECT status,agent_session_ref FROM handoff_status_history ORDER BY rowid').all();
   const ref = (await tokenHash(agentToken)).slice(0, 12);
@@ -275,4 +275,19 @@ test('simultaneous first opens write one epoch-ms stamp and SQL pickup preserves
   assert.equal(pickup.unit, 'integer'); assert.equal(pickup.pickup_ms, 4567);
   assert.equal((await store.findIntakeHandoff(receipt.protocol, now + 1000)).first_opened_at, now);
   assert.equal(changes(), before + 1, 'later reads write nothing');
+});
+
+
+test('a failed closing update rolls back explanation, history and notification together', async t => {
+  const { db, store, finish } = await setup(t);
+  const { receipt } = await finish('incomplete');
+  db.prepare("INSERT INTO notification_targets VALUES('ana','iv.x',1)").run();
+  const post = body => route(request('/agent/intake-status', { method: 'POST', body }), env, store);
+  assert.equal((await post({ protocol: receipt.protocol, status: 'in_review' })).status, 200);
+  db.exec("CREATE TRIGGER fail_closing BEFORE UPDATE OF status ON intake_handoffs WHEN NEW.status='closed' BEGIN SELECT RAISE(ABORT,'forced failure'); END;");
+  await assert.rejects(post({ protocol: receipt.protocol, status: 'closed', closing_note: 'Must roll back' }), /forced failure/);
+  assert.equal(db.prepare('SELECT status FROM intake_handoffs').get().status, 'in_review');
+  assert.equal(db.prepare('SELECT closing_note FROM intake_handoffs').get().closing_note, null);
+  assert.equal(db.prepare("SELECT count(*) n FROM handoff_status_history WHERE status='closed'").get().n, 0);
+  assert.equal(db.prepare("SELECT count(*) n FROM email_outbox WHERE template='closed'").get().n, 0);
 });

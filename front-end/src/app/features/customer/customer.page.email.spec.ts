@@ -6,7 +6,7 @@ import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { ApiError } from '../../core/http/api.service';
 import { Report } from '../../shared/models/intake.model';
-const report: Report = { protocol: 'P', reference_short: 'AR-AAAA-BBBB', status: 'received', kind: 'incomplete', transaction_id: null, accepted_at: '2026-10-04T12:00:00Z', next_step: 'review_pending' };
+const report: Report = { protocol: 'P', reference_short: 'AR-AAAA-BBBB', status: 'received', kind: 'incomplete', transaction_id: null, accepted_at: '2026-10-04T12:00:00Z', closing_note: null, next_step: 'review_pending' };
 describe('Customer status email', () => {
   let service: jasmine.SpyObj<CustomerService>;
   beforeEach(() => {

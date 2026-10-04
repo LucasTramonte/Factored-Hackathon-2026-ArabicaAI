@@ -9,7 +9,7 @@ import { CustomerPage } from './customer.page';
 import { CustomerService } from './customer.service';
 
 const previous: Report = { protocol: '11111111-1111-4111-8111-111111111111', reference_short: 'AR-AAAA-BBBB', kind: 'complete',
-  status: 'closed', next_step: 'closed_by_person', accepted_at: '2026-10-03T10:00:00.000Z', transaction_id: 'tx-old' };
+  status: 'closed', closing_note: null, next_step: 'closed_by_person', accepted_at: '2026-10-03T10:00:00.000Z', transaction_id: 'tx-old' };
 const transaction: Transaction = { transaction_id: 'tx-old', merchant_name: 'Café', occurred_at: null, source_occurred_at: null, amount: '10.00', currency: 'ARS' };
 const start: IntakeStart = { episode_id: '22222222-2222-4222-8222-222222222222', state: 'selection_required', language: 'es', mode: 'guided', replayed: false };
 

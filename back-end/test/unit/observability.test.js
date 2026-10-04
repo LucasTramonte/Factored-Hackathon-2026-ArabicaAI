@@ -44,3 +44,20 @@ test('an unexpected error logs its class only, then the 503 request line; no pat
   const text = JSON.stringify(lines);
   for (const secret of ['AR-ABCD-EFGH', 'secret-text', 'aaaaaaaa', 'demo_session']) assert.ok(!text.includes(secret), secret);
 });
+
+
+test('a closing failure logs neither explanation, statement, protocol nor provider error text', async t => {
+  const lines = captured(t);
+  const protocol = crypto.randomUUID(), secret = 'SECRET CLOSING EXPLANATION';
+  const DB = { prepare: () => ({ bind: () => ({ all: async () => ({ results: [{ actor: 'agent', customer_id: null, expires_at: Date.now() + 60000 }] }) }) }),
+    batch: async () => { throw new Error(secret); } };
+  const response = await worker.fetch(new Request('https://w.example/agent/intake-status', {
+    method: 'POST', headers: { Cookie: 'demo_agent_session=' + 'a'.repeat(64) },
+    body: JSON.stringify({ protocol, status: 'closed', closing_note: secret })
+  }), { ...env, DB }, {});
+  assert.equal(response.status, 503);
+  assert.deepEqual(lines.map(line => line.event), ['unhandled_error', 'request']);
+  assert.equal(lines[0].error, 'Error');
+  assert.doesNotMatch(JSON.stringify(lines), /SECRET CLOSING EXPLANATION|closing_note|aaaaaaaa/);
+  assert.ok(!JSON.stringify(lines).includes(protocol));
+});

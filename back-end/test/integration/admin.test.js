@@ -158,7 +158,7 @@ test("an update an admin asks for while acting is queued to the admin's own addr
   });
   const agent = client(); assert.equal((await agent.call('/demo/agent-session', {})).status, 200);
   for (const status of ['in_review', 'closed']) {
-    assert.equal((await agent.call('/agent/intake-status', { protocol: receipt.protocol, status })).status, 200);
+    assert.equal((await agent.call('/agent/intake-status', { protocol: receipt.protocol, status, ...(status === 'closed' ? { closing_note: 'Review finished; please contact the bank if you still need help.' } : {}) })).status, 200);
   }
   await store(async s => {
     assert.equal(await s.findNotificationTarget('CLI-COHORT-3'), null, 'acting still stores no address for the customer');

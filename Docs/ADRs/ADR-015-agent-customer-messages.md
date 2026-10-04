@@ -30,6 +30,14 @@ Email isn't a substitute today:
 5. **No email yet.** The message is in-app only. Emailing "you have a new message" needs a non-additive migration to widen the template `CHECK`, applied by a person, and is a follow-up.
 6. **Nothing moves money or decides.** A message is text between people. The agent still only moves the status, and nothing refunds, blocks or rules on fraud.
 
+## Explained closure contract (2026-10-04)
+
+The lifecycle remains `received → in_review → closed`: closed means a person finished the review, never that the charge was resolved. Starting review keeps exactly `{protocol,status}`. Closing requires exactly `{protocol,status,closing_note}`, with 1–2000 Unicode code points after trimming, well-formed text without NUL. An old reviewer client omitting the note receives 422; invalid note text also receives 422. Deploy the client and API together through the existing pipeline.
+
+Migration 0029 adds nullable `intake_handoffs.closing_note`. New closure stores note, status, history and the existing notification outbox in the same D1 batch, then reads back before success. The immutable first note wins: identical trimmed close/note replay returns the stored result, a different note conflicts (409), and a concurrent losing request never stores its note. Legacy closed rows retain null and display an honest missing-explanation message; they cannot acquire a note through replay.
+
+The owned customer report and approved agent detail expose the note as plain text. The customer can use the existing linked follow-up with “Todavía necesito ayuda”; closed message threads remain read-only. The existing closing email stays generic and points to the app, without note, statement, new template, model, logs or event content. No refund, card block or fraud decision is implied.
+
 ## Consequences
 
 - **+** The agent can ask for what's missing and explain the next step. The customer answers on the same report.

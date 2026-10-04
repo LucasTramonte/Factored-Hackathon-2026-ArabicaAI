@@ -203,8 +203,8 @@ export async function listReports(request, env, store) {
   if (!current) return fail(401, 'Start a demo session first');
   if (new URL(request.url).search) return fail(422, 'Unexpected parameters');
   const rows = await store.listCustomerHandoffs(current.customer_id, REPORTS_PAGE + 1);
-  return json({ items: rows.slice(0, REPORTS_PAGE).map(({ protocol, reference_short, kind, status, accepted_at, transaction_id }) =>
-    ({ protocol, reference_short: reference_short ?? null, kind, status, next_step: NEXT_STEP[status], accepted_at, transaction_id: transaction_id ?? null })),
+  return json({ items: rows.slice(0, REPORTS_PAGE).map(({ protocol, reference_short, kind, status, closing_note, accepted_at, transaction_id }) =>
+    ({ protocol, reference_short: reference_short ?? null, kind, status, closing_note: closing_note ?? null, next_step: NEXT_STEP[status], accepted_at, transaction_id: transaction_id ?? null })),
     has_more: rows.length > REPORTS_PAGE });
 }
 

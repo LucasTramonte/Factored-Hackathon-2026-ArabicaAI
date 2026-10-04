@@ -23,7 +23,7 @@ test('a customer lists only their own acknowledged reports, newest first, withou
   assert.equal(listed.status, 200); assertContract('reportList', listed.body);
   // A complete report names its confirmed charge, so the client can show the charge's status; others carry null.
   assert.deepEqual(listed.body.items.slice(0, 2), [[incomplete.body, null], [complete.body, 'demo-tx-001']].map(([r, tx]) => ({ protocol: r.protocol,
-    reference_short: r.reference_short, kind: r.kind, status: 'received', next_step: 'review_pending', accepted_at: r.accepted_at, transaction_id: tx })));
+    reference_short: r.reference_short, kind: r.kind, status: 'received', closing_note: null, next_step: 'review_pending', accepted_at: r.accepted_at, transaction_id: tx })));
   assert.ok(listed.body.items.length <= 20);
   assert.doesNotMatch(listed.text, /customer_statement|reconheço|demo-ana|episode_id/);
 

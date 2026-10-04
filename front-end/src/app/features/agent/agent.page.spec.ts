@@ -15,7 +15,7 @@ const P2 = '22222222-2222-4222-8222-222222222222';
 const intake = (protocol: string, kind: AgentIntake['kind'] = 'complete', reason: AgentIntake['reason'] = 'duplicate'): AgentIntake =>
   ({ protocol, reference_short: protocol === P1 ? 'AR-7K3M-2Q4X' : null, episode_id: P2, kind, reason, status: 'received', tool_status: 'ok', destination: 'case_service', priority: 'normal', urgency: 'normal', accepted_at: '2026-09-30T12:00:00.000Z' });
 const detail = (protocol: string, over: Partial<AgentIntakeDetail> = {}): AgentIntakeDetail => ({
-  ...intake(protocol), language: 'es', customer_statement: 'No reconozco este cargo',
+  ...intake(protocol), closing_note: null, language: 'es', customer_statement: 'No reconozco este cargo',
   verified_evidence: { transaction: { transaction_id: 'TX-9', merchant_name: 'Café', occurred_at: null, source_occurred_at: '2026-09-01 10:00:00', amount: '12.50', currency: 'MXN' } },
   actions_taken: ['owned_transaction_retrieved'], unresolved_questions: [], history: [{ seq: 1, event: 'intake_started', ts: '2026-09-30T11:59:00.000Z' }],
   history_has_more: false, model_reading: { mode: 'off', model_version: null, llm_calls: 0 }, customer_suggestion: null, scope: 'synthetic_demo_only',
@@ -517,6 +517,34 @@ describe('AgentPage', () => {
       expect(t().urgencyHigh).toBe('High priority');
     });
 
+    it('requires trimmed Unicode explanation and renders stored text without HTML', async () => {
+      service.intakeDetail.and.resolveTo(detail(P1, { status: 'in_review' }));
+      await loadAndOpen();
+      await page.advance(page.detail()!);
+      expect(service.setStatus).not.toHaveBeenCalled();
+      page.closingNote = '😀'.repeat(2000);
+      expect(page.validClosingNote()).toBeTrue();
+      page.closingNote = '😀'.repeat(2001);
+      await page.advance(page.detail()!);
+      expect(service.setStatus).not.toHaveBeenCalled();
+      page.closingNote = '  <img src=x onerror=alert(1)> 😀  ';
+      service.setStatus.and.resolveTo({ protocol: P1, status: 'closed', changed_at: '2026-10-04T12:00:00Z' });
+      await page.advance(page.detail()!); fixture.detectChanges();
+      expect(service.setStatus).toHaveBeenCalledOnceWith(P1, 'closed', '<img src=x onerror=alert(1)> 😀');
+      expect(el().querySelector('.closing-explanation')!.textContent).toContain('<img src=x onerror=alert(1)> 😀');
+      expect(el().querySelector('.closing-explanation img')).toBeNull();
+    });
+
+    it('shows the honest legacy explanation in each language without allowing an edit', async () => {
+      for (const language of ['es', 'pt', 'en'] as const) {
+        TestBed.inject(LangService).set(language);
+        service.intakeDetail.and.resolveTo(detail(P1, { status: 'closed', closing_note: null }));
+        await loadAndOpen();
+        expect(el().querySelector('.closing-explanation')!.textContent).toContain(t().closingLegacy);
+        expect(el().querySelector('#closing-note')).toBeNull();
+      }
+    });
+
     it('takes the case, then closes it, updating row and detail in place and focusing the new status', async () => {
       document.body.appendChild(el());
       service.intakeDetail.and.resolveTo(detail(P1));
@@ -525,15 +553,18 @@ describe('AgentPage', () => {
       action()[0].click();
       await fixture.whenStable();
       fixture.detectChanges();
+      // Rendering the new ngModel textarea schedules another render before the focus callback.
+      await fixture.whenStable(); fixture.detectChanges();
       expect(service.setStatus).toHaveBeenCalledOnceWith(P1, 'in_review');
       expect(page.detail()!.status).toBe('in_review');
       expect(page.intakes().find(i => i.protocol === P1)!.status).toBe('in_review');
       expect(el().querySelector(`.intake-row[data-protocol="${P1}"] .status-chip`)!.textContent!.trim()).toBe(t().inReview);
       expect(document.activeElement).toBe(statusText());
+      page.closingNote = 'Review explanation'; fixture.detectChanges();
       action()[0].click();
       await fixture.whenStable();
       fixture.detectChanges();
-      expect(service.setStatus).toHaveBeenCalledWith(P1, 'closed');
+      expect(service.setStatus).toHaveBeenCalledWith(P1, 'closed', 'Review explanation');
       expect(action().length).toBe(0);
       expect(statusText().textContent).toContain(t().chipClosed);
       expect(document.activeElement).toBe(statusText());
@@ -550,6 +581,7 @@ describe('AgentPage', () => {
       expect(service.messages).toHaveBeenCalledOnceWith(P1);
       service.messages.and.resolveTo({ status: 'closed', can_post: false, items: [] });
       action()[0].click(); await fixture.whenStable(); fixture.detectChanges();
+      page.closingNote = 'Review explanation'; fixture.detectChanges();
       action()[0].click(); await fixture.whenStable(); fixture.detectChanges();
       expect(service.messages).toHaveBeenCalledTimes(2);
       expect(el().querySelector('.messages-readonly')?.textContent).toContain(t().messagesClosed);

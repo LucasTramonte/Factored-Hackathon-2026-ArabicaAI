@@ -116,6 +116,8 @@ test('migration 0014 admits English and keeps every episode, foreign key and ind
   // Today's confirm reads the bank flag (0023, ADR-011); transactions are outside what 0014 rebuilds.
   db.exec(readFileSync(new URL('../../migrations/0023_bank_flag.sql', import.meta.url), 'utf8'));
   db.exec(reason);
+  // Today's status store reads the additive handoff explanation; it is outside 0014's episode rebuild.
+  db.exec(readFileSync(new URL('../../migrations/0029_closing_explanation.sql', import.meta.url), 'utf8'));
   // Today's session insert writes the admin mark (0021, ADR-007 decision 10) and today's session read the acting admin
   // (0022); sessions are outside what 0014 rebuilds.
   for (const f of ['0021_admin_act_as.sql', '0022_acting_admin.sql']) db.exec(readFileSync(new URL('../../migrations/' + f, import.meta.url), 'utf8'));

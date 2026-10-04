@@ -120,6 +120,8 @@ export interface IntakeTransition {
 }
 
 export interface AgentIntakeDetail extends AgentIntake {
+  /** Immutable explanation of a finished review; null for earlier or open reports. */
+  closing_note: string | null;
   language: IntakeLang;
   customer_statement: string;
   verified_evidence: { transaction: Transaction | null };
@@ -256,6 +258,8 @@ export interface IntakeReceipt {
 
 /** GET /reports: the session customer's own handoffs, newest first, 20 per page, with the status a person set. */
 export interface Report {
+  /** Immutable explanation of a finished review; null for earlier or open reports. */
+  closing_note: string | null;
   protocol: string;
   reference_short: string | null;
   kind: IntakeKind;

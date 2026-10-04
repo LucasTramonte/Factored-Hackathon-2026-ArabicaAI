@@ -64,7 +64,7 @@ export async function getAgentIntakeDetail(request, env, store) {
     const event = JSON.parse(event_json);
     return Object.fromEntries(historyKeys.filter(key => key in event).map(key => [key, event[key]]));
   });
-  return json({ protocol: row.protocol, reference_short: row.reference_short ?? null, episode_id: row.episode_id, kind: row.kind, status: row.status, tool_status: row.tool_status,
+  return json({ protocol: row.protocol, reference_short: row.reference_short ?? null, episode_id: row.episode_id, kind: row.kind, status: row.status, closing_note: row.closing_note ?? null, tool_status: row.tool_status,
     destination: row.destination, priority: row.priority, urgency: row.urgency, accepted_at: row.accepted_at,
     first_opened_at: new Date(row.first_opened_at).toISOString(), language: row.language, reason: row.reason,
     customer_history: row.customer_history,
@@ -84,7 +84,7 @@ const PREVIOUS = { in_review: 'received', closed: 'in_review' };
 
 /**
  * POST /agent/intake-status ``{ protocol, status }``: a person moves an acknowledged handoff received → in_review →
- * closed. Nothing is refunded, blocked or decided (ADR-002). 200 when the handoff ends in the requested status (first
+ * closed, requiring ``closing_note`` for closure. Nothing is refunded, blocked or decided (ADR-002). 200 when the handoff ends in the requested status (first
  * time or replay; a replay writes nothing), 404 when unknown, 409 for any other step. The first step queues one
  * email to the customer, sent after the response.
  */
@@ -93,14 +93,22 @@ export async function transitionIntake(request, env, store, ctx) {
   const body = await readJsonBody(request);
   if (body.error) return body.error;
   const value = body.value;
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).sort().join() !== 'protocol,status'
-    || typeof value.protocol !== 'string' || !UUID.test(value.protocol) || !Object.hasOwn(PREVIOUS, value.status)) return fail(422, 'Provide exactly a valid protocol and status');
+  if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.protocol !== 'string' || !UUID.test(value.protocol) || !Object.hasOwn(PREVIOUS, value.status)) return fail(422, 'Provide exactly a valid protocol and status');
+  const keys = Object.keys(value).sort().join();
+  let closingNote = null;
+  if (value.status === 'closed') {
+    if (keys !== 'closing_note,protocol,status' || typeof value.closing_note !== 'string'
+      || !value.closing_note.isWellFormed() || value.closing_note.includes('\u0000')) return fail(422, 'Provide a closing_note of 1–2000 Unicode characters');
+    closingNote = value.closing_note.trim();
+    if ([...closingNote].length < 1 || [...closingNote].length > 2000) return fail(422, 'Provide a closing_note of 1–2000 Unicode characters');
+  } else if (keys !== 'protocol,status') return fail(422, 'Provide exactly a valid protocol and status');
   const protocol = value.protocol.toLowerCase();
   // The session's audit ref: 12 hex characters of the token hash, never the token.
   const agentSessionRef = (await tokenHash(readCookies(request)[COOKIE.agent])).slice(0, 12);
-  const { row, emailId } = await store.transitionHandoff({ protocol, from: PREVIOUS[value.status], to: value.status,
+  const { row, emailId } = await store.transitionHandoff({ protocol, from: PREVIOUS[value.status], to: value.status, closingNote,
     now: Date.now(), agentSessionRef, emailId: crypto.randomUUID() });
   if (!row) return fail(404, 'Intake handoff not found');
+  if (value.status === 'closed' && row.status === 'closed' && row.closing_note !== closingNote) return fail(409, 'A different closing explanation is already recorded');
   if (row.status !== value.status) return fail(409, 'Status can only move forward one step');
   // A store of its own, so the send's queries never count in this response's metrics.
   if (emailId && ctx?.waitUntil) ctx.waitUntil(deliver(env, createStore(env.DB),
