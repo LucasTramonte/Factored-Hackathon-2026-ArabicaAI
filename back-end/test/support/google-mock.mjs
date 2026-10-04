@@ -31,7 +31,8 @@ const mock = createServer(async (request, response) => {
       if (request.headers.authorization !== 'Bearer mock-federated') return send(403, { error: 'denied' });
       return send(200, { accessToken: 'mock-vertex', expireTime: new Date(Date.now() + 3600000).toISOString() });
     }
-    if (request.url === `/v1/projects/${vars.VERTEX_PROJECT}/locations/global/endpoints/openapi/chat/completions`) {
+    // The location the Worker is configured with (wrangler.jsonc ``VERTEX_LOCATION``, ``us``), so the integration Worker's path is checked.
+    if (request.url === `/v1/projects/${vars.VERTEX_PROJECT}/locations/${vars.VERTEX_LOCATION ?? 'global'}/endpoints/openapi/chat/completions`) {
       if (request.headers.authorization !== 'Bearer mock-vertex') return send(401, { error: 'unauthenticated' });
       const user = JSON.parse(JSON.parse(text).messages[1].content);
       received.push(user);

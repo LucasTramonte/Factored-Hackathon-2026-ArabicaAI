@@ -15,13 +15,15 @@
     "COGNITO_USER_POOL_ID": "us-east-2_Lo7KrT6MT",
     "COGNITO_CLIENT_ID": "5ak5cbjgdddso1c3h3i2aha7sn",
     "SES_REGION": "us-east-2",
-    "INTAKE_AI_ENABLED": "0",
+    "INTAKE_AI_ENABLED": "1",
+    "INTAKE_AI_SHARE_B": "1",
     "VERTEX_PROJECT": "factored-hackathon-arabica-ai",
+    "VERTEX_LOCATION": "us",
     "VERTEX_PROJECT_NUMBER": "92397500240",
     "VERTEX_SERVICE_ACCOUNT": "arabica-worker-vertex@factored-hackathon-arabica-ai.iam.gserviceaccount.com",
     "VERTEX_WIF_ISSUER": "https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev",
     "VERTEX_WIF_KID": "9095f0228830804a",
-    "VERTEX_MODEL_RETIRES": "2026-10-21"
+    "VERTEX_MODEL_RETIRES": "2027-01-31"
   },
   "observability": {
     "logs": { "enabled": true, "head_sampling_rate": 1, "invocation_logs": true, "persist": true },

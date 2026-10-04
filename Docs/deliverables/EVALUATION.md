@@ -166,7 +166,7 @@ These limit what the result means. None of them is hidden in the numbers above.
 - **The baseline is ours.** The checklist is a reasonable rules engine, not the best one possible. A team that spent more time on rules, or a small trained classifier, could narrow the gap.
 - **The latency wasn't measured where it would run.** It was measured from a laptop to Vertex AI, not from the Worker, and without the deterministic matching and database work an online request adds.
 - **Nothing here measures a customer outcome.** It shows better reading. It doesn't show that a customer finishes a report faster or that an agent resolves anything sooner.
-- **The model never ran on the 22 `safety` cases.** Its 0 unsafe comes from the frozen set's own adversarial situations; only the checklist was scored on the dedicated red-team set.
+- **v1 never ran on the 22 `safety` cases.** Its 0 unsafe comes from the frozen set's own adversarial situations. Its one red-team attempt timed out on every call during Google's degradation (§11). The red-team result belongs to v2, and those cases are not held out.
 
 ## 9. What else could have been tested
 
@@ -175,7 +175,7 @@ In rough order of value, with what stopped us:
 1. **Real customer messages.** Shadow mode on live traffic, where the model reads but changes nothing, would give real wording and the share of customers who can't find their charge, the number that decides whether the AI path is worth running ([ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md), condition 3). There is no real traffic yet: the live service has 5 episodes, all team sessions.
 2. **A second, larger held-out set from another model family.** About 200 cases written by a different generator (for example Gemini or Claude), with the same spec-first gold, would remove the shared-style concern and give about 90% power for an 8-point gain. This is also what a successor model needs, since the frozen set is spent. It needs a generator, an inference budget and a protocol decision.
 3. **Harder language.** Code-switching between Spanish and Portuguese (the model's weakest family, 0 of 2), regional variants (Mexican, Colombian, Argentine, Brazilian), typos, voice-to-text output and very short messages. CheckList-style perturbations (change the amount format, make the date relative, add noise) would test these systematically.
-4. **The red-team set against the model.** Running the 22 `safety` cases and a larger injection set through the model, not just the checklist.
+4. **A larger red-team set against the model.** v2 has run the 22 `safety` cases (§11). A larger, independently written injection set is still owed.
 5. **Other models and sizes.** gpt-oss-120b, a small fast model, and a frontier model on the same cases, to put accuracy, latency and cost on one chart and pick the successor with evidence.
 6. **A stronger baseline.** Rules written blind by someone outside the team, or a small trained classifier, so the model has to beat a serious alternative.
 7. **Fully blind native review.** Native speakers from each country, who have seen no AI suggestions, labelling a larger random sample. That tightens the 15.3% label-error bound.
@@ -211,6 +211,25 @@ These come from separate streams and are never pooled with the frozen result.
 - **Results:** 10 of 12 were safe automated resolutions (83%, 55–95%), 0 unsafe. Two of the 12 were written to fail (an expired session and a recording failure), so 10 is the maximum.
 - **Limit:** the cases were written with the code they test. They show it does what its authors intended, not how it does on unseen requests.
 - **To reproduce:** `make intake-ui-build`, then `INQUIRY_OUT=data/charge-views/authored.jsonl npm --prefix back-end run test:integration`, then `.venv/bin/python -m evals.inquiry.score data/charge-views/authored.jsonl`.
+
+**Extractor v2 and the provider incident (2026-10-04)** ([ADR-006 amendment 10](../ADRs/ADR-006-learned-extractor-workers-ai.md#post-freeze-amendment-2026-10-04)). These are exploratory measurements, never pooled with the frozen result.
+- **What happened.** Google's shared pay-as-you-go pool for `gpt-oss-20b` degraded. Its model latency in Google's own metrics went from 0.4–1.0 s an hour to 216 s at 15h UTC. Calls then got HTTP 429 "too many concurrent requests", from a shared pool with no per-project limit. v1's red-team attempt (15:29–15:39 UTC) timed out on 60 of 60 model calls.
+- **Same moment, same ~2,100-token request, 8 calls each:**
+  - `gpt-oss-20b`: 0/8;
+  - `gpt-oss-120b`: 4/8, p50 7.6 s;
+  - `gemma-4-26b`: 8/8, p50 2.5 s;
+  - `gemini-3.5-flash-lite`: 8/8, p50 1.6 s (global) and 1.3 s (`us`);
+  - `gemini-3.1-flash-lite`: 8/8, p50 2.3 s.
+- **v2, through the committed module** (`intake_agent/extractor/vertex_v2.py`; v1's prompt and parsing, Gemini 3.5 Flash-Lite at minimal thinking):
+
+  | Split | Always-handoff | Checklist | v2, majority of 3 | v2, all runs | Unsafe | Errors | p50 / p95 |
+  |---|---|---|---|---|---|---|---|
+  | Development (18) | 4 | 16 | **18** | 54/54 | 0 | 0 | 1.69 / 2.15 s |
+  | Safety, red-team (22) | 8 | 20 | **22** | 66/66 | 0 | 0 | 1.64 / 2.19 s |
+
+  **Development triggers at 10 repetitions** (180 runs, 16:18 UTC, the ADR-006 protocol): 18/18 by majority and 179/180 runs correct. 0 unsafe, 0 provider errors, 0 calls with unknown usage. Latency: pooled p50 1,508 ms and p95 1,830 ms, with an interval upper bound of **2,072 ms**, under the 3,000 ms trigger. Instability: 1 of 18 cases (`ambiguous_matches-pt` in 1 of 10 runs, still `clarify` and safe), the same as v1's 1/18, which passed under amendment 9. About 1,940 input and 69 output tokens per call. Every development trigger passes.
+- **Limit:** both splits were written with knowledge of the corpus, and development shaped v1's prompt. These results show that v2 reads our coverage set as well as v1 did, not how it does on unseen messages. The aggregates are in [`extractor-v2-development-safety-2026-10-04.json`](../Evidence/evaluation/extractor-v2-development-safety-2026-10-04.json).
+- **To reproduce:** `VERTEX_ACCESS_TOKEN=$(gcloud auth print-access-token) VERTEX_PROJECT=factored-hackathon-arabica-ai .venv/bin/python -m evals.intake.run --split safety --repetitions 3 --system extractor-v2=intake_agent.extractor.vertex_v2:extract`.
 
 **Live service:** 5 report episodes exported from remote D1 on 2026-10-02, all team and reviewer sessions since the last demo reset, on the guided flow, which calls no model.
 - **Outcomes:** 4 complete handoffs, 1 incomplete ("I can't find it"), 0 recorded unsafe. Safety is recorded as `not_assessed`, never as safe.

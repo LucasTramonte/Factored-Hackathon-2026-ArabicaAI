@@ -402,11 +402,67 @@ def build_context_cards(con: duckdb.DuckDBPyConnection, quality: dict) -> list[C
     ]
 
 
+# ADR-005's design window, the population of the reviewed baselines (PR-04, BUSINESS_OUTCOMES.md).
+TIMING_WINDOW = ("2023-06-17", "2026-01-01")  # [start, end): business timestamp ``creation_date``
+TIMING_SUBCATEGORY = "Cargo no reconocido"
+# metric → (unit, SQL interval in that unit). Negative intervals are counted and left out, never silently dropped.
+TIMING_METRICS = {
+    "first_response": ("hours", "date_diff('second', assignment_date, first_response_date) / 3600.0"),
+    "creation_to_resolution": ("days", "date_diff('second', creation_date, resolution_date) / 86400.0"),
+}
+
+
+def build_complaint_timing(con: duckdb.DuckDBPyConnection, quality: dict) -> list[Check]:
+    """How long unrecognized-charge complaints waited at this bank: p50 and p90 per metric, with ``n`` and population.
+
+    Grain: one row per metric, aggregated in SQL from ``silver.fact_complaints`` in ADR-005's design window, the same
+    population and intervals as ``data_foundation/queries/product/PR-04_before.sql``. ``n`` counts the complaints that
+    have the interval; ``missing`` those without one (no response or no resolution yet) and ``negative`` those whose
+    dates run backwards, so ``n + missing + negative = population``. Creation to resolution covers resolved complaints
+    only: most are never resolved, so it is a survivor statistic and must never be shown as an expected time.
+    Served as a reviewed seed (``data_pipelines.gold.service_timing``), never read online from Gold or Silver.
+    """
+    start, end = TIMING_WINDOW
+    selects = " UNION ALL ".join(f"""
+        SELECT '{metric}' AS metric, '{unit}' AS unit,
+               quantile_cont(x, 0.5) FILTER (WHERE x >= 0) AS p50,
+               quantile_cont(x, 0.9) FILTER (WHERE x >= 0) AS p90,
+               count(*) FILTER (WHERE x >= 0) AS n,
+               count(*) FILTER (WHERE x IS NULL) AS missing,
+               count(*) FILTER (WHERE x < 0) AS negative,
+               count(*) AS population
+        FROM (SELECT {interval} AS x FROM window_complaints)""" for metric, (unit, interval) in TIMING_METRICS.items())
+    con.execute(f"""
+        CREATE OR REPLACE TABLE gold.complaint_timing AS
+        WITH window_complaints AS (
+          SELECT * FROM {SOURCE}.silver.fact_complaints
+          WHERE subcategory = ? AND creation_date >= CAST(? AS TIMESTAMP) AND creation_date < CAST(? AS TIMESTAMP))
+        SELECT metric, unit, p50, p90, n, missing, negative, population,
+               ? AS subcategory, CAST(? AS DATE) AS window_start, CAST(? AS DATE) AS window_end_exclusive,
+               'silver.fact_complaints' AS source
+        FROM ({selects}) ORDER BY metric
+    """, [TIMING_SUBCATEGORY, start, end, TIMING_SUBCATEGORY, start, end])
+    silver = con.execute(f"SELECT count(*) FROM {SOURCE}.silver.fact_complaints WHERE subcategory = ?"
+                         " AND creation_date >= CAST(? AS TIMESTAMP) AND creation_date < CAST(? AS TIMESTAMP)",
+                         [TIMING_SUBCATEGORY, start, end]).fetchone()[0]
+    rows, mismatched, unbalanced, unordered = con.execute("""
+        SELECT count(*), count(*) FILTER (WHERE population <> ?), count(*) FILTER (WHERE n + missing + negative <> population),
+               count(*) FILTER (WHERE n > 0 AND NOT (0 <= p50 AND p50 <= p90))
+        FROM gold.complaint_timing""", [silver]).fetchone()
+    return [
+        Check("complaint_timing", "one_row_per_metric", len(TIMING_METRICS), rows),
+        Check("complaint_timing", "population_matches_silver_window", 0, mismatched),
+        Check("complaint_timing", "n_missing_negative_sum_to_population", 0, unbalanced),
+        Check("complaint_timing", "p50_not_above_p90", 0, unordered),
+    ]
+
+
 # Gold table → (builder, Bronze/Silver tables its quality run must cover), in build order.
 BUILDERS = {"customers": (build_customers, {"customers"}),
             "customer_complaints": (build_customer_complaints, {"customers", "complaints"}),
             "card_purchases":(build_card_purchases, {"customers", "products", "transactions"}),
-            "context_cards": (build_context_cards, {"customers", "products"})}
+            "context_cards": (build_context_cards, {"customers", "products"}),
+            "complaint_timing": (build_complaint_timing, {"complaints"})}
 
 
 def build(con: duckdb.DuckDBPyConnection, tables: tuple[str, ...], silver_db: Path, quality: dict,

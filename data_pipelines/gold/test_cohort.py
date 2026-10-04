@@ -63,7 +63,8 @@ def make_silver(tmp_path: Path, customers, transactions, complaints, products=No
                     " transaction_status VARCHAR, merchant_category VARCHAR DEFAULT 'Other', amount DOUBLE DEFAULT 10.5,"
                     f" transaction_country VARCHAR DEFAULT 'México', fraud_score DOUBLE DEFAULT {SECRET[1]}, is_fraud BOOLEAN DEFAULT true)")
         con.execute("CREATE TABLE silver.fact_complaints(complaint_id VARCHAR, customer_id VARCHAR, creation_date TIMESTAMP,"
-                    " subcategory VARCHAR, category VARCHAR DEFAULT 'Transactions')")
+                    " subcategory VARCHAR, category VARCHAR DEFAULT 'Transactions', assignment_date TIMESTAMP DEFAULT NULL,"
+                    " first_response_date TIMESTAMP DEFAULT NULL, resolution_date TIMESTAMP DEFAULT NULL)")
         con.execute("CREATE TABLE bronze.transactions(transaction_id VARCHAR, amount VARCHAR, _source_file VARCHAR, transaction_date VARCHAR)")
         con.executemany("INSERT INTO silver.dim_customers VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", customers)
         con.executemany("INSERT INTO silver.dim_products VALUES (?, ?, 'Tarjeta Crédito', '4111222233334444', 'USD', 'Active')", products)

@@ -1,0 +1,36 @@
+{
+ "population": {
+  "subcategory": "Cargo no reconocido",
+  "window_start": "2023-06-17",
+  "window_end_exclusive": "2026-01-01",
+  "timestamp": "creation_date",
+  "source": "silver.fact_complaints",
+  "query": "data_foundation/queries/product/PR-04_before.sql"
+ },
+ "gold_build": "20261004T164425548775Z",
+ "quality_generated_at_utc": "2026-09-30T03:11:03.695551+00:00",
+ "published_on": "2026-10-04",
+ "metrics": [
+  {
+   "metric": "creation_to_resolution",
+   "unit": "days",
+   "p50": 15.0,
+   "p90": 27.0,
+   "n": 2414,
+   "missing": 7956,
+   "negative": 0,
+   "population": 10370
+  },
+  {
+   "metric": "first_response",
+   "unit": "hours",
+   "p50": 25.0,
+   "p90": 44.0,
+   "n": 6045,
+   "missing": 4325,
+   "negative": 0,
+   "population": 10370
+  }
+ ],
+ "version": "4e2a1b33eac4812d"
+}

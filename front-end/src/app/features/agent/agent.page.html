@@ -114,7 +114,7 @@
                 <dl class="detail-meta">
                   <div><dt>{{ t().transactionId }}</dt><dd class="ar-mono">{{ tx.transaction_id }}</dd></div>
                   <div><dt>{{ t().merchant }}</dt><dd>{{ tx.merchant_name || t().noMerchant }}</dd></div>
-                  <div><dt>{{ t().amount }}</dt><dd class="ar-amount">{{ tx.amount }} {{ tx.currency }}</dd></div>
+                  <div><dt>{{ t().amount }}</dt><dd class="ar-amount">{{ money(tx.amount, tx.currency) }}</dd></div>
                   <div><dt>{{ t().date }}</dt><dd>
                     @if (tx.source_occurred_at) { {{ sourceTime(tx.source_occurred_at) }} ({{ t().tzMissing }}) }
                     @else if (tx.occurred_at) { {{ tx.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }} }
@@ -142,7 +142,7 @@
             <dl class="detail-meta">
               <div><dt>{{ t().transactionId }}</dt><dd class="ar-mono">{{ tx.transaction_id }}</dd></div>
               <div><dt>{{ t().merchant }}</dt><dd>{{ tx.merchant_name || t().noMerchant }}</dd></div>
-              <div><dt>{{ t().amount }}</dt><dd class="ar-amount">{{ tx.amount }} {{ tx.currency }}</dd></div>
+              <div><dt>{{ t().amount }}</dt><dd class="ar-amount">{{ money(tx.amount, tx.currency) }}</dd></div>
               <div><dt>{{ t().date }}</dt><dd>
                 @if (tx.source_occurred_at) { {{ sourceTime(tx.source_occurred_at) }} ({{ t().tzMissing }}) }
                 @else if (tx.occurred_at) { {{ tx.occurred_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }} }

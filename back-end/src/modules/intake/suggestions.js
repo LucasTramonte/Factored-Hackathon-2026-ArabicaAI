@@ -1,7 +1,7 @@
 /**
  * AI suggestions on "I can't find the charge" (ADR-012; Docs/Plans/ai-suggestion-plan.md). After an incomplete handoff
- * with details is acknowledged, the Worker reads the details with extractor v1 on Vertex AI, outside the request
- * (``ctx.waitUntil``), and deterministic code suggests at most three of the customer's own charges. The customer may then
+ * with details is acknowledged, the Worker reads the details with extractor v2 on Vertex AI (ADR-006 amendment 10), outside
+ * the request (``ctx.waitUntil``), and deterministic code suggests at most three of the customer's own charges. The customer may then
  * confirm one; nothing closes, resolves or refunds, and the agent still reviews the report.
  *
  * One runner per run: ``runSuggestion`` first claims the pending run atomically (a replay or a second Worker gets
@@ -9,7 +9,8 @@
  *
  * Guards, in order, each recorded as the run's outcome when it stops the call: the switch (``INTAKE_AI_ENABLED`` exactly
  * ``'1'``, else ``off``), the pilot arm (A is the control: ``off``), the model's retirement date (``retired``), the
- * credential vars and secret (missing: ``off``), the token exchange (``auth_error``), the daily cap in D1 (``capped``).
+ * credential vars and secret (missing: ``off``), the circuit breaker (``provider_error`` with no call: see ``breakerOpen``),
+ * the token exchange (``auth_error``), the daily cap in D1 (``capped``).
  * Then the call (``timeout``, ``provider_error``, ``config_error``, ``invalid_output``) and the rule (``no_match``,
  * ``ambiguous``, ``suggested``). Nothing here throws into the request, and the request's response never depends on it.
  */
@@ -17,8 +18,17 @@ import { VOCABULARY, extract, registeredVersion, vertexUrl } from './ai-transpor
 import { accessToken, credentialConfig } from './vertex-auth.js';
 import { suggest } from './matcher.js';
 
-/** ``openai/gpt-oss-20b-maas`` leaves Vertex AI on this date (UTC); from that day on the Worker never calls it. */
-export const DEFAULT_RETIRES = '2026-10-21';
+/**
+ * The last day (UTC, exclusive) the Worker calls ``google/gemini-3.5-flash-lite`` without a fresh review. Google has
+ * announced no shutdown for it (its predecessor, 3.1 Flash-Lite, runs to 2027-05-07), so this is a review date, kept well
+ * inside that horizon: re-check Google's model lifecycle page and move it with an ADR-006 note.
+ */
+export const DEFAULT_RETIRES = '2027-01-31';
+/** Circuit breaker (ADR-006 amendment 10): of the last ``BREAKER_SAMPLE`` model-calling runs in the window... */
+export const BREAKER_WINDOW_MS = 5 * 60 * 1000;
+export const BREAKER_SAMPLE = 5;
+/** ...this many failing with ``timeout`` or ``provider_error`` opens it until they age out of the window. */
+export const BREAKER_FAILURES = 3;
 /** Extractions per UTC day (each at most two model calls) unless ``INTAKE_AI_DAILY_CAP`` says otherwise. */
 export const DEFAULT_DAILY_CAP = 200;
 /** Every outcome kind a run records; ``ai-suggestions.test.js`` keeps it equal to migration 0024's CHECK and ``episodes.py``. */
@@ -35,11 +45,23 @@ export const switchOn = env => env.INTAKE_AI_ENABLED === '1';
  */
 export const testOrigin = env => typeof env.VERTEX_TEST_ORIGIN === 'string' && LOOPBACK.test(env.VERTEX_TEST_ORIGIN) ? env.VERTEX_TEST_ORIGIN : null;
 
-/** The pilot arm of a new incomplete handoff with details: absent with the switch off, else A or B at random (50/50). */
+/** The randomized pilot's share of arm B (ADR-014) unless ``INTAKE_AI_SHARE_B`` says otherwise. */
+export const DEFAULT_SHARE_B = 0.5;
+
+/**
+ * The share of new runs assigned to arm B: ``INTAKE_AI_SHARE_B`` when it is a number from 0 to 1 (``"1"`` for the demo,
+ * where every eligible report is read; ADR-012 amendment 1), else the pilot's 50/50.
+ */
+export function shareB(env) {
+  const share = env.INTAKE_AI_SHARE_B === undefined || String(env.INTAKE_AI_SHARE_B).trim() === '' ? NaN : Number(env.INTAKE_AI_SHARE_B);
+  return share >= 0 && share <= 1 ? share : DEFAULT_SHARE_B;
+}
+
+/** The pilot arm of a new incomplete handoff with details: absent with the switch off, else B with ``shareB`` odds. */
 export function newArm(env) {
   if (!switchOn(env)) return undefined;
   if (testOrigin(env) && ['A', 'B'].includes(env.INTAKE_AI_TEST_ARM)) return env.INTAKE_AI_TEST_ARM;
-  return crypto.getRandomValues(new Uint8Array(1))[0] & 1 ? 'B' : 'A';
+  return crypto.getRandomValues(new Uint32Array(1))[0] < shareB(env) * 2 ** 32 ? 'B' : 'A';
 }
 
 /**
@@ -57,6 +79,17 @@ export function retired(env, nowMs) {
  * timezone-free form. It can be a day off the customer's local date near midnight; then a relative date matches nothing.
  */
 export const asOfAt = nowMs => new Date(nowMs).toISOString().slice(0, 19);
+
+/**
+ * Whether the provider looks down: at least ``BREAKER_FAILURES`` of the last ``BREAKER_SAMPLE`` runs that called the
+ * model within ``BREAKER_WINDOW_MS`` timed out or failed at the provider. While open, a run skips the call (no tokens, no
+ * load on a struggling pool, no customer waiting 10 s for nothing) and records ``provider_error`` with no call, which keeps
+ * the skips countable apart from real failures. It closes on its own as those failures age out; the next run then probes.
+ */
+export async function breakerOpen(store, nowMs) {
+  const outcomes = await store.recentModelOutcomes({ since: nowMs - BREAKER_WINDOW_MS, limit: BREAKER_SAMPLE });
+  return outcomes.filter(o => o === 'timeout' || o === 'provider_error').length >= BREAKER_FAILURES;
+}
 
 function dailyCap(env) {
   const cap = env.INTAKE_AI_DAILY_CAP === undefined ? DEFAULT_DAILY_CAP : Number(env.INTAKE_AI_DAILY_CAP);
@@ -100,13 +133,14 @@ export async function runSuggestion(env, store, { handoffId, customerId, details
     if (retired(env, now())) return await finish('retired');
     const config = credentialConfig(env);
     if (!config) return await finish('off');
+    if (await breakerOpen(store, now())) return await finish('provider_error');
     const origin = testOrigin(env);
     const token = await accessToken(config, { fetcher, now, origin });
     if (!token) return await finish('auth_error');
     if (!await store.reserveAiCall({ day: new Date(now()).toISOString().slice(0, 10), cap: dailyCap(env) })) return await finish('capped');
     const producer = await registeredVersion();
     await store.startSuggestionCall({ handoffId, producer });
-    const url = vertexUrl(config.project, origin ?? undefined);
+    const url = vertexUrl(config.project, origin ?? undefined, env.VERTEX_LOCATION ?? 'global');
     const asOf = asOfAt(now());
     const result = await extract({ url, message: details, language, asOf, token, fetcher, now });
     if (result.kind !== 'extracted') return await finish(result.kind, { usage: result.usage, producer });

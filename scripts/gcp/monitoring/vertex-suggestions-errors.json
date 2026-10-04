@@ -1,0 +1,26 @@
+{
+  "displayName": "Vertex AI suggestions: throttled or failing (429/5xx)",
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "Extractor v2 (`google/gemini-3.5-flash-lite`, ADR-006 amendment 10) answered with HTTP 429 (Google's shared pool is busy) or 5xx at least 3 times in 15 minutes, in any location. Customers still get their reference; their report falls back to an incomplete handoff, and the Worker's circuit breaker skips the model while 3 of the last 5 calls fail. Check `SELECT outcome, llm_calls, count(*) FROM handoff_suggestion_runs GROUP BY 1, 2` on D1 and Vertex's quota page. Source: scripts/gcp/monitoring/README.md."
+  },
+  "userLabels": { "app": "arabica-intake", "managed_by": "repo" },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "429 or 5xx responses for gemini-3.5-flash-lite, 3 or more in 15 min",
+      "conditionThreshold": {
+        "filter": "resource.type = \"aiplatform.googleapis.com/PublisherModel\" AND resource.labels.model_user_id = \"gemini-3.5-flash-lite\" AND metric.type = \"aiplatform.googleapis.com/publisher/online_serving/model_invocation_count\" AND metric.labels.response_code = monitoring.regex.full_match(\"429|5[0-9][0-9]\")",
+        "aggregations": [
+          { "alignmentPeriod": "900s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM" }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 2,
+        "duration": "0s",
+        "trigger": { "count": 1 }
+      }
+    }
+  ],
+  "alertStrategy": { "autoClose": "3600s" },
+  "enabled": true
+}

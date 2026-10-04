@@ -96,7 +96,7 @@ describe('AgentPage', () => {
     expect(checks.querySelector('h3')?.textContent).toContain(t().whatWeChecked);
     expect(checks.textContent).toContain(t().check_owned_transaction_retrieved);
     expect(checks.textContent).toContain('owned_transaction_retrieved');
-    expect(el().textContent).toContain('12.50 MXN');
+    expect(el().textContent).toContain('MXN\u00a012.50');
     // The queue row and the detail show the short code; the detail keeps the UUID as the case id. A null code falls back to the UUID.
     const rows = [...el().querySelectorAll('.intake-row')].map(r => r.textContent!);
     expect(rows.find(r => r.includes('AR-7K3M-2Q4X'))).toBeDefined();
@@ -612,7 +612,7 @@ describe('AgentPage', () => {
       expect(box.querySelector('h3')!.textContent!.trim()).toBe(t().suggestionHeading);
       expect(box.textContent).toContain(t().suggestionNotVerified);
       expect(box.textContent).toContain('demo-tx-001');
-      expect(box.textContent).toContain('125.50 BRL');
+      expect(box.textContent).toContain('BRL\u00a0125.50');
       expect(el().textContent).toContain(t().noEvidence);
       expect(box.querySelector('.mark-bar')!.getAttribute('role')).toBe('group');
       expect(box.querySelector('.mark-bar')!.getAttribute('aria-labelledby')).toBe('suggestion-mark-question');
