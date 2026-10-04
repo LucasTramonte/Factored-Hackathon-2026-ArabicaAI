@@ -27,6 +27,7 @@ The service does not decide fraud, issue refunds or authenticate bank customers.
 | `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. Remote D1 holds 0001–0008 (0006: customer source and country; 0007: the `seed_loads` load log; 0008: the short reference). 0009–0013 (notifications, review status, one open report per charge, auth audit, urgency) come with PRs #60 to #66 and go to remote D1 before each merges. |
 | `scripts/intake-store.mjs` | Local D1 binding for the operator scripts, through Wrangler's `getPlatformProxy`. It uses the store in `src/store/d1.js`, so the scripts contain no SQL. |
 | `scripts/close-idle-intakes.mjs`, `scripts/export-intake-events.mjs` | Manual operator scripts: bounded idle closure and the privacy-checked event export (below). |
+| `scripts/intake-kpis.mjs` | Read-only: the dispute managers' KPIs for one window as JSON, aggregates only. Definitions and the test that proves them: `Docs/intake/intake-events.md`, "Dispute-manager KPIs". |
 | `scripts/reset-demo-activity.sql` | Deletes demo activity in foreign-key order and keeps the seed (below). |
 | `seeds/seed_fictitious.sql` | Fictitious identities and charges. Rerunning it is a no-op, and drift makes it fail. |
 | `test/unit/` | Pure-module tests: validation, sign-in, sessions, failure injection, routing, the contract validator. |

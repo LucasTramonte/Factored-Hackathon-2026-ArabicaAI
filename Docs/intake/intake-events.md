@@ -143,6 +143,44 @@ A `handoff_pending` episode (its reservation committed but its read-back or ackn
 
 Episodes, turns, events, handoffs and cases stay until the shutdown after 2026-10-20 ([ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md)). Expired sessions are still purged at every login. After the window, the team takes a final export, then runs `back-end/scripts/reset-demo-activity.sql`, which deletes in foreign-key order.
 
+## Dispute-manager KPIs (store `intakeKpis`)
+
+The decision KPIs in [`BUSINESS_OUTCOMES.md`](../deliverables/BUSINESS_OUTCOMES.md#decision-kpis-for-dispute-managers) are read from D1 by `intakeKpis` in `back-end/src/store/d1.js`, and printed as JSON by a read-only script:
+
+```bash
+cd back-end
+node scripts/intake-kpis.mjs [--since 2026-10-01] [--until 2026-10-08T00:00:00Z] [--config <path>]
+```
+
+`--until` defaults to now and `--since` to seven days before it. Both are UTC, and a date alone means its midnight. The script reads the local D1 by default; `--remote` reads the deployed database and is run only by a person. On any failure it prints `KPI read failed` and exits 1. Run the idle sweep first, at the same cutoff, as for an export (Idle abandonment above): until it runs, an idle start is pending, not abandoned.
+
+**Population.** Episodes started (`created_at`) in [since, until), cut by report language (`all`, `es`, `pt`, `en`). Alerts carry no language, so they are a separate block over the answers given in the window. Each share is `{numerator, denominator, rate}`, and the rate is null, never 0, when the denominator is empty. A percentile over nothing is null. The output holds aggregates only: no customer, transaction, episode or handoff identifier, and no statement.
+
+| KPI | Definition |
+|---|---|
+| `reports.outcomes` | Episodes by state: `complete_handoff`, `incomplete_handoff` ("I can't find it"), `technical_handoff`, `abandoned` (closed by the idle sweep), `pending` (still choosing, or a reservation not yet acknowledged). They add up to `started`. |
+| `reports.not_complete_handoff` | Episodes not ending in a complete handoff / started. |
+| `workload.handoffs` | Acknowledged handoffs of any kind / started. |
+| `workload.opened_within_24h` | Handoffs an agent first opened (`first_opened_at`) at most 24 h after `accepted_at`, inclusive / acknowledged handoffs. A handoff not yet opened stays in the denominator (`unopened` counts them), so a recent window understates this share until 24 h have passed. |
+| `workload.status` | Acknowledged handoffs by current review status: received, in review, closed. |
+| `friction.funnel` | Started → `transaction_confirmed` (a complete handoff reserved) or `cant_find` (an incomplete one) → `handoff_created` (any reservation, technical included) → `acknowledged` (receipt read back), each / started. Picking a charge happens in the client and is not recorded, so an abandonment can't be placed between start and pick. |
+| `friction.clarifications_per_episode` | `clarification_requested` events / started. The guided producer emits none, so this is 0 until a producer that asks does. |
+| `friction.span_ms` | `duration_ms` of each ended episode's `intake_ended`: median (the mean of the two middle values when their number is even) and nearest-rank p95, as the episode scorer computes latency. An abandoned episode's span runs to its idle deadline. |
+| `suggestions` | Suggestion runs (ADR-012) of the window's episodes: `by_arm` (`A`, `B`, or `none` with the switch off) counts finished runs by outcome; `pending` runs have none yet. `shown`, `confirmed`, `none_of_these`, `marked_correct` and `marked_wrong` are counted as in the pilot summary. |
+| `persistence.none_of_these_still_handoff` | Runs where the customer answered "none of these" / runs whose suggestions were shown. The report stays an incomplete handoff whatever the answer. |
+| `persistence.confirmed_suggestion_marked_wrong` | Confirmed suggestions an agent marked wrong / confirmed suggestions an agent marked. |
+| `repeat_reporters` | Customers with two acknowledged reports in the window at most 90 days apart / customers with at least one. Reports before the window don't count, so a window shorter than 90 days sees only repeats inside it. |
+| `value_at_stake.complete_handoffs` | Per source currency, the confirmed charge's amount: `n` and the nearest-rank quartiles (the smallest observed amount with at least a quarter, half or three quarters of the amounts at or below it), as stored text. Currencies are never summed or converted. |
+| `value_at_stake.no_amount` | Acknowledged incomplete and technical handoffs: reports with no confirmed charge. |
+| `alerts` | The customers' own answers (an admin's answer while acting as a customer is not counted) to the bank's alert (ADR-011) given in the window: `recognized` ("Yes, it's mine"), `not_mine` ("I don't recognize it, report it"), and `reported`, answers whose charge then got a complete report that started after the answer and before the window's end. |
+| `alerts.deflected_by_explanation` | "Yes, it's mine" / answers. |
+| `alerts.persistence_recognized_then_reported` | "Yes, it's mine" answers whose charge was reported afterwards / "Yes, it's mine" answers. |
+| `alerts.value_at_stake_deflected` | Per source currency, quartiles of the charge amounts answered "Yes, it's mine", as above. |
+
+**Proof before use.** `back-end/test/integration/kpi-instrumentation.test.js` drives the authored journeys in `back-end/test/fixtures/kpi-journeys.json` over HTTP on local D1 and requires every value above to equal the hand-counted one. It also scores the same episodes' exported events with `evals/intake/episodes.py` and requires both paths to agree on started, outcomes, clarifications, spans and suggestion results by arm. `back-end/test/unit/intake-kpis.test.js` proves the boundaries real time can't place: 90 days between reports and 24 h to the first open, both inclusive.
+
+**Cost.** One batch of seven reads, no write: a constant 30 rows for an empty window, and about 43 rows per episode in it (ADR-004, 2026-10-04 KPI note).
+
 ## Open questions for Lucas and Manoella
 
 1. Abandonment timeout: how long without a customer message before the service emits `intake_ended` with `abandoned`? Proposal: 10 minutes, or session expiry, whichever comes first. *As implemented on 2026-09-30:* this proposal (see Idle abandonment above).
