@@ -1,6 +1,6 @@
 # AI suggestions on "I can't find the charge": implementation and measurement plan
 
-**Status:** plan, 2026-10-04. Step 0 is done ([ADR-012 amendment 1](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3)): the switch is on in the demo, every eligible report in arm B (`INTAKE_AI_SHARE_B = "1"`). The online model is extractor v2 ([ADR-006 amendment 10](../ADRs/ADR-006-learned-extractor-workers-ai.md#post-freeze-amendment-2026-10-04)), the successor this plan chose, adopted early after v1's endpoint degraded on 2026-10-04. Its held-out evaluation (step 7) is still owed. Step 1 is done: the service account, pool, provider and binding exist (read-only check, 2026-10-04), and the Worker secret is set. Steps 2–5 are built (see the [implementation note](#implementation-note-2026-10-04)); steps 6 and 7 are open. It follows [ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md) (Proposed) and needs the amendment in step 0 before the switch is turned on anywhere.
+**Status:** plan, 2026-10-04. Step 0 is done ([ADR-012 amendment 1](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3)): the switch is on in the demo, every eligible report in arm B (`INTAKE_AI_SHARE_B = "1"`). The online model is extractor v2 ([ADR-006 amendment 10](../ADRs/ADR-006-learned-extractor-workers-ai.md#post-freeze-amendment-2026-10-04)), the successor this plan chose, adopted early after v1's endpoint degraded on 2026-10-04. Its held-out evaluation (step 7) is still owed. Step 1 is done: the service account, pool, provider and binding exist (read-only check, 2026-10-04), and the Worker secret is set. Steps 2–5 are built (see the [implementation note](#implementation-note-2026-10-04)); steps 6 and 7 are open. It follows [ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md) (Proposed) and its demo amendment; the production gate remains unchanged.
 
 **For:** the team (Lucas, Roberto, Manoella) and whoever builds the PR. Manoella approves anything that changes what the model is asked or how its answer is read (ADR-006, decision 5).
 
@@ -10,7 +10,7 @@ When a customer can't find the charge in their own list, today they write what t
 
 That is the only step in the flow where something has to understand free text. Everywhere else the customer picks from a list. The frozen comparison says a model reads those descriptions far better than our rules: 53 of 60 held-out cases against 23, and 46 of 52 on the cases that never leaked, with 0 unsafe ([`EVALUATION.md`](../deliverables/EVALUATION.md#1-the-result)).
 
-What we don't know is how often customers take this path. In the dataset nothing records it. On the live service it happened once in 5 team episodes. So the plan builds the path so it can be measured, and keeps it behind a switch until the measurement says it is worth running.
+What we don't know is how often customers take this path. In the dataset nothing records it. On the live service it happened once in 5 team episodes. The path is now enabled in the synthetic demo so its mechanics can be measured; real-customer use still needs the production gate.
 
 ## The flow
 
@@ -49,8 +49,8 @@ We listed the Model Garden on project `factored-hackathon-arabica-ai` and sent e
 
 ### Recommendation
 
-1. **The demo, until 2026-10-21: extractor v1 (`gpt-oss-20b-maas`).** It is the only model with a held-out result, and the switch may only serve the version that was evaluated. After that date the endpoint is gone and the path falls back to today's handoff on its own (see fallbacks).
-2. **The production successor (v2): Gemini Flash-Lite, evaluated as a new version.** Four reasons:
+1. **The current demo: extractor v2 (`google/gemini-3.5-flash-lite`).** ADR-006 amendment 10 adopted it after v1's endpoint degraded. It uses v1's prompt and parsing, `reasoning_effort: "minimal"`, and the global OpenAI-compatible endpoint. The review date is 2027-01-31; from that date the Worker falls back without a call, and CI fails one day earlier while the switch is on. Its held-out evaluation remains owed; the frozen result belongs to v1.
+2. **The original production recommendation: Gemini Flash-Lite, evaluated as a new version.** The current v2 demo uses the compatibility endpoint without `responseSchema` or a pinned region; the following proposed production changes still need implementation and evaluation. Four reasons:
    - **Schema-enforced output.** `responseSchema` makes the answer valid JSON by construction, which removes a failure the v1 fallback has to handle.
    - **Latency.** With `thinkingBudget: 0` requested it answered within about 1.9 s in every probe call. Gemini 3.x documents thinking levels (`MINIMAL` to `HIGH`) rather than an off switch, so the probe may have run at the model's minimum; the successor sets `thinkingLevel: MINIMAL` explicitly and re-measures.
    - **Lifetime.** It is Google's own line, so it is less likely to disappear in weeks the way the partner open-model endpoint did.
@@ -80,7 +80,7 @@ Option A adds two calls (STS, then `generateAccessToken`) per hour per Worker is
 
 ## How we measure it
 
-### Before the switch is turned on anywhere
+### Validation for demo enablement
 
 - **Parity.** The JavaScript port of the request body, parsing, retry and deadline must match the Python that was evaluated. Golden fixtures come from the Python code run on the development split and on malformed responses. The JavaScript test checks byte-identical request bodies and identical parsed facts. The deterministic matcher gets the same treatment. Without parity, the frozen result says nothing about the online code.
 - **Contract and safety tests**, as AGENTS.md requires for every API change:
@@ -92,9 +92,11 @@ Option A adds two calls (STS, then `generateAccessToken`) per hour per Worker is
   - contract validation;
   - D1 budget ceilings.
 - **Fallback tests**, one per failure in the table below, each checking that the handoff is identical to today's.
-- **Latency from the Worker.** Measure the extraction call's p50 and p95 on the deployed Worker, with synthetic messages, at least 72 calls so the p95 has an interval. Also check that the report request's own p95 doesn't move, since the model is outside it.
+- **Latency from the Worker (still owed).** Measure the extraction call's p50 and p95 on the deployed Worker, with synthetic messages, at least 72 calls so the p95 has an interval. Also check that the report request's own p95 doesn't move, since the model is outside it.
 
-### While it runs (the pilot)
+### While it runs (demo and planned pilot)
+
+The demo assigns every eligible report to arm B. Set `INTAKE_AI_SHARE_B = "0.5"` for the randomized pilot and its arm comparisons.
 
 Each episode records references and counts, never text. Every rate comes with its numerator and denominator.
 
@@ -128,7 +130,8 @@ Every failure leaves the customer exactly where they are today: an incomplete ha
 | Switch off, or the credential is missing | No call at all (tested: no `fetch`) | `off` |
 | Token exchange fails (STS or federation error) | No call; retry the exchange on the next report, not in a loop | `auth_error` |
 | Timeout (10 s hard deadline) | Abandon the call; nothing shown | `timeout` |
-| Provider error (HTTP 429, 5xx, network) | No retry, same as v1 | `provider_error` |
+| HTTP 429 | One jittered retry if the shared 10 s deadline permits, within the two-call limit shared with invalid-output retries; nothing shown if it fails | `provider_error` if retries are exhausted |
+| Provider error (5xx, network, error envelope) | No retry | `provider_error` |
 | 401 or 403 from Vertex | No retry; flagged for a person, since it means configuration, not load | `config_error` |
 | Invalid JSON or schema after one retry | Nothing shown | `invalid_output` |
 | Valid facts that match no charge, or more than 3 | Nothing shown; the policy would ask to clarify, and the person matches by hand | `no_match` / `ambiguous` |
@@ -141,14 +144,14 @@ Every failure leaves the customer exactly where they are today: an incomplete ha
 
 ## Steps
 
-0. **Amend ADR-012.** Conditions 1–2 hold. Condition 3 can only be met by running the path. The amendment allows the switch on in the demo environment, with synthetic customers only, as the pilot that collects the 30 episodes. It keeps the production gate unchanged and adds the decision rules above. Lucas, Roberto and Manoella decide.
+0. **Amend ADR-012 (done; amendment 1).** Conditions 1–2 hold. Condition 3 can only be met by running the path. The amendment allows the switch on in the demo environment, with synthetic customers only, as the pilot that collects the 30 episodes. It keeps the production gate unchanged and adds the decision rules above. Lucas, Roberto and Manoella decide.
 1. **Credential (person).** Create the service account with Vertex AI User only, the workload identity pool and OIDC provider with the Worker's uploaded JWKS, and the binding. Then put the Worker's signing key as a secret (`wrangler secret put VERTEX_WIF_SIGNING_KEY`) and set the project and provider names as vars. All of this is a person's job; agents don't change permissions.
 2. **Port and parity (code PR).** Port the Vertex transport, body, parse, retry and deadline to JavaScript, plus the deterministic matcher, with golden fixtures from the development split only. Replace the dead Workers AI binding path in `ai-transport.js`. `registeredVersion()` keeps pinning the prompt hash. Manoella approves the port.
 3. **Storage and routes.** An additive migration for suggestions and the customer's choice. A GET route for a handoff's suggestions and a POST to confirm one, owner-scoped, with all the tests above and an ADR-004 note for any new budget ceiling.
 4. **Client.** The "Is it one of these?" step in es, pt and en. The agent view's "confirmed from a suggestion" marker, and a correct/wrong control for the agent, which is the label the pilot needs.
 5. **Events and export.** Outcome kinds, producer version, calls and tokens in `intake-events.md` and the exporter; the arm assignment; the pilot summary in the same scorer as today's episodes.
-6. **Measure from the Worker** (synthetic, ≥72 calls), then turn the switch on in the demo environment under the amended ADR.
-7. **Successor before 2026-10-21.** Isolated build of v2 on Gemini Flash-Lite, development triggers on its host, a new held-out set, pre-registration, tag, one run, publication. Until v2 is registered, the retirement guard turns the path off on that date.
+6. **Measure from the Worker** (synthetic, ≥72 calls). This remains owed; the switch is already on in the demo under ADR-012 amendment 1.
+7. **Complete v2 evaluation.** Gemini Flash-Lite is already in the demo, measured on development and safety splits. A new held-out set, pre-registration, tag, one run and publication remain owed. Review the model before its configured 2027-01-31 cutoff.
 
 ## What this plan does not claim
 
@@ -162,7 +165,7 @@ Every failure leaves the customer exactly where they are today: an incomplete ha
 
 ## Implementation note (2026-10-04)
 
-Built on branch `feat/ai-suggestions`, switch off (`INTAKE_AI_ENABLED = "0"`). What is in it, and where it differs from the text above:
+Historical implementation snapshot: built on branch `feat/ai-suggestions` with v1 and the switch off (`INTAKE_AI_ENABLED = "0"`). The notes below describe that initial build. ADR-012 amendment 1 and ADR-006 amendment 10 subsequently enabled the demo with v2; current settings, retry behavior and review date are above and in [`back-end/README.md`](../../back-end/README.md#ai-suggestions-on-i-cant-find-it-adr-012).
 
 - **Port and parity.** `back-end/src/modules/intake/ai-transport.js` ports `vertex.py` and `workers_ai.py` (body, parse, schema, one retry, 10 s deadline, no retry on provider errors); `matcher.js` ports `label_rules.evaluate`. `python -m evals.intake.online_parity` runs the evaluated Python, unchanged, on the development split and authored synthetic inputs and writes `back-end/test/fixtures/ai-parity.json`: 15 request bodies byte-identical, 26 parse cases, 21 HTTP exchanges (kind, calls, usage), 753 policy cases, all equal. Known divergences, none reachable with the routes' inputs: Python's `json.loads` accepts `NaN`/`Infinity` in a provider body (the JS reads such a body as `provider_error`); `Decimal` accepts non-ASCII digits and `fromisoformat` week dates (the JS refuses them, so they can only drop a suggestion); diacritics are removed only in U+0300–U+036F.
 - **Online inputs.** `as_of` is the Worker's current UTC time in the harness's timezone-free form (`YYYY-MM-DDTHH:MM:SS`), the same value the policy then uses, which is closer to the evaluated condition than null. The Worker doesn't know the customer's local time, so near midnight the UTC date can be a day off the customer's: the worst case is a relative date ("ayer") that matches nothing, which suggests nothing. **For Manoella's port review (reading condition):** the frozen run's `as_of` was the session's local time; online it is UTC. D1 holds no category, card or country per charge, so those facts never fit; the category is taken from the closed vocabulary's merchant names. The customer's "cards" are the currencies of their own charges, as `systems.customers_from` derives them.

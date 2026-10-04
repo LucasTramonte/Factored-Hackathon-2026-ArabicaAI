@@ -30,7 +30,7 @@ Our job: **every dispute reaches a person with the right transaction, confirmed 
 
 The customer signs in, picks a reason, writes a short statement, picks the charge from their own recent card purchases and confirms it. The service stores the case with the statement and the verified transaction, reads it back, and only then shows a reference. If the customer can't find the charge, or a lookup fails, the case still reaches a person as an incomplete or technical handoff, with the open questions listed. The agent sees the customer's words, the confirmed transaction when there is one, what was checked and what is still unknown.
 
-A "?" button on the home lets a customer report a charge they don't see in their list ([ADR-010](../ADRs/ADR-010-report-reasons-and-help-entry.md), decision 5). It opens the same guided chat with no charge selected, through the same `POST /intake/start`. When no owned charge is confirmed, nothing automated happens: the report ends as an incomplete handoff for a person, the problem statement's "case requiring human intervention" (p. 3).
+A "?" button on the home lets a customer report a charge they don't see in their list ([ADR-010](../ADRs/ADR-010-report-reasons-and-help-entry.md), decision 5). It opens the same guided chat with no charge selected, through the same `POST /intake/start`. When no owned charge is confirmed, the report ends as an incomplete handoff for a person; the enabled demo may then suggest charges for the customer to confirm. The report remains the problem statement's "case requiring human intervention" (p. 3).
 
 An earlier design read free text and routed other requests (another language, a recognized charge, a lost card, a balance question) with an explicit message. That routing exists only in the evaluation harness. The online service accepts only an unrecognized-charge report, and no step needs it to understand free text: the charge comes from a list and the reason from a closed set.
 
@@ -80,7 +80,7 @@ The editable source is [`current-workflow.svg`](../Evidence/diagrams/current-wor
 
 ### The target workflow, with AI online
 
-This is where the flow goes once the AI path qualifies. The plan, its measures and its fallbacks are in the [AI suggestion plan](../Plans/ai-suggestion-plan.md); it is on in the demo since 2026-10-04 ([ADR-012 amendment 1](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3)), with every eligible report read.
+This is the AI suggestion flow enabled in the demo; real-customer use still requires the production gate. The plan, its measures and its fallbacks are in the [AI suggestion plan](../Plans/ai-suggestion-plan.md); it is on in the demo since 2026-10-04 ([ADR-012 amendment 1](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3)), with every eligible report read.
 
 ![Target workflow: the customer's request stays deterministic; for "I can't find it", Vertex AI reads the description after the reference, code suggests up to three of the customer's own charges, the customer confirms and a person reviews; every failure falls back to today's handoff; events feed the pilot measures and the offline evaluation](../Evidence/diagrams/target-workflow.png)
 
@@ -88,7 +88,7 @@ Five rules shape it:
 - **The customer's request never waits for a model.** The reference comes back in one round trip; the model runs afterwards.
 - **The model reads; code decides.** It returns facts in a closed vocabulary. Deterministic code picks from the customer's own charges, enforced in SQL.
 - **Every failure ends where today's flow ends.** The case stays an incomplete handoff for a person, and the failure is recorded as a kind.
-- **It can switch itself off.** Rules fixed in advance (any unsafe outcome, more than 5% failures, too many wrong suggestions, a slow request) turn it off. A retired model id is never called.
+- **It has an off switch and automatic guards.** Operators turn it off under the plan's rules (any unsafe outcome, more than 5% failures, too many wrong suggestions, a slow request). The circuit breaker pauses failing calls, and the retirement guard never calls a retired model.
 - **It produces its own labels.** Agents mark confirmed suggestions correct or wrong, which feeds the next model's evaluation.
 
 The editable source is [`build_target_workflow.py`](../Evidence/diagrams/build_target_workflow.py).
@@ -172,7 +172,7 @@ The brief asks where AI is appropriate and where deterministic logic is preferab
 
 **Where it runs.** Development started on Workers AI. Bedrock inference is blocked on the project's AWS Free plan, so amendment 7 moved the offline evaluation to Google Vertex AI (`openai/gpt-oss-20b-maas`, the same weights, the same prompt and parsing; only the transport differs).
 
-**Where it stands.** At the provider's default reasoning level the model was accurate but slow. On Workers AI its p95 was 3.58 s; on Vertex it got 180 of 180 calls correct with 0 unsafe, but a p95 of 2.64 s with an interval upper bound of 3.08 s. Both fired the 3 s trigger. The isolated builder then set `reasoning_effort: "low"`, verified on Vertex only (amendments 8 and 9). At low, development scored 18 of 18 by majority with 0 unsafe, 158 of 160 calls schema-valid, and a p95 upper bound of about 2,340 ms. Instability passes under a ruling Manoella made after the result was seen (the model changed its reading on 1 of 18 cases; two provider failures count as errors); amendment 9 records every other reading. Every development trigger passes. On the one frozen run (2026-10-04, tag `extractor-v1`), the model got 53 of 60 held-out cases right against the checklist's 23, and 46 of 52 on the cases that never leaked, with 0 unsafe ([`EVALUATION.md`](EVALUATION.md#1-the-result)). Online, the shadow switch is off (`INTAKE_AI_ENABLED`, `APPROVED_EXTRACTOR = null`).
+**Where it stands.** At the provider's default reasoning level the model was accurate but slow. On Workers AI its p95 was 3.58 s; on Vertex it got 180 of 180 calls correct with 0 unsafe, but a p95 of 2.64 s with an interval upper bound of 3.08 s. Both fired the 3 s trigger. The isolated builder then set `reasoning_effort: "low"`, verified on Vertex only (amendments 8 and 9). At low, development scored 18 of 18 by majority with 0 unsafe, 158 of 160 calls schema-valid, and a p95 upper bound of about 2,340 ms. Instability passes under a ruling Manoella made after the result was seen (the model changed its reading on 1 of 18 cases; two provider failures count as errors); amendment 9 records every other reading. Every development trigger passes. On the one frozen run (2026-10-04, tag `extractor-v1`), the model got 53 of 60 held-out cases right against the checklist's 23, and 46 of 52 on the cases that never leaked, with 0 unsafe ([`EVALUATION.md`](EVALUATION.md#1-the-result)). Online, extractor v2 suggestions are enabled in the demo (`INTAKE_AI_ENABLED = "1"`, `INTAKE_AI_SHARE_B = "1"`); the former shadow path has been removed.
 
 **Why only there ([ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md), Proposed).** We asked, path by path, whether the evidence shows the deterministic flow falling short. The checklist's one measured weakness, reading free text, sits on a step the guided flow doesn't need. The one path where a model could help, matching an "I can't find it" description to the customer's own charges, has one live occurrence in five episodes. And the model adds about 1.6 s at p50 to any step it joins, against a 2,000 ms report-request target. So ADR-012 names that path in advance and sets the bar for switching it on. The first two conditions now hold; the last two don't yet:
 - the frozen comparison has run, and the extractor is at least as correct as the checklist on held-out cases, with 0 unsafe;
@@ -275,7 +275,7 @@ The deployed state is [above](#the-solution-and-what-exists-today); the extracto
 
 **Before submission on 2026-10-05:**
 1. ~~Tag v0.3.0~~ Done 2026-10-04 on `0a743bb`.
-2. Turn AI suggestions on in the demo (ADR-012 amendment 1).
+2. ~~Turn AI suggestions on in the demo~~ Done 2026-10-04 (ADR-012 amendment 1), with extractor v2 and every eligible report in arm B.
 3. Confirm submission access and repository visibility with a person; agents don't change permissions.
 
 **After submission:**

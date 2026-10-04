@@ -65,8 +65,7 @@ test('with the AI switch on, CI fails a day before the configured model retires;
   for (const retires of ['2026-10-20', '2026-10-19', '2026-01-01', 'soon', undefined]) assert.throws(() => assertModelNotRetired(on(retires), day), /VERTEX_MODEL_RETIRES/, String(retires));
   for (const flag of ['0', undefined, 'true']) assert.doesNotThrow(() => assertModelNotRetired({ vars: { INTAKE_AI_ENABLED: flag, VERTEX_MODEL_RETIRES: '2000-01-01' } }, day));
   const shipped = await readWranglerConfig();
-  // On for the demo (ADR-012 amendment 1): from 2026-10-20 this fails CI until the switch is off or a successor is registered.
-  assert.equal(shipped.vars.INTAKE_AI_ENABLED, '1', 'the switch is on for the demo');
+  // With the switch on, CI fails one day before the configured review date (currently 2027-01-31 for v2).
   assert.doesNotThrow(() => assertModelNotRetired(shipped));
 });
 

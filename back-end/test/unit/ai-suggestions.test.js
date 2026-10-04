@@ -1,6 +1,6 @@
 /**
  * AI suggestions on "I can't find the charge" (ADR-012; Docs/Plans/ai-suggestion-plan.md), with Google mocked: no test
- * reaches a network. The switch ships off; off, the handoff and its D1 work are today's and ``fetch`` is never called.
+ * reaches a network. With the switch off, the handoff and its D1 work are today's and ``fetch`` is never called.
  * On, the extraction runs after the response (ctx.waitUntil), every guard and fallback is recorded as one outcome kind,
  * and only the customer's own charges are ever suggested. Keys are generated here; nothing is a real credential.
  */
@@ -110,11 +110,15 @@ test('the committed prompt copy is byte-identical to the evaluated prompt, and t
   assert.deepEqual([...producers()], ['guided-0.1']);
 });
 
-test('wrangler.jsonc ships the switch on with every eligible report in arm B (ADR-012 amendment 1), the non-secret Vertex vars, and no key, binding or test seam', async () => {
+test('wrangler.jsonc supports either switch setting, the demo share of arm B, and non-secret Vertex vars without a key, binding or test seam', async () => {
   const config = await readWranglerConfig();
   assert.equal(config.ai, undefined, 'no Workers AI binding: the evaluated host is Vertex AI');
-  assert.equal(config.vars.INTAKE_AI_ENABLED, '1');
-  assert.equal(shareB(config.vars), 1);
+  assert.ok(['1', '0'].includes(config.vars.INTAKE_AI_ENABLED));
+  for (const enabled of ['1', '0']) {
+    const vars = { ...config.vars, INTAKE_AI_ENABLED: enabled };
+    assert.equal(shareB(vars), 1, 'the demo share stays configured even when the switch is off');
+    assert.equal(newArm(vars), enabled === '1' ? 'B' : undefined, `switch ${enabled}`);
+  }
   assert.deepEqual(Object.fromEntries(Object.entries(config.vars).filter(([k]) => k.startsWith('VERTEX_'))), {
     VERTEX_PROJECT: 'factored-hackathon-arabica-ai', VERTEX_PROJECT_NUMBER: '92397500240',
     VERTEX_SERVICE_ACCOUNT: 'arabica-worker-vertex@factored-hackathon-arabica-ai.iam.gserviceaccount.com',
