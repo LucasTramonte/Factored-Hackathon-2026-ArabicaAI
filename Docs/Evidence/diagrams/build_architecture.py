@@ -1,8 +1,8 @@
 """Render the ArabicaAI architecture as one SVG with each tool's icon: the batch data path, the online service on
 Cloudflare, the users, the managed services and the offline evaluation.
 
-State: main after v0.3.0 (2026-10-04), from SYSTEM_DESIGN.md and ADR-002 to ADR-014. Solid lines are deployed or
-built; dashed lines are off behind a switch. Icons come from icons/ (Simple Icons, see icons/README.md). Standard
+State: main after v0.3.0 and #116 (2026-10-04), from SYSTEM_DESIGN.md, ADR-002 to ADR-014 and ADR-012 amendment 1.
+Every line is deployed or built. Icons come from icons/ (Simple Icons, see icons/README.md). Standard
 library only; render to PNG with headless Chrome or Edge (see DATA_ENGINEERING.md, "Latency and the diagram").
 Run from the repository root:  python Docs/Evidence/diagrams/build_architecture.py
 """
@@ -86,7 +86,7 @@ add('<desc id="description">The organizers\' Amazon S3 bucket is read once into 
     'typed Silver tables, a quality gate and Gold tables with the reviewed serving slice. The slice is loaded by hand into '
     'Cloudflare D1. A Cloudflare Worker serves the Angular app and the API for customers, agents and admins, keeps every SQL '
     'statement in one file, and is deployed by GitHub Actions. Amazon Cognito signs people in with an email code, Amazon SES '
-    'sends status emails, and Google Cloud Vertex AI runs the offline evaluation and the online suggestions, which are off. '
+    'sends status emails, and Google Cloud Vertex AI runs the offline evaluation; in the demo, extractor v2 on Vertex AI reads the details of an "I can\'t find it" report after the response. '
     'The Worker never reads S3, DuckDB or Silver.</desc>')
 add('<defs>'
     f'<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="{LINE}"/></marker>'
@@ -98,7 +98,7 @@ add('<defs>'
     '</defs>')
 add(f'<rect width="{W}" height="{H}" fill="#ffffff"/>')
 text(40, 46, "ArabicaAI · architecture", 26, 700, INK, "start")
-text(40, 72, "main after v0.3.0 (2026-10-04) · solid: deployed or built · dashed: off behind a switch · "
+text(40, 72, "main after v0.3.0 and #116 (2026-10-04) · every path is deployed or built · "
      "the Worker never reads S3, DuckDB or Silver", 13.5, 400, SUB, "start")
 
 # ---------- source ----------
@@ -172,14 +172,14 @@ add('<rect x="960" y="716" width="612" height="200" rx="26" fill="#f6f8fb" strok
 for i, (slug, title, sub, dash) in enumerate([
         ("amazoncognito", "Amazon Cognito", "email one-time code|verified ID token", None),
         ("amazonsimpleemailservice", "Amazon SES", "receipt + status emails|sandbox, attempted once", None),
-        ("googlecloud", "Vertex AI", "suggestions for “I can't|find it” · switch OFF", "6 5")]):
+        ("googlecloud", "Vertex AI", "extractor v2 · “I can't find it”|on in the demo, after|the response (ADR-012)", None)]):
     x = 980 + i * 198
     card(x, 742, 184, 150, title, sub, dash=dash, title_y=820)
     icon(slug, x + 72, 754, 40)
 text(1266, 908, "managed services the Worker calls", 11.5, 400, MUTED)
 arrow([(1072, 660), (1072, 740)], "verify token", 1080, 690, anchor="start")
 arrow([(1270, 660), (1270, 740)], "emails, after|the response", 1262, 684, anchor="end")
-arrow([(1306, 660), (1306, 704), (1468, 704), (1468, 740)], dash=True)
+arrow([(1306, 660), (1306, 704), (1468, 704), (1468, 740)])
 
 # ---------- offline evaluation ----------
 add('<rect x="30" y="716" width="850" height="200" rx="26" fill="#fff9ec" stroke="#e6c77a" stroke-width="1.6"/>')
