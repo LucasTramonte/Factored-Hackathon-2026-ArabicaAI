@@ -110,6 +110,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   suggestionPollMs = 1500;
   /** Each watch gets a number; a newer receipt, a new report or leaving the page stops the older one. */
   private suggestionWatch = 0;
+  private suggestionTimer: ReturnType<typeof setTimeout> | undefined;
   readonly ended = signal(false);
   readonly chatError = signal('');
   readonly log = signal<ChatLine[]>([{ from: 'bot', key: 'chatHello' }]);
@@ -230,6 +231,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     if (this.narrowQuery) this.narrowQuery.onchange = null;
     this.cognito.forget();
     this.suggestionWatch++;
+    clearTimeout(this.suggestionTimer);
   }
 
   start(): void {
@@ -802,7 +804,7 @@ export class CustomerPage implements OnInit, OnDestroy {
         return;
       }
       if (list.status !== 'pending' || Date.now() + this.suggestionPollMs > until) return;
-      await new Promise(done => setTimeout(done, this.suggestionPollMs));
+      await new Promise(done => { this.suggestionTimer = setTimeout(done, this.suggestionPollMs); });
       if (!current()) return;
     }
   }

@@ -98,26 +98,30 @@ export class AgentPage {
 
   /**
    * Label a customer-confirmed suggestion correct or wrong (the pilot's measure); the first mark stands. On 409 another
-   * person marked it first: reload the detail to show their mark. Focus lands on the mark's status line.
+   * person marked it first: reload the detail to show their mark. Focus lands on the mark's status line after a stored
+   * mark (ours or theirs); on a failure it stays on the button, beside the alert.
    */
   async mark(d: AgentIntakeDetail, mark: SuggestionMarkValue): Promise<void> {
     if (this.marking() || d.customer_suggestion?.choice !== 'confirmed' || d.customer_suggestion.mark) return;
     this.marking.set(true);
     this.markFailed.set(false);
+    let shown = false;
     try {
       const stored = await this.service.markSuggestion(d.protocol, mark);
       this.detail.update(x => x?.protocol === d.protocol && x.customer_suggestion ? { ...x, customer_suggestion: { ...x.customer_suggestion, mark: stored.mark } } : x);
+      shown = true;
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         try {
           const fresh = await this.service.intakeDetail(d.protocol);
           this.detail.update(x => x?.protocol === d.protocol ? fresh : x);
+          shown = true;
         } catch (again) { this.fail(again); }
       } else if (e instanceof ApiError && e.status === 401) this.fail(e);
       else this.markFailed.set(true);
     } finally {
       this.marking.set(false);
-      afterNextRender(() => this.markStatus()?.nativeElement.focus(), { injector: this.injector });
+      if (shown) afterNextRender(() => this.markStatus()?.nativeElement.focus(), { injector: this.injector });
     }
   }
 

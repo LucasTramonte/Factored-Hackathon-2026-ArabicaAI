@@ -642,8 +642,11 @@ describe('AgentPage', () => {
       service.intakeDetail.and.resolveTo(suggested());
       await loadAndOpen();
       service.markSuggestion.and.rejectWith(new ApiError(503, 'x'));
-      await page.mark(page.detail()!, 'correct'); fixture.detectChanges();
+      const correct = marker()!.querySelector<HTMLButtonElement>('.mark-correct')!;
+      correct.focus(); correct.click();
+      await fixture.whenStable(); fixture.detectChanges(); await fixture.whenStable();
       expect(marker()!.querySelectorAll('.mark-bar button').length).toBe(2);
+      expect(document.activeElement).toBe(correct, 'a failure leaves focus on the button the agent pressed');
       expect(marker()!.querySelector('[role=alert]')!.textContent!.trim()).toBe(t().suggestionMarkFailed);
       service.markSuggestion.and.rejectWith(new ApiError(409, 'x'));
       service.intakeDetail.and.resolveTo(suggested('correct'));
