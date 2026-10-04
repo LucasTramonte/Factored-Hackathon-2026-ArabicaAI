@@ -35,9 +35,9 @@ export const switchOn = env => env.INTAKE_AI_ENABLED === '1';
  */
 export const testOrigin = env => typeof env.VERTEX_TEST_ORIGIN === 'string' && LOOPBACK.test(env.VERTEX_TEST_ORIGIN) ? env.VERTEX_TEST_ORIGIN : null;
 
-/** The pilot arm of a new incomplete handoff with details: ``null`` with the switch off, else A or B at random (50/50). */
+/** The pilot arm of a new incomplete handoff with details: absent with the switch off, else A or B at random (50/50). */
 export function newArm(env) {
-  if (!switchOn(env)) return null;
+  if (!switchOn(env)) return undefined;
   if (testOrigin(env) && ['A', 'B'].includes(env.INTAKE_AI_TEST_ARM)) return env.INTAKE_AI_TEST_ARM;
   return crypto.getRandomValues(new Uint8Array(1))[0] & 1 ? 'B' : 'A';
 }

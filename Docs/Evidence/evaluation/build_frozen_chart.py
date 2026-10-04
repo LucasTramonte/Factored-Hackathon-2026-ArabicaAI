@@ -9,6 +9,7 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 cuts = json.loads((HERE / "frozen-v1-cuts-2026-10-04.json").read_text(encoding="utf-8"))
+mcnemar = json.loads((HERE / "frozen-v1-unexposed-2026-10-04.json").read_text(encoding="utf-8"))["mcnemar"]
 rows = cuts["summary"]
 SYSTEMS = [("handoff", None, "Always hand off", "#9aa5b1"), ("checklist", None, "Checklist (rules)", "#e8a33d"),
            ("extractor-v1", "majority", "Extractor v1 (majority of 3)", "#1a73e8")]
@@ -81,7 +82,8 @@ add(f'<text x="{rx0 + 250}" y="{ry0 + 14 + len(fams) * rowh + 16}" font-size="12
     'Top: checklist · bottom: model · filled = correct.</text>')
 
 add(f'<text x="40" y="{H - 24}" font-size="12.5" fill="#414d5c">Source: frozen-v1-cuts-2026-10-04.json (aggregates; raw result SHA-256 '
-    f'{cuts["result_sha256"][:12]}…). Paired McNemar on the 52 never-exposed cases: 28 cases only the model got right, 2 only the checklist, p ≈ 8.7×10⁻⁷.</text>')
+    f'{cuts["result_sha256"][:12]}…). Paired McNemar on the 52 never-exposed cases: {mcnemar["c"]} cases only the model got right, '
+    f'{mcnemar["b"]} only the checklist, p ≈ {mcnemar["p"]:.1e}.</text>')
 add("</svg>")
 (HERE / "frozen-v1-comparison.svg").write_text("\n".join(out) + "\n", encoding="utf-8")
 print("wrote frozen-v1-comparison.svg")

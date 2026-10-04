@@ -48,9 +48,9 @@ export async function startIntake(request, env, store) {
 export const confirmIntake = (request, env, store, ctx) => finishIntake(request, env, store, ctx, true);
 /**
  * POST /intake/handoff: explicitly request human review without inventing a confirmed transaction. A new handoff with
- * ``details`` gets a suggestion run (its pilot arm) in its reservation batch; after the acknowledged response, the
- * Worker schedules ``runSuggestion`` in ctx.waitUntil (no ctx, as in direct unit calls: nothing is scheduled). The
- * response is the same whatever the switch or the run does.
+ * ``details`` gets a suggestion run (its pilot arm) in its reservation batch only while the switch is on; after the
+ * acknowledged response, the Worker schedules ``runSuggestion`` in ctx.waitUntil (no ctx, as in direct unit calls:
+ * nothing is scheduled). The response is the same whatever the switch or the run does.
  */
 export const handoffIntake = (request, env, store, ctx) => finishIntake(request, env, store, ctx, false);
 

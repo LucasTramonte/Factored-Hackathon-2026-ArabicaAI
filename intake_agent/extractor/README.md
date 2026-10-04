@@ -63,7 +63,7 @@ Run from the repository root, keeping the registered Vertex target and model (th
 
 ```sh
 .venv/bin/python -m evals.intake.run \
-  --cases evals/intake/frozen_es_pt_v1.json --split frozen_es_pt_v1 --repetitions 3 \
+  --cases evals/intake/frozen_es_pt_v1.candidate.json --repetitions 3 \
   --system extractor-v1=intake_agent.extractor.vertex:extract \
   --preregistration extractor-v1=evals/intake/preregistration/extractor-v1.md \
   --output data/frozen-run/results.json
