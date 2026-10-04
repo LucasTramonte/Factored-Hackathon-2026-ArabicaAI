@@ -41,20 +41,22 @@ For context: at the provider default (`medium`), instability was 0/18, but laten
 Mark exactly one with `[x]`:
 
 - [ ] Reading 1: the trigger **fires**.
-- [ ] Reading 2: the trigger **passes**. Instability counts only the model's changes; service failures are reported as errors.
+- [X] Reading 2: the trigger **passes**. Instability counts only the model's changes; service failures are reported as errors.
 - [ ] Reading 3: the trigger **passes**. Instability is measured on the first 3 repetitions, as written.
 - [ ] Reading 4: the trigger **fires**.
 - [ ] Other (explain below).
 
 **Reason (one or two sentences):**
 
-> 
+> Instability measures whether the model reads the same message differently. A failed call to the provider is not a reading (the model returned nothing), so the two service failures are reported as errors, separately. Under this principle the window doesn't matter: the model changed 1 of 18 cases over the first 3, any 3, or all 10 repetitions.
 
 **Also approved in this PR** (mark both if you approve them):
 
-- [ ] ADR-006 amendment 8 (the sources for the reasoning level and the endpoint probe; no behaviour change).
-- [ ] The builder's change: `reasoning_effort: "low"` in `workers_ai.build_body`, with its tests.
+- [X] ADR-006 amendment 8 (the sources for the reasoning level and the endpoint probe; no behaviour change).
+- [X] The builder's change: `reasoning_effort: "low"` in `workers_ai.build_body`, with its tests.
+
+> Approved, provided Lucas confirms Workers AI accepts the field, or limits the description to Vertex
 
 **Name and date:**
 
-> Manoella, 2026-10-
+> Manoella, 2026-10-03
