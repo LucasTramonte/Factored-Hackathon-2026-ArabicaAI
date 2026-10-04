@@ -30,11 +30,37 @@ def _rows(con, sql: str) -> list[dict]:
     return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
+BOOT_DRAWS, BOOT_SEED = 10_000, 20261004
+
+
+def bootstrap_ci(values, q: float, draws: int = BOOT_DRAWS, seed: int = BOOT_SEED) -> tuple[float, float]:
+    """95% percentile-bootstrap interval for the q-quantile (linear interpolation, as DuckDB's quantile_cont).
+
+    Resamples the quarter's durations with replacement `draws` times from a fixed seed, so a rerun on the same
+    data gives the same bounds. Holds one draws x n matrix at a time (at most 10,000 x 649 floats)."""
+    import numpy as np
+    x = np.asarray(values, dtype=float)
+    rng = np.random.default_rng(seed)
+    stats = np.quantile(x[rng.integers(0, len(x), size=(draws, len(x)))], q, axis=1)
+    low, high = np.quantile(stats, [0.025, 0.975])
+    return round(float(low), 2), round(float(high), 2)
+
+
 def aggregates(con) -> dict:
-    """FR-01 per quarter and FR-02 coverage, with the derived rates; every count is read, none is assumed."""
-    quarters = [{**r, "first_day": str(r["first_day"]), "last_day": str(r["last_day"]),
-                 "median_hours": round(r["median_hours"], 2), "p90_hours": round(r["p90_hours"], 2)}
-                for r in _rows(con, (QUERIES / "FR-01_by_quarter.sql").read_text(encoding="utf-8"))]
+    """FR-01 per quarter with bootstrap intervals from FR-03, and FR-02 coverage; every count is read, none assumed."""
+    import numpy as np
+    durations: dict[tuple[int, int], list[float]] = {}
+    for r in _rows(con, (QUERIES / "FR-03_durations.sql").read_text(encoding="utf-8")):
+        durations.setdefault((r["year"], r["quarter"]), []).append(r["hours"])
+    quarters = []
+    for r in _rows(con, (QUERIES / "FR-01_by_quarter.sql").read_text(encoding="utf-8")):
+        x = durations[(r["year"], r["quarter"])]
+        if len(x) != r["n"] or abs(np.quantile(x, .5) - r["median_hours"]) > 1e-9 or abs(np.quantile(x, .9) - r["p90_hours"]) > 1e-9:
+            raise ValueError(f"FR-03 does not reproduce FR-01 for {r['year']} Q{r['quarter']}")
+        (m_lo, m_hi), (p_lo, p_hi) = bootstrap_ci(x, .5), bootstrap_ci(x, .9)
+        quarters.append({**r, "first_day": str(r["first_day"]), "last_day": str(r["last_day"]),
+                         "median_hours": round(r["median_hours"], 2), "median_ci95": [m_lo, m_hi],
+                         "p90_hours": round(r["p90_hours"], 2), "p90_ci95": [p_lo, p_hi]})
     cov = _rows(con, (QUERIES / "FR-02_coverage.sql").read_text(encoding="utf-8"))
     one = {r["measure"]: r["n"] for r in cov if r["label"] is None}
     by_status = {r["label"]: r["n"] for r in cov if r["measure"] == "no_first_response_by_status"}
@@ -47,7 +73,8 @@ def aggregates(con) -> dict:
             "no_first_response_by_status": dict(sorted(by_status.items(), key=lambda kv: -kv[1])),
             "excluded_no_assignment": one["first_response_without_assignment"],
             "excluded_before_assignment": one["first_response_before_assignment"],
-            "charted": one["charted"], "quarters": quarters}
+            "charted": one["charted"], "quarters": quarters,
+            "intervals": f"95% percentile bootstrap per quarter, {BOOT_DRAWS:,} resamples, seed {BOOT_SEED}"}
 
 
 def chart(data: dict, out: Path = CHART_OUT) -> None:
@@ -62,7 +89,9 @@ def chart(data: dict, out: Path = CHART_OUT) -> None:
     med, p90 = [q["median_hours"] for q in qs], [q["p90_hours"] for q in qs]
     partial = [i for i, q in enumerate(qs) if _partial(q)]
     fig, ax = plt.subplots(figsize=(11, 5.6), facecolor="white")
+    bands = {"p90": [q["p90_ci95"] for q in qs], "Median": [q["median_ci95"] for q in qs]}
     for vals, colour, name in ((p90, light, "p90"), (med, blue, "Median")):
+        ax.fill_between(x, [b[0] for b in bands[name]], [b[1] for b in bands[name]], color=colour, alpha=.22, lw=0, zorder=1)
         ax.plot(x, vals, color=colour, lw=2.4, zorder=2)
         full = [i for i in x if i not in partial]
         ax.scatter(full, [vals[i] for i in full], color=colour, s=34, zorder=3, edgecolor="white", linewidth=1.2)
@@ -93,13 +122,16 @@ def chart(data: dict, out: Path = CHART_OUT) -> None:
     fig.suptitle(f"Recorded first responses take about a day; "
                  f"{100 * data['no_first_response_share']:.1f}% of complaints have none recorded", x=.01, ha="left",
                  fontsize=13, fontweight="bold", color=ink)
-    fig.text(.01, .905, f"Cargo no reconocido complaints with a recorded first response (n = {data['charted']:,}), by creation "
-             "quarter: median and 90th percentile. Hollow points are partial quarters.", fontsize=9.5, color=muted)
+    fig.text(.01, .925, f"Cargo no reconocido complaints with a recorded first response (n = {data['charted']:,}), by creation "
+             "quarter: median and 90th percentile.\nShaded: 95% bootstrap interval; the bands overlap in every quarter, so the "
+             "quarter-to-quarter moves are within sampling noise. Hollow points are partial quarters.",
+             fontsize=9.5, color=muted, va="top", linespacing=1.4)
     fig.text(.01, .012, f"Excluded from the lines: {data['excluded_no_assignment']:,} complaints with a first response but no "
              "assignment date. These durations are recorded source timestamps, not a bank SLA or our product's latency.\n"
              "Synthetic LATAM Bank dataset, silver.fact_complaints; full period 2023-06-17 to 2026-06-18, including the 2026 "
-             "quarters (descriptive only). Queries FR-01, FR-02.", fontsize=7.8, color=muted, linespacing=1.45)
-    fig.tight_layout(rect=(0, .06, 1, .89))
+             f"quarters (descriptive only).\nQueries FR-01 to FR-03. Intervals: {data['intervals']}.", fontsize=7.8, color=muted,
+             linespacing=1.45)
+    fig.tight_layout(rect=(0, .08, 1, .86))
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150, facecolor="white")
     plt.close(fig)

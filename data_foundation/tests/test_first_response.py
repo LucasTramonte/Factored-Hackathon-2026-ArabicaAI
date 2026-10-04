@@ -37,6 +37,15 @@ def test_filters_are_counted_and_quarters_stay_apart(con):
     assert by_q[(2024, 2)]["n"] == 1 and by_q[(2024, 2)]["median_hours"] == 36.0
 
 
+def test_intervals_hold_their_point_and_are_reproducible(con):
+    for q in fr.aggregates(con)["quarters"]:
+        assert q["median_ci95"][0] <= q["median_hours"] <= q["median_ci95"][1]
+        assert q["p90_ci95"][0] <= q["p90_hours"] <= q["p90_ci95"][1]
+    x = list(range(200))
+    low, high = fr.bootstrap_ci(x, .5)
+    assert low < 99.5 < high and (low, high) == fr.bootstrap_ci(x, .5)
+
+
 def test_chart_draws_from_the_aggregates_alone(con, tmp_path):
     pytest.importorskip("matplotlib")  # chart dependencies come from requirements-charts.txt, not the CI install
     data =json.loads(json.dumps(fr.aggregates(con), default=str))
