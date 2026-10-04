@@ -53,7 +53,7 @@ The question is which model, doing what, and how we avoid spending more than the
 
 ## Pre-freeze amendments (2026-09-30)
 
-These were written before any frozen scoring. Amendments 1, 2, 6 and 7 change how a result is measured and what follows from it, not the result itself. Amendment 8 only supplies documentation sources for a choice amendment 2 already makes. Amendments 3 and 4 change labels and policy, so they need Manoella's approval as the unexposed reviewer (decision 5), given in the PR that carries them.
+These were written before any frozen scoring. Amendments 1, 2, 6, 7 and 9 change how a result is measured and what follows from it, not the result itself. Amendment 8 only supplies documentation sources for a choice amendment 2 already makes. Amendments 3 and 4 change labels and policy, so they need Manoella's approval as the unexposed reviewer (decision 5), given in the PR that carries them.
 
 1. **Latency is measured on enough calls to decide.** Forty-eight calls can't estimate a p95: a two-sided distribution-free 95% interval needs 72 values (a one-sided 95% upper bound needs 59), and at a true p95 of exactly 3 s the old trigger fires 43% of the time. The rule, fixed before the measurement it applies to:
    - **Sample:** at least 150 model-calling executions on the development split (10 repetitions of the 16 model-calling cases), each counted at its wall time, timeouts included at their full duration.
@@ -89,6 +89,17 @@ These were written before any frozen scoring. Amendments 1, 2, 6 and 7 change ho
    - **The 20B endpoint honours it (probe, 2026-10-03, Lucas's session):** one content-free arithmetic question, never an evaluation case, twice per setting at temperature 0. No field: 110 completion tokens and 244 reasoning characters; `medium`: identical (110 and 244); `low`: 32 and 45; `high`: 145 and 342. All eight answered correctly. So the omitted field behaves as `medium`, `low` is accepted, and the "Thinking: Not supported" row does not describe this endpoint's behaviour.
    - **Deadline:** Google's page for the model says the `gpt-oss-20b-maas` endpoint is deprecated (2026-07-21) and retires on 2026-10-21. The frozen run must happen before then; after it, the result can't be re-run on this host.
    - **Approval:** Manoella, as the unexposed reviewer, approves this amendment in the PR that carries it, together with the builder's change.
+
+9. **How the instability trigger reads a 10-repetition run (2026-10-03, ruled by Manoella after the result was seen).** At `reasoning_effort: "low"` on Vertex, development scored 18/18 correct, 0 unsafe, 158 of 160 schema-valid, and a p95 interval upper bound of about 2.34 s. Three cases changed answer across the 10 repetitions. One was the model reading a message differently (`missing_currency-es`, repetition 3). Two were provider failures (the call failed and the fail-safe made a technical handoff). The trigger was written as "across the 3 repetitions", before amendment 1 introduced 10.
+   - **Ruling (verbatim, [`extractor-v1-instability-ruling.md`](../../evals/intake/preregistration/extractor-v1-instability-ruling.md)):** reading 2, the trigger passes. "Instability measures whether the model reads the same message differently. A failed call to the provider is not a reading (the model returned nothing), so the two service failures are reported as errors, separately. Under this principle the window doesn't matter: the model changed 1 of 18 cases over the first 3, any 3, or all 10 repetitions."
+   - **Made after the result was seen.** Lucas and Claude are exposed and didn't choose. Every reading is reported with it:
+     - all 10 repetitions with failures counted: 3/18, fires;
+     - model changes only: 1/18, passes (the ruling);
+     - the first 3 repetitions: 1/18, passes;
+     - the worst 3 consecutive repetitions: 2/18, fires.
+   - **From now on**, instability counts only changes in the model's reading, over all repetitions run. Provider failures are reported as errors, with their count, and never folded into instability or correctness rates.
+   - **Scope of the reasoning field (Manoella's condition).** `reasoning_effort: "low"` is verified only on the Vertex endpoint (amendment 8's probe), so this amendment and the builder's change are described for Vertex only. Workers AI, no longer an evaluation host (amendment 7), documents the reasoning level in another request format, `reasoning: { effort }` in its Responses API ([model page](https://developers.cloudflare.com/workers-ai/models/gpt-oss-20b)). Whether it accepts this field was not checked, and nothing here claims it does.
+   - **Consequence:** every ADR-006 development trigger passes for extractor v1 at `low` on Vertex. Next comes the pre-registration on the team branch (`prereg fill`), a human tag `extractor-v1`, and the frozen run once, before the endpoint retires on 2026-10-21.
 
 ## Consequences
 
