@@ -6,7 +6,8 @@ import { AwsClient } from 'aws4fetch';
 
 const b64 = bytes => btoa(Array.from(new Uint8Array(bytes), b => String.fromCharCode(b)).join(''));
 const unb64 = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
-const utf8b64 = text => b64(new TextEncoder().encode(text));
+const utf8 = new TextEncoder();
+const utf8b64 = text => b64(utf8.encode(text));
 /** Base64 in 76-character lines, as MIME bodies require. */
 const wrap = text => text.replace(/.{1,76}/g, '$&\r\n');
 /**
@@ -16,7 +17,7 @@ const wrap = text => text.replace(/.{1,76}/g, '$&\r\n');
 export function encodedWords(text) {
   const words = []; let chunk = '';
   for (const ch of text) {
-    if (new TextEncoder().encode(chunk + ch).length > 45) { words.push(chunk); chunk = ''; }
+    if (utf8.encode(chunk + ch).length > 45) { words.push(chunk); chunk = ''; }
     chunk += ch;
   }
   words.push(chunk);
@@ -25,13 +26,15 @@ export function encodedWords(text) {
 
 /**
  * A raw RFC 5322 message: multipart/related holding a multipart/alternative (text, html) and the inline images.
- * Every body part is base64, so no content needs escaping; the subject is RFC 2047 encoded for non-ASCII.
+ * Every body part is base64, so no content needs escaping; the subject is RFC 2047 encoded for non-ASCII. A CR or LF
+ * in ``from``, ``to`` or ``subject`` would inject a header, so it throws (``sendEmail`` turns that into ``ok: false``).
  */
-export function mime({ from, to, subject, text, html, inline }) {
+export function mime({ from, to, subject, text, html, inline, date = new Date() }) {
+  if (/[\r\n]/.test(from + to + subject)) throw new Error('CR/LF in a header');
   const rel = 'rel-arabicaai', alt = 'alt-arabicaai';
   const part = (headers, body) => `${headers}\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap(body)}`;
   return [
-    `From: ${from}`, `To: ${to}`, `Subject: ${encodedWords(subject)}`, 'MIME-Version: 1.0',
+    `From: ${from}`, `To: ${to}`, `Subject: ${encodedWords(subject)}`, `Date: ${date.toUTCString()}`, 'MIME-Version: 1.0',
     `Content-Type: multipart/related; boundary="${rel}"`, '',
     `--${rel}`, `Content-Type: multipart/alternative; boundary="${alt}"`, '',
     `--${alt}`, part('Content-Type: text/plain; charset=UTF-8', utf8b64(text)),

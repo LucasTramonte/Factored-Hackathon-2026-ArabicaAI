@@ -47,7 +47,8 @@ test('every template in every language names the reference, says no refund start
       assert.equal(html.includes('bloquea tarjetas') || html.includes('bloqueia cartões') || html.includes('does not block cards'), urgent, where);
     }
   }
-  // Without an app URL there is no button, the inline logo stays; the reference is escaped like any other value.
+  // Without an app URL, or with one that is not https, there is no button; the inline logo stays; the reference is escaped like any other value.
+  assert.ok(!render('received', 'en', { reference: 'R', appUrl: 'http://demo.example' }).html.includes('<a '));
   const bare = render('received', 'en', { reference: 'AR-<X>&"1"' }).html;
   assert.ok(bare.includes(`cid:${LOGO_CID}`) && !bare.includes('<a ') && bare.includes('AR-&lt;X&gt;&amp;&quot;1&quot;'));
   assert.ok(render('received', 'es', { reference: 'R', urgent: true }).text.includes('Este servicio no bloquea tarjetas.'));
@@ -89,7 +90,8 @@ test('with an inline image the message goes as raw MIME: text, html and the cid 
     async req => { calls.push(await req.json()); return Response.json({ MessageId: 'm-3' }); });
   assert.deepEqual(Object.keys(calls[0].Content), ['Raw']);
   const raw = Buffer.from(calls[0].Content.Raw.Data, 'base64').toString('utf8');
-  assert.ok(raw.startsWith(`From: ${ses.SES_FROM}\r\nTo: ${mail.to}\r\nSubject: =?UTF-8?B?${Buffer.from('Recibimos tu reporte AR-1').toString('base64')}?=\r\n`));
+  assert.ok(raw.startsWith(`From: ${ses.SES_FROM}\r\nTo: ${mail.to}\r\nSubject: =?UTF-8?B?${Buffer.from('Recibimos tu reporte AR-1').toString('base64')}?=\r\nDate: `));
+  assert.match(raw, /\r\nDate: [A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT\r\nMIME-Version: 1.0\r\n/);
   assert.match(raw, /Content-Type: multipart\/related; boundary="rel-arabicaai"/);
   assert.match(raw, /Content-Type: multipart\/alternative; boundary="alt-arabicaai"/);
   const decoded = (type) => Buffer.from(raw.split(`Content-Type: ${type}; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n`)[1].split('\r\n--')[0].replace(/\r\n/g, ''), 'base64').toString('utf8');
@@ -98,7 +100,17 @@ test('with an inline image the message goes as raw MIME: text, html and the cid 
   assert.match(raw, new RegExp(`Content-Type: image/png\\r\\nContent-ID: <${LOGO_CID}>\\r\\nContent-Disposition: inline`));
   assert.equal(raw.split(`Content-ID: <${LOGO_CID}>`)[1].split('\r\n--rel-arabicaai--')[0].split('\r\n\r\n')[1].replace(/\r\n/g, ''), LOGO_PNG_BASE64);
   for (const line of raw.split('\r\n')) assert.ok(line.length <= 998, 'line length');
-  // RFC 2047: no encoded-word over 75 characters, folding between words, multibyte characters never split.
+});
+
+test('a CR or LF in a header field is refused, and a send with one fails instead of injecting a header', async () => {
+  const base = { from: 'a@x', to: 'b@x', subject: 's', text: 't', html: null, inline: [] };
+  for (const field of ['from', 'to', 'subject']) for (const bad of ['\r', '\n']) assert.throws(() => mime({ ...base, [field]: `x${bad}Bcc: c@x` }), /CR\/LF/);
+  let called = false;
+  assert.deepEqual(await sendEmail({ ...ses, SES_FROM: 'a@x\r\nBcc: c@x' }, { ...mail, inline: [{ cid: 'c', type: 'image/png', base64: 'AA==' }] }, async () => { called = true; }), { ok: false });
+  assert.equal(called, false);
+});
+
+test('RFC 2047 encoded words: at most 75 characters each, folded between words, multibyte characters never split', () => {
   const long = 'Recibimos tu reporte AR-ABCD-1234, una notificación más larga de lo habitual ñandú 日本語';
   const folded = encodedWords(long);
   const parts = folded.split('\r\n ');
@@ -107,6 +119,9 @@ test('with an inline image the message goes as raw MIME: text, html and the cid 
   assert.equal(parts.map(w => Buffer.from(w.slice(10, -2), 'base64').toString('utf8')).join(''), long);
   assert.equal(encodedWords('a'.repeat(46)).split('\r\n ').length, 2);
   assert.equal(encodedWords('a'.repeat(45)), `=?UTF-8?B?${Buffer.from('a'.repeat(45)).toString('base64')}?=`);
+});
+
+test('mime() without HTML still closes the related part', () => {
   assert.ok(mime({ from: 'a', to: 'b', subject: 'ñ', text: 'ñ', html: null, inline: [] }).endsWith('--rel-arabicaai--\r\n'));
 });
 

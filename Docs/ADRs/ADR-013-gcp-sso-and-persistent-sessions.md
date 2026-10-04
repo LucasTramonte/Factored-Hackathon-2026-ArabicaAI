@@ -15,7 +15,7 @@
 **The user-experience problem**, as measured in this project:
 - **Every hour, a new code.** Sessions don't slide, so a judge exploring for more than an hour signs in again.
 - **A reload looks like a sign-out.** The cookie survives, but the client keeps the signed-in state only in the tab (ADR-007, decision 8), so a reload shows the sign-in screen again.
-- **Codes are scarce.** Cognito's default sender caps the whole AWS account at about 50 code emails a day (ADR-004, 2026-10-03 note). SES production access, the way to lift it, is pending. Team and evaluators share that budget.
+- **Codes are scarce.** Cognito's default sender caps the whole AWS account at about 50 code emails a day (ADR-004, 2026-10-03 note). SES production access, the way to lift it, was pending when this record was written (granted 2026-10-04; decision 9, phase 2). Team and evaluators shared that budget.
 - **Staff are treated like customers.** Agents, admins and auditors also receive email codes and carry a fake `custom:customer_id`, although they are not bank customers.
 
 The team now has a Google Cloud project with trial credits (ADR-006, amendment 7). This ADR proposes how to use it for a better sign-in and session experience. It does not implement the migration.
@@ -66,7 +66,7 @@ The team now has a Google Cloud project with trial credits (ADR-006, amendment 7
 9. **Migration path.**
    - **Phase 0:** sliding sessions and `GET /auth/me`.
    - **Phase 1:** Google sign-in for staff behind a configuration switch, with `staff_members` seeded from the current Cognito `admin`, `agent` and `auditor` groups, and Cognito staff sign-in kept until every staff member has signed in once with Google.
-   - **Phase 2 (optional):** customer email sign-in on Identity Platform. Only if SES production access stays denied, and only after an ADR-007 amendment.
+   - **Phase 2 (optional):** customer email sign-in on Identity Platform. Only if SES production access stays denied, and only after an ADR-007 amendment. **Resolved 2026-10-04:** SES production access was granted and Cognito sends through SES (`DEVELOPER`) from the team's domain, which lifts the 50-a-day cap; phase 2 is not needed and is dropped.
    - Each phase is a separate PR with the adversarial auth tests AGENTS.md requires: method and path matrix, session swap, forgery and expiry, isolation, hostile input, concurrency, contracts and D1 budget.
 
 ## Consequences

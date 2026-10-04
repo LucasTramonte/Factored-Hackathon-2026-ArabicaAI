@@ -73,11 +73,11 @@ const MONO = "'Geist Mono', SFMono-Regular, Menlo, Consolas, monospace";
  * The HTML version of a rendered email: logo header, body paragraphs, the reference in a mono box, the urgent note in a
  * warning box, a button to the app and the demo disclaimer. Table layout and inline styles only, so every client renders
  * it; no ``<style>`` block, so the markup carries no braces. The logo is the inline attachment ``cid:arabicaai-logo``
- * (``logo.js``), so it shows without any hosted file; ``appUrl`` (optional) is only the button target, and without it
- * there is no button.
+ * (``logo.js``), so it shows without any hosted file; ``appUrl`` (optional, ``https://`` only) is only the button target,
+ * and without it there is no button.
  */
 function html({ lang, subject, paragraphs, reference, urgent, appUrl }) {
-  const base = appUrl ? appUrl.replace(/\/+$/, '') : null;
+  const base = /^https:\/\//.test(appUrl ?? '') ? appUrl.replace(/\/+$/, '') : null;  // only an https link becomes a button
   const logo = `<img src="cid:${LOGO_CID}" width="32" height="32" alt="" style="display:block;width:32px;height:32px;border-radius:16px">`;
   const p = text => `<p style="margin:0 0 14px;font:16px/24px ${FONT};color:${C.ink}">${esc(text)}</p>`;
   const refBox = `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 20px"><tr><td style="padding:12px 16px;border:1px solid ${C.line};border-radius:12px;background:${C.surface}">`

@@ -117,12 +117,14 @@ Emails are sent as raw MIME: plain text plus an HTML version with the ArabicaAI 
 `POST /reports/update` confirms only that D1 queued the request. The background sender records `queued`, `failed`, `skipped`, or `sent` in `email_outbox`; in this schema `sent` means SES accepted the API request and returned a message id, not that the recipient's mailbox delivered it. A failed or unconfigured attempt has a ten-second retry delay (so concurrent clicks cannot duplicate a send); queued or SES-accepted requests keep the five-minute suppression window. The customer interface uses the same distinction and never claims delivery from the 202 response. The outbox contains only reference metadata, never the address, statement, or email body.
 
 ```bash
-SES_FROM_EMAIL=<sender address> back-end/scripts/ses/setup.sh   # creates or finds the sender identity and the send-only user; prints verification status and the user ARN
+SES_IDENTITY=<sender domain or address> ALERT_EMAIL=<bounce/complaint/alarm recipient> back-end/scripts/ses/setup.sh
+# creates or finds the sender identity and the send-only user; sets the suppression list, the identity's default
+# configuration set (BOUNCE and COMPLAINT events to an SNS topic) and two CloudWatch reputation alarms; prints the state
 ```
 
 Human steps (the access key never passes through an agent or the repository):
 
-1. Open the AWS verification email sent to the sender address and click its link; `setup.sh` then prints `verified=True`. Set the sender once: `cd back-end && npx wrangler secret put SES_FROM` (value `ArabicaAI demo <address>`).
+1. For an address identity, click the AWS verification link; for a domain, publish the DKIM CNAMEs, MAIL FROM and `_dmarc` records where its DNS lives. `setup.sh` then prints `verified=True`. Confirm the SNS subscription email so bounce, complaint and alarm notifications arrive. Set the sender once: `cd back-end && npx wrangler secret put SES_FROM` (value `ArabicaAI <noreply@domain>`).
 2. Create the access key and set the three Worker secrets:
 
    ```bash
