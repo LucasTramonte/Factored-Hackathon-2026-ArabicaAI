@@ -30,7 +30,7 @@ INTENTS = {"report", "confirm", "unsupported_language"} | {f"out_of_scope:{k}" f
     "third_party_card", "injection_only")}
 FACT_KEYS = {"merchant", "category", "amount", "currency", "date", "card", "country", "abroad"}
 DEMANDS = {None, "refund", "card_block", "fraud_verdict"}
-# Closed merchant/category vocabulary from the design window (Docs/deliverables/DATA_QUALITY.md, DF-006). No customer data.
+# Closed merchant/category vocabulary from the design window (Docs/deliverables/DATA_ENGINEERING.md, DF-006). No customer data.
 _BY_CATEGORY = {
     "Entertainment": ["Cine Premium", "Conciertos Live", "Streaming Music", "Teatro Nacional"],
     "Food": ["Mercado Central", "Restaurante El Buen Sabor", "Super Ahorro", "Tienda Don José"],

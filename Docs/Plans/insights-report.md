@@ -96,7 +96,7 @@ Verdicts are from the adversarial review of 2026-10-03, reproduced before this e
 **For the insights report (Manoella):**
 1. **Lead with KPIs 1–3,** with their denominators, coverage and the limits under them. This is what the evaluators asked for.
 2. **Build them as reviewed aggregates** in `make report`, from the appendix queries, design window only, and commit the SQL and quality evidence with the figures. Leave the `/insights` page for after the aggregates are reviewed.
-3. **Register F1 and the channel-dependent wait missingness** as a finding in [`DATA_QUALITY.md`](../deliverables/DATA_QUALITY.md), with its query.
+3. **Register F1 and the channel-dependent wait missingness** as a finding in [`DATA_ENGINEERING.md`](../deliverables/DATA_ENGINEERING.md), with its query.
 4. **Show satisfaction honestly:** call-center CSAT by resolution and contact reason (F3, F4), and closed-case complaint satisfaction (F5), each with its population. No survey CSAT for unrecognized charges.
 5. **Prepare the segment cut** the brief requires: language comes from our live episodes; customer segment needs `customers.segment` (a current snapshot) through the survey's or complaint's own `customer_id`. Live D1 has no segment yet.
 

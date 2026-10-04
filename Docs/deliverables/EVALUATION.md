@@ -4,7 +4,7 @@
 
 **Question:** does a learned component that reads the customer's message do better than a rule-based baseline, on the same cases, without becoming less safe?
 
-This document is the evaluation deliverable, like [`DATA_QUALITY.md`](DATA_QUALITY.md) is for data quality and [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md) is for capacity and cost. It covers:
+This document is the evaluation deliverable, like [`DATA_ENGINEERING.md`](DATA_ENGINEERING.md) is for data quality and [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md) is for capacity and cost. It covers:
 - what we test and why;
 - the test sets we built;
 - how we keep test data from leaking into the systems;
@@ -92,7 +92,7 @@ Leakage can happen in two ways here. Statistics from the test period can shape d
 | Test content spreads through documents | Status pages carry aggregates and rules only, never messages or fixture detail | `REVIEW_STATUS.md`, redacted on 2026-09-30 (see the disclosure below) |
 
 **What we disclose**, instead of hiding it:
-- **One full-period profiling:** before the time windows existed, we profiled several facts over the full period once. For every fact later used in design, the design-window values agree to one decimal place ([`DATA_QUALITY.md`](DATA_QUALITY.md), Disclosure).
+- **One full-period profiling:** before the time windows existed, we profiled several facts over the full period once. For every fact later used in design, the design-window values agree to one decimal place ([`DATA_ENGINEERING.md`](DATA_ENGINEERING.md), Disclosure).
 - **The drafting session read one extra file:** the repository's agent configuration, which contains no cases.
 - **Roberto's Spanish review isn't blind:** he answered after seeing AI suggestions, so it isn't counted as an independent audit.
 - **Frozen-case detail reached git, and the blind build could reach it.** The facts:

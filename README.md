@@ -8,7 +8,7 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 
 ![Deployed architecture: Angular, Cloudflare Worker and D1 with Cognito email sign-in and SES sandbox notifications, deployed from GitHub Actions after CI; a read-only S3, Bronze, Silver, quality and Gold batch produces a reviewed D1 seed. The offline evaluation calls Vertex AI and has not run on the frozen set; the online extractor is off. The Lambda and PostgreSQL AWS target was never deployed.](Docs/Evidence/diagrams/current-workflow.png)
 
-*Deployed state: main `79c324b`, Worker `79aa39a9` (`main-79c324b`), deployed 2026-10-03 by the GitHub Actions deploy workflow, D1 migrations 0001–0020, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0); the app changes of #87–#92 are deployed but not yet tagged. Solid paths are deployed; dashed paths are the offline evaluation, not run on the frozen set.*
+*Deployed state: main `a47b2e1`, Worker `d8da20c6`, deployed 2026-10-04 by the GitHub Actions deploy workflow, D1 migrations 0001–0023, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0); #87–#106 and #110 are deployed but not yet tagged. Solid paths are deployed; dashed paths are the offline evaluation, not run on the frozen set.*
 
 ## Contents
 
@@ -26,18 +26,17 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 
 | Deliverable | Document |
 |---|---|
-| **System design:** customer, problem, solution, architecture, results, cost and risks, in one narrative | [`SYSTEM_DESIGN.md`](Docs/deliverables/SYSTEM_DESIGN.md) |
-| **Evaluation:** how the model is compared with a baseline, the test sets we built ourselves, how data leakage is prevented, and every option we considered | [`EVALUATION.md`](Docs/deliverables/EVALUATION.md) |
-| **Product report:** the problem sized with KPIs, how disputes are handled today, satisfaction with its populations, and the segment cut | [`PRODUCT_REPORT.md`](Docs/deliverables/PRODUCT_REPORT.md) |
-| **Data quality:** every finding that changes or limits a decision, each with its query | [`DATA_QUALITY.md`](Docs/deliverables/DATA_QUALITY.md) |
-| **Data engineering:** contracts, the quality gate, lineage from S3 to the served row, the update and freshness policy with its test fixture, and the stack with its trade-offs | [`DATA_ENGINEERING.md`](Docs/deliverables/DATA_ENGINEERING.md) |
+| **System design:** the customer, the problem, what we built, the architecture and security, the AI decision, results, cost and risks | [`SYSTEM_DESIGN.md`](Docs/deliverables/SYSTEM_DESIGN.md) |
+| **Business outcomes:** the unrecognized-charge problem in numbers, how it's handled today, satisfaction, and what we will and won't claim | [`BUSINESS_OUTCOMES.md`](Docs/deliverables/BUSINESS_OUTCOMES.md) |
+| **Data engineering:** the pipeline, contracts, quality gate, lineage, update policy, the findings register (each with its query) and how to reproduce it all | [`DATA_ENGINEERING.md`](Docs/deliverables/DATA_ENGINEERING.md) |
+| **Evaluation:** how the model is compared with a baseline, the test sets we built, how leakage is prevented, and the options we considered | [`EVALUATION.md`](Docs/deliverables/EVALUATION.md) |
 | **Capacity and cost:** where each layer runs and why, the Cloudflare limits, and a priced AWS production target ([calculator estimate](https://calculator.aws/#/estimate?id=2c6fd3cd749c39840166f0e274fd6813501f5f7e)) | [ADR-004](Docs/ADRs/ADR-004-intake-capacity-and-cost.md) |
 
 ## Repository layout
 
 | Folder | What it holds | Who needs it |
 |---|---|---|
-| [`Docs/deliverables/`](Docs/deliverables/) | The documents the brief asks for: system design, data engineering, data quality, evaluation, plus architecture, business outcomes and reproduction | Evaluators, first |
+| [`Docs/deliverables/`](Docs/deliverables/) | The four documents the brief asks for: system design, business outcomes, data engineering and evaluation | Evaluators, first |
 | [`Docs/`](Docs/README.md) | Decisions ([`ADRs/`](Docs/ADRs/README.md)), workflow contracts ([`intake/`](Docs/intake/)), runbooks and roadmaps ([`Plans/`](Docs/Plans/)), cost evidence ([`Costs/`](Docs/Costs/README.md)), accessibility evidence and diagrams ([`Evidence/`](Docs/Evidence/)), release history ([`releases/`](Docs/releases/README.md)), the organizers' originals ([`sources/`](Docs/sources/README.md)) and dated working notes ([`archive/`](Docs/archive/)) | Anyone checking why a decision was made |
 | [`data_pipelines/`](data_pipelines/) | The batch path: S3 → `bronze/` → `silver/` → `quality/` → `gold/` (the reviewed serving slice and cohort), Python and DuckDB | Data engineering |
 | [`data_profiles/`](data_profiles/) | The findings register's queries (`findings/queries/DF-*.sql`) and their runner and tests | Data quality |
@@ -68,7 +67,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 
 The Worker and D1 remain the single runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito proves who signs in, and the Worker issues its own session from the verified token. SES only delivers email; cases stay in D1. These integrations are deployed, with Cognito replacing the former shared gates ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). SES remains in the sandbox, so only verified recipients receive email.
 
-The app changes of #87–#92 (atomic one-open-report, the customer history and first-open time for agents, receipt feedback, "Not resolved" links, the sign-in code help) are merged and deployed. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan). The frozen comparison still needs Manoella's approval of amendment 7, a checked pre-registration and a human tag ([evaluation status](Docs/deliverables/EVALUATION.md)).
+Everything merged through #106 and #110 is deployed, including the in-app alert when the bank flags a charge (ADR-011) and session restore on reload. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan). Extractor v1 is registered; the frozen comparison waits for Manoella's review of that registration and a person's `extractor-v1` tag ([evaluation status](Docs/deliverables/EVALUATION.md)).
 
 | Component | Path | What it does |
 |---|---|---|
@@ -77,7 +76,7 @@ The app changes of #87–#92 (atomic one-open-report, the customer history and f
 | Intake API | `back-end/` | One online runtime: sessions from Cognito sign-in, customer-scoped retrieval, idempotent cases, reference after commit, the customer's reports, review status, notification emails, agent view |
 | Web client | `front-end/` | Customer and agent views; API contracts in `front-end/contracts/` |
 | Evaluation | `evals/intake`, [`EVALUATION.md`](Docs/deliverables/EVALUATION.md) | Team-built ES/PT test sets, checklist baseline, learned-component harness, episode KPI scorer |
-| Data quality register | [`DATA_QUALITY.md`](Docs/deliverables/DATA_QUALITY.md), `data_profiles/findings/` | Every dataset finding that changes or limits a decision, with its query, impact and handling |
+| Data quality register | [`DATA_ENGINEERING.md`](Docs/deliverables/DATA_ENGINEERING.md), `data_profiles/findings/` | Every dataset finding that changes or limits a decision, with its query, impact and handling |
 | Decisions | `Docs/ADRs/` | Scope, runtime, capacity, cost and cloud placement, each with its limitations and exit triggers |
 
 **Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Customers, agents and evaluators sign in with an email one-time code from Amazon Cognito; ask the team to enrol your email. There is no team password ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md), [auth runbook](Docs/Plans/auth-runbook.md)).
@@ -143,14 +142,14 @@ If the CSVs are installed locally, run `make setup` and `make pipeline-local`. O
 | `make intake-setup` / `make intake-test` | Install and test the intake service: Gold slice, Angular specs, and Worker unit and local-D1 tests. |
 | `make intake-sample-slice` | Build the reviewed D1 seed from the one-day quality-gated sample (see the intake runbook). |
 
-Docker reuses cached build layers on later runs. For a smaller first S3 check, follow the targeted commands in [REPRODUCIBILITY.md](Docs/deliverables/REPRODUCIBILITY.md). CI runs offline tests and compilation without S3 credentials. Docker checks remain available with `make docker-test`.
+Docker reuses cached build layers on later runs. For a smaller first S3 check, follow the targeted commands in [DATA_ENGINEERING.md](Docs/deliverables/DATA_ENGINEERING.md#11-reproducing-it). CI runs offline tests and compilation without S3 credentials. Docker checks remain available with `make docker-test`.
 
 ## Where to look next
 
 - [Data dictionary](Docs/LATAM_BANK_DATA_DICTIONARY.md): exact table, column, and relationship names.
 - [Dataset overview](Docs/LATAM_BANK_DATASET.md) and [hackathon brief](Docs/FACTORED_HACKATHON_2026.md): source scope and challenge context.
-- [Architecture](Docs/deliverables/ARCHITECTURE.md) and [reproduction guide](Docs/deliverables/REPRODUCIBILITY.md): pipeline behavior, memory limits, Docker, and troubleshooting commands.
-- [Data quality and findings register](Docs/deliverables/DATA_QUALITY.md): what the data can and can't support, each finding backed by a reproducible query, and the evaluation data protocol ([ADR-005](Docs/ADRs/ADR-005-evaluation-data-protocol.md)).
+- [Reproducing the pipeline](Docs/deliverables/DATA_ENGINEERING.md#11-reproducing-it): memory limits, Docker, and troubleshooting commands.
+- [Findings register](Docs/deliverables/DATA_ENGINEERING.md#10-findings-register): what the data can and can't support, each finding backed by a reproducible query, and the evaluation data protocol ([ADR-005](Docs/ADRs/ADR-005-evaluation-data-protocol.md)).
 - [Quality parity record](data_pipelines/quality/PARITY.md): the 13-table audit, observed warnings, and comparison with the former CSV scanner.
 - [Decision records](Docs/ADRs/README.md): workflow scope, runtime, and capacity and cost, with their limitations.
 - [Silver transcript verification](Docs/archive/2026-09-27-silver-transcript-verification.md): the dated record of the 2026-09-27 transcript reconciliation. `notebooks/07_silver_transcript_verification.ipynb` has a network-free readout. Older notebooks and reports are dated historical evidence.

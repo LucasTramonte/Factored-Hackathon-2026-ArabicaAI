@@ -1,6 +1,6 @@
 # Frozen ES/PT evaluation set (`frozen_es_pt_v1`)
 
-This is the blind, held-out set on which the checklist baseline and the learned extractor are compared, once each. It has 60 single-turn decision points (30 per session language), 30 paired ES/PT situations, 4 synthetic customers and 32 approved card purchases. It is a coverage set, not a prevalence sample. The protocol is [ADR-005](../../../Docs/ADRs/ADR-005-evaluation-data-protocol.md), and the data facts behind the fixture come from the design window of the [data quality register](../../../Docs/deliverables/DATA_QUALITY.md).
+This is the blind, held-out set on which the checklist baseline and the learned extractor are compared, once each. It has 60 single-turn decision points (30 per session language), 30 paired ES/PT situations, 4 synthetic customers and 32 approved card purchases. It is a coverage set, not a prevalence sample. The protocol is [ADR-005](../../../Docs/ADRs/ADR-005-evaluation-data-protocol.md), and the data facts behind the fixture come from the design window of the [data quality register](../../../Docs/deliverables/DATA_ENGINEERING.md).
 
 **Status (2026-09-29):**
 - Built and verified.

@@ -69,13 +69,13 @@ One point per slide, at most about 7 words of text, large type, a picture doing 
 
 | Claim | Status | Source |
 |---|---|---|
-| 11 unrecognized-charge complaints a day; three in four recorded as Open, In Process or Escalated; first response after about a day (25 h at p50) | Yes, as figures from the challenge's **synthetic** bank data. Never "unresolved forever" or "real customers" | `PRODUCT_REPORT.md` |
+| 11 unrecognized-charge complaints a day; three in four recorded as Open, In Process or Escalated; first response after about a day (25 h at p50) | Yes, as figures from the challenge's **synthetic** bank data. Never "unresolved forever" or "real customers" | `BUSINESS_OUTCOMES.md` |
 | "A reference in seconds" / "one minute" | **Target only.** Five team episodes (four accepted, one routed incomplete) support no rate, so never "on average" or "customers do it in" | `EVALUATION.md` §9 |
 | "Big amounts don't mean fraud" | Yes, in this data, in every period | ADR-011 |
 | "The bank's fraud flag" in the demo | It's an authored flag on demo customers. Say "when the bank's fraud system flags a charge", not "we detect fraud" | ADR-011 |
 | "Tested on cases it never saw" / "AI is X% better" | **No**, until the frozen comparison runs. Today: "passed every pre-registered development gate; held-out comparison pending" | ADR-006 amendments 7–9 |
-| Money saved, customers retained, satisfaction raised | **No.** No measured product effect exists | `PRODUCT_REPORT.md`: "every figure is descriptive" |
-| Market size in dollars | **No** dollar TAM. Bottom-up per bank: about 4,000 such complaints a year in a bank like the challenge's synthetic one (11.16 × 365). Say exactly that | `PRODUCT_REPORT.md` |
+| Money saved, customers retained, satisfaction raised | **No.** No measured product effect exists | `BUSINESS_OUTCOMES.md`: "every figure is descriptive" |
+| Market size in dollars | **No** dollar TAM. Bottom-up per bank: about 4,000 such complaints a year in a bank like the challenge's synthetic one (11.16 × 365). Say exactly that | `BUSINESS_OUTCOMES.md` |
 | Traction | Pre-traction: a working, deployed product with tests. Lean on the story and the rigor, as YC advises | — |
 
 ## Open decisions for Lucas and Roberto

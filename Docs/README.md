@@ -6,7 +6,7 @@ For the whole story in one narrative, read [`SYSTEM_DESIGN.md`](deliverables/SYS
 
 | # | Brief asks for | Read |
 |---|---|---|
-| 1 | A problem supported by data | [ADR-001](ADRs/ADR-001-workflow-prioritization.md) compares the four official workflows with measured demand. [ADR-002](ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md) records the choice and its limits. [`DATA_QUALITY.md`](deliverables/DATA_QUALITY.md) lists every finding that changes a decision, each with its query |
+| 1 | A problem supported by data | [ADR-001](ADRs/ADR-001-workflow-prioritization.md) compares the four official workflows with measured demand. [ADR-002](ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md) records the choice and its limits. [`BUSINESS_OUTCOMES.md`](deliverables/BUSINESS_OUTCOMES.md) sizes the problem, and the [findings register](deliverables/DATA_ENGINEERING.md#10-findings-register) lists every finding that changes a decision, each with its query |
 | 2 | A functioning AI system | [Customer and measurement contract](intake/customer-and-measurement-contract.md), [ADR-006](ADRs/ADR-006-learned-extractor-workers-ai.md) (the model extracts facts, the policy decides), [`back-end/README.md`](../back-end/README.md) |
 | 3 | Controlled automation | [ADR-002](ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md) decisions 1–3, [ADR-007](ADRs/ADR-007-customer-identity-cognito-email-otp.md) (Cognito sign-in, roles from groups), the [event contract](intake/intake-events.md), and the adversarial test matrix in [`AGENTS.md`](../AGENTS.md) |
 | 4 | Sound data and ML practice | **[`DATA_ENGINEERING.md`](deliverables/DATA_ENGINEERING.md)**: contracts, quality gate, lineage, the update and freshness policy with its labelled test fixture, and the stack. Then **[`EVALUATION.md`](deliverables/EVALUATION.md)**: the test sets we built, leakage prevention, and every option considered. The protocol is [ADR-005](ADRs/ADR-005-evaluation-data-protocol.md). The new-data rehearsal is in `Docs/Evidence/new-data-rehearsal.md` |
@@ -17,7 +17,7 @@ For the whole story in one narrative, read [`SYSTEM_DESIGN.md`](deliverables/SYS
 
 | Folder | Holds |
 |---|---|
-| [`deliverables/`](deliverables/) | The documents the brief asks for: system design, data engineering, data quality, evaluation, architecture, business outcomes, reproduction |
+| [`deliverables/`](deliverables/) | The four documents the brief asks for: system design, business outcomes, data engineering (with the findings register and reproduction) and evaluation |
 | [`releases/`](releases/README.md) | Release history: each version's PRs, decisions, evidence and deployed state |
 | [`ADRs/`](ADRs/README.md) | Decisions: scope, runtime, cost and placement, evaluation, the learned component. Start here |
 | [`Costs/`](Costs/README.md) | Evidence cited by ADR-004 only: the calculator export and the Cloudflare workbook |
