@@ -51,11 +51,13 @@ const CEILING = {
   // proactive_answers and cases by key). POST /alerts/answer: session, then one batch (a guarded insert and its read-back);
   // the row and its primary key are the two writes, none on a replay. Measured, no margin.
   alert: [2, 3, 0, 2],
-  alertAnswer: [3, 3, 2, 2],
+  // Migration 0025's index proactive_answers_time adds one write to the answer (2 -> 3; ADR-004, 2026-10-04 KPI note).
+  alertAnswer: [3, 3, 3, 2],
   // The CHECK on intake_episodes.reason (migration 0016, ADR-010) adds one counted read to each statement that writes an
   // episode row, as 0004's CHECKs did: start 8 -> 9 and replay 6 -> 7 rows read, measured with and without it (ADR-004).
-  // Migration 0018's index intake_episodes_owner_recent adds one write to the episode insert (11 -> 12).
-  intakeStart: [6, 9, 12, 2],
+  // Migration 0018's index intake_episodes_owner_recent adds one write to the episode insert (11 -> 12), and migration
+  // 0025's intake_episodes_created one more (12 -> 13), for the KPI window (ADR-004, 2026-10-04 KPI note).
+  intakeStart: [6, 9, 13, 2],
   intakeStartReplay: [6, 7, 2, 2],
   // The first acknowledgement queues one "received" email for a customer with a notification target (Task 3.2):
   // one more statement in the acknowledgement batch, 3 writes (row, primary key, email_outbox_recent).
@@ -124,8 +126,16 @@ const CEILING = {
   // Operator scripts, per store call: one atomic page of 100 due starts, a sweep with nothing due, the due probe.
   idleSweepPage: [2, 1210, 300, 1],
   idleSweepNoop: [2, 10, 0, 1],
-  idleDueProbe: [1, 3, 0, 1]
+  idleDueProbe: [1, 3, 0, 1],
+  // The dispute managers' KPI read (intakeKpis, scripts/intake-kpis.mjs): one batch of seven reads, one round trip, no
+  // write. The window is found through migration 0025's indexes, so an empty one costs a constant 30 rows (index probes and
+  // the empty intermediate results of the ranking statements), whatever the store holds. KPI_FIXTURE acknowledged handoffs
+  // cost 887 (about 43 an episode: each of five statements reads the episode's index entry, row, handoff and events, and
+  // the span and repeat statements count their materialized and ranked rows again). Measured, no margin (ADR-004).
+  kpisEmpty: [7, 30, 0, 1],
+  kpisFixture: [7, 887, 0, 1]
 };
+const KPI_FIXTURE = 20;
 // An export page reads about 2 rows per episode (its page entry and the look-ahead that ends its event range) plus
 // its events, so the ceiling is computed from the page actually read, with a small fixed slack. A scan of
 // intake_episodes or intake_events adds rows per retained episode or event and fails here even on a small store.
@@ -134,8 +144,9 @@ const EXPORT_SLACK = 2;
 const exportCeiling = rows => [1, 2 * rows.length + rows.reduce((n, row) => n + JSON.parse(row.events_json).length, 0) + EXPORT_SLACK, 0, 1];
 // Customer requests of one guided episode (login + list?lang= + displayed + start + terminal request), as the client
 // sends them from ADR-009 on; ADR-004 sizes capacity on these.
-// Migration 0018's episode index adds one write to each episode's start (complete 46 -> 47, incomplete 37 -> 38).
-const EPISODE_CEILING = { complete: [37, 125, 47, 20], incomplete: [31, 75, 38, 17] };
+// Migration 0018's episode index adds one write to each episode's start (complete 46 -> 47, incomplete 37 -> 38), and
+// migration 0025's one more (complete 47 -> 48, incomplete 38 -> 39).
+const EPISODE_CEILING = { complete: [37, 125, 48, 20], incomplete: [31, 75, 39, 17] };
 
 function within(name, m, ceiling = CEILING[name]) {
   assert.ok(m, `${name}: X-D1-Metrics header missing (is DEMO_EXPOSE_DB_METRICS set?)`);
@@ -468,4 +479,32 @@ test('the idle sweep closes a page of 100 stale suggestion runs, and a sweep wit
     measured.noop = within('suggestionSweepNoop', noop.metrics);
   });
   console.log('D1_SUGGESTION_SWEEP ' + JSON.stringify(measured));
+});
+
+test("the dispute managers' KPI read stays bounded by its window: a constant for an empty one, a fixed cost per episode in it", async () => {
+  const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
+  // Bounded fixture: 20 acknowledged incomplete handoffs started two years ago, a window no other suite writes to. Runs
+  // last in this file, so its starts never meet the idle sweeps above (they are acknowledged, never due anyway).
+  const old = Date.now() - 2 * 365 * 86400000; const sessionHash = await tokenHash('kpi-budget-' + crypto.randomUUID());
+  const payloadHash = await tokenHash(JSON.stringify(['incomplete', null]));
+  const measured = {};
+  await withIntakeStore({ config: config() }, async store => {
+    await store.rotateSession({ now: Date.now(), oldHash: null, newHash: sessionHash, actor: 'customer', customerId: 'demo-bruno', expiresAt: Date.now() + 3600000, requestId: 'kpi-budget' });
+    for (let i = 0; i < KPI_FIXTURE; i++) {
+      const at = old + i;
+      const { episode } = await store.startIntake({ customerId: 'demo-bruno', language: 'pt', statement: 'Não reconheço esta cobrança.', reason: 'not_mine', key: crypto.randomUUID(), now: at, expiresAt: at + 3600000 });
+      await store.persistIntakeHandoff({ customerId: 'demo-bruno', episodeId: episode.episode_id, turnKey: crypto.randomUUID(), payloadHash, sessionHash,
+        completeCase: null, kind: 'incomplete', evidence: { transaction: null, tool_status: 'ok' }, actions: [], questions: ['matching_transaction', 'customer_confirmation'],
+        usage: { tool_calls: 0, operation_duration_ms: 0 }, now: at });
+      const receipt = await store.readIntakeReceipt('demo-bruno', episode.episode_id, { sessionHash, now: at });
+      assert.equal((await store.finishIntakeHandoff({ customerId: 'demo-bruno', episode, receipt, sessionHash, now: at, operationDuration: 0, toolCalls: 0 })).acknowledged, true);
+    }
+    const empty = await storeCall(store, () => store.intakeKpis({ sinceMs: old - 86400000, untilMs: old - 1 }));
+    assert.equal(empty.result.by_language.all.reports.started, 0);
+    measured.empty = within('kpisEmpty', empty.metrics);
+    const fixture = await storeCall(store, () => store.intakeKpis({ sinceMs: old, untilMs: old + KPI_FIXTURE }));
+    assert.equal(fixture.result.by_language.all.reports.started, KPI_FIXTURE, 'exactly the fixture is in the window');
+    measured.fixture = within('kpisFixture', fixture.metrics);
+  });
+  console.log('D1_INTAKE_KPIS ' + JSON.stringify({ episodes: KPI_FIXTURE, ...measured }));
 });

@@ -73,6 +73,66 @@ const suggestionEvent = (where, result = 'r.outcome') => 'INSERT INTO intake_eve
 /** The suggestion rule reads at most this many of the customer's newest purchases (ADR-004, 2026-10-04 note). */
 export const SUGGESTION_PURCHASES = 200;
 
+/**
+ * The suggestion pilot's aggregate columns over runs ``r`` with their handoff ``h``, the customer's answer ``c`` and the
+ * agent's mark ``m`` (``PILOT_JOINS``); shared by ``suggestionPilotSummary`` and ``intakeKpis`` so both count alike.
+ */
+const PILOT_COLUMNS = "COUNT(*) AS runs,COALESCE(SUM(r.shown_at IS NOT NULL),0) AS shown,"
+  + "COALESCE(SUM(r.outcome='suggested' AND r.shown_at IS NULL),0) AS not_shown,COALESCE(SUM(c.choice='confirmed'),0) AS confirmed,"
+  + "COALESCE(SUM(c.choice='none'),0) AS rejected,COALESCE(SUM(r.shown_at IS NOT NULL AND c.handoff_id IS NULL AND (h.first_opened_at IS NOT NULL OR h.status<>'received')),0) AS not_answered,"
+  + "COALESCE(SUM(r.shown_at IS NOT NULL AND c.handoff_id IS NULL AND h.first_opened_at IS NULL AND h.status='received'),0) AS awaiting,"
+  + "COALESCE(SUM(m.mark='correct'),0) AS marked_correct,COALESCE(SUM(m.mark='wrong'),0) AS marked_wrong,COALESCE(SUM(r.injection_flagged=1),0) AS injection_flagged,"
+  + 'COALESCE(SUM(r.llm_calls),0) AS llm_calls,COALESCE(SUM(r.usage_unavailable_calls),0) AS usage_unavailable_calls,'
+  + 'COALESCE(SUM(r.known_input_tokens),0) AS known_input_tokens,COALESCE(SUM(r.known_output_tokens),0) AS known_output_tokens ';
+const PILOT_JOINS = 'LEFT JOIN handoff_suggestion_choices c ON c.handoff_id=r.handoff_id LEFT JOIN handoff_suggestion_marks m ON m.handoff_id=r.handoff_id ';
+
+/** Report languages the KPIs are cut by; ``all`` is every episode. */
+export const KPI_LANGUAGES = ['all', 'es', 'pt', 'en'];
+/** An agent opened a handoff in time when ``first_opened_at`` is at most this long after acceptance. */
+export const KPI_OPEN_MS = 24 * 3600 * 1000;
+/** Two reports by one customer at most this far apart make a repeat reporter. */
+export const KPI_REPEAT_MS = 90 * 24 * 3600 * 1000;
+/** Episodes (alias ``e``) started in [since, until): the range uses index ``intake_episodes_created`` (migration 0025). */
+const KPI_WINDOW = 'e.created_at>=? AND e.created_at<?';
+/** ``h.accepted_at`` (UTC ISO text) as epoch ms, as migration 0018 prescribes; never subtract the text itself. */
+const ACCEPTED_MS = 'CAST(ROUND((julianday(h.accepted_at)-2440587.5)*86400000) AS INTEGER)';
+const ACKNOWLEDGED = "e.state=h.kind||'_handoff'";
+/**
+ * Rows at the given ranks of ``value`` per ``lang`` (and ``keys``) from CTE ``d``, plus ``n``, with ``all`` added when
+ * ``withAll``; ranks are SQL integer expressions of ``n``. Only those rows leave SQL, never the population.
+ */
+const ranked = (keys, order, ranks, withAll = true) => {
+  const columns = keys.map(key => key + ',').join('');
+  const partition = ['lang', ...keys].join(',');
+  return (withAll ? `lanes AS (SELECT lang,${columns}value FROM d UNION ALL SELECT 'all',${columns}value FROM d),` : 'lanes AS (SELECT * FROM d),')
+    + `ranks AS (SELECT lang,${columns}value,ROW_NUMBER() OVER (PARTITION BY ${partition} ORDER BY ${order}) AS rn,COUNT(*) OVER (PARTITION BY ${partition}) AS n FROM lanes) `
+    + `SELECT lang,${columns}n,rn,value FROM ranks WHERE rn IN (${ranks.join(',')})`;
+};
+/** Nearest-rank quartiles (rank ceil(q*n)): observed amounts as stored text, never averaged or converted. */
+const QUARTILE_RANKS = ['(25*n+99)/100', '(50*n+99)/100', '(75*n+99)/100'];
+/** The median's one or two middle ranks and the nearest-rank p95, as ``evals/intake/episodes.py`` computes latency. */
+const SPAN_RANKS = ['(n+1)/2', 'n/2+1', '(95*n+99)/100'];
+/** Charge amounts of alert answers given in [since, until) by the customer, each with whether a complete report on that charge started after the answer, before ``until``. */
+const ALERT_ANSWERS = "WITH x AS (SELECT p.answer,t.currency,t.amount,EXISTS(SELECT 1 FROM cases c JOIN intake_handoffs h ON h.complete_case_id=c.case_id "
+  + "JOIN intake_episodes e ON e.episode_id=h.episode_id WHERE c.customer_id=p.customer_id AND c.transaction_id=p.transaction_id "
+  + "AND e.state='complete_handoff' AND e.created_at>=p.answered_at AND e.created_at<?) AS reported "
+  + "FROM proactive_answers p JOIN transactions t ON t.customer_id=p.customer_id AND t.transaction_id=p.transaction_id "
+  + "WHERE p.answered_by='customer' AND p.answered_at>=? AND p.answered_at<?)";
+/** ``{ numerator, denominator, rate }``; the rate is null, never 0, when the denominator is empty. */
+const share = (numerator, denominator) => ({ numerator, denominator, rate: denominator ? numerator / denominator : null });
+/** ``{ currency: { n, p25, p50, p75 } }`` from ``ranked`` rows of one language. */
+function quartiles(rows) {
+  const out = {};
+  for (const row of rows) {
+    const at = out[row.currency] ??= { n: row.n, ranks: {} };
+    at.ranks[row.rn] = row.value;
+  }
+  for (const [currency, { n, ranks }] of Object.entries(out)) {
+    out[currency] = { n, p25: ranks[Math.floor((25 * n + 99) / 100)], p50: ranks[Math.floor((50 * n + 99) / 100)], p75: ranks[Math.floor((75 * n + 99) / 100)] };
+  }
+  return out;
+}
+
 /** The agent detail summarises at most this many of the customer's other, newest reports. */
 const HISTORY_REPORTS = 20;
 
@@ -784,16 +844,103 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
      */
     suggestionPilotSummary: ({ sinceMs, untilMs }) => {
       if (!Number.isSafeInteger(sinceMs) || sinceMs < 0 || !Number.isSafeInteger(untilMs) || untilMs <= sinceMs) throw new Error('Invalid pilot window');
-      return all('SELECT r.arm,r.outcome,COUNT(*) AS runs,COALESCE(SUM(r.shown_at IS NOT NULL),0) AS shown,'
-        + "COALESCE(SUM(r.outcome='suggested' AND r.shown_at IS NULL),0) AS not_shown,COALESCE(SUM(c.choice='confirmed'),0) AS confirmed,"
-        + "COALESCE(SUM(c.choice='none'),0) AS rejected,COALESCE(SUM(r.shown_at IS NOT NULL AND c.handoff_id IS NULL AND (h.first_opened_at IS NOT NULL OR h.status<>'received')),0) AS not_answered,"
-        + "COALESCE(SUM(r.shown_at IS NOT NULL AND c.handoff_id IS NULL AND h.first_opened_at IS NULL AND h.status='received'),0) AS awaiting,"
-        + "COALESCE(SUM(m.mark='correct'),0) AS marked_correct,COALESCE(SUM(m.mark='wrong'),0) AS marked_wrong,COALESCE(SUM(r.injection_flagged=1),0) AS injection_flagged,"
-        + 'COALESCE(SUM(r.llm_calls),0) AS llm_calls,COALESCE(SUM(r.usage_unavailable_calls),0) AS usage_unavailable_calls,'
-        + 'COALESCE(SUM(r.known_input_tokens),0) AS known_input_tokens,COALESCE(SUM(r.known_output_tokens),0) AS known_output_tokens '
-        + 'FROM handoff_suggestion_runs r JOIN intake_handoffs h ON h.handoff_id=r.handoff_id LEFT JOIN handoff_suggestion_choices c ON c.handoff_id=r.handoff_id '
-        + 'LEFT JOIN handoff_suggestion_marks m ON m.handoff_id=r.handoff_id WHERE r.created_at>=? AND r.created_at<? '
+      return all('SELECT r.arm,r.outcome,' + PILOT_COLUMNS + 'FROM handoff_suggestion_runs r JOIN intake_handoffs h ON h.handoff_id=r.handoff_id ' + PILOT_JOINS
+        + 'WHERE r.created_at>=? AND r.created_at<? '
         + 'GROUP BY r.arm,r.outcome ORDER BY r.arm,r.outcome', sinceMs, untilMs);
+    },
+    /**
+     * The dispute managers' KPIs (Docs/deliverables/BUSINESS_OUTCOMES.md, "Decision KPIs for dispute managers") for the
+     * episodes started in [sinceMs, untilMs), cut by language (``all``, ``es``, ``pt``, ``en``), plus the alerts (ADR-011)
+     * customers answered in that window, which carry no language. Read-only. Every share is ``{ numerator, denominator,
+     * rate }`` with a null rate on an empty denominator; a percentile over nothing is null. Amounts stay in their source
+     * currency, as stored text, and are never summed or converted. No customer or transaction identifier leaves SQL.
+     * Definitions are in Docs/intake/intake-events.md ("Dispute-manager KPIs").
+     *
+     * Row model: one batch (one round trip) of seven reads. The window is found through indexes ``intake_episodes_created``
+     * and ``proactive_answers_time`` (migration 0025), never by scanning the tables; each episode in it then costs its
+     * handoff, case, charge, suggestion run, answer and mark by primary or unique key, and its own events (at most a few
+     * each, ``UNIQUE(episode_id, seq)``), so rows read grow with the window's episodes, not with the store. Memory: the
+     * grouping, ranking and percentiles run in D1 (SQLite sorts the window's rows there); the Worker receives a bounded
+     * number of aggregate rows (at most a few per language, arm, outcome and currency).
+     */
+    intakeKpis: async ({ sinceMs, untilMs }) => {
+      if (!Number.isSafeInteger(sinceMs) || sinceMs < 0 || !Number.isSafeInteger(untilMs) || untilMs <= sinceMs) throw new Error('Invalid KPI window');
+      const window = [sinceMs, untilMs];
+      const [episodes, spans, runs, repeats, amounts, alerts, deflected] = await batch([
+        ['SELECT e.language AS lang,COUNT(*) AS started,'
+          + "SUM(e.state='complete_handoff') AS complete_handoff,SUM(e.state='incomplete_handoff') AS incomplete_handoff,"
+          + "SUM(e.state='technical_handoff') AS technical_handoff,SUM(e.state='abandoned') AS abandoned,"
+          + "SUM(e.state IN ('selection_required','handoff_pending')) AS pending,"
+          + "SUM(h.kind='complete') AS transaction_confirmed,SUM(h.kind='incomplete') AS cant_find,COUNT(h.handoff_id) AS handoff_created,"
+          + 'SUM(' + ACKNOWLEDGED + ') AS acknowledged,'
+          + 'SUM(' + ACKNOWLEDGED + ' AND h.first_opened_at-' + ACCEPTED_MS + '<=?) AS opened_in_time,'
+          + 'SUM(' + ACKNOWLEDGED + ' AND h.first_opened_at IS NULL) AS unopened,'
+          + 'SUM(' + ACKNOWLEDGED + " AND h.status='received') AS received,SUM(" + ACKNOWLEDGED + " AND h.status='in_review') AS in_review,"
+          + 'SUM(' + ACKNOWLEDGED + " AND h.status='closed') AS closed,"
+          + "SUM((SELECT COUNT(*) FROM intake_events v WHERE v.episode_id=e.episode_id AND json_extract(v.event_json,'$.event')='clarification_requested')) AS clarifications "
+          + 'FROM intake_episodes e LEFT JOIN intake_handoffs h ON h.episode_id=e.episode_id WHERE ' + KPI_WINDOW + ' GROUP BY e.language',
+          KPI_OPEN_MS, ...window],
+        // The span of an ended episode is its intake_ended duration_ms, the same number the episode scorer reads.
+        ["WITH d AS MATERIALIZED (SELECT e.language AS lang,json_extract(v.event_json,'$.duration_ms') AS value FROM intake_episodes e "
+          + 'JOIN intake_events v ON v.episode_id=e.episode_id WHERE ' + KPI_WINDOW + " AND json_extract(v.event_json,'$.event')='intake_ended'),"
+          + ranked([], 'value', SPAN_RANKS), ...window],
+        // Episodes first: SQLite never moves a table across a LEFT JOIN, so the window's index must lead.
+        ['SELECT e.language AS lang,r.arm,r.outcome,' + PILOT_COLUMNS + 'FROM intake_episodes e JOIN intake_handoffs h ON h.episode_id=e.episode_id '
+          + 'JOIN handoff_suggestion_runs r ON r.handoff_id=h.handoff_id ' + PILOT_JOINS + 'WHERE ' + KPI_WINDOW + ' GROUP BY e.language,r.arm,r.outcome', ...window],
+        // Acknowledged reports per customer: a repeat reporter has two of them, in the window, at most KPI_REPEAT_MS apart.
+        ['WITH d AS MATERIALIZED (SELECT e.customer_id,e.language AS lang,e.created_at FROM intake_episodes e JOIN intake_handoffs h ON h.episode_id=e.episode_id '
+          + 'WHERE ' + KPI_WINDOW + ' AND ' + ACKNOWLEDGED + "),lanes AS (SELECT customer_id,lang,created_at FROM d UNION ALL SELECT customer_id,'all',created_at FROM d),"
+          + 'gaps AS (SELECT lang,customer_id,created_at-LAG(created_at) OVER (PARTITION BY lang,customer_id ORDER BY created_at) AS gap FROM lanes) '
+          + 'SELECT lang,COUNT(DISTINCT customer_id) AS reporting,COUNT(DISTINCT CASE WHEN gap<=? THEN customer_id END) AS repeaters FROM gaps GROUP BY lang',
+          ...window, KPI_REPEAT_MS],
+        ['WITH d AS MATERIALIZED (SELECT e.language AS lang,t.currency,t.amount AS value FROM intake_episodes e JOIN intake_handoffs h ON h.episode_id=e.episode_id '
+          + 'JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id JOIN transactions t ON t.customer_id=c.customer_id AND t.transaction_id=c.transaction_id '
+          + 'WHERE ' + KPI_WINDOW + " AND e.state='complete_handoff' AND h.kind='complete'),"
+          + ranked(['currency'], 'CAST(value AS REAL),value', QUARTILE_RANKS), ...window],
+        [ALERT_ANSWERS + " SELECT COUNT(*) AS answered,COALESCE(SUM(answer='mine'),0) AS recognized,COALESCE(SUM(answer='report'),0) AS not_mine,"
+          + "COALESCE(SUM(reported),0) AS reported,COALESCE(SUM(answer='mine' AND reported),0) AS recognized_then_reported FROM x", untilMs, ...window],
+        [ALERT_ANSWERS + ",d AS (SELECT 'all' AS lang,currency,amount AS value FROM x WHERE answer='mine')," + ranked(['currency'], 'CAST(value AS REAL),value', QUARTILE_RANKS, false),
+          untilMs, ...window]
+      ]);
+      const of = (result, lang) => result.results.filter(row => row.lang === lang);
+      const sum = (rows, key) => rows.reduce((n, row) => n + Number(row[key] ?? 0), 0);
+      const by_language = {};
+      for (const lang of KPI_LANGUAGES) {
+        const rows = lang === 'all' ? episodes.results : of(episodes, lang);
+        const count = key => sum(rows, key);
+        const started = count('started');
+        const handoffs = count('acknowledged');
+        const span = Object.fromEntries(of(spans, lang).map(row => [row.rn, row.value]));
+        const ended = of(spans, lang)[0]?.n ?? 0;
+        const arms = lang === 'all' ? runs.results : of(runs, lang);
+        const by_arm = {};
+        for (const row of arms.filter(row => row.outcome !== null)) {
+          const arm = by_arm[row.arm ?? 'none'] ??= {};
+          arm[row.outcome] = (arm[row.outcome] ?? 0) + row.runs;
+        }
+        const marked = sum(arms, 'marked_correct') + sum(arms, 'marked_wrong');
+        const repeat = of(repeats, lang)[0];
+        by_language[lang] = {
+          reports: { started, outcomes: Object.fromEntries(['complete_handoff', 'incomplete_handoff', 'technical_handoff', 'abandoned', 'pending'].map(k => [k, count(k)])),
+            not_complete_handoff: share(started - count('complete_handoff'), started) },
+          workload: { handoffs: share(handoffs, started), opened_within_24h: share(count('opened_in_time'), handoffs), unopened: count('unopened'),
+            status: { received: count('received'), in_review: count('in_review'), closed: count('closed') } },
+          friction: { funnel: Object.fromEntries(['transaction_confirmed', 'cant_find', 'handoff_created', 'acknowledged'].map(k => [k, share(count(k), started)])),
+            clarifications_per_episode: share(count('clarifications'), started),
+            span_ms: { ended, p50: ended ? (span[(ended + 1) >> 1] + span[(ended >> 1) + 1]) / 2 : null, p95: ended ? span[Math.floor((95 * ended + 99) / 100)] : null } },
+          suggestions: { runs: sum(arms, 'runs'), pending: sum(arms.filter(row => row.outcome === null), 'runs'), by_arm, shown: sum(arms, 'shown'),
+            confirmed: sum(arms, 'confirmed'), none_of_these: sum(arms, 'rejected'), marked_correct: sum(arms, 'marked_correct'), marked_wrong: sum(arms, 'marked_wrong') },
+          persistence: { none_of_these_still_handoff: share(sum(arms, 'rejected'), sum(arms, 'shown')), confirmed_suggestion_marked_wrong: share(sum(arms, 'marked_wrong'), marked) },
+          repeat_reporters: share(repeat?.repeaters ?? 0, repeat?.reporting ?? 0),
+          value_at_stake: { complete_handoffs: quartiles(of(amounts, lang)), no_amount: count('incomplete_handoff') + count('technical_handoff') }
+        };
+      }
+      const answers = alerts.results[0];
+      return { window: { since: new Date(sinceMs).toISOString(), until: new Date(untilMs).toISOString() }, by_language,
+        alerts: { answered: answers.answered, recognized: answers.recognized, not_mine: answers.not_mine, reported: answers.reported,
+          deflected_by_explanation: share(answers.recognized, answers.answered),
+          persistence_recognized_then_reported: share(answers.recognized_then_reported, answers.recognized),
+          value_at_stake_deflected: quartiles(deflected.results) } };
     },
     /**
      * An agent's mark on the customer-confirmed suggestion of one acknowledged report (public ``protocol``): the first

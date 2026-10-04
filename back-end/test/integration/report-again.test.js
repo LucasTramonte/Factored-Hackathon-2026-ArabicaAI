@@ -38,7 +38,7 @@ test('linked starts replay once and create a new normal handoff without reopenin
   });
   const ceiling = (m, reads, writes) => assert.ok(m.queries <= 7 && m.rows_read <= reads && m.rows_written <= writes && m.round_trips <= 2,
     'linked start exceeded measured ceiling: ' + JSON.stringify(m));
-  ceiling(started.metrics, 19, 12);
+  ceiling(started.metrics, 19, 13); // 12 -> 13 writes: migration 0025's intake_episodes_created entry
   ceiling(responses.find(r => r.status === 200).metrics, 17, 2);
   console.log('D1_LINKED_START ' + JSON.stringify(started.metrics));
   console.log('D1_LINKED_START_REPLAY ' + JSON.stringify(responses.find(r => r.status === 200).metrics));
