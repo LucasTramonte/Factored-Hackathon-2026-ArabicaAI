@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 from calendar import monthrange
 from datetime import date
 from pathlib import Path
@@ -28,6 +29,8 @@ header{border-bottom:1px solid var(--line);background:var(--surface-raised)}
 nav{display:flex;gap:4px;flex-wrap:wrap;font-size:14px}nav a{padding:6px 10px;border-radius:var(--radius-md);color:var(--ink)}nav a[aria-current="page"]{background:var(--accent-soft);color:var(--accent)}
 main{max-width:1120px;margin:0 auto;padding:32px 40px 64px;display:flex;flex-direction:column;gap:24px}main>*{min-width:0}
 .intro h1{margin:0 0 8px;font:600 32px/40px var(--font-sans);letter-spacing:-.02em}.intro p{margin:0;font:400 18px/28px var(--font-sans);color:var(--ink-muted);max-width:760px}.intro p+p{margin-top:8px;font-size:14px;line-height:20px}
+.intro.lead h1{font-size:15px;line-height:20px;font-weight:600;letter-spacing:0;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.06em}
+.intro.lead>p:first-of-type{color:var(--ink);font:600 26px/34px var(--font-sans);letter-spacing:-.015em;max-width:900px}.intro.lead>p+p{margin-top:12px}
 section{background:var(--surface-raised);border:1px solid var(--line);border-radius:var(--radius-lg);padding:24px}
 section h2{margin:0 0 16px;font:600 20px/28px var(--font-sans);letter-spacing:-.01em}h3{margin:24px 0 12px;font:600 16px/24px var(--font-sans)}
 p,li{line-height:1.55}small,.muted{color:var(--ink-muted);font-size:13px;line-height:18px}code{font:400 13px/20px var(--font-mono)}
@@ -39,7 +42,8 @@ section.note{background:var(--surface-sunken);border:0;border-left:0}.note p{mar
 .card b{font:600 28px/34px var(--font-sans);letter-spacing:-.02em;color:var(--accent)}
 .takeaways{display:grid;gap:12px}.takeaways article{padding:14px 18px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md)}.takeaways h3{margin:0 0 6px}.takeaways p{margin:0}
 .tablewrap{overflow:auto;margin:8px 0}table{border-collapse:collapse;width:100%;font-size:14px;line-height:20px}
-th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left;padding-left:0}
+th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th:first-child,td:first-child{padding-left:0}
+th.n,td.n{text-align:right;white-space:nowrap}td.t{min-width:96px}td .sub{display:block;margin-top:2px;font:400 12px/16px var(--font-mono);color:var(--ink-muted)}
 th{font:500 12px/16px var(--font-sans);color:var(--ink-muted);border-bottom-color:var(--line-strong);background:var(--surface-raised);position:sticky;top:0}td{font-variant-numeric:tabular-nums}tr:last-child td{border-bottom:0}
 figure{margin:20px 0 0}figcaption{font:600 14px/20px var(--font-sans);margin-bottom:8px}
 .timeseries{width:100%;height:auto}.timeseries text{fill:var(--ink-muted);font:400 11px var(--font-mono)}
@@ -66,8 +70,24 @@ details{margin:14px 0}summary{cursor:pointer;font-weight:600}
 .rp-axis{min-height:0}.rp-axis div{display:flex;justify-content:space-between;font:400 11px/14px var(--font-mono);color:var(--ink-muted)}
 .scatter{display:block;width:100%;max-width:760px;height:auto;margin:8px 0}.scatter text{fill:var(--ink-muted);font:400 12px var(--font-sans)}.scatter text.lbl{fill:var(--ink);font-weight:500}
 .scatter line{stroke:var(--line)}.scatter circle{fill:var(--accent);stroke:var(--surface-raised);stroke-width:2}.scatter circle.uc{fill:var(--warn)}.dist tbody tr:last-child th{border-bottom:0}
+.dp{margin:12px 0 0}.dp-row{display:grid;grid-template-columns:200px minmax(0,1fr) 220px;align-items:center;gap:12px;min-height:30px;font-size:14px}
+.dp-track{position:relative;align-self:stretch;background:linear-gradient(var(--line),var(--line)) 0 50%/100% 1px no-repeat}
+.dp-head{min-height:34px;font-weight:600}.dp-head .dp-track{background:none}.dp-head>span:first-child{align-self:end;padding-bottom:2px}
+.dp-ref{position:absolute;top:0;bottom:0;width:0;border-left:1.5px dotted var(--line-strong)}.dp-ref.ref-acc{border-color:var(--accent)}.dp-ref.ref-uc{border-color:var(--warn)}
+.dp-top>div>span.ref-acc{color:var(--accent)}.dp-top>div>span.ref-uc{color:var(--warn)}.dp-dot[title]{cursor:help}
+.dp-dot{position:absolute;top:50%;width:13px;height:13px;margin:-6.5px 0 0 -6.5px;border-radius:50%;background:var(--accent);border:2px solid var(--surface-raised)}.dp-dot.uc{background:var(--warn)}
+.dp-join{position:absolute;top:50%;height:2px;margin-top:-1px;background:var(--line-strong)}
+.dp-row em{font:500 12px/16px var(--font-mono);color:var(--ink-muted);font-style:normal}
+.dp-top>div,.dp-axis>div{position:relative;height:18px}.dp-top>div>span,.dp-axis>div>span{position:absolute;transform:translateX(-50%);white-space:nowrap;font:400 11px/16px var(--font-mono);color:var(--ink-muted)}
+.dp-top{min-height:22px}.dp-top>div>span{font:600 12px/16px var(--font-sans);color:var(--ink)}.dp-axis{min-height:20px}
+.callout{display:grid;grid-template-columns:auto 1fr;gap:4px 20px;align-items:center;margin:20px 0 0;padding:18px 20px;border-radius:var(--radius-md);background:var(--warn-soft);border-left:3px solid var(--warn)}
+.callout>b{font:600 34px/40px var(--font-sans);letter-spacing:-.02em;color:var(--warn)}.callout p{margin:0}
+.steps{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;margin:12px 0}.steps div{flex:1 1 150px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--surface)}
+.steps div b{display:block;font:600 22px/28px var(--font-sans);color:var(--warn)}.steps div small{display:block}
+.toc{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:14px}.toc a{padding:0;border-radius:0;color:var(--link);font-weight:500}section{scroll-margin-top:16px}
 footer{color:var(--ink-muted);font:400 12px/16px var(--font-mono);text-align:center}
-@media (max-width:720px){.top,main{padding-left:16px;padding-right:16px}section{padding:16px}.bar{flex-wrap:wrap}.bar span:first-child,.bar b{width:auto}.bar b{text-align:left}.intro h1{font-size:26px;line-height:32px}.rp-row{grid-template-columns:minmax(0,1fr);gap:2px;margin-bottom:8px}.rp-axis span:empty{display:none}}
+@media (max-width:720px){.top,main{padding-left:16px;padding-right:16px}section{padding:16px}.bar{flex-wrap:wrap}.bar span:first-child,.bar b{width:auto}.bar b{text-align:left}.intro h1{font-size:26px;line-height:32px}.rp-row{grid-template-columns:minmax(0,1fr);gap:2px;margin-bottom:8px}.rp-axis span:empty{display:none}
+.intro.lead>p:first-of-type{font-size:20px;line-height:28px}.dp-top>div{height:34px}.dp-top>div>span{width:84px;white-space:normal;text-align:center;font-size:11px;line-height:14px}.dp-row{grid-template-columns:110px minmax(0,1fr);gap:8px;font-size:13px}.dp-row>em,.dp-row>span:last-child:empty{display:none}.callout{grid-template-columns:1fr}}
 </style>"""
 
 PAGES = [("index.html", "Report hub"), ("product-report.html", "Unrecognized-charge baseline"),
@@ -89,10 +109,37 @@ def num(value) -> str:
     return f"{int(value or 0):,}"
 
 
+_NUMBER = re.compile(r"^[-−+]?(US\$)?[\d][\d,]*(\.\d+)?(%| h| d| s)?( [A-Z]{3})?$")
+_NOT_A_VALUE = ("", "n/a", "unknown")
+
+
+def _cell_text(value) -> str:
+    return str((value[0] if isinstance(value, tuple) else value) if value is not None else "")
+
+
+def _numeric_column(items: list[dict], key: str) -> bool:
+    """A column is numeric when every cell that holds a value reads as a number; placeholders like
+    "n/a" or "too few to compare" don't count either way."""
+    texts = [_cell_text(row.get(key)).strip() for row in items]
+    values = [t for t in texts if t.lower() not in _NOT_A_VALUE and not t.startswith("too few")]
+    return bool(values) and all(_NUMBER.match(t) for t in values)
+
+
+def _cell(value) -> str:
+    """A cell is a value, or (value, detail): the detail sits underneath, smaller and muted."""
+    if isinstance(value, tuple):
+        main, detail = value
+        return f'{esc(main)}<small class="sub">{esc(detail)}</small>'
+    return esc(value)
+
+
 def table(items: list[dict], columns: list[tuple[str, str]]) -> str:
-    """Render selected aggregate columns as a readable table."""
-    head = "".join(f"<th>{esc(label)}</th>" for _, label in columns)
-    body = "".join("<tr>" + "".join(f"<td>{esc(row.get(key))}</td>" for key, _ in columns) + "</tr>" for row in items)
+    """Render selected aggregate columns as a table: numeric columns right-aligned, text columns left-aligned and
+    allowed to wrap. The first column is always a left-aligned label."""
+    kinds = ["t" if i == 0 or not _numeric_column(items, key) else "n" for i, (key, _) in enumerate(columns)]
+    head = "".join(f'<th class="{k}">{esc(label)}</th>' for k, (_, label) in zip(kinds, columns))
+    body = "".join("<tr>" + "".join(f'<td class="{k}">{_cell(row.get(key))}</td>' for k, (key, _) in zip(kinds, columns)) + "</tr>"
+                   for row in items)
     return f'<div class="tablewrap"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
@@ -106,12 +153,13 @@ def _movement(change: float) -> str:
     return "rose" if change > 0 else "fell" if change < 0 else "was unchanged"
 
 
-def shell(title: str, subtitle: str, body: str, current: str = "", links: str = "") -> str:
-    """Wrap an offline report page in the web app's header, type scale and tokens."""
+def shell(title: str, subtitle: str, body: str, current: str = "", links: str = "", lead: bool = False) -> str:
+    """Wrap an offline report page in the web app's header, type scale and tokens. With lead, the subtitle is the
+    page's takeaway and is set as the main statement rather than a muted description."""
     current_attr = ' aria-current="page"'  # kept outside the f-string: Python 3.10 forbids backslashes in its expressions
     nav = "".join(f'<a href="{href}"{current_attr if href == current else ""}>{esc(label)}</a>' for href, label in PAGES)
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{esc(title)}</title>{STYLE}</head><body>
-<header><div class="top"><span class="ar-wordmark">Arabica<b>AI</b></span><nav>{nav}</nav></div></header><main><div class="intro"><h1>{esc(title)}</h1><p>{esc(subtitle)}</p>{links}</div>{body}<footer>Aggregate synthetic data · Private repository · Offline report</footer></main></body></html>'''
+<header><div class="top"><span class="ar-wordmark">Arabica<b>AI</b></span><nav>{nav}</nav></div></header><main><div class="intro{" lead" if lead else ""}"><h1>{esc(title)}</h1><p>{esc(subtitle)}</p>{links}</div>{body}<footer>Aggregate synthetic data · Private repository · Offline report</footer></main></body></html>'''
 
 
 def complete_activity_rows(activity: dict) -> list[dict]:

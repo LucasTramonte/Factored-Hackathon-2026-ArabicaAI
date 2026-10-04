@@ -82,6 +82,14 @@ def make_db(path: Path, with_holdout: bool) -> Path:
         # Added after the inserts above, which list the original nine complaint columns.
         con.execute("ALTER TABLE silver.fact_complaints ADD COLUMN status VARCHAR; "
                     "ALTER TABLE silver.fact_complaints ADD COLUMN resolution VARCHAR;")
+        # DF-028 columns: Q1 is closed at the same time of day it was created; the rest have no lifecycle dates yet.
+        con.execute("""ALTER TABLE silver.fact_complaints ADD COLUMN assignment_date TIMESTAMP;
+            ALTER TABLE silver.fact_complaints ADD COLUMN first_response_date TIMESTAMP;
+            ALTER TABLE silver.fact_complaints ADD COLUMN resolution_date TIMESTAMP;
+            ALTER TABLE silver.fact_complaints ADD COLUMN closing_date TIMESTAMP;
+            UPDATE silver.fact_complaints SET status = 'Closed', assignment_date = '2025-03-10 09:00:00',
+              first_response_date = '2025-03-11 02:00:00', resolution_date = '2025-03-20 02:00:00',
+              closing_date = '2025-03-24 02:00:00' WHERE complaint_id = 'Q1'""")
         # DF-027 columns: a design-window Phone contact with a wait, and an Email contact without one; each has a
         # survey that answers the wait question, so the Email answer has no measured wait to pair with.
         con.execute("""ALTER TABLE silver.fact_call_center_interactions ADD COLUMN interaction_date TIMESTAMP;
@@ -198,8 +206,8 @@ def test_lookback_counts_purchases_before_each_unrecognized_charge_complaint(tmp
                     "('T6','2023-08-01 12:00:00','2023-08-01','P1','C1','Purchase','Approved',1,'USD',1,false,'Old','Food','México')")
         # Left-censored: a complaint before 2023-10-15 has truncated history and is excluded.
         con.execute("INSERT INTO silver.fact_complaints VALUES "
-                    "('Q3','2023-09-01 12:00:00','2023-09-01','C1','Cargo no reconocido','x',NULL,NULL,NULL,NULL,NULL),"
-                    "('Q4','2025-06-01 12:00:00','2025-06-01','C2','Cargo no reconocido','x',NULL,NULL,NULL,NULL,NULL)")
+                    "('Q3','2023-09-01 12:00:00','2023-09-01','C1','Cargo no reconocido','x',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL),"
+                    "('Q4','2025-06-01 12:00:00','2025-06-01','C2','Cargo no reconocido','x',NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL)")
     rows = {r[0]: r for r in rf.run(db, only=("DF-021",))["results"][0]["rows"]}
     # country, complaints, n30/n45/n90/n120 quantiles (p50, p90, p95, p99), share with none in
     # 45 and 120 days, days since the last purchase (p50, p95, p99).
@@ -248,8 +256,8 @@ def test_dispute_outcomes_count_status_resolution_and_repeat_complainants(tmp_pa
         con.execute("UPDATE silver.fact_complaints SET status = 'Rechazado', resolution = 'Plantilla A'")
         # C1 complains twice; C2 once. Q9 (holdout) and Q2 (another subcategory) are excluded.
         con.execute("INSERT INTO silver.fact_complaints VALUES "
-                    "('Q5','2025-07-01 12:00:00','2025-07-01','C1','Cargo no reconocido','x',NULL,NULL,NULL,'Cerrado',NULL),"
-                    "('Q6','2025-08-01 12:00:00','2025-08-01','C2','Cargo no reconocido','x',NULL,NULL,NULL,'Cerrado',NULL)")
+                    "('Q5','2025-07-01 12:00:00','2025-07-01','C1','Cargo no reconocido','x',NULL,NULL,NULL,'Cerrado',NULL,NULL,NULL,NULL,NULL),"
+                    "('Q6','2025-08-01 12:00:00','2025-08-01','C2','Cargo no reconocido','x',NULL,NULL,NULL,'Cerrado',NULL,NULL,NULL,NULL,NULL)")
     rows = rf.run(db, only=("DF-025",))["results"][0]["rows"]
     # kind, label, complaints, customers
     assert rows == [["complaints_per_customer", "2 or more", 2, 1], ["complaints_per_customer", "1", 1, 1],
@@ -264,6 +272,26 @@ def test_wait_is_counted_per_channel_and_an_undefined_correlation_is_null(tmp_pa
     # Email: an answer with no measured wait, so no pair. Phone: one pair, so corr() is undefined (NaN) and reported NULL.
     assert rows == [["Email", 1, 1, 0, 1, 1, 0, None],
                     ["Phone", 1, 1, 1, 1, 1, 1, None]]
+
+
+def test_frozen_status_counts_outcomes_assignment_and_closing_time(tmp_path):
+    """Escalated cases without outcome dates, Open cases without an agent, and a closing that keeps the creation time."""
+    db = make_db(tmp_path / "f.duckdb", with_holdout=True)
+    with duckdb.connect(str(db)) as con:
+        # Q3 is Open and never assigned; Q4 is Escalated, assigned, with no outcome; Q9 (holdout) must not count.
+        con.execute("INSERT INTO silver.fact_complaints VALUES "
+                    "('Q3','2024-05-01 10:00:00','2024-05-01','C1','Cargo no reconocido','x',NULL,NULL,NULL,'Open',NULL,NULL,NULL,NULL,NULL),"
+                    "('Q4','2024-05-02 10:00:00','2024-05-02','C2','Cargo no reconocido','x',NULL,NULL,NULL,'Escalated',NULL,"
+                    "'2024-05-02 18:00:00',NULL,NULL,NULL)")
+        con.execute("UPDATE silver.fact_complaints SET status = 'Escalated' WHERE complaint_id = 'Q9'")
+    rows = {(r[0], r[1]): r[2:] for r in rf.run(db, only=("DF-028",))["results"][0]["rows"]}
+    # measure, label -> numerator, denominator
+    assert rows[("assigned_by_status", "Open")] == [0, 1]
+    assert rows[("assigned_by_status", "Escalated")] == [1, 1]
+    assert rows[("escalated_with_resolution", "Escalated")] == [0, 1]
+    assert rows[("closing_keeps_creation_time", "Closed with both dates")] == [1, 1]
+    assert rows[("unresolved_by_quarter", "2024-Q2")] == [2, 2] and rows[("unresolved_by_quarter", "2025-Q1")] == [0, 1]
+    assert not [k for k in rows if k[1].startswith("2026")]
 
 
 def test_dictionary_counts_are_compared_with_bronze_and_silver_rows(tmp_path):
