@@ -6,6 +6,7 @@ import { SESSION_MS, requireSession, tokenHash } from '../../auth/session.js';
 import { fail, json, readJsonBody, readCookies } from '../../http.js';
 import { UUID, validateStartRequest, validateHandoffRequest } from './validation.js';
 import { newArm, runSuggestion } from './suggestions.js';
+import { postOutcome, threadJson, validateMessage } from './messages.js';
 import { EMAIL_FAILURE_RETRY_MS, SHORT_REFERENCE, UPDATE_EVERY_MS, createStore } from '../../store/d1.js';
 import { deliver } from '../../notify/dispatch.js';
 import { STATUS_TEXT } from '../../notify/templates.js';
@@ -257,6 +258,39 @@ export async function requestUpdate(request, env, store, ctx) {
   ctx?.waitUntil?.(deliver(env, createStore(env.DB), { messageId, customerId, language: report.language, reference,
     template: 'update', status: STATUS_TEXT[report.status][report.language] }));
   return json({ queued: true }, 202);
+}
+
+/**
+ * GET /intake/handoff/{protocol or short reference}/messages: the thread between the session customer and the agent on
+ * their own acknowledged report (ADR-015), oldest first, with ``can_post``. Another customer's or a missing report: 404.
+ */
+export async function getMessages(request, env, store) {
+  const current = await requireSession(request, store, 'customer');
+  if (!current) return fail(401, 'Start a demo session first');
+  if (new URL(request.url).search) return fail(422, 'Unexpected parameters');
+  const ref = reportRef(request, '/messages');
+  const found = ref && await store.listMessages({ customerId: current.customer_id, ...ref });
+  return found ? json(threadJson(found)) : fail(404, 'Report not found');
+}
+
+/**
+ * POST /intake/handoff/{protocol or short reference}/messages ``{ body, idempotency_key }``: the session customer writes
+ * to the agent on their own report, until it is closed. A retry with the same key stores one message (``postOutcome``).
+ */
+export async function postMessage(request, env, store) {
+  const current = await requireSession(request, store, 'customer');
+  if (!current) return fail(401, 'Start a demo session first');
+  if (new URL(request.url).search) return fail(422, 'Unexpected parameters');
+  const ref = reportRef(request, '/messages');
+  if (!ref) return fail(404, 'Report not found');
+  const parsed = await readJsonBody(request);
+  if (parsed.error) return parsed.error;
+  const checked = validateMessage(parsed.value);
+  if (checked.error) return checked.error;
+  const messageId = crypto.randomUUID();
+  const found = await store.postMessage({ customerId: current.customer_id, ...ref, author: 'customer', body: checked.value.body,
+    key: checked.value.key, now: Date.now(), messageId });
+  return postOutcome(found, messageId, checked.value.body);
 }
 
 /** The report a suggestion path names: a protocol (UUID, any case) or a short reference; anything else is null. */

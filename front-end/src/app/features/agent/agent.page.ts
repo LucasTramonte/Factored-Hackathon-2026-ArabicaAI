@@ -11,7 +11,8 @@ import { formatMoney } from '../../shared/format/money.util';
 import { LangService, STATUS_CHIP, Strings, checkText, errorText } from '../../shared/i18n/lang.service';
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
-import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind, REASON_LABEL, Reason, SuggestionMarkValue } from '../../shared/models/intake.model';
+import { MessageThreadView } from '../../shared/messages/message-thread.component';
+import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind, REASON_LABEL, Reason, SuggestionMarkValue, MessageThread } from '../../shared/models/intake.model';
 import { AgentService } from './agent.service';
 import { CustomerService } from '../customer/customer.service';
 
@@ -23,7 +24,7 @@ const KIND_KEYS: Record<IntakeKind, keyof Strings> = { complete: 'kindComplete',
  */
 @Component({
   selector: 'app-agent-page',
-  imports: [DatePipe, FormsModule, RouterLink, LangSwitch, Mark],
+  imports: [DatePipe, FormsModule, RouterLink, LangSwitch, Mark, MessageThreadView],
   templateUrl: './agent.page.html',
   styleUrl: './agent.page.css'
 })
@@ -180,6 +181,7 @@ export class AgentPage {
   private applyStatus(protocol: string, status: HandoffStatus): void {
     this.intakes.update(xs => xs.map(x => x.protocol === protocol ? { ...x, status } : x));
     this.detail.update(x => x?.protocol === protocol ? { ...x, status } : x);
+    if (status === 'closed' && this.detail()?.protocol === protocol) void this.loadMessages(protocol); // now read-only
   }
 
   /** Local one-click agent session (development builds), then the queue. */
@@ -280,6 +282,44 @@ export class AgentPage {
   }
 
   /** Open one intake's detail; focus moves to its heading once it renders. */
+  /** The open report's messages with the customer (ADR-015) and the state of the agent's post. */
+  readonly thread = signal<MessageThread | null>(null);
+  readonly messageSending = signal(false);
+  readonly messageFailed = signal('');
+  readonly messagesSent = signal(0);
+  /** One key per message text: a retry of the same text reuses it (one stored message); new text gets a new key. */
+  private messageKey: { body: string; key: string } | null = null;
+
+  /** Read the thread; a reload after a post keeps the current thread and any error on screen until it answers. */
+  private async loadMessages(protocol: string): Promise<void> {
+    try {
+      const thread = await this.service.messages(protocol);
+      if (this.detail()?.protocol === protocol) this.thread.set(thread);
+    } catch (e) {
+      if (this.detail()?.protocol === protocol) this.messageFailed.set(errorText(this.t(), e));
+    }
+  }
+
+  /** Post the agent's message to the customer on the open report, then show the stored thread. */
+  async sendMessage(body: string): Promise<void> {
+    const protocol = this.detail()?.protocol;
+    if (!protocol || this.messageSending()) return;
+    if (this.messageKey?.body !== body) this.messageKey = { body, key: crypto.randomUUID() };
+    this.messageSending.set(true);
+    this.messageFailed.set('');
+    try {
+      await this.service.postMessage(protocol, body, this.messageKey.key);
+      this.messageKey = null;
+      this.messagesSent.update(n => n + 1);
+    } catch (e) {
+      this.messageFailed.set(e instanceof ApiError && e.status === 409 ? this.t().messagesClosed : errorText(this.t(), e));
+      if (e instanceof ApiError && e.status === 409) this.messageKey = null;
+    } finally {
+      this.messageSending.set(false);
+    }
+    await this.loadMessages(protocol);
+  }
+
   async open(protocol: string, trigger: HTMLElement): Promise<void> {
     // Each request gets a number; only the latest may change the panel, even for the same protocol
     // (a double click whose first request fails must not hide the second one's detail).
@@ -293,6 +333,9 @@ export class AgentPage {
       if (request !== this.detailRequest) return;
       this.detail.set(detail);
       afterNextRender(() => this.detailHeading()?.nativeElement.focus(), { injector: this.injector });
+      this.thread.set(null);
+      this.messageFailed.set('');
+      void this.loadMessages(protocol);
     } catch (e) {
       if (request !== this.detailRequest) return;
       this.openProtocol.set(null);

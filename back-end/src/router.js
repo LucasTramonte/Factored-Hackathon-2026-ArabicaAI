@@ -5,8 +5,8 @@
 import { fail, json } from './http.js';
 import { GRANTED } from './auth/cognito.js';
 import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession, whoAmI } from './modules/customer/routes.js';
-import { startIntake, confirmIntake, confirmSuggestion, getServiceTimes, getSuggestions, handoffIntake, listReports, recordFeedback, requestUpdate } from './modules/intake/routes.js';
-import { listAgentIntakes, getAgentIntakeDetail, markSuggestion, startAgentSession, transitionIntake } from './modules/agent/routes.js';
+import { startIntake, confirmIntake, confirmSuggestion, getMessages, getServiceTimes, getSuggestions, handoffIntake, listReports, postMessage, recordFeedback, requestUpdate } from './modules/intake/routes.js';
+import { listAgentIntakes, getAgentIntakeDetail, getAgentMessages, markSuggestion, postAgentMessage, startAgentSession, transitionIntake } from './modules/agent/routes.js';
 import { listAuditEvents } from './modules/audit/routes.js';
 import { actAs, listCustomers } from './modules/admin/routes.js';
 import { answerAlert, getAlert } from './modules/proactive/routes.js';
@@ -38,7 +38,9 @@ export const API_ROUTES = {
   '/alerts': { GET: getAlert },
   '/alerts/answer': { POST: answerAlert },
   '/intake/handoff/{reference}/suggestions': { GET: getSuggestions },
-  '/intake/handoff/{reference}/suggestions/confirm': { POST: confirmSuggestion }
+  '/intake/handoff/{reference}/suggestions/confirm': { POST: confirmSuggestion },
+  '/intake/handoff/{reference}/messages': { GET: getMessages, POST: postMessage },
+  '/agent/intake-messages': { GET: getAgentMessages, POST: postAgentMessage }
 };
 /** Paths with one ``{reference}`` segment (no slash) and the table key each resolves to; the handler validates the segment. */
 const TEMPLATES = Object.keys(API_ROUTES).filter(path => path.includes('{')).map(path =>
@@ -77,7 +79,9 @@ export const ROUTE_ROLES = {
   '/alerts': 'customer',
   '/alerts/answer': 'customer',
   '/intake/handoff/{reference}/suggestions': 'customer',
-  '/intake/handoff/{reference}/suggestions/confirm': 'customer'
+  '/intake/handoff/{reference}/suggestions/confirm': 'customer',
+  '/intake/handoff/{reference}/messages': 'customer',
+  '/agent/intake-messages': 'agent'
 };
 for (const path of Object.keys(API_ROUTES)) if (!ROLES.includes(ROUTE_ROLES[path])) throw new Error(`Route ${path} has no role`);
 export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/audit/', '/admin/', '/alerts/', '/transactions/', '/cases/', '/intake/', '/reports/'];
@@ -85,6 +89,19 @@ export const API_PREFIXES = ['/demo/', '/auth/', '/agent/', '/audit/', '/admin/'
 export const API_NAMESPACES = new Set(['/intake', '/auth', '/audit', '/admin']);
 /** HTML documents the Worker sees first; all are public. Hashed bundles skip the Worker. */
 export const DOCUMENT_PATHS = new Set(['/', '/index.html', '/agent']);
+
+/**
+ * The log label of a path: its route-table key (a template keeps references out of logs), ``healthz``, ``document``,
+ * ``unknown_api`` or ``asset``. Never the raw path.
+ */
+export function routeLabel(pathname) {
+  if (pathname === '/healthz') return 'healthz';
+  if (API_ROUTES[pathname]) return pathname;
+  const template = templateOf(pathname);
+  if (template) return template;
+  if (DOCUMENT_PATHS.has(pathname)) return 'document';
+  return API_NAMESPACES.has(pathname) || API_PREFIXES.some(prefix => pathname.startsWith(prefix)) ? 'unknown_api' : 'asset';
+}
 
 /** Dispatch one request; ``store`` is the per-request D1 store and ``ctx`` the Worker context (for waitUntil). */
 export async function route(request, env, store, ctx) {

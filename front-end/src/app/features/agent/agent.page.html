@@ -87,7 +87,9 @@
         </div>
         <div class="box-body detail">
           <div class="status-bar">
-            <span #statusText id="intake-status" class="ar-chip" tabindex="-1">{{ statusLabel(d.status) }}</span>
+            <!-- The status moves received → in review → closed; the kind in the title (charge confirmed or not) never changes. -->
+            <span class="ar-field-label">{{ t().statusPrefix }}</span>
+            <span #statusText id="intake-status" class="ar-chip" [class.ar-chip-ok]="d.status === 'closed'" tabindex="-1">{{ statusLabel(d.status) }}</span>
             @if (d.status !== 'closed') {
               <button type="button" class="ar-btn status-action" (click)="advance(d)" [disabled]="busy()">{{ d.status === 'received' ? t().takeCase : t().closeReview }}</button>
             }
@@ -134,6 +136,8 @@
             </section>
           }
 
+          <app-message-thread viewer="agent" idPrefix="agent-messages" [thread]="thread()" [sending]="messageSending()"
+            [failed]="messageFailed()" [sent]="messagesSent()" (send)="sendMessage($event)" />
           <h3>{{ t().statement }}</h3>
           <p class="case-statement" [attr.lang]="d.language">{{ d.customer_statement }}</p>
 

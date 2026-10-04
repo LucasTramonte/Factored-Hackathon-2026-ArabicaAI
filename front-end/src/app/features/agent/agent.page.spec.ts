@@ -33,7 +33,8 @@ describe('AgentPage', () => {
   const el = () => fixture.nativeElement as HTMLElement;
 
   beforeEach(async () => {
-    service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'intakes', 'intakeDetail', 'setStatus', 'markSuggestion'], { roles: signal([]) });
+    service = jasmine.createSpyObj<AgentService>('AgentService', ['signIn', 'intakes', 'intakeDetail', 'setStatus', 'markSuggestion', 'messages', 'postMessage'], { roles: signal([]) });
+    service.messages.and.resolveTo({ status: 'received', can_post: true, items: [] });
     service.signIn.and.resolveTo(agentSession);
     cognito = jasmine.createSpyObj<CognitoService>('CognitoService', ['requestCode', 'submitCode', 'forget']);
     cognito.requestCode.and.resolveTo();
@@ -537,6 +538,35 @@ describe('AgentPage', () => {
       expect(statusText().textContent).toContain(t().chipClosed);
       expect(document.activeElement).toBe(statusText());
       el().remove();
+    });
+
+    it('the title names the kind (no charge confirmed), the status has its own label, and closing turns the thread read-only', async () => {
+      service.intakeDetail.and.resolveTo(detail(P1, { kind: 'incomplete' }));
+      service.setStatus.and.callFake(async (protocol, status) => ({ protocol, status, changed_at: '2026-10-02T10:00:00.000Z' }));
+      await loadAndOpen();
+      fixture.detectChanges();
+      expect(el().querySelector('#intake-detail-title')!.textContent).toContain('No charge confirmed');
+      expect(el().querySelector('.status-bar')!.textContent).toContain(t().statusPrefix);
+      expect(service.messages).toHaveBeenCalledOnceWith(P1);
+      service.messages.and.resolveTo({ status: 'closed', can_post: false, items: [] });
+      action()[0].click(); await fixture.whenStable(); fixture.detectChanges();
+      action()[0].click(); await fixture.whenStable(); fixture.detectChanges();
+      expect(service.messages).toHaveBeenCalledTimes(2);
+      expect(el().querySelector('.messages-readonly')?.textContent).toContain(t().messagesClosed);
+      expect(el().querySelector('#agent-messages-draft')).toBeNull();
+    });
+
+    it('the agent writes to the customer: one key per text, the thread read again, a 409 explained', async () => {
+      service.intakeDetail.and.resolveTo(detail(P1));
+      await loadAndOpen();
+      service.postMessage.and.resolveTo({ message_id: 'aaaaaaaa-1111-4111-8111-111111111111', author: 'agent', body: 'Hola', created_at: '2026-10-04T18:00:00.000Z' });
+      await page.sendMessage('Hola');
+      expect(service.postMessage.calls.mostRecent().args.slice(0, 2)).toEqual([P1, 'Hola']);
+      expect(page.messagesSent()).toBe(1);
+      expect(service.messages).toHaveBeenCalledTimes(2);
+      service.postMessage.and.rejectWith(new ApiError(409, 'x'));
+      await page.sendMessage('Otra');
+      expect(page.messageFailed()).toBe(t().messagesClosed);
     });
 
     it('disables the action while the change is pending', async () => {

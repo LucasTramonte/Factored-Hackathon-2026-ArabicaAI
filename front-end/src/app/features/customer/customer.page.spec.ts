@@ -7,7 +7,7 @@ import { LangService, errorText } from '../../shared/i18n/lang.service';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { AgentService } from '../agent/agent.service';
-import { Identity, IntakeReceipt, IntakeStart, Report, Role, ServiceTimes, Transaction } from '../../shared/models/intake.model';
+import { Identity, IntakeReceipt, IntakeStart, MessageThread, Report, Role, ServiceTimes, Transaction } from '../../shared/models/intake.model';
 
 /** The reviewed baseline as GET /intake/service-times serves it (migration 0027). */
 const TIMES: ServiceTimes = { basis: 'bank_history', version: '4e2a1b33eac4812d', published_on: '2026-10-04',
@@ -24,7 +24,7 @@ describe('CustomerPage', () => {
 
   beforeEach(async () => {
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['identities', 'signIn', 'signInWithToken', 'logout', 'transactions',
-      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed', 'sendFeedback', 'suggestions', 'answerSuggestions', 'serviceTimes'],
+      'startIntake', 'confirmIntake', 'handoffIntake', 'reports', 'requestUpdate', 'displayed', 'sendFeedback', 'suggestions', 'answerSuggestions', 'serviceTimes', 'messages', 'postMessage'],
       { client: signal(''), card: signal(null), roles: signal([]) });
     service.suggestions.and.resolveTo({ status: 'none', items: [], choice: null, chosen_transaction_id: null, answerable: false });
     service.identities.and.resolveTo([{ customer_id: 'demo-ana', display_name: 'Ana (demo)' },
@@ -1328,6 +1328,66 @@ describe('CustomerPage', () => {
       expect(second).toContain('11111111-2222-4333-8444-555555555555'); // no short code: the protocol
       expect(second).toContain(p.t().kindTechnical);
       expect(el.textContent).not.toContain(p.t().moreReports);
+    });
+
+    describe('messages with the agent (ADR-015)', () => {
+      const THREAD: MessageThread = { status: 'in_review', can_post: true, items: [
+        { message_id: 'aaaaaaaa-1111-4111-8111-111111111111', author: 'agent', body: '¿Recuerdas el comercio?', created_at: '2026-10-04T18:00:00.000Z' }] };
+      const openThread = async () => {
+        service.reports.and.resolveTo({ items: [report('incomplete', 'AR-AAAA-BBBB')], has_more: false });
+        service.messages.and.resolveTo(THREAD);
+        const { fixture, p, el } = await home();
+        el.querySelector<HTMLButtonElement>('.messages-btn')!.click();
+        await fixture.whenStable(); fixture.detectChanges();
+        return { fixture, p, el };
+      };
+
+      it('opens one report\'s thread from "Your reports" and shows the agent\'s question', async () => {
+        const { el, p } = await openThread();
+        expect(service.messages).toHaveBeenCalledOnceWith('99999999-8888-4777-8666-555555555555');
+        expect(el.querySelector('.messages-btn')!.getAttribute('aria-expanded')).toBe('true');
+        expect(el.querySelector('.message-agent')?.textContent).toContain('¿Recuerdas el comercio?');
+        expect(el.querySelector('.message-agent')?.textContent).toContain(p.t().messageAgent);
+      });
+
+      it('a retry of the same text reuses its key; new text gets a new key; a 409 says the report is closed', async () => {
+        const { p } = await openThread();
+        service.postMessage.and.rejectWith(new ApiError(503, 'x'));
+        await p.sendMessage('Fue el martes');
+        service.postMessage.and.resolveTo(THREAD.items[0]);
+        await p.sendMessage('Fue el martes');
+        const [first, retry] = service.postMessage.calls.allArgs();
+        expect(retry[2]).toBe(first[2], 'one key for one text');
+        expect(p.messagesSent()).toBe(1);
+        await p.sendMessage('Otra cosa');
+        expect(service.postMessage.calls.mostRecent().args[2]).not.toBe(first[2]);
+        service.postMessage.and.rejectWith(new ApiError(409, 'x'));
+        await p.sendMessage('Gracias');
+        expect(p.messageFailed()).toBe(p.t().messagesClosed);
+        expect(service.messages.calls.count()).toBeGreaterThan(1, 'the stored thread is read again after each post');
+      });
+    });
+
+    describe('validation errors appear where the click was, and focus the field to fix', () => {
+      it('no reason: the alert follows the Send button and the first reason gets focus; a short text focuses the text box', async () => {
+        const { fixture, p, el } = await home();
+        document.body.appendChild(el);
+        p.openChat(); fixture.detectChanges();
+        p.chatStatement = 'No reconozco este cargo.';
+        await p.send();
+        fixture.detectChanges(); await fixture.whenStable();
+        const alert = el.querySelector('#chat-error')!;
+        expect(alert.textContent).toContain(p.t().chatReasonValidation);
+        const send = el.querySelector('.chat-actions')!;
+        expect(send.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy('the alert comes after the Send button');
+        expect(document.activeElement).toBe(el.querySelector('.chat-reasons input'));
+        p.reason.set('not_mine'); p.chatStatement = 'corto';
+        await p.send();
+        fixture.detectChanges(); await fixture.whenStable();
+        expect(el.querySelector('#chat-error')!.textContent).toContain(p.t().chatValidationShort);
+        expect(document.activeElement).toBe(el.querySelector('#chat-statement'));
+        el.remove();
+      });
     });
 
     describe('after a fresh sign-in, each charge row follows its server report', () => {

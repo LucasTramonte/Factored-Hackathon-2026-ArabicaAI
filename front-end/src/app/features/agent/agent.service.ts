@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/http/api.service';
-import { AgentIntakeDetail, AgentIntakeList, AgentSession, IntakeTransition, Role, SuggestionMark, SuggestionMarkValue } from '../../shared/models/intake.model';
+import { AgentIntakeDetail, AgentIntakeList, AgentSession, IntakeTransition, MessageThread, ReportMessage, Role, SuggestionMark, SuggestionMarkValue } from '../../shared/models/intake.model';
 
 /** Agent calls: a separate session, read-only views and the one status step a person takes. Nothing refunds, blocks or decides. */
 @Injectable({ providedIn: 'root' })
@@ -31,5 +31,15 @@ export class AgentService {
   /** Mark the charge a customer confirmed from a suggestion as correct or wrong; the first mark stands (409 on a different one). */
   markSuggestion(protocol: string, mark: SuggestionMarkValue): Promise<SuggestionMark> {
     return this.api.request<SuggestionMark>('/agent/suggestion-mark', { protocol, mark });
+  }
+
+  /** The report's message thread with the customer (ADR-015). */
+  messages(protocol: string): Promise<MessageThread> {
+    return this.api.request<MessageThread>('/agent/intake-messages?protocol=' + encodeURIComponent(protocol));
+  }
+
+  /** Write to the customer; the same ``key`` on a retry stores one message (409 once the report is closed). */
+  postMessage(protocol: string, body: string, key: string): Promise<ReportMessage> {
+    return this.api.request<ReportMessage>('/agent/intake-messages', { protocol, body, idempotency_key: key });
   }
 }

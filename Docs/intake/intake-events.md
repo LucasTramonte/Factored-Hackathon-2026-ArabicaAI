@@ -197,3 +197,5 @@ node scripts/intake-kpis.mjs [--since 2026-10-01] [--until 2026-10-08T00:00:00Z]
 3. Whether `session_ref` should be a hash of the session id or a separate opaque token. Either is fine for the scorer; it must not be reversible to `customer_id` from the analytics export. *As implemented:* a separate random UUID per episode.
 
 These record what the Worker does; they are not a recorded team decision.
+
+**Messages (ADR-015) are not events.** A message between the agent and the customer is case content, like the statement. It lives in `handoff_messages` and is served only to the two parties. No event, export or log carries its text, and the Worker's structured logs (`back-end/src/log.js`) carry route labels, kinds and counts only.
