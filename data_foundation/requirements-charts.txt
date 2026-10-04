@@ -1,0 +1,5 @@
+# Charts for the intake decision-KPI baselines (data_foundation/scripts/build_intake_kpi_charts.py).
+# Same pinned stack as notebooks/ for pandas and matplotlib.
+pandas==3.0.6
+matplotlib==3.11.2
+seaborn==0.13.2

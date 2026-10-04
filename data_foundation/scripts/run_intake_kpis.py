@@ -89,7 +89,18 @@ def summarize(q: dict, customers: int, window: str) -> dict:
     for r in q['IK-05']:
         f = fam.setdefault(r['familiarity'], [0, 0])
         f[0] += r['fraud']; f[1] += r['transactions']
+    ce3 = {}
+    for r in q.get('IK-06', []):
+        c = ce3.setdefault('with_history' if r['ce3_like_history'] else 'without_history', [0, 0])
+        c[0] += r['fraud']; c[1] += r['transactions']
     return {
+        'ce3_like_history': None if not ce3 else {
+            'fraud_transactions': {k: {'fraud': v[0], 'transactions': v[1]} for k, v in ce3.items()},
+            'without_vs_with_history': relative_risk(ce3['without_history'][0], ce3['without_history'][1],
+                                                     ce3['with_history'][0], ce3['with_history'][1]),
+            'by_year': q['IK-06']},
+        'weekly': q.get('IK-07', []),
+        'quarterly': q['IK-01'],
         'window': window, 'quarters': len(quarters), 'complaints_in_trend_quarters': sum(n),
         'complaints_in_window': sum(r['complaints'] for r in q['IK-01']),
         'rates': rates,
