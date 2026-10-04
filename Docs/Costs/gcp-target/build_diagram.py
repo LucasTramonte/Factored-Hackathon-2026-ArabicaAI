@@ -82,7 +82,7 @@ box(1000, 710, 280, 110, "Cloud Run job · daily batch", "DuckDB: Bronze → Sil
 path([(1265, 708), (1265, 600), (1292, 600), (1292, 320), (1282, 320)], "loads the serving slice|(IAM auth)", lx=1175, ly=598)
 
 # Managed services outside the VPC
-box(1350, 470, 190, 100, "Vertex AI", "Gemini 3.5 Flash-Lite|global endpoint (no regional)|extracts facts only", fill="#eef6ff")
+box(1350, 470, 190, 100, "Vertex AI", "Gemini 3.5 Flash-Lite · us multi-region|reads the description into facts;|code picks the suggestions", fill="#eef6ff")
 path([(690, 492), (690, 645), (1445, 645), (1445, 572)], "model call (from the task route) · Private Google Access", dash=True, lx=1080, ly=639)
 box(1350, 710, 190, 90, "Cloud Storage · lake", "Bronze/Silver/Gold Parquet|CMEK · Silver/Gold kept 7 days")
 arrow(1280, 765, 1348, 765)
@@ -93,7 +93,7 @@ box(1350, 290, 190, 90, "Cloud KMS", "one customer key|SQL · lake (CMEK)")
 path([(700, 388), (700, 245), (740, 245), (740, 135), (1330, 135), (1330, 195), (1348, 195)], "structured logs", dash=True, lx=1040, ly=129)
 
 # Footer
-add('<text x="40" y="918" font-size="13" fill="#414d5c">Estimated $95.38/month at list price (Cloud Billing Catalog, '
+add('<text x="40" y="918" font-size="13" fill="#414d5c">Estimated $96.08/month at list price (Cloud Billing Catalog, '
     'us-central1, read 2026-10-04, free tiers not applied). Same volumes as the AWS target. Sizing and comparison: README.md here. '
     'Source: main.tf.</text>')
 add("</svg>")

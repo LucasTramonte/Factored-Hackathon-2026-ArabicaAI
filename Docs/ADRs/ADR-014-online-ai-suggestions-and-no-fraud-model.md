@@ -48,7 +48,7 @@ We also re-examined fraud detection. It is the most visible ML use case in the d
 2. **Turning it on is a pilot, and only in the demo environment, with synthetic customers.** ADR-012's third condition, 30 live episodes, can only be met by running the path. So it may be switched on in the demo environment as the pilot that collects those episodes:
    - each "I can't find it" report is assigned to an arm at random (50/50), and only arm B gets the extraction;
    - the decision rules fixed in the plan switch it off: any unsafe outcome; more than 5% failures over the last 50; more than 1 in 10 confirmed suggestions marked wrong by agents (with at least 20 reviewed); the report request's p95 at 2,000 ms or more;
-   - turning it on for real customers needs ADR-012's conditions measured on the pilot and a new decision.
+   - **the demo pilot does not satisfy ADR-012's third condition.** Team and reviewer sessions can't show how often real customers can't find a charge. The demo pilot tests the mechanics: failure rates, latency from the Worker, agent-marked correctness on authored situations. Real-customer use is measured only in a production pilot whose population is the bank's signed-in customers who start a report, with numerator the reports ending in "I can't find it", over at least 30 started reports in a stated event-time window, by language, with abandoned reports counted in the denominator. Turning it on for real customers needs that measurement and a new decision.
 3. **The online model is the evaluated one, and only until it retires.** That is v1, `openai/gpt-oss-20b-maas` on Vertex AI with `reasoning_effort: "low"` and the registered prompt. The Worker refuses to call it after its configured retirement date (2026-10-21). After that the path falls back on its own. A successor (the plan recommends Gemini 3.5 Flash-Lite) is a new version: an isolated build, re-measured development triggers, a new held-out set, a registration and a person's tag.
 4. **Credential: Workload Identity Federation, no Google key** (ADR-012 decision 4 as revised). The Worker signs a short-lived JWT, exchanges it at Google's STS, and impersonates a service account that holds only Vertex AI User.
 5. **No transaction-level fraud model.** It isn't defensible on this data:
@@ -75,7 +75,7 @@ Prices are list prices from the Cloud Billing Catalog API, read 2026-10-04. "Per
 - **+** It adds 0 ms to the customer's request and costs under 1 cent a day at the dataset bank's volume.
 - **+** The pilot produces the evidence ADR-012 asked for: use rate, confirmation rate and agent-marked correctness, by randomized arm.
 - **+** Saying no to fraud is itself a result: the data can't support it, and the record shows why.
-- **−** The text goes to Google's `global` endpoint, which doesn't pin a region. That is fine for synthetic customers; for real data a bank needs Vertex's zero-retention exception, and possibly a regional deployment.
+- **−** v1 runs on Google's `global` endpoint, which doesn't pin where text is processed. That is fine for synthetic customers. The successor runs in the `us` multi-region, which keeps text in the United States. For real data a bank also needs Vertex's zero-retention exception, and a self-deployed regional endpoint if the text must stay in Latin America.
 - **−** v1 retires on 2026-10-21. Until a successor is registered, the path turns itself off on that date.
 - **−** The JavaScript port is new code reading the model's answer. Its parity with the evaluated Python is proven only on the development split and malformed cases. Manoella approves it (ADR-006 decision 5).
 - **−** A demo pilot measures team and reviewer sessions, not customers.
@@ -83,8 +83,8 @@ Prices are list prices from the Cloud Billing Catalog API, read 2026-10-04. "Per
 ## Alternatives considered
 
 - **Keep the path offline until real customers exist.** It is safe, but it never produces the evidence ADR-012's third condition needs. Rejected: the pilot is the measurement. Reopen if a reviewer finds the off switch or the decision rules insufficient.
-- **Use the model for the whole conversation.** It would add 1.6–2.6 s to every turn and a failure mode to every step, for a reading need the guided flow doesn't have (ADR-012). Rejected. Reopen if a live path appears that must be decided from free text.
-- **A fraud model on `fraud_score` and transaction fields.** Rejected for the reasons in decision 5. Reopen if the organizers confirm that `fraud_score` is computed before the label and supply a label timestamp, and if a bank defines the review capacity and the cost of each error.
+- **Use the model for the whole conversation.** It would add 1.6–2.6 s to every turn and a failure mode to every step, for a reading need the guided flow doesn't have (ADR-012). Rejected: no measured benefit on any live path. Reopen if a live path appears that must be decided from free text.
+- **A fraud model on `fraud_score` and transaction fields.** Rejected: no label timestamp, a likely leaking feature, and no product decision to drive (decision 5). Reopen if the organizers confirm that `fraud_score` is computed before the label and supply a label timestamp, and if a bank defines the review capacity and the cost of each error.
 - **Shadow mode** (the model reads, the customer sees nothing). Rejected: it pays for tokens and produces neither a customer benefit nor the agent-marked labels the pilot gives. Reopen if the bank forbids customer-facing suggestions.
 
 ## Implementation notes

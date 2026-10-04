@@ -17,7 +17,7 @@ terraform {
 variable "project_id" { type = string }
 variable "region" {
   type    = string
-  default = "us-central1" # database, API, batch and lake; the model is on the global endpoint (README)
+  default = "us-central1" # database, API, batch and lake; the model is in the `us` multi-region (README)
 }
 variable "domain" { type = string }
 variable "api_image" { type = string }   # Node 22 API container (the Worker's routes, store on PostgreSQL)
@@ -33,10 +33,11 @@ data "google_project" "current" {
 }
 
 locals {
-  # The extractor's successor (ADR-012, AI suggestion plan). Gemini 3.5 Flash-Lite has no regional endpoint
-  # (404 in 9 regions, 2026-10-04), so the call goes to `global`, which doesn't pin where text is processed.
+  # The extractor's successor (ADR-012, AI suggestion plan). Gemini 3.5 Flash-Lite has no single-region endpoint
+  # (404 in 9 regions, 2026-10-04) but answers in the `us` multi-region (aiplatform.us.rep.googleapis.com), which keeps
+  # customer text inside the United States; `global` would pin nothing.
   vertex_model    = "gemini-3.5-flash-lite"
-  vertex_location = "global"
+  vertex_location = "us"
   agents = {
     gcs = "service-${data.google_project.current.number}@gs-project-accounts.iam.gserviceaccount.com"
     sql = "service-${data.google_project.current.number}@gcp-sa-cloud-sql.iam.gserviceaccount.com"
@@ -305,6 +306,9 @@ resource "google_storage_bucket_iam_member" "site_origin" {
   bucket = google_storage_bucket.site.name
   role   = "roles/storage.objectViewer"
   member = "serviceAccount:${local.agents.lb}" # private-origin access for the load balancer
+
+  # The load balancer's service agent exists once a backend bucket does.
+  depends_on = [google_compute_backend_bucket.site]
 }
 
 resource "google_compute_backend_bucket" "site" {

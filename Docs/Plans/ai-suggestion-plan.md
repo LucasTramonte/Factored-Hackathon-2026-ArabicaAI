@@ -34,8 +34,8 @@ We listed the Model Garden on project `factored-hackathon-arabica-ai` and sent e
 | `openai/gpt-oss-20b-maas` (extractor v1) | global | 959 / 1,535 ms | 5/5 | The evaluated model. Already off the Model Garden listing; retires 2026-10-21 |
 | `openai/gpt-oss-120b-maas`, low reasoning | global | 2,662 ms, then a timeout over 30 s | 1/1 answered | Failed on the second call in two separate tries |
 | `google/gemma-4-26b-a4b-it-maas` | global only | 1,341 / 1,680 ms | 5/5 | Open weights; could later be self-hosted |
-| `gemini-3.5-flash-lite`, `thinkingBudget: 0` requested | global only | 1,581 / 1,854 ms | 5/5 | Newest Flash-Lite; schema-enforced JSON output |
-| `gemini-3.1-flash-lite`, `thinkingBudget: 0` requested | global only | 1,873 / 2,171 ms | 5/5 | |
+| `gemini-3.5-flash-lite`, `thinkingBudget: 0` requested | global; also `us` and `eu` multi-regions (one call each, HTTP 200, about 2.0 s) | 1,581 / 1,854 ms | 5/5 | Newest Flash-Lite; schema-enforced JSON output |
+| `gemini-3.1-flash-lite`, `thinkingBudget: 0` requested | global (multi-regions not tried) | 1,873 / 2,171 ms | 5/5 | |
 | `gemini-2.5-flash-lite`, `thinkingBudget: 0` | us-central1 | 1,347 / 1,733 ms | 5/5 | The only candidate we could pin to a region, but a reviewer cites Google's lifecycle page retiring it on 2026-10-20 (we couldn't load that page to confirm). Not available in `southamerica-east1` |
 
 **Prices:**
@@ -56,7 +56,7 @@ We listed the Model Garden on project `factored-hackathon-arabica-ai` and sent e
    - **Lifetime.** It is Google's own line, so it is less likely to disappear in weeks the way the partner open-model endpoint did.
    - **A different family from the test writer.** Our frozen messages were written by an OpenAI model, so a Gemini reader also tests whether our result depended on a shared style (`EVALUATION.md`, section 8).
 
-   Take `gemini-3.5-flash-lite` on the global endpoint. We found no regional endpoint for it in 9 regions tried (us-central1, us-east1, us-east4, us-east5, us-south1, us-west1, us-west4, northamerica-northeast1, southamerica-east1, europe-west4; 404 on each, 2026-10-04). `gemini-2.5-flash-lite` is regional but is reported to retire on 2026-10-20, so it can't be the successor. **A bank that requires its customers' text to stay in one region has no Flash-Lite option today.** It would self-deploy Gemma or gpt-oss weights on a regional Vertex endpoint (a dedicated GPU, roughly $800 a month always on; ADR-004 section 5 has the break-even) or wait for a regional Flash-Lite.
+   Take `gemini-3.5-flash-lite` in the `us` multi-region (`aiplatform.us.rep.googleapis.com`, location `us`), which keeps customer text inside the United States. It also answers in `eu` and on the global endpoint; none of the 9 single regions we tried serves it (us-central1, us-east1, us-east4, us-east5, us-south1, us-west1, us-west4, northamerica-northeast1, southamerica-east1, europe-west4; 404 on each, 2026-10-04). `gemini-2.5-flash-lite` has single-region endpoints but is reported to retire on 2026-10-20, so it can't be the successor. **Nothing serves a Flash-Lite inside Latin America today.** A bank that requires that would self-deploy Gemma or gpt-oss weights on a regional Vertex endpoint (a dedicated GPU, roughly $800 a month always on; ADR-004 section 5 has the break-even).
 3. **The comparator: Gemma 4 26B.** It is open weights, so it keeps a self-hosting exit if a bank wants the model inside its own network.
 4. **Not gpt-oss-120b.** It timed out in both probes. We would need a reason to retry it.
 

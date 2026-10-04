@@ -67,9 +67,9 @@
 <text x="1175" y="612" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">(IAM auth)</text>
 <rect x="1350" y="470" width="190" height="100" rx="8" fill="#eef6ff" stroke="#232f3e" stroke-width="1.6"/>
 <text x="1445.0" y="513.0" text-anchor="middle" font-size="15" font-weight="600" fill="#16191f">Vertex AI</text>
-<text x="1445.0" y="533.0" text-anchor="middle" font-size="12" fill="#414d5c">Gemini 3.5 Flash-Lite</text>
-<text x="1445.0" y="548.0" text-anchor="middle" font-size="12" fill="#414d5c">global endpoint (no regional)</text>
-<text x="1445.0" y="563.0" text-anchor="middle" font-size="12" fill="#414d5c">extracts facts only</text>
+<text x="1445.0" y="533.0" text-anchor="middle" font-size="12" fill="#414d5c">Gemini 3.5 Flash-Lite · us multi-region</text>
+<text x="1445.0" y="548.0" text-anchor="middle" font-size="12" fill="#414d5c">reads the description into facts;</text>
+<text x="1445.0" y="563.0" text-anchor="middle" font-size="12" fill="#414d5c">code picks the suggestions</text>
 <polyline points="690,492 690,645 1445,645 1445,572" fill="none" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)" stroke-dasharray="6 5"/>
 <text x="1080" y="639" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">model call (from the task route) · Private Google Access</text>
 <rect x="1350" y="710" width="190" height="90" rx="8" fill="#ffffff" stroke="#232f3e" stroke-width="1.6"/>
@@ -91,5 +91,5 @@
 <text x="1445.0" y="363.0" text-anchor="middle" font-size="12" fill="#414d5c">SQL · lake (CMEK)</text>
 <polyline points="700,388 700,245 740,245 740,135 1330,135 1330,195 1348,195" fill="none" stroke="#414d5c" stroke-width="1.8" marker-end="url(#a)" stroke-dasharray="6 5"/>
 <text x="1040" y="129" text-anchor="middle" font-size="12" fill="#232f3e" paint-order="stroke" stroke="#ffffff" stroke-width="4">structured logs</text>
-<text x="40" y="918" font-size="13" fill="#414d5c">Estimated $95.38/month at list price (Cloud Billing Catalog, us-central1, read 2026-10-04, free tiers not applied). Same volumes as the AWS target. Sizing and comparison: README.md here. Source: main.tf.</text>
+<text x="40" y="918" font-size="13" fill="#414d5c">Estimated $96.08/month at list price (Cloud Billing Catalog, us-central1, read 2026-10-04, free tiers not applied). Same volumes as the AWS target. Sizing and comparison: README.md here. Source: main.tf.</text>
 </svg>
