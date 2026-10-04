@@ -28,6 +28,9 @@ const CEILING = {
   // Every session start and logout also writes one auth_events row in its existing batch (migration 0012): one query,
   // 1 read and 2 writes (the row and auth_events_time), no round trip; logout's insert also checks the session (ADR-004).
   login: [6, 10, 6, 3],
+  // First email sign-in inserts notification_targets row + TEXT primary-key index; a warm upsert writes one row.
+  // Existing-cost fixture qualification, not a production change (ADR-004, 2026-10-04 Task 4a note).
+  emailLoginCold: [6, 10, 7, 3],
   list: [2, 25, 0, 2],
   // GET /transactions?lang= (ADR-009): list plus one charge_views insert (row and primary key), one more round trip.
   listView: [3, 26, 2, 3],
@@ -186,8 +189,19 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
   const measured = {};
   measured.identities = within('identities', (await c.call('/demo/identities')).metrics);
   measured.login = within('login', (await c.call('/demo/session', { customer_id: 'demo-ana' })).metrics);
-  measured.emailLogin = within('login', (await client({ authorization: 'Bearer ' + await idToken('demo-ana') })
-    .call('/auth/session', {})).metrics);
+  // This bounded cohort identity has no email sign-in in earlier suites; admin act-as never stores its address.
+  // Assert absence so a warm fixture cannot silently hide the first-login write. The demo login above already
+  // purges the expired seed session; neither measured email login sends a prior cookie.
+  const { withIntakeStore } = await import('../../scripts/intake-store.mjs');
+  await withIntakeStore({ config: config() }, async store => assert.equal(await store.findNotificationTarget('CLI-COHORT-2'), null));
+  const emailLogin = async () => client({ authorization: 'Bearer ' + await idToken('CLI-COHORT-2') }).call('/auth/session', {});
+  const cold = await emailLogin(); assert.equal(cold.status, 200);
+  measured.emailLoginCold = within('emailLoginCold', cold.metrics);
+  assert.equal(cold.metrics.rows_written, 7, 'first notification target writes its row and primary-key index');
+  await withIntakeStore({ config: config() }, async store => assert.ok(await store.findNotificationTarget('CLI-COHORT-2')));
+  const warm = await emailLogin(); assert.equal(warm.status, 200);
+  measured.emailLoginWarm = within('login', warm.metrics);
+  assert.equal(warm.metrics.rows_written, 6, 'existing notification target rewrites only its row');
   measured.list = within('list', (await c.call('/transactions')).metrics);
   measured.create = within('create', (await c.call('/cases', { transaction_id: 'demo-tx-001',
     customer_statement: 'Budget probe: I do not recognize this charge.', customer_confirmed: true,
