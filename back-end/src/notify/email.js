@@ -9,6 +9,19 @@ const unb64 = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
 const utf8b64 = text => b64(new TextEncoder().encode(text));
 /** Base64 in 76-character lines, as MIME bodies require. */
 const wrap = text => text.replace(/.{1,76}/g, '$&\r\n');
+/**
+ * RFC 2047 header value: ``=?UTF-8?B?…?=`` words of at most 75 characters (so at most 45 UTF-8 bytes each, never
+ * splitting a character), folded with CRLF and a space between words.
+ */
+export function encodedWords(text) {
+  const words = []; let chunk = '';
+  for (const ch of text) {
+    if (new TextEncoder().encode(chunk + ch).length > 45) { words.push(chunk); chunk = ''; }
+    chunk += ch;
+  }
+  words.push(chunk);
+  return words.map(w => `=?UTF-8?B?${utf8b64(w)}?=`).join('\r\n ');
+}
 
 /**
  * A raw RFC 5322 message: multipart/related holding a multipart/alternative (text, html) and the inline images.
@@ -18,7 +31,7 @@ export function mime({ from, to, subject, text, html, inline }) {
   const rel = 'rel-arabicaai', alt = 'alt-arabicaai';
   const part = (headers, body) => `${headers}\r\nContent-Transfer-Encoding: base64\r\n\r\n${wrap(body)}`;
   return [
-    `From: ${from}`, `To: ${to}`, `Subject: =?UTF-8?B?${utf8b64(subject)}?=`, 'MIME-Version: 1.0',
+    `From: ${from}`, `To: ${to}`, `Subject: ${encodedWords(subject)}`, 'MIME-Version: 1.0',
     `Content-Type: multipart/related; boundary="${rel}"`, '',
     `--${rel}`, `Content-Type: multipart/alternative; boundary="${alt}"`, '',
     `--${alt}`, part('Content-Type: text/plain; charset=UTF-8', utf8b64(text)),

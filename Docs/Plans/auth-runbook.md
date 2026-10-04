@@ -49,7 +49,7 @@ back-end/scripts/cognito/setup.sh
 
 Idempotent. It creates or finds the pool `arabicaai-demo`, the immutable attribute `custom:customer_id`, the public app client `arabicaai-web` (no secret, `USER_AUTH` with `EMAIL_OTP`, user-existence errors hidden) and the four groups, then prints three values.
 
-**The sign-in code email.** The pool sends through SES (`EmailSendingAccount` `DEVELOPER`, sender `Arabica AI <lucastramonte3@gmail.com>`, set by hand on 2026-10-04 after production access). The code email itself is branded with `back-end/scripts/cognito/otp-email.html` (logo, the code large in a monospace box, Spanish, Portuguese and English): a person applies it once with `back-end/scripts/cognito/otp-email.sh <pool id>`. Cognito uses the MFA message template for passwordless codes, so the script sets MFA to `OPTIONAL` with that template; nobody has an MFA preference, so sign-in keeps its single code. Email clients run no scripts, so there is no copy button: the code is large and selectable, and Apple Mail and Safari autofill it from the message.
+**The sign-in code email.** The pool sends through SES (`EmailSendingAccount` `DEVELOPER`, sender `Arabica AI <a team member's verified address>`, set by hand on 2026-10-04 after production access; the address itself is not committed, issue #70). The code email itself is branded with `back-end/scripts/cognito/otp-email.html` (logo, the code large in a monospace box, Spanish, Portuguese and English): a person applies it once with `back-end/scripts/cognito/otp-email.sh <pool id>`. Cognito uses the MFA message template for passwordless codes, so the script sets MFA to `OPTIONAL` with that template; nobody has an MFA preference, so sign-in keeps its single code. Email clients run no scripts, so there is no copy button: the code is large and selectable, and Apple Mail and Safari autofill it from the message.
 
 ## 5. Configure the Worker
 
@@ -76,7 +76,7 @@ sh back-end/scripts/cognito/enroll.sh <email> <customer_id> admin     # team or 
 - `custom:customer_id` is immutable. Rerunning with a different id refuses; to re-map, remove the user (section 9) and enrol again.
 - Groups only add up: enrolling an existing user in `admin` keeps `customer` and `agent`.
 - The customer id must already be loaded in remote D1 (the fictitious seed or the cohort), or sign-in answers 403.
-- Report emails reach any address: SES production access was granted (checked 2026-10-04, `ProductionAccessEnabled` true, 50,000 a day). No recipient verification is needed any more.
+- Report emails may be sent to any address: SES production access was granted (checked 2026-10-04, `ProductionAccessEnabled` true, 50,000 a day), so recipients no longer need SES verification. Delivery still depends on the sender (section 5) and on the recipient's spam filter.
 
 **Fictitious identities.** `demo-ana` (Roberto), `demo-bruno` (Lucas), `demo-carla` (Manoella), and `demo-diego`, `demo-elena`, `demo-marco` (evaluators), each with charges shaped for every report reason and the urgency lane. Load them with `npx wrangler d1 execute arabica-intake-demo --remote --file seeds/seed_fictitious.sql` from `back-end/` (idempotent upserts).
 

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { encrypt, decrypt, mime, sendEmail } from '../../src/notify/email.js';
+import { encodedWords, encrypt, decrypt, mime, sendEmail } from '../../src/notify/email.js';
 import { LOGO_CID, LOGO_PNG_BASE64 } from '../../src/notify/logo.js';
 import { STATUS_TEXT, render } from '../../src/notify/templates.js';
 
@@ -98,6 +98,15 @@ test('with an inline image the message goes as raw MIME: text, html and the cid 
   assert.match(raw, new RegExp(`Content-Type: image/png\\r\\nContent-ID: <${LOGO_CID}>\\r\\nContent-Disposition: inline`));
   assert.equal(raw.split(`Content-ID: <${LOGO_CID}>`)[1].split('\r\n--rel-arabicaai--')[0].split('\r\n\r\n')[1].replace(/\r\n/g, ''), LOGO_PNG_BASE64);
   for (const line of raw.split('\r\n')) assert.ok(line.length <= 998, 'line length');
+  // RFC 2047: no encoded-word over 75 characters, folding between words, multibyte characters never split.
+  const long = 'Recibimos tu reporte AR-ABCD-1234, una notificación más larga de lo habitual ñandú 日本語';
+  const folded = encodedWords(long);
+  const parts = folded.split('\r\n ');
+  assert.ok(parts.length > 1);
+  for (const w of parts) { assert.match(w, /^=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=$/); assert.ok(w.length <= 75, w); }
+  assert.equal(parts.map(w => Buffer.from(w.slice(10, -2), 'base64').toString('utf8')).join(''), long);
+  assert.equal(encodedWords('a'.repeat(46)).split('\r\n ').length, 2);
+  assert.equal(encodedWords('a'.repeat(45)), `=?UTF-8?B?${Buffer.from('a'.repeat(45)).toString('base64')}?=`);
   assert.ok(mime({ from: 'a', to: 'b', subject: 'ñ', text: 'ñ', html: null, inline: [] }).endsWith('--rel-arabicaai--\r\n'));
 });
 

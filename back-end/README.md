@@ -189,7 +189,7 @@ To enrol a team member or an evaluator (an admin also needs a loaded customer id
 sh back-end/scripts/cognito/enroll.sh <email> <customer_id> admin
 ```
 
-The six fictitious identities are `demo-ana`, `demo-bruno`, `demo-carla`, `demo-diego`, `demo-elena` and `demo-marco`. Report emails reach any enrolled address: SES production access is on ([auth runbook](../Docs/Plans/auth-runbook.md)).
+The six fictitious identities are `demo-ana`, `demo-bruno`, `demo-carla`, `demo-diego`, `demo-elena` and `demo-marco`. Report emails may be sent to any enrolled address, since SES production access is on; whether they are delivered depends on the sender's domain policy and the recipient's filters ([auth runbook](../Docs/Plans/auth-runbook.md)).
 
 ## Operator scripts: idle closure and event export
 
