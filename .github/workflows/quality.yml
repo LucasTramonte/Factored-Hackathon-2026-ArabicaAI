@@ -74,7 +74,7 @@ jobs:
 
       - name: Check the online parity fixture on Python 3.12
         if: steps.scope.outputs.python == 'true'
-        run: python -m pytest evals/intake/test_online_parity.py -q
+        run: python -m unittest evals.intake.test_online_parity -v  # stdlib only; the 3.12 interpreter has no pytest
 
   web:
     runs-on: ubuntu-latest
