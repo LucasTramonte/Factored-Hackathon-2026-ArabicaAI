@@ -25,7 +25,9 @@ function setup(before = '~') {
   const db = new DatabaseSync(':memory:'); db.exec('PRAGMA foreign_keys=ON');
   const dir = new URL('../../migrations/', import.meta.url);
   for (const file of readdirSync(dir).sort().filter(f => f < before)) db.exec(readFileSync(new URL(file, dir), 'utf8'));
-  db.exec(readFileSync(new URL('../../seeds/seed_fictitious.sql', import.meta.url), 'utf8'));
+  const seed = readFileSync(new URL('../../seeds/seed_fictitious.sql', import.meta.url), 'utf8');
+  // The seed's bank-flag updates need migration 0023 (ADR-011); an older schema loads the charges without them.
+  db.exec('0023' < before ? seed : seed.replace(/^UPDATE transactions SET bank_flagged=1 .*$/gm, ''));
   const store = createStore({ prepare: sql => ({ bind: (...p) => ({ all: () => ({ results: db.prepare(sql).all(...p) }) }) }),
     batch: async statements => { db.exec('BEGIN'); try { const r = statements.map(s => s.all()); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } } });
   let cookie = '';
@@ -111,6 +113,8 @@ test('migration 0014 admits English and keeps every episode, foreign key and ind
   const { db, store, call } = setup(MIGRATION);
   // Today's start writes the reason and its source (0016, 0017, ADR-010): add them to fill the old table, drop them to restore the pre-0014 shape.
   const reason = ['0016_report_reason.sql', '0017_reason_source.sql'].map(f => readFileSync(new URL('../../migrations/' + f, import.meta.url), 'utf8')).join('\n');
+  // Today's confirm reads the bank flag (0023, ADR-011); transactions are outside what 0014 rebuilds.
+  db.exec(readFileSync(new URL('../../migrations/0023_bank_flag.sql', import.meta.url), 'utf8'));
   db.exec(reason);
   // Today's session insert writes the admin mark (0021, ADR-007 decision 10) and today's session read the acting admin
   // (0022); sessions are outside what 0014 rebuilds.

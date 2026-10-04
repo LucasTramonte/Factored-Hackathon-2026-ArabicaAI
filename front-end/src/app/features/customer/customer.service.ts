@@ -3,7 +3,7 @@ import { ApiService } from '../../core/http/api.service';
 import { LangService } from '../../shared/i18n/lang.service';
 import type { SessionState } from '../../shared/models/intake.model';
 import { ContextCard, CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeReceipt, IntakeStart, IntakeStartBody,
-  ReportList, Role, TransactionList } from '../../shared/models/intake.model';
+  ReportList, Role, TransactionList, AlertResponse } from '../../shared/models/intake.model';
 
 /** Customer calls: email sign-in (simulated in local development), own charges and the guided intake. */
 @Injectable({ providedIn: 'root' })
@@ -42,6 +42,16 @@ export class CustomerService {
   /** Admins only: replace the session with one for ``customerId``; the response is a customer session (``admin_act_as``). */
   actAs(customerId: string): Promise<CustomerSession> {
     return this.api.request<CustomerSession>('/admin/act-as', { customer_id: customerId });
+  }
+
+  /** The proactive alert (ADR-011): at most one bank-flagged charge of this customer, not yet answered or reported. */
+  alert(): Promise<AlertResponse> {
+    return this.api.request<AlertResponse>('/alerts');
+  }
+
+  /** Answer the alert once: ``mine`` (recognized) or ``report`` (opening the guided report); the first answer stands. */
+  answerAlert(transactionId: string, answer: 'mine' | 'report'): Promise<unknown> {
+    return this.api.request('/alerts/answer', { transaction_id: transactionId, answer });
   }
 
   /** Revoke the browser's customer session cookie (always 204). */

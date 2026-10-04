@@ -4,6 +4,8 @@
   "title": "Intake API response contracts",
   "description": "Response bodies the Angular client relies on. back-end/test validates every integration-test response against these definitions, so a change here and in the Worker must land together.",
   "$defs": {
+    "proactiveAlert": {"description": "GET /alerts (ADR-011): at most one bank-flagged charge of the session customer, not yet answered or reported.", "type": "object", "additionalProperties": false, "required": ["alert"], "properties": {"alert": {"type": ["object", "null"], "additionalProperties": false, "required": ["transaction_id", "occurred_at", "source_occurred_at", "merchant_name", "amount", "currency"], "properties": {"transaction_id": {"type": "string", "minLength": 1}, "occurred_at": {"type": ["string", "null"]}, "source_occurred_at": {"type": ["string", "null"]}, "merchant_name": {"type": "string", "minLength": 1}, "amount": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$"}, "currency": {"type": "string", "pattern": "^[A-Z]{3}$"}}}}},
+    "alertAnswer": {"description": "POST /alerts/answer (ADR-011): the stored first answer.", "type": "object", "additionalProperties": false, "required": ["transaction_id", "answer", "answered_at"], "properties": {"transaction_id": {"type": "string", "minLength": 1}, "answer": {"type": "string", "pattern": "^(mine|report)$"}, "answered_at": {"type": "string", "minLength": 1}}},
     "intakeStart": {
       "type": "object",
       "additionalProperties": false,

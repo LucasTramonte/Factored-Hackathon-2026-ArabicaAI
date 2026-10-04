@@ -255,8 +255,34 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
 
     /** Read only the live owner's evidence; a missing and foreign transaction are indistinguishable. */
     findOwnedTransaction: (customerId, transactionId) => first(
-      'SELECT transaction_id,occurred_at,source_occurred_at,merchant_name,amount,currency FROM transactions '
+      'SELECT transaction_id,occurred_at,source_occurred_at,merchant_name,amount,currency,bank_flagged FROM transactions '
       + 'WHERE customer_id=? AND transaction_id=?', customerId, transactionId),
+    /**
+     * The proactive alert (ADR-011): the customer's newest bank-flagged charge that this kind of answerer hasn't answered
+     * and that has no report yet (any case on it, open or closed), or null. Reads only the customer's own charges.
+     */
+    findProactiveAlert: (customerId, answeredBy) => first(
+      'SELECT t.transaction_id,t.occurred_at,t.source_occurred_at,t.merchant_name,t.amount,t.currency FROM transactions t '
+      + 'WHERE t.customer_id=? AND t.bank_flagged=1 '
+      + 'AND NOT EXISTS(SELECT 1 FROM proactive_answers a WHERE a.customer_id=t.customer_id AND a.transaction_id=t.transaction_id AND a.answered_by=?) '
+      + 'AND NOT EXISTS(SELECT 1 FROM cases c WHERE c.customer_id=t.customer_id AND c.transaction_id=t.transaction_id) '
+      + 'ORDER BY t.occurred_at DESC, t.source_occurred_at DESC, t.transaction_id LIMIT 1', customerId, answeredBy),
+    /**
+     * Record one answer to an alert, only on the customer's own bank-flagged charge; the first answer stands (a replay
+     * changes nothing). Resolves the stored ``{ answer, answered_at }``, or null when the charge isn't the customer's
+     * flagged one.
+     */
+    answerProactiveAlert: async ({ customerId, transactionId, answeredBy, answer, now }) => {
+      const [, read] = await batch([
+        ['INSERT INTO proactive_answers(customer_id,transaction_id,answered_by,answer,answered_at) SELECT ?,?,?,?,? '
+          + 'WHERE EXISTS(SELECT 1 FROM transactions WHERE customer_id=? AND transaction_id=? AND bank_flagged=1) '
+          + 'ON CONFLICT(customer_id,transaction_id,answered_by) DO NOTHING',
+          customerId, transactionId, answeredBy, answer, now, customerId, transactionId],
+        ['SELECT answer,answered_at FROM proactive_answers WHERE customer_id=? AND transaction_id=? AND answered_by=?',
+          customerId, transactionId, answeredBy]
+      ]);
+      return read?.results?.[0] ?? null;
+    },
     /**
      * Whether this customer has a complete report on the charge that no person has closed yet, acknowledged or still
      * pending within one session lifetime. The confirm batch repeats this check atomically (``reserveIntakeHandoff``); this read answers fast. Reads only
