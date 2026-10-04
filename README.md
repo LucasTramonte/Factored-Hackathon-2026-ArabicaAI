@@ -8,7 +8,7 @@ The data is a synthetic LATAM banking dataset. Descriptive counts from it are no
 
 ![Deployed architecture: Angular, Cloudflare Worker and D1 with Cognito email sign-in and SES sandbox notifications, deployed from GitHub Actions after CI; a read-only S3, Bronze, Silver, quality and Gold batch produces a reviewed D1 seed. The offline evaluation calls Vertex AI and ran once on the frozen set; the online extractor is off. The Lambda and PostgreSQL AWS target was never deployed.](Docs/Evidence/diagrams/current-workflow.png)
 
-*Deployed state: main `a47b2e1`, Worker `d8da20c6`, deployed 2026-10-04 by the GitHub Actions deploy workflow, D1 migrations 0001–0023, extractor off. The latest release tag is [v0.2.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.2.0); #87–#106 and #110 are deployed but not yet tagged. Solid paths are deployed; dashed paths are the offline evaluation, which ran once on the frozen set on 2026-10-04 (the diagram's label predates that run).*
+*Deployed state: release [v0.3.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.3.0) (`0a743bb`, Worker `22e99b3f`, D1 migrations 0001–0025), deployed 2026-10-04 by the GitHub Actions deploy workflow. AI suggestions on "I can't find it" are on in the demo from the deploy that carries [ADR-012 amendment 1](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3); later deploys are in the [release history](Docs/releases/README.md). Solid paths are deployed; dashed paths are the offline evaluation, which ran once on the frozen set on 2026-10-04 (the diagram's label predates that run).*
 
 ## Contents
 

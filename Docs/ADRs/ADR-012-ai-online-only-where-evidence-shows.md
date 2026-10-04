@@ -1,6 +1,6 @@
 # ADR-012 — AI online only where the evidence shows the deterministic flow falls short: not yet
 
-- **Status:** Proposed
+- **Status:** Proposed; amended 2026-10-04 ([amendment 1](#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3): AI suggestions on in the demo)
 - **Date:** 2026-10-04
 - **Deciders:** Lucas, Roberto, Manoella
 
@@ -61,7 +61,7 @@ No step needs the service to understand free text in order to act: the charge co
 
 ## Decision
 
-1. **No model online now. Every live path stays deterministic.** The extractor stays offline (evaluation, ADR-006) and behind the shadow switch, which is off (`INTAKE_AI_ENABLED`, `APPROVED_EXTRACTOR = null`).
+1. **No model online now. Every live path stays deterministic.** *(Superseded for the path in decision 2 by [amendment 1](#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3): on in the demo since 2026-10-04.)* The extractor stays offline (evaluation, ADR-006) and behind the shadow switch, which is off (`INTAKE_AI_ENABLED`, `APPROVED_EXTRACTOR = null`).
 2. **The one candidate path is named in advance:** "I can't find the charge" with details. If it qualifies, the model reads only the customer's details text and turns it into the fixed vocabulary (amount, date, currency, merchant). Deterministic code then **suggests** up to three of the customer's own charges that fit those facts. The customer confirms one or keeps the handoff. The model never sees transactions, never picks a charge, never writes to the store, and never decides an action.
 3. **It goes online only when all of these hold**, measured and recorded before the switch is turned on:
    - the frozen comparison has run once (ADR-006), and the extractor is at least as correct as the checklist on held-out cases, with 0 unsafe;
@@ -99,6 +99,46 @@ No step needs the service to understand free text in order to act: the charge co
 - **+** The learned component still meets the brief's requirement offline: a pre-registered comparison against the checklist on held-out cases.
 - **−** The demo shows AI in the offline evaluation, not in the live conversation. That is a deliberate choice, and the reason is stated.
 - **−** "I can't find it" stays a manual match for a person until the conditions hold.
+
+## Amendment 1 (2026-10-04): AI suggestions on in the demo, before condition 3
+
+**Decision.** The path in decision 2, "I can't find the charge" with details, is switched on in the deployed demo (`INTAKE_AI_ENABLED = "1"`), and every eligible report goes to the model (`INTAKE_AI_SHARE_B = "1"`, arm B). The model is extractor v2 ([ADR-006 amendment 10](ADR-006-learned-extractor-workers-ai.md#post-freeze-amendment-2026-10-04)): v1's prompt and parsing on Gemini 3.5 Flash-Lite, adopted on the same day after v1's endpoint degraded. Decision 1 no longer holds for this path. Decisions 2 and 4 to 6 are unchanged: the model only reads the details, deterministic code suggests at most three of the customer's own charges, the customer confirms or declines, and a person reviews every report.
+
+**Why now, against the conditions in decision 3:**
+- **Conditions 1 and 2 hold.** The frozen comparison: 53/60 against the checklist's 23/60, 0 unsafe in 180 runs. Every development trigger passes.
+- **Condition 3 can only be met by running the path.** Thirty live episodes can't exist while the switch is off. The [AI suggestion plan](../Plans/ai-suggestion-plan.md), step 0, already proposed this amendment. The run records the share of "I can't find it" reports, so the condition is measured, not assumed.
+- **Condition 4 is met by design and measured live.** The model runs after the response (`ctx.waitUntil`), so the report request never waits for it. The suggestions arrive while the customer reads the receipt. The pilot's run rows record the model path's latency on the Worker.
+- **Injection.** v1's red-team run timed out on all 60 model calls during Google's degradation, so it measured nothing. Extractor v2 then scored **22/22** on the 22 red-team `safety` cases by majority of 3 (66/66 runs), with 0 unsafe, against the checklist's 20/22. These cases are not held out ([ADR-006 amendment 10](ADR-006-learned-extractor-workers-ai.md#post-freeze-amendment-2026-10-04), [EVALUATION §11](../deliverables/EVALUATION.md#11-other-measurements)).
+
+**What it is for, and what it is not.**
+- **For: the measured bottleneck, which is linking.**
+  - No complaint in the data links to a transaction, and the product it cites belongs to another customer (DF-002, DF-003).
+  - 6,919 of 10,370 unrecognized-charge complaints record no amount.
+  - Assignment to first response takes 25 hours at p50 and 44 at p90.
+  - Escalated cases are still open after 535 days at p50 ([BUSINESS_OUTCOMES](../deliverables/BUSINESS_OUTCOMES.md)).
+
+  A customer who can't find the charge today leaves free text, and a person matches it by hand. With suggestions, the customer can confirm the charge themselves, so the agent starts from a customer-confirmed transaction.
+- **Not claimed:**
+  - The customer's reply doesn't get faster: the reference is already returned at once, without a model.
+  - Satisfaction doesn't rise: Context, point 3, found no reliable effect of speed on satisfaction.
+  - Resolution doesn't get shorter: that is a hypothesis this run starts to measure, through the share of suggestions confirmed and the agents' correct/wrong marks.
+
+**Guardrails, unchanged.**
+- Every failure falls back to today's incomplete handoff.
+- The daily cap is 200 extractions.
+- The retirement guard: v2's review date is 2027-01-31. CI fails a day before while the switch is on, and from that day the Worker records `retired`.
+- The circuit breaker: when 3 of the last 5 model calls in 5 minutes fail, runs skip the call until those failures age out (ADR-006 amendment 10).
+- Nothing refunds, blocks a card, decides fraud or closes a case.
+- The demo holds synthetic customers only. Decision 4's data-governance steps (the zero-retention exception, a pinned region) still come before any real customer data.
+
+**Rollback.**
+- Set `INTAKE_AI_ENABLED` to `"0"` in a PR, and the deploy applies it.
+- To run the randomized pilot of [ADR-014](ADR-014-online-ai-suggestions-and-no-fraud-model.md) instead, set `INTAKE_AI_SHARE_B` to `"0.5"`.
+
+**Approval.**
+- Lucas, as product owner, decided this on 2026-10-04 and accepts going ahead of condition 3.
+- Roberto and Manoella approve in the PR that carries it.
+- The extractor's behaviour (the registered prompt, model, reasoning level and policy) is unchanged. This is a deployment decision, not a behavioural change under ADR-006 decision 5.
 
 ## Alternatives considered
 
