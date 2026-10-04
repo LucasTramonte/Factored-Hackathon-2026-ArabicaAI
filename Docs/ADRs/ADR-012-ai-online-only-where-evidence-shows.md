@@ -24,10 +24,40 @@ No step needs the service to understand free text in order to act: the charge co
 | Reading free text (what a fully conversational flow would need) | The rule-based checklist misses currency words, non-ISO and relative dates, paraphrases | Checklist 15/25 on `v1_authored`, 16/18 on development, 22/24 on evaluation. The guided UI avoids this need: nothing is decided from the text | `EVALUATION.md` §3 |
 | "I can't find the charge" (incomplete handoff with details) | The customer can't find the charge, so a person must match it by hand | 1 of 5 live episodes (Portuguese). Five episodes support no rate | `EVALUATION.md` §9 (remote export, 2026-10-02) |
 | Latency of the guided requests | Slow steps | One timed confirm: 1,268 ms. The report-request target is p95 below 2,000 ms; evidence is still incomplete | `EVALUATION.md` §10 |
-| The learned extractor itself | Whether a model reads better than the checklist | Development: 18/18 at the default reasoning level, but p95 interval upper bound 3,079 ms (latency trigger fires). At `low`: latency passes (about 2.34 s), instability ruling pending (#98). Frozen comparison **not run** | ADR-006 amendments 7–8; `DEV_LOG.md` |
+| The learned extractor itself | Whether a model reads better than the checklist | Development, 10 repetitions each. At the provider default: 180/180 executions correct, 0 unsafe, but a p95 interval upper bound of 3,079 ms (the latency trigger fires). At `low`: 18/18 cases correct by majority, 0 unsafe, 158 of 160 schema-valid, upper bound about 2,340 ms, and instability 1/18 model changes plus 2 provider failures, which pass under Manoella's ruling. Every development trigger passes; the frozen comparison has **not run** | ADR-006 amendments 7–9; `DEV_LOG.md` |
 | Proactive help | Customers wait to start every interaction | Handled deterministically by ADR-011 (a bank flag, no model) | ADR-011 |
 
-**What the evidence says.** The one measured weakness of deterministic logic, reading free text, sits on a step the guided flow doesn't depend on. The one path where a model could plausibly help (matching an "I can't find it" description to the customer's own charges) has a single live occurrence. The model hasn't yet passed its own pre-registered gates or its held-out comparison. On top of that, it adds about 1.6 s at p50, and 2.3 to 2.6 s at p95 at the low reasoning level, to whatever step it joins, against a 2,000 ms report-request target.
+**What the evidence says.** The one measured weakness of deterministic logic, reading free text, sits on a step the guided flow doesn't depend on. The one path where a model could plausibly help (matching an "I can't find it" description to the customer's own charges) has a single live occurrence. The model has passed its development gates but not yet its held-out comparison. On top of that, it adds about 1.6 s at p50, and 2.3 to 2.6 s at p95 at the low reasoning level, to whatever step it joins, against a 2,000 ms report-request target.
+
+**Challenge: should an AI agent replace the human reviewer?** The product owner observed that, among escalated cases, the dissatisfaction measured by the KPIs sits where an agent reviewed, and asked whether an online AI agent in place of the person would bring more satisfaction or speed. We tested that against the data ([`AI-01_satisfaction_drivers.sql`](../../data_foundation/queries/ai_decision/AI-01_satisfaction_drivers.sql); design window 2023-06-17 to 2025-12-31; aggregates only):
+
+1. **The data has no automated service to compare against.** All 580,546 contact-centre interactions in the window have a human agent (`agent_id` is never null). `agent_type` (Digital, Phone, In-Person, Hybrid) describes people on different channels, not bots. Whatever the data says, it can't measure how an AI agent would score.
+2. **Satisfaction follows resolution, not who handled the case.** Complaint contacts (`Queja`) with a CSAT answer (scale 1–4, 18,526 answers):
+
+   | Cut | Unresolved | Resolved |
+   |---|---|---|
+   | Not escalated / escalated | 2.00 (n = 9,447) / 2.02 (n = 1,022) | 3.00 (n = 7,218) / 2.99 (n = 839) |
+   | Agent type: Digital, Phone, In-Person, Hybrid | 2.01, 2.01, 2.00, 1.97 | 3.02, 3.00, 2.97, 3.01 |
+   | Experience: Junior to Specialist | 1.97–2.03 | 2.98–3.00 |
+   | Wait under 1 min / 1–5 min | 2.01 / 2.00 | 3.01 / 3.00 |
+   | Call under 5 min / 5–10 min / 10 min or more | 1.97 / 2.01 / 2.00 | 2.99 / 3.00 / 3.01 |
+
+   Escalated contacts aren't less satisfied once resolution is held fixed, and they're unresolved about as often (55% against 57%). The dissatisfaction the KPI shows on reviewed and escalated cases is the dissatisfaction of **unresolved** cases. On this dataset, satisfaction looks set almost entirely by the outcome. That is a property of the data as generated, and a reason not to read more into it.
+3. **Speed shows no reliable effect on satisfaction.** Unrecognized-charge complaints with a resolution score: 397 of 10,370 (3.8%, closed cases only).
+   - **Days to resolution against the score:** correlation 0.036 (n = 397).
+   - **SLA breached against not:** 3.21 against 3.01.
+   - **Hours to first response:** correlation −0.069 (n = 384). The one hint in favour of speed is that complaints answered within 12 hours score 3.42 (n = 77), against 2.83–3.11 in the slower bands. It isn't monotonic, and it is the best of four bands chosen after looking, so it is a hypothesis, not evidence.
+4. **What a resolution is.** Of 2,535 resolved or closed unrecognized-charge complaints:
+   - account adjustment: 20.0%;
+   - detailed explanation: 19.4%;
+   - escalated with a definitive fix: 19.4%;
+   - compensation: 18.3%;
+   - correction: 17.9%;
+   - none recorded: 5.0%.
+
+   754 (29.7%) record a compensation amount. **About 80% of resolutions move money or change the account.** ADR-002 and the brief keep those out of a model's hands (no refund, no money movement, no fraud decision). Only the "explanation" fifth is informational, and even there the explanation follows an investigation, which no field records.
+
+**What the challenge changes.** It doesn't change the decision to keep the reviewer human. The data offers no evidence that a different handler raises satisfaction, no automated comparison, and no ground truth for a correct dispute outcome against which an AI reviewer could be evaluated. It does sharpen one point: if anything moves satisfaction besides resolution, it is likely a **fast first response**. Our service already gives one deterministically (the reference in seconds, status emails at each step). An AI-drafted first explanation for the agent to send is the one AI step this evidence leaves open (decision 5).
 
 ## Decision
 
@@ -45,7 +75,13 @@ No step needs the service to understand free text in order to act: the charge co
    - **Security:** the model sees only the details text, the session language and the closed vocabulary; no customer id, transaction or history. Its output is validated against the schema before anything uses it, and ownership of suggested charges is enforced in SQL.
    - **Auditability:** events carry the producer version, call counts and token usage, never the text (`intake-events.md`). The suggestion, and the customer's choice, are recorded as references.
    - **Determinism:** the suggestion rule (facts → own charges) is deterministic and unit-tested. Only the reading is learned.
-5. **Everything else stays deterministic by design,** because it is already adequate: sign-in, reason, charge list, confirmation, receipts, notifications, agent queue, proactive alert (ADR-011) and urgency.
+5. **The person stays the reviewer; AI may later assist the agent, not replace them.** The challenge above found satisfaction tied to resolution, no automated counterfactual, and no correct-outcome label. A model deciding a dispute would also cross ADR-002's boundary. The one candidate is **agent assist**: a model drafts the first explanation, and a person reads, edits and sends it. It is pilot-only and measured by:
+   - time to first response;
+   - re-contact within 7 days;
+   - CSAT for resolved and unresolved cases separately;
+
+   against the current flow, in production, with agents choosing per case. It needs its own ADR before any build.
+6. **Everything else stays deterministic by design,** because it is already adequate: sign-in, reason, charge list, confirmation, receipts, notifications, agent queue, proactive alert (ADR-011) and urgency.
 
 ## Consequences
 
@@ -58,6 +94,8 @@ No step needs the service to understand free text in order to act: the charge co
 ## Alternatives considered
 
 - **An AI assistant for the whole conversation.** It would add 1.6 to 2.6 s to every turn and a new failure mode to every step, to solve a reading problem the guided flow doesn't have. Rejected: no measured benefit on live paths. Reopen if a live path appears that must be decided from free text.
-- **Turn the shadow extractor on online now.** Shadow mode costs tokens on every start and changes nothing for the customer, and the model hasn't passed its gates. Rejected. Reopen when decision 3's first two conditions hold, to collect live latency and usage before activation.
+- **Turn the shadow extractor on online now.** Shadow mode costs tokens on every start and changes nothing for the customer, and the held-out comparison hasn't run. Rejected: cost with no customer benefit and no held-out result yet. Reopen when decision 3's first two conditions hold, to collect live latency and usage before activation.
 - **The model picks the charge directly from the customer's transactions.** It would send transaction data to the model and let a model output choose a record. Rejected: data minimization and ADR-002's boundary. Reopen never for picking; suggestions stay deterministic.
-- **A trained urgency or routing classifier (SageMaker).** ADR-011 found no validated pre-outcome signal to learn from. Rejected. Reopen with a timestamped label or new pre-outcome fields.
+- **A trained urgency or routing classifier (SageMaker).** ADR-011 found no validated pre-outcome signal to learn from. Rejected: nothing trustworthy to train or evaluate on. Reopen with a timestamped label or new pre-outcome fields.
+- **An online AI agent instead of the human reviewer** (the product owner's challenge). The data shows satisfaction set by resolution, not by who handled the case: escalated and non-escalated, every agent type and experience level score the same once resolution is fixed. There is no automated service in the data to compare against, and no label for the correct outcome of a dispute. About 80% of resolutions move money or change the account, which a model may not do (ADR-002). Rejected: no evidence it would raise satisfaction or resolve more, and no way to evaluate it. Reopen with a pilot that measures an AI-handled path against the human one on time to first response, re-contact and CSAT within outcome, or with a labelled set of correct dispute outcomes.
+
