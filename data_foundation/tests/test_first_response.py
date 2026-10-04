@@ -41,6 +41,7 @@ def test_intervals_hold_their_point_and_are_reproducible(con):
     for q in fr.aggregates(con)["quarters"]:
         assert q["median_ci95"][0] <= q["median_hours"] <= q["median_ci95"][1]
         assert q["p90_ci95"][0] <= q["p90_hours"] <= q["p90_ci95"][1]
+    assert fr.quantile([1, 2, 3, 4], .9) == pytest.approx(3.7) and fr.quantile([5], .5) == 5  # as quantile_cont
     x = list(range(200))
     low, high = fr.bootstrap_ci(x, .5)
     assert low < 99.5 < high and (low, high) == fr.bootstrap_ci(x, .5)

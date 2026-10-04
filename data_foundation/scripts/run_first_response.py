@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -33,29 +34,32 @@ def _rows(con, sql: str) -> list[dict]:
 BOOT_DRAWS, BOOT_SEED = 10_000, 20261004
 
 
+def quantile(sorted_x: list[float], q: float) -> float:
+    """Linear-interpolation quantile of an ascending list, the same definition as DuckDB's quantile_cont."""
+    h = (len(sorted_x) - 1) * q
+    lo = int(h)
+    return sorted_x[lo] + (h - lo) * (sorted_x[min(lo + 1, len(sorted_x) - 1)] - sorted_x[lo])
+
+
 def bootstrap_ci(values, q: float, draws: int = BOOT_DRAWS, seed: int = BOOT_SEED) -> tuple[float, float]:
-    """95% percentile-bootstrap interval for the q-quantile (linear interpolation, as DuckDB's quantile_cont).
+    """95% percentile-bootstrap interval for the q-quantile, standard library only.
 
     Resamples the quarter's durations with replacement `draws` times from a fixed seed, so a rerun on the same
-    data gives the same bounds. Holds one draws x n matrix at a time (at most 10,000 x 649 floats)."""
-    import numpy as np
-    x = np.asarray(values, dtype=float)
-    rng = np.random.default_rng(seed)
-    stats = np.quantile(x[rng.integers(0, len(x), size=(draws, len(x)))], q, axis=1)
-    low, high = np.quantile(stats, [0.025, 0.975])
-    return round(float(low), 2), round(float(high), 2)
+    data gives the same bounds. Holds one resample (at most 649 floats) and the draws statistics at a time."""
+    rng, x = random.Random(seed), list(values)
+    stats = sorted(quantile(sorted(rng.choices(x, k=len(x))), q) for _ in range(draws))
+    return round(quantile(stats, .025), 2), round(quantile(stats, .975), 2)
 
 
 def aggregates(con) -> dict:
     """FR-01 per quarter with bootstrap intervals from FR-03, and FR-02 coverage; every count is read, none assumed."""
-    import numpy as np
     durations: dict[tuple[int, int], list[float]] = {}
     for r in _rows(con, (QUERIES / "FR-03_durations.sql").read_text(encoding="utf-8")):
         durations.setdefault((r["year"], r["quarter"]), []).append(r["hours"])
     quarters = []
     for r in _rows(con, (QUERIES / "FR-01_by_quarter.sql").read_text(encoding="utf-8")):
-        x = durations[(r["year"], r["quarter"])]
-        if len(x) != r["n"] or abs(np.quantile(x, .5) - r["median_hours"]) > 1e-9 or abs(np.quantile(x, .9) - r["p90_hours"]) > 1e-9:
+        x = sorted(durations[(r["year"], r["quarter"])])
+        if len(x) != r["n"] or abs(quantile(x, .5) - r["median_hours"]) > 1e-9 or abs(quantile(x, .9) - r["p90_hours"]) > 1e-9:
             raise ValueError(f"FR-03 does not reproduce FR-01 for {r['year']} Q{r['quarter']}")
         (m_lo, m_hi), (p_lo, p_hi) = bootstrap_ci(x, .5), bootstrap_ci(x, .9)
         quarters.append({**r, "first_day": str(r["first_day"]), "last_day": str(r["last_day"]),
