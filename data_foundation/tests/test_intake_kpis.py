@@ -2,8 +2,7 @@
 import math
 import unittest
 
-from data_foundation.scripts.run_intake_kpis import cochran_armitage, poisson_gof, relative_risk
-from data_foundation.src.intake_stats import wilson
+from data_foundation.scripts.run_intake_kpis import cochran_armitage, poisson_gof, relative_risk, wilson
 
 
 class IntakeKpiStatsTests(unittest.TestCase):

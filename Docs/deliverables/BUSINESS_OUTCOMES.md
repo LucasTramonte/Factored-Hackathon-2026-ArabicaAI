@@ -138,7 +138,7 @@ The table maps each question to a measure, gives the baseline in the supplied da
 1. **Historical baselines.**
    - They come only from the design window.
    - **Confirmation rule, fixed before the holdout is read (committed with this section):**
-     - run the same queries once on the holdout window (2026-01-01 inclusive to 2026-06-18 exclusive);
+     - run the same queries once on the holdout window (2026-01-01 to 2026-06-17);
      - for each of the five rates, run a two-proportion z-test of holdout against design at α = 0.01 (0.05 / 5, Bonferroni). A baseline is confirmed when p ≥ 0.01;
      - repeat reporting is confirmed when the holdout Poisson fit has p ≥ 0.01;
      - the merchant-familiarity result is confirmed when the holdout risk-ratio interval includes 1.
@@ -170,9 +170,7 @@ The table maps each question to a measure, gives the baseline in the supplied da
 3. **Instrumentation test set.**
    - Before the KPIs are trusted, a set of authored journeys, each with known expected counts, runs on local D1: abandon at each step, "I recognize it" on the alert, "can't find it", "none of these", a repeat reporter, a technical failure.
    - The KPI queries must reproduce those counts exactly.
-   - The set tests the measurement, not the customers.
-   - **Built (2026-10-04).** Fourteen authored journeys on the fictitious customers, in Spanish, Portuguese and English ([`kpi-journeys.json`](../../back-end/test/fixtures/kpi-journeys.json)), run over HTTP on local D1 in [`kpi-instrumentation.test.js`](../../back-end/test/integration/kpi-instrumentation.test.js). The KPI read, `intakeKpis` in `back-end/src/store/d1.js`, reproduces every hand-counted value exactly. The same episodes' events, scored by `evals/intake/episodes.py`, agree with it on every KPI the two share. A unit test fixes the 90-day and 24-hour boundaries. The definitions are in [`intake-events.md`](../intake/intake-events.md#dispute-manager-kpis-store-intakekpis).
-   - Run the set with `cd back-end && node test/run-local.mjs` (CI runs it with every suite). Read the KPIs for a window with `node scripts/intake-kpis.mjs --since <date> [--until <date>]`; it reads local D1, and a person runs it with `--remote` on the deployed one.
+   - The set tests the measurement, not the customers. It isn't built yet.
 4. **How the industry handles the same gaps, and what we take from it.**
    - **Show the purchase before the dispute.** Visa's Order Insight gives issuers and cardholders the purchase details before a dispute is filed, "helping to resolve issues early" ([Visa, friendly fraud](https://corporate.visa.com/en/solutions/visa-protect/insights/friendly-fraud.html)). Our flow does this by design: the customer picks the charge from their own list, with merchant, time and amount, before anything is reported.
    - **Prior undisputed history as evidence.** Visa's Compelling Evidence 3.0 treats at least two prior undisputed transactions with a matching IP address or device ID, older than 120 days, as evidence against a fraud claim (same source). The supplied transactions carry no IP or device, so IK-06 tests a merchant-only version, which shows no separation. **In production, capturing the device ID and IP at authorization would make this the first questionable-claim signal worth testing**, shown to the agent, never used to refuse.
