@@ -192,3 +192,132 @@ test('the route is public and POST-only, with no sub-paths, and costs one D1 rou
   const { queries, roundTrips } = fresh.store.metrics();
   assert.deepEqual([queries, roundTrips], [3, 1], 'retention delete, conditional insert and read-back in one batch');
 });
+
+
+test('UTC midnight permits the same address again and retains exactly the seven-day boundary', async t => {
+  const { db, sent, ask } = setup();
+  t.after(() => db.close());
+  let now = Date.parse('2026-10-05T23:59:59.999Z');
+  t.mock.method(Date, 'now', () => now);
+  const insert = db.prepare('INSERT INTO access_requests(email_hash,day,token,created_at) VALUES (?,?,?,?)');
+  insert.run('expired', '2026-09-27', 'old', 0);
+  insert.run('boundary', '2026-09-28', 'keep', 0);
+  insert.run('recent', '2026-09-29', 'recent', 0);
+  assert.equal((await ask({ email: 'midnight@example.com' })).status, 200);
+  assert.deepEqual(rows(db).filter(r => r.email_hash.length < 64).map(r => r.email_hash).sort(), ['boundary', 'recent']);
+  assert.equal((await ask({ email: 'MIDNIGHT@example.com' })).status, 200);
+  assert.equal(sent.length, 1);
+  now += 1;
+  assert.equal((await ask({ email: 'midnight@example.com' })).status, 200);
+  assert.equal(sent.length, 2);
+  assert.deepEqual(rows(db).filter(r => r.email_hash.length < 64).map(r => r.email_hash), ['recent']);
+  assert.deepEqual(rows(db).filter(r => r.email_hash.length === 64).map(r => r.day).sort(), ['2026-10-05', '2026-10-06']);
+});
+
+test('distinct concurrent addresses cannot overfill the final daily slot', async t => {
+  const { db, sent, ask } = setup();
+  t.after(() => db.close());
+  t.mock.method(Date, 'now', () => Date.parse('2026-10-05T12:00:00Z'));
+  const insert = db.prepare('INSERT INTO access_requests(email_hash,day,token,created_at) VALUES (?, ?, ?, 0)');
+  for (let i = 0; i < DAILY_CAP - 1; i++) insert.run(`hash-${i}`, '2026-10-05', `holder-${i}`);
+  const results = await Promise.all(Array.from({ length: 10 }, (_, i) => ask({ email: `burst-${i}@example.com` })));
+  assert.equal(results.filter(r => r.status === 200).length, 1);
+  assert.equal(results.filter(r => r.status === 429).length, 9);
+  assert.equal(sent.length, 1);
+  assert.equal(rows(db).length, DAILY_CAP);
+  for (const result of results.filter(r => r.status === 429)) {
+    assert.equal(result.headers.get('Retry-After'), '3600');
+    assertContract('error', result.body);
+  }
+});
+
+test('only the holding token can release one address on one day, including after a retry', async t => {
+  const { db, store } = setup();
+  t.after(() => db.close());
+  const reservation = { emailHash: 'hash-a', day: '2026-10-05', token: 'first', now: 1, cap: DAILY_CAP, keepFrom: '2026-09-28' };
+  assert.equal(await store.reserveAccessRequest(reservation), 'reserved');
+  assert.equal(await store.reserveAccessRequest({ ...reservation, token: 'duplicate' }), 'duplicate');
+  assert.equal(await store.reserveAccessRequest({ ...reservation, day: '2026-10-06' }), 'reserved');
+  assert.equal(await store.reserveAccessRequest({ ...reservation, emailHash: 'hash-b' }), 'reserved');
+  const before = rows(db);
+  await store.releaseAccessRequest({ ...reservation, token: 'duplicate' });
+  assert.deepEqual(rows(db), before, 'a duplicate cannot release the winning reservation');
+  await store.releaseAccessRequest(reservation);
+  assert.deepEqual(rows(db), before.filter(r => r.email_hash !== 'hash-a' || r.day !== '2026-10-05'));
+  assert.equal(await store.reserveAccessRequest({ ...reservation, token: 'retry' }), 'reserved');
+  const retried = rows(db);
+  await store.releaseAccessRequest(reservation);
+  assert.deepEqual(rows(db), retried, 'a stale sender cannot remove the retry reservation');
+});
+
+test('failed delivery returns a generic error even if releasing its reservation fails', async t => {
+  const reserve = t.mock.fn(async () => 'reserved');
+  const release = t.mock.fn(async () => { throw new Error('private database detail'); });
+  const send = t.mock.fn(async () => ({ ok: false, error: 'private provider detail' }));
+  let response;
+  const lines = await logged(async () => {
+    response = await requestAccess(new Request(PATH, { method: 'POST', body: JSON.stringify({ email: 'judge@example.com' }) }),
+      ENV, { reserveAccessRequest: reserve, releaseAccessRequest: release }, undefined, send);
+  });
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assertContract('error', body);
+  assert.doesNotMatch(JSON.stringify(body), /private/);
+  const { emailHash, day, token } = reserve.mock.calls[0].arguments[0];
+  assert.deepEqual(release.mock.calls.map(c => c.arguments), [[{ emailHash, day, token }]]);
+  assert.equal(send.mock.callCount(), 1);
+  assert.deepEqual(lines.map(JSON.parse), [{ event: 'access_request', outcome: 'failed' }]);
+});
+
+test('invalid bodies and missing configuration never call the reservation or sender', async t => {
+  const reserve = t.mock.fn(async () => { throw new Error('must not reserve'); });
+  const send = t.mock.fn(async () => { throw new Error('must not send'); });
+  for (const [body, env, status] of [[{ email: 'invalid' }, ENV, 422], [{ email: 'judge@example.com' }, {}, 503]]) {
+    const response = await requestAccess(new Request(PATH, { method: 'POST', body: JSON.stringify(body) }),
+      env, { reserveAccessRequest: reserve }, undefined, send);
+    assert.equal(response.status, status);
+  }
+  assert.equal(reserve.mock.callCount(), 0);
+  assert.equal(send.mock.callCount(), 0);
+});
+
+test('addresses accept exact local, domain-label and total limits and reject one character over', async t => {
+  const { db, ask, sent } = setup();
+  t.after(() => db.close());
+  const longest = 'x'.repeat(64) + '@' + 'a'.repeat(63) + '.' + 'b'.repeat(63) + '.' + 'c'.repeat(61);
+  assert.equal(longest.length, 254);
+  for (const email of [longest, 'judge+panel@example.com', 'judge@sub-domain.example.com']) {
+    assert.equal((await ask({ email })).status, 200, email);
+  }
+  for (const email of [longest + 'c', 'x'.repeat(65) + '@example.com', 'x@' + 'a'.repeat(64) + '.com',
+    'x@example-.com', 'x@example..com', 'x@example.com.']) {
+    assert.equal((await ask({ email })).status, 422, email);
+  }
+  assert.equal(sent.length, 3);
+  assert.equal(rows(db).length, 3);
+});
+
+for (const [field, limit] of [['name', 100], ['note', 500]]) {
+  test(`${field} is trimmed, counts Unicode code points and rejects malformed text`, async t => {
+    const { db, sent, ask } = setup();
+    t.after(() => db.close());
+    const text = '😀'.repeat(limit);
+    assert.equal((await ask({ email: 'boundary@example.com', [field]: `  ${text}  ` })).status, 200);
+    assert.ok(sent[0].text.includes(`${field === 'name' ? 'Name' : 'Note'}: ${text}\n`));
+    for (const value of [text + '😀', '\uDFFF', 'a\0b', false, {}, []]) {
+      assert.equal((await ask({ email: 'invalid@example.com', [field]: value })).status, 422);
+    }
+    assert.equal(sent.length, 1);
+    assert.equal(rows(db).length, 1);
+  });
+}
+
+test('null and whitespace optional fields use the absent-field labels', async t => {
+  const { db, sent, ask } = setup();
+  t.after(() => db.close());
+  for (const [i, value] of [null, ' \t\n '].entries()) {
+    assert.equal((await ask({ email: `optional-${i}@example.com`, name: value, note: value })).status, 200);
+    assert.match(sent[i].text, /^Name: \(not given\)$/m);
+    assert.match(sent[i].text, /^Note: \(none\)$/m);
+  }
+});

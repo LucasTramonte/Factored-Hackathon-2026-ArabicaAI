@@ -94,3 +94,10 @@ test('every migration after the 0014 rebuild is additive, so the deploy can appl
     assert.deepEqual(additiveProblems(sql), [], `${file} is not additive: split it, or a person applies it before the deploy`);
   }
 });
+
+
+test('the access-request inbox cannot be committed in vars even with an empty or non-string value', () => {
+  for (const value of ['', null, false, 0, undefined]) {
+    assert.throws(() => assertNoLocalVars({ vars: { ACCESS_REQUEST_TO: value } }), /secret put ACCESS_REQUEST_TO/);
+  }
+});

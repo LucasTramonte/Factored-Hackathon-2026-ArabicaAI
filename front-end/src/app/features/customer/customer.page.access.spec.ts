@@ -69,4 +69,94 @@ describe('Evaluator access request on the sign-in screen', () => {
     expect(page.accessState()).toBe('sent');
     fixture.destroy();
   }));
+
+  it('submits bound form inputs, disables actions while pending, and restores them after a network error', fakeAsync(() => {
+    const { fixture, page, el } = login();
+    page.openAccessRequest(); fixture.detectChanges(); flushMicrotasks();
+    for (const [id, value] of [['access-email', 'judge@example.com'], ['access-name', '  Judge One  '], ['access-note', '  Please enrol me  ']]) {
+      const input = el.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${id}`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    }
+    let reject!: (reason: unknown) => void;
+    service.requestAccess.and.returnValue(new Promise((_resolve, fail) => reject = fail));
+    const form = el.querySelector<HTMLFormElement>('#access-email')!.closest('form')!;
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+    expect(service.requestAccess).toHaveBeenCalledOnceWith({ email: 'judge@example.com', name: 'Judge One', note: 'Please enrol me' });
+    expect(page.busy()).toBeTrue();
+    expect([...form.querySelectorAll<HTMLButtonElement>('button')].every(button => button.disabled)).toBeTrue();
+    reject(new Error('private network detail'));
+    flushMicrotasks(); fixture.detectChanges();
+    expect(page.busy()).toBeFalse();
+    expect([...form.querySelectorAll<HTMLButtonElement>('button')].every(button => !button.disabled)).toBeTrue();
+    expect(el.querySelector('#access-error')?.textContent?.trim()).toBe(page.t().accessFailed);
+    expect(el.textContent).not.toContain('private network detail');
+    expect(page.accessName).toBe('  Judge One  ');
+    expect(page.accessNote).toBe('  Please enrol me  ');
+    fixture.destroy();
+  }));
+
+  it('closing and reopening keeps the request draft and clears the prior error', fakeAsync(() => {
+    const { fixture, page, el } = login();
+    page.email = 'signin@example.com';
+    page.openAccessRequest(); fixture.detectChanges();
+    page.accessEmail = 'request@example.com'; page.accessName = 'Judge'; page.accessNote = 'Assigned panel';
+    service.requestAccess.and.rejectWith(new ApiError(422, 'invalid'));
+    void page.sendAccessRequest(); flushMicrotasks(); fixture.detectChanges();
+    expect(page.accessState()).toBe('invalid');
+    el.querySelector<HTMLButtonElement>('#access-email')!.closest('form')!.querySelector<HTMLButtonElement>('button[type="button"]')!.click();
+    fixture.detectChanges();
+    expect(el.querySelector('#access-email')).toBeNull();
+    expect(page.accessOpen()).toBeFalse();
+    page.email = 'different-signin@example.com';
+    el.querySelector<HTMLButtonElement>('#access-open')!.click(); fixture.detectChanges(); flushMicrotasks();
+    expect(page.accessEmail).toBe('request@example.com');
+    expect(page.accessName).toBe('Judge');
+    expect(page.accessNote).toBe('Assigned panel');
+    expect(page.accessState()).toBe('idle');
+    expect(el.querySelector('#access-error')).toBeNull();
+    expect(el.querySelector('#access-email')?.getAttribute('aria-describedby')).toBe('access-intro');
+    expect(document.activeElement?.id).toBe('access-email');
+    fixture.destroy();
+  }));
+
+  it('omits both blank optional fields and releases busy after a successful send', fakeAsync(() => {
+    const { fixture, page } = login();
+    page.accessEmail = ' judge@example.com '; page.accessName = '  '; page.accessNote = '  ';
+    void page.sendAccessRequest(); flushMicrotasks();
+    expect(service.requestAccess).toHaveBeenCalledOnceWith({ email: 'judge@example.com' });
+    expect(page.accessState()).toBe('sent');
+    expect(page.busy()).toBeFalse();
+    fixture.destroy();
+  }));
+
+  it('does not submit an access request while sign-in is busy', fakeAsync(() => {
+    const { fixture, page, el } = login();
+    page.busy.set(true); fixture.detectChanges();
+    expect(el.querySelector<HTMLButtonElement>('#access-open')!.disabled).toBeTrue();
+    void page.sendAccessRequest(); flushMicrotasks();
+    expect(service.requestAccess).not.toHaveBeenCalled();
+    expect(page.busy()).toBeTrue();
+    expect(page.accessState()).toBe('idle');
+    fixture.destroy();
+  }));
+
+  it('declares native email validation and the API field limits', fakeAsync(() => {
+    const { fixture, page, el } = login();
+    page.openAccessRequest(); fixture.detectChanges(); flushMicrotasks();
+    const email = el.querySelector<HTMLInputElement>('#access-email')!;
+    const form = email.closest('form')!;
+    expect(form.noValidate).toBeFalse();
+    expect(email.required).toBeTrue();
+    expect(email.type).toBe('email');
+    expect(email.maxLength).toBe(254);
+    expect(el.querySelector<HTMLInputElement>('#access-name')!.maxLength).toBe(100);
+    expect(el.querySelector<HTMLTextAreaElement>('#access-note')!.maxLength).toBe(500);
+    email.value = ''; expect(email.checkValidity()).toBeFalse();
+    email.value = 'invalid'; expect(email.checkValidity()).toBeFalse();
+    email.value = 'judge@example.com'; expect(form.checkValidity()).toBeTrue();
+    fixture.destroy();
+  }));
+
 });

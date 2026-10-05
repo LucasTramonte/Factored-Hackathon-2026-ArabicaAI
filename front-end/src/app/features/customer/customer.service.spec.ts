@@ -80,3 +80,34 @@ describe('CustomerService transaction discovery', () => {
     expect(api.request).toHaveBeenCalledTimes(1);
   });
 });
+
+
+describe('CustomerService evaluator access', () => {
+  let api: jasmine.SpyObj<ApiService>;
+  let service: CustomerService;
+  beforeEach(() => {
+    api = jasmine.createSpyObj<ApiService>('ApiService', ['request']);
+    TestBed.configureTestingModule({ providers: [{ provide: ApiService, useValue: api }] });
+    service = TestBed.inject(CustomerService);
+  });
+
+  for (const body of [{ email: 'judge@example.com' }, { email: 'judge@example.com', name: 'Judge', note: 'Panel assignment' }]) {
+    it(`posts ${body.name ? 'all fields' : 'email only'} to the public route and returns its receipt`, async () => {
+      const receipt = { status: 'received' as const };
+      api.request.and.resolveTo(receipt);
+      expect(await service.requestAccess(body)).toBe(receipt);
+      expect(api.request).toHaveBeenCalledOnceWith('/auth/access-request', body);
+    });
+  }
+
+  it('propagates a failure without retrying or changing client identity', async () => {
+    const failure = new Error('unavailable');
+    api.request.and.rejectWith(failure);
+    const client = service.client(), card = service.card(), roles = service.roles();
+    await expectAsync(service.requestAccess({ email: 'judge@example.com' })).toBeRejectedWith(failure);
+    expect(api.request).toHaveBeenCalledTimes(1);
+    expect(service.client()).toBe(client);
+    expect(service.card()).toBe(card);
+    expect(service.roles()).toBe(roles);
+  });
+});
