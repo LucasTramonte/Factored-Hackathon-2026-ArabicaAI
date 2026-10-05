@@ -1,6 +1,6 @@
 # Report support assistant — proposed design
 
-Status: draft for product review. No implementation or model activation is authorized by this document.
+Status: design approved by the user on October 4, 2026. The execution plan requires review before implementation; model activation requires separate approval.
 
 ## Outcome
 
@@ -84,7 +84,7 @@ Create each phase branch from current main after the previous phase merges. This
 
 ## Design review decisions
 
-Confirm the initial customer scope above, and whether the first release should include all three phases or stop after the reviewer copilot. The recommendation is to design all three but release each separately; Phase 3 stays off until its own evaluation passes.
+Approved direction: plan all three phases and release each separately; Phase 3 stays off until its own evaluation passes.
 
 After design review, write the execution plan with exact files, endpoint/response contracts, limits, test assertions, rollout checks and task interfaces. This draft is intentionally not an approved implementation plan.
 
