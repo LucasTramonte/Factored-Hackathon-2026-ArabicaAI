@@ -12,7 +12,7 @@ To trace a change, go from the release to its PRs, then from each PR to the ADR,
 | `v0.4.0` | 2026-10-04 | `45d933d` | `v0.4.0` | #114–#120 | ADR-012 amendment 1, ADR-014, ADR-015 | [v0.4.0](#v040) | Deploy run 21:06 UTC; Worker version not recorded; D1 0001–0028; AI suggestions on | Worker version not recorded; the extractor v2 held-out evaluation is owed |
 | `v0.5` | 2026-10-05 | `d5cd089` | `v0.5.0` | #122–#131 | ADR-015 explained closure contract (migration 0029) | [v0.5](#v05) | Deploy run 02:19 UTC; Worker version not recorded; D1 0001–0029; AI suggestions on | Tagged `v0.5`, without a patch number; Worker version not recorded; no support assistants |
 
-Unreleased on main: #132 (report support assistants, off) and #134, milestone v0.6.0.
+Unreleased on main: everything merged since `v0.5`, starting with #132 (report support assistants, off); the [`v0.6.0` milestone](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/milestone/5) lists it.
 
 `v1.0.0` is the final hackathon submission ([`CONTRIBUTING.md`](../../CONTRIBUTING.md#versioning)).
 

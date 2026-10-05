@@ -253,7 +253,7 @@ The client polls `GET …/suggestions` for at most about 15 s after such a recei
 | `VERTEX_WIF_SIGNING_KEY` | **secret** | The Worker's PKCS#8 PEM private key: `npx wrangler secret put VERTEX_WIF_SIGNING_KEY`. Never a var; `predeploy.mjs` refuses it in `vars` |
 | `ASSIST_REVIEWER_ENABLED`, `ASSIST_CUSTOMER_ENABLED` | optional var | The report support assistants ([ADR-016](../Docs/ADRs/ADR-016-report-support-assistants.md)). Exactly `"1"` turns one on; absent is off, as in production |
 | `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | **secret** | The SES credentials for notification email; with `SES_REGION` (var, `us-east-2`) and `SES_FROM` missing, no email is attempted |
-| `SES_FROM` | **secret** | The sender address. It is a person's address, so `predeploy.mjs` refuses it in `vars` |
+| `SES_FROM` | **secret** | The sender address, today `Arabica AI <noreply@arabicaai-demo.com>`. It once held a person's address, so `predeploy.mjs` still refuses it in `vars` |
 | `EMAIL_KEY` | **secret** | 32 bytes, base64: the AES-GCM key that encrypts the stored email address. Without it sign-in proceeds and no address is stored |
 
 `VERTEX_TEST_ORIGIN` (honoured only for a loopback `http` origin) and `INTAKE_AI_TEST_ARM` are local test seams that `run-local.mjs` writes to `.dev.vars`; `predeploy.mjs` refuses both in `vars`.
