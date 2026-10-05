@@ -15,7 +15,7 @@ const humanMessage = { message_id: 'agent-1', author: 'agent' as const, body: 'P
 describe('Customer report support', () => {
   let service: jasmine.SpyObj<CustomerService>;
   beforeEach(() => {
-    localStorage.setItem('arabica.customer-tour.v1', 'dismissed');
+    localStorage.setItem('arabica.customer-tour.v2', 'dismissed');
     spyOnProperty(document, 'visibilityState', 'get').and.returnValue('visible');
     spyOnProperty(navigator, 'onLine', 'get').and.returnValue(true);
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['signIn', 'transactions', 'reports', 'alert', 'identities', 'displayed', 'messages', 'postMessage', 'logout', 'requestUpdate'],
@@ -27,7 +27,7 @@ describe('Customer report support', () => {
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [provideRouter([]), { provide: CustomerService, useValue: service },
       { provide: CognitoService, useValue: { forget: () => undefined } }] });
   });
-  afterEach(() => localStorage.removeItem('arabica.customer-tour.v1'));
+  afterEach(() => localStorage.removeItem('arabica.customer-tour.v2'));
   function home() {
     const fixture = TestBed.createComponent(CustomerPage); document.body.append(fixture.nativeElement); fixture.detectChanges();
     const page = fixture.componentInstance; page.lang.set('en'); page.identity = 'demo-ana'; void page.login(); flushMicrotasks(); fixture.detectChanges();

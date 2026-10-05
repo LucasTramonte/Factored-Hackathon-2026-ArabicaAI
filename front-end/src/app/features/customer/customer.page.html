@@ -375,7 +375,7 @@
                     [attr.aria-describedby]="chatError() ? 'chat-error' : promptLast() ? 'chat-prompt' : null" [attr.aria-invalid]="chatError() ? true : null"></textarea>
                 </fieldset>
                 <div class="report-actions chat-actions">
-                  <button type="button" class="ar-btn ar-btn-secondary" (click)="discover()" [disabled]="busy() || discoveryBusy() || !chatDetails.trim()">{{ discoveryBusy() ? t().working : t().recent }}</button>
+                  <button type="button" class="ar-btn ar-btn-secondary" (click)="discover()" [disabled]="busy() || discoveryBusy() || !chatDetails.trim()">{{ discoveryBusy() ? t().working : t().discoverySearch }}</button>
                   <button type="button" class="ar-btn" (click)="handoff()" [disabled]="busy()">{{ frozen() ? t().retry : t().chatSend }}</button>
                 </div>
                 @if (discoveryError(); as why) { <p class="ar-caption" role="status">{{ why === 'narrow' ? t().discoveryNarrow : t().discoveryUnavailable }}</p> }

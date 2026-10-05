@@ -47,7 +47,7 @@ async function recorded(episodeId) {
   const events = await withIntakeStore({ config: config() }, store => store.listIntakeHistory(episodeId));
   return events.map(e => JSON.parse(e.event_json)).find(e => e.event === 'suggestion_recorded') ?? null;
 }
-const SUGGEST = 'Lembro só do mercado. FACTS={"merchant":"Mercado Demo"}';
+const SUGGEST = 'Lembro só do mercado. FACTS={"merchant":"Mercado Central"}';
 
 test('the new routes answer only their method; look-alike paths are JSON 404; no session or the other actor is 401', async () => {
   const id = uuid();
@@ -88,8 +88,8 @@ test("waitUntil with mocked Vertex: the customer's own charge is suggested; anot
   const receipt = await handoff(ana, SUGGEST);
   const shown = await settled(ana, receipt);
   assert.deepEqual(shown, { status: 'suggested', choice: null, chosen_transaction_id: null, answerable: true, items: [{ transaction_id: 'demo-tx-001',
-    merchant_name: 'Mercado Demo', amount: '125.50', currency: 'BRL', occurred_at: '2026-09-25T14:00:00+00:00', source_occurred_at: null }] },
-    "Carla's Mercado Demo charge is never Ana's suggestion");
+    merchant_name: 'Mercado Central', amount: '125.50', currency: 'BRL', occurred_at: '2026-09-25T14:00:00+00:00', source_occurred_at: null }] },
+    "Carla's Mercado Central charge is never Ana's suggestion");
   const run = await recorded(receipt.episode_id);
   assert.deepEqual([run.result, run.arm, run.llm_calls, run.known_input_tokens, run.usage_unavailable_calls, run.suggestions], ['suggested', 'B', 1, 1840, 0, 1]);
   assert.match(run.producer, /^extractor-v2@[0-9a-f]{12}$/);
@@ -156,7 +156,7 @@ test('concurrent identical confirms store one answer; a different answer later i
   assert.equal(detail.status, 200); assertContract('agentIntakeDetail', detail.body);
   assert.equal(detail.body.verified_evidence.transaction, null, 'a confirmed suggestion is not bank-verified evidence');
   assert.deepEqual(detail.body.customer_suggestion, { choice: 'confirmed', verified_by_bank: false, mark: null, transaction: { transaction_id: 'demo-tx-001',
-    occurred_at: '2026-09-25T14:00:00+00:00', source_occurred_at: null, merchant_name: 'Mercado Demo', amount: '125.50', currency: 'BRL' } });
+    occurred_at: '2026-09-25T14:00:00+00:00', source_occurred_at: null, merchant_name: 'Mercado Central', amount: '125.50', currency: 'BRL' } });
   assert.equal(detail.body.model_reading.mode, 'suggestion');
   for (const body of [{}, { protocol: receipt.protocol }, { protocol: receipt.protocol, mark: 'right' }, { protocol: 'x', mark: 'correct' },
     { protocol: receipt.protocol, mark: 'correct', status: 'closed' }]) {

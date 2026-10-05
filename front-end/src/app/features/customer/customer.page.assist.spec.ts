@@ -14,7 +14,7 @@ const customerMessage = { message_id: 'customer-1', author: 'customer' as const,
 describe('Customer bounded assistance', () => {
   let service: jasmine.SpyObj<CustomerService>;
   beforeEach(() => {
-    localStorage.setItem('arabica.customer-tour.v1', 'dismissed');
+    localStorage.setItem('arabica.customer-tour.v2', 'dismissed');
     spyOnProperty(document, 'visibilityState', 'get').and.returnValue('visible');
     spyOnProperty(navigator, 'onLine', 'get').and.returnValue(true);
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['signIn', 'transactions', 'reports', 'alert', 'identities', 'displayed', 'messages', 'postMessage', 'logout', 'requestUpdate', 'assist'],
@@ -26,7 +26,7 @@ describe('Customer bounded assistance', () => {
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [provideRouter([]), { provide: CustomerService, useValue: service },
       { provide: CognitoService, useValue: { forget: () => undefined } }] });
   });
-  afterEach(() => localStorage.removeItem('arabica.customer-tour.v1'));
+  afterEach(() => localStorage.removeItem('arabica.customer-tour.v2'));
   function home() {
     const fixture = TestBed.createComponent(CustomerPage); document.body.append(fixture.nativeElement); fixture.detectChanges();
     const page = fixture.componentInstance; page.lang.set('en'); page.identity = 'demo-ana'; void page.login(); flushMicrotasks(); fixture.detectChanges();
@@ -76,4 +76,26 @@ describe('Customer bounded assistance', () => {
   const {fixture,page}=opened();let finish!:(v:CustomerAssist)=>void;service.assist.and.returnValue(new Promise(r=>finish=r));page.assistQuestion='status';void page.askReportQuestion();void page.askReportQuestion();flushMicrotasks();expect(service.assist).toHaveBeenCalledTimes(1);finish(classified);flushMicrotasks();fixture.detectChanges();expect(page.questionAnswer()).not.toBeNull();page.thread.set({status:'received',can_post:true,items:[customerMessage]});fixture.detectChanges();expect(page.questionAnswer()).toBeNull();fixture.destroy();
  }));
 
+
+ it('a 503 keeps the panel, says AI help is unavailable right now (not that the report changed) and allows a retry', fakeAsync(() => {
+  const {fixture,page,el}=opened();
+  service.assist.and.rejectWith(new ApiError(503));
+  page.assistQuestion='de que es este reporte?'; void page.askReportQuestion(); flushMicrotasks(); fixture.detectChanges();
+  expect(el.querySelector('.customer-assist')).not.toBeNull();
+  expect(el.textContent).toContain(page.t().customerAssistOff);
+  expect(el.textContent).not.toContain(page.t().customerAssistUnavailable);
+  expect(el.querySelector('#customer-messages-draft')).not.toBeNull(); // the human thread stays usable
+  service.assist.and.resolveTo({intent:'status',field:null,language:'en',snapshot:{status:'received',message_count:0}});
+  void page.askReportQuestion(); flushMicrotasks(); fixture.detectChanges(); flushMicrotasks(); fixture.detectChanges();
+  expect(el.textContent).not.toContain(page.t().customerAssistOff);
+  fixture.destroy();
+ }));
+
+ it('keeps the existing message after a failure that is not 503', fakeAsync(() => {
+  const {fixture,page,el}=opened();
+  service.assist.and.rejectWith(new ApiError(500));
+  page.assistQuestion='status?'; void page.askReportQuestion(); flushMicrotasks(); fixture.detectChanges();
+  expect(el.textContent).toContain(page.t().customerAssistUnavailable);
+  fixture.destroy();
+ }));
 });

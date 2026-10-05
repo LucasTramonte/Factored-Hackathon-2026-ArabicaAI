@@ -16,14 +16,14 @@ const received = async () => (await fetch(process.env.VERTEX_MOCK_URL + '/__vert
 
 test('the model sees only the description; candidates are the owner\'s stored charges filtered by the returned criteria', async () => {
   const { customer, episode } = await fixture();
-  const response = await customer.call(PATH, payload(episode, 'Streaming en abril, más de 100 <script>x</script> AR-AAAA-BBBB DISCOVER={"merchant_hint":"Demo","currency":"BRL","amount_operator":"gt","amount":100}'));
+  const response = await customer.call(PATH, payload(episode, 'Streaming en abril, más de 100 <script>x</script> AR-AAAA-BBBB DISCOVER={"merchant_hint":null,"currency":"BRL","amount_operator":"gt","amount":100}'));
   assert.equal(response.status, 200); assertContract('transactionDiscovery', response.body);
   assert.equal(response.body.status, 'candidates'); assert.deepEqual(response.body.items.map(i => i.transaction_id).sort(), ['demo-tx-001', 'demo-tx-005', 'demo-tx-006']);
   assert.ok(response.body.items.every(i => Number(i.amount) > 100));
   const input = (await received()).at(-1); assert.deepEqual(Object.keys(input).sort(), ['description', 'intents', 'language', 'operators']);
   const none = await customer.call(PATH, payload(episode, 'Nada DISCOVER={"merchant_hint":"Cafe"}')); assert.equal(none.status, 200); assert.equal(none.body.status, 'none'); assert.deepEqual(none.body.items, []);
   const wild = await customer.call(PATH, payload(episode, 'Wildcards DISCOVER={"merchant_hint":"%"}')); assert.equal(wild.status, 200); assert.equal(wild.body.status, 'none', 'LIKE wildcards in a hint are literal');
-  const broad = await customer.call(PATH, payload(episode, 'Todo DISCOVER={"merchant_hint":"Demo"}')); assert.equal(broad.status, 200); assert.equal(broad.body.status, 'ambiguous'); assert.equal(broad.body.items.length, 3);
+  const broad = await customer.call(PATH, payload(episode, 'Todo DISCOVER={"merchant_hint":null}')); assert.equal(broad.status, 200); assert.equal(broad.body.status, 'ambiguous'); assert.equal(broad.body.items.length, 3);
 });
 test('authentication, exact body, method/path policy, foreign or missing episode, dataset source', async () => {
   const { customer, episode } = await fixture();

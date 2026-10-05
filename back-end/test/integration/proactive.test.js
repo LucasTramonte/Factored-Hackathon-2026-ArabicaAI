@@ -92,7 +92,7 @@ test('a report on a flagged charge is high urgency and ends the alert', async ()
   const marco = await signedIn('demo-marco');
   assert.equal((await marco.call('/alerts')).body.alert.transaction_id, 'demo-tx-025');
   const start = await marco.call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
-    customer_statement: 'No reconozco este cargo de Jornal Demo.', idempotency_key: crypto.randomUUID() });
+    customer_statement: 'No reconozco este cargo de Cable TV.', idempotency_key: crypto.randomUUID() });
   assert.equal(start.status, 201);
   const receipt = await marco.call('/intake/confirm', { episode_id: start.body.episode_id, transaction_id: 'demo-tx-025', customer_confirmed: true,
     idempotency_key: crypto.randomUUID() });

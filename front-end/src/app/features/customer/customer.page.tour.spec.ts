@@ -6,7 +6,7 @@ import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { Transaction } from '../../shared/models/intake.model';
 
-const KEY = 'arabica.customer-tour.v1';
+const KEY = 'arabica.customer-tour.v2';
 const tx: Transaction = { transaction_id: 'tour-charge', merchant_name: 'Café', amount: '10', currency: 'BRL', occurred_at: null, source_occurred_at: null };
 describe('Customer tour eligibility and preference', () => {
   let service: jasmine.SpyObj<CustomerService>;

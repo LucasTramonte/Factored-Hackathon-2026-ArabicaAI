@@ -10,7 +10,7 @@ const report: Report = { protocol: 'P', reference_short: 'AR-AAAA-BBBB', status:
 describe('Customer status email', () => {
   let service: jasmine.SpyObj<CustomerService>;
   beforeEach(() => {
-    localStorage.setItem('arabica.customer-tour.v1', 'dismissed');
+    localStorage.setItem('arabica.customer-tour.v2', 'dismissed');
     service = jasmine.createSpyObj<CustomerService>('CustomerService', ['signIn', 'transactions', 'reports', 'alert', 'identities', 'displayed', 'requestUpdate', 'logout', 'actAs'], { client: signal(''), card: signal(null), roles: signal([]) });
     service.signIn.and.resolveTo({ customer_id: 'demo-ana', roles: ['customer'], mode: 'simulated_login' });
     service.transactions.and.resolveTo({ items: [], has_more: false, coverage: 'fictitious_demo_data_only', view_ref: null });
@@ -18,7 +18,7 @@ describe('Customer status email', () => {
     service.alert.and.resolveTo({ alert: null }); service.identities.and.resolveTo([]); service.logout.and.resolveTo(undefined); service.requestUpdate.and.resolveTo({ queued: true });
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [provideRouter([]), { provide: CustomerService, useValue: service }, { provide: CognitoService, useValue: { forget: () => undefined } }] });
   });
-  afterEach(() => localStorage.removeItem('arabica.customer-tour.v1'));
+  afterEach(() => localStorage.removeItem('arabica.customer-tour.v2'));
   function home() {
     const fixture = TestBed.createComponent(CustomerPage); document.body.append(fixture.nativeElement); fixture.detectChanges();
     const page = fixture.componentInstance; page.identity = 'demo-ana'; void page.login(); flushMicrotasks(); fixture.detectChanges();

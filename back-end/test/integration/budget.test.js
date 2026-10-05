@@ -452,7 +452,7 @@ test('AI suggestion routes and the after-response run stay within their D1 budge
   const measured = {};
   const c = client(); assert.equal((await c.call('/demo/session', { customer_id: 'demo-ana' })).status, 200);
   const start = await c.call('/intake/start', startBody()); assert.equal(start.status, 201);
-  const details = 'Lembro só do mercado. FACTS={"merchant":"Mercado Demo"}';
+  const details = 'Lembro só do mercado. FACTS={"merchant":"Mercado Central"}';
   const handoff = await c.call('/intake/handoff', { episode_id: start.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID(), details });
   assert.equal(handoff.status, 201); assertContract('intakeReceipt', handoff.body);
   measured.incompleteDetails = within('intakeIncompleteDetails', handoff.metrics);
@@ -485,7 +485,7 @@ test('AI suggestion routes and the after-response run stay within their D1 budge
   const reply = body => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
   const fetcher = async url => String(url).endsWith('/v1/token') ? reply({ access_token: 'f' })
     : String(url).endsWith(':generateAccessToken') ? reply({ accessToken: 'v', expireTime: new Date(Date.now() + 3600000).toISOString() })
-      : reply({ choices: [{ message: { content: JSON.stringify({ intent: 'report', stated_facts: { merchant: 'Mercado Demo' }, invalid: null, demand: null, injection: false }) } }],
+      : reply({ choices: [{ message: { content: JSON.stringify({ intent: 'report', stated_facts: { merchant: 'Mercado Central' }, invalid: null, demand: null, injection: false }) } }],
         usage: { prompt_tokens: 1840, completion_tokens: 84 } });
   const now = Date.now(); const sessionHash = await tokenHash('suggestion-budget-' + crypto.randomUUID());
   await withIntakeStore({ config: config() }, async store => {

@@ -87,7 +87,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   private offerTour(): void {
     if (this.tourOffered || this.step() !== 'home') return;
     this.tourOffered = true;
-    try { if (['dismissed', 'complete'].includes(localStorage.getItem('arabica.customer-tour.v1') ?? '')) return; }
+    // v2 (2026-10-05): a fresh key so every browser is offered the tour again before judging.
+    try { if (['dismissed', 'complete'].includes(localStorage.getItem('arabica.customer-tour.v2') ?? '')) return; }
     catch { /* Storage is optional; this page still offers only once. */ }
     if (!this.alert() && !this.chatOpen()) { this.prepareTourTarget(); this.tour.set('welcome'); }
   }
@@ -109,7 +110,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   endTour(complete = false): void {
     this.tour.set(null);
     this.tourOffered = true;
-    try { localStorage.setItem('arabica.customer-tour.v1', complete ? 'complete' : 'dismissed'); }
+    try { localStorage.setItem('arabica.customer-tour.v2', complete ? 'complete' : 'dismissed'); }
     catch { /* Current page session already suppresses another automatic offer. */ }
   }
 
@@ -186,7 +187,13 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
   /** A charge whose newest server report is still open is not offered again (the server refuses it with 409). */
-  readonly choosable = computed(() => this.transactions().filter(tx => (this.reportOf(tx.transaction_id)?.status ?? 'closed') === 'closed'));
+  /** A charge chosen from outside the loaded page: a search result or the bank alert's charge. Forgotten by ``clearChat``. */
+  readonly extraCharge = signal<Transaction | null>(null);
+  readonly choosable = computed(() => {
+    const extra = this.extraCharge(), list = this.transactions();
+    const all = extra && !list.some(t => t.transaction_id === extra.transaction_id) ? [...list, extra] : list;
+    return all.filter(tx => (this.reportOf(tx.transaction_id)?.status ?? 'closed') === 'closed');
+  });
   readonly statusChip = STATUS_CHIP;
   /** The steps a report moves through, in order; a person moves it forward one step at a time. */
   readonly progressSteps = ['received', 'in_review', 'closed'] as const;
@@ -479,7 +486,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
     this.alert.set(null);
     if (answer === 'mine') this.alertNote.set(this.t().alertThanks);
-    else this.openChat(tx.transaction_id);
+    else { this.openChat(tx.transaction_id); this.extraCharge.set(tx); } // after openChat: a restart clears the chat
   }
 
   /**
@@ -889,7 +896,8 @@ export class CustomerPage implements OnInit, OnDestroy {
       }
       this.questionAnswer.set({result,report,checked:Date.now(),question});
     } catch (e) {
-      if (current()) { this.questionError.set(this.t().customerAssistUnavailable); if (e instanceof ApiError && e.status === 401) { this.clearQuestionHelp(); this.pauseUnauthorized(); } }
+      // A 503 is the switch off, a customer not offered AI help, or a provider failure: say so, keep the retry (ADR-016).
+      if (current()) { this.questionError.set(this.t()[e instanceof ApiError && e.status === 503 ? 'customerAssistOff' : 'customerAssistUnavailable']); if (e instanceof ApiError && e.status === 401) { this.clearQuestionHelp(); this.pauseUnauthorized(); } }
     } finally { if (current()) this.assistBusy.set(false); }
   }
 
@@ -1151,13 +1159,17 @@ export class CustomerPage implements OnInit, OnDestroy {
     try {
       const found = await this.service.discoverTransactions(description, this.reportLang(), episode.episode_id, crypto.randomUUID());
       if (this.episode()?.episode_id === episode.episode_id) this.discovery.set(found);
-    } catch (error) { this.discoveryError.set(error instanceof ApiError && error.status === 422 ? 'narrow' : 'unavailable'); }
+    } catch (error) {
+      this.discoveryError.set(error instanceof ApiError && error.status === 422 ? 'narrow' : 'unavailable');
+    }
     finally { this.discoveryBusy.set(false); }
   }
 
-  /** Selecting a returned candidate still requires the existing explicit confirmation checkbox. */
+  /** Selecting a returned candidate still requires the existing explicit confirmation checkbox; the normal choose step shows it. */
   useDiscovery(transactionId: string): void {
-    if (!this.discovery()?.items.some(i => i.transaction_id === transactionId)) return;
+    const tx = this.discovery()?.items.find(i => i.transaction_id === transactionId);
+    if (!tx) return;
+    this.extraCharge.set(tx); this.general.set(false);
     this.choice = transactionId; this.chatConfirmed = false; this.asking.set(false);
     this.log.update(l => [...l, { from:'bot', key:'chatChoose' }]);
   }
@@ -1225,6 +1237,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   private clearChat(): void {
+    this.extraCharge.set(null);
     this.previousProtocol.set(null);
     this.frozen.set(null);
     this.episode.set(null);
