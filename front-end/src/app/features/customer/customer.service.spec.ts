@@ -23,6 +23,18 @@ describe('CustomerService guided intake', () => {
       ['/demo/session', { customer_id: 'demo-ana' }], ['/auth/session', {}, { Authorization: 'Bearer a.b.c' }], ['/auth/logout', {}], ['/reports', undefined, {}, undefined]]);
   });
 
+  it('uses the language selected when each status email is requested', async () => {
+    const api = jasmine.createSpyObj<ApiService>('ApiService', ['request']);
+    api.request.and.resolveTo({ queued: true });
+    TestBed.configureTestingModule({ providers: [{ provide: ApiService, useValue: api }] });
+    const lang = TestBed.inject(LangService), service = TestBed.inject(CustomerService);
+    for (const language of ['es', 'pt', 'en'] as const) {
+      lang.set(language);
+      await service.requestUpdate('report-protocol');
+      expect(api.request.calls.mostRecent().args).toEqual(['/reports/update', { protocol: 'report-protocol', language }]);
+    }
+  });
+
   it('sends the interface language on the charges list and posts the display acknowledgement', async () => {
     const api = jasmine.createSpyObj<ApiService>('ApiService', ['request']);
     api.request.and.resolveTo({});

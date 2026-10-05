@@ -75,9 +75,9 @@ test('POST /reports/update: the owner gets one "update" email per report per 5 m
   assert.equal((await ana.call('/auth/session', {})).status, 200);
   const episode = (await ana.call('/intake/start', startBody('es'))).body.episode_id;
   const receipt = (await ana.call('/intake/handoff', { episode_id: episode, kind: 'incomplete', idempotency_key: crypto.randomUUID() })).body;
-  const first = await ana.call('/reports/update', { protocol: receipt.protocol.toUpperCase() });
+  const first = await ana.call('/reports/update', { protocol: receipt.protocol.toUpperCase(), language: 'en' });
   assert.equal(first.status, 202); assert.deepEqual(first.body, { queued: true }); assertContract('updateQueued', first.body);
-  const again = await ana.call('/reports/update', { protocol: receipt.protocol });
+  const again = await ana.call('/reports/update', { protocol: receipt.protocol, language: 'pt' });
   assert.equal(again.status, 429); assert.deepEqual(again.body, { detail: 'An update request is already in progress or was accepted recently' });
   const wait = Number(again.headers.get('Retry-After'));
   assert.ok(wait > 0 && wait <= 300, String(wait));
@@ -88,7 +88,7 @@ test('POST /reports/update: the owner gets one "update" email per report per 5 m
       if (rows.length && rows.every(r => r.provider_status !== 'queued')) break;
       await new Promise(done => setTimeout(done, 100));
     }
-    assert.deepEqual(rows, [{ template: 'update', language: 'es', provider_status: 'skipped' }]);
+    assert.deepEqual(rows, [{ template: 'update', language: 'en', provider_status: 'skipped' }]);
   });
 
   const bruno = client(); assert.equal((await bruno.call('/demo/session', { customer_id: 'demo-bruno' })).status, 200);
@@ -101,7 +101,9 @@ test('POST /reports/update: the owner gets one "update" email per report per 5 m
   const noTarget = await bruno.call('/reports/update', { protocol: own.protocol });
   assert.equal(noTarget.status, 409); assert.deepEqual(noTarget.body, { detail: 'No email on file for this sign-in' });
 
-  for (const body of ['{bad', [], {}, { protocol: 'x' }, { protocol: 42 }, { protocol: receipt.protocol, extra: 1 }, { reference: receipt.protocol }]) {
+  for (const body of ['{bad', [], {}, { protocol: 'x' }, { protocol: 42 }, { protocol: receipt.protocol, extra: 1 }, { reference: receipt.protocol },
+    ...[null, '', 'fr', 'EN', 1, {}, ['en']].map(language => ({ protocol: receipt.protocol, language })),
+    { protocol: receipt.protocol, language: 'en', customer_id: 'demo-bruno' }]) {
     assert.equal((await ana.call('/reports/update', body)).status, 422, JSON.stringify(body));
   }
   const get = await ana.call('/reports/update');
@@ -118,7 +120,7 @@ test('two concurrent update requests for one report queue exactly one email', as
   const episode = (await ana.call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
     customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() })).body.episode_id;
   const receipt = (await ana.call('/intake/handoff', { episode_id: episode, kind: 'incomplete', idempotency_key: crypto.randomUUID() })).body;
-  const results = await Promise.all([1, 2].map(() => ana.call('/reports/update', { protocol: receipt.protocol })));
+  const results = await Promise.all(['es', 'en'].map(language => ana.call('/reports/update', { protocol: receipt.protocol, language })));
   assert.deepEqual(results.map(r => r.status).sort(), [202, 429]);
   assert.ok(Number(results.find(r => r.status === 429).headers.get('Retry-After')) > 0);
   await withIntakeStore({ config: resolve(process.cwd(), 'wrangler.jsonc') }, async store => {

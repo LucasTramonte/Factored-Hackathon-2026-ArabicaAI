@@ -184,25 +184,33 @@ test('update route preserves request-time reference/status/language and sends ac
     { method: 'POST', headers: { Cookie: `demo_session=${token}` }, body: JSON.stringify(body) }), workerEnv, store, ctx);
   const decoded = (raw, type) => Buffer.from(raw.split(`Content-Type: ${type}; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n`)[1]
     .split('\r\n--')[0].replace(/\r\n/g, ''), 'base64').toString('utf8');
-  for (const language of ['es', 'pt', 'en']) for (const status of ['received', 'in_review', 'closed']) for (const acting of [false, true]) {
+  for (const requestedLanguage of [undefined, 'es', 'pt', 'en']) for (const language of ['es', 'pt', 'en']) for (const status of ['received', 'in_review', 'closed']) for (const acting of [false, true]) {
     const ownerToken = acting ? otherToken : ownToken;
     const start = await (await call(ownerToken, '/intake/start', { language, mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine',
       customer_statement: 'SECRET CUSTOMER STATEMENT', idempotency_key: crypto.randomUUID() })).json();
     const receipt = await (await call(ownerToken, '/intake/handoff', { episode_id: start.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() })).json();
     db.prepare('UPDATE intake_handoffs SET status=? WHERE episode_id=?').run(status, start.episode_id);
     targetGate = new Promise(resolve => releaseTarget = resolve); const jobs = [];
-    const response = await call(acting ? adminToken : ownToken, '/reports/update', { protocol: receipt.protocol }, { waitUntil: job => jobs.push(job) });
+    const response = await call(acting ? adminToken : ownToken, '/reports/update', { protocol: receipt.protocol, ...(requestedLanguage && { language: requestedLanguage }) }, { waitUntil: job => jobs.push(job) });
     assert.equal(response.status, 202); assert.deepEqual(await response.json(), { queued: true });
     db.prepare('UPDATE intake_handoffs SET status=? WHERE episode_id=?').run(status === 'closed' ? 'received' : 'closed', start.episode_id);
     releaseTarget(); await Promise.all(jobs);
     const payload = sent.at(-1); assert.deepEqual(payload.Destination.ToAddresses, ['ana@example.com']);
     const raw = Buffer.from(payload.Content.Raw.Data, 'base64').toString('utf8'), text = decoded(raw, 'text/plain'), html = decoded(raw, 'text/html');
     assert.ok(text.includes(receipt.reference_short) && html.includes(receipt.reference_short));
-    assert.ok(text.includes(STATUS_TEXT[status][language]) && html.includes(STATUS_TEXT[status][language]));
-    assert.ok(html.includes(`lang="${language}"`) && html.includes('href="https://demo.example/customer"'));
+    const emailLanguage = requestedLanguage ?? language;
+    assert.ok(text.includes(STATUS_TEXT[status][emailLanguage]) && html.includes(STATUS_TEXT[status][emailLanguage]));
+    assert.ok(html.includes(`lang="${emailLanguage}"`) && html.includes('href="https://demo.example/customer"'));
     assert.doesNotMatch(text + html, /SECRET CUSTOMER STATEMENT|bruno@example|AR-FOREIGN/);
-    assert.equal(db.prepare("SELECT provider_status FROM email_outbox WHERE reference=? AND template='update'").get(receipt.reference_short).provider_status, 'sent');
-    assert.equal((await call(acting ? ownToken : otherToken, '/reports/update', { protocol: receipt.protocol })).status, 404);
+    assert.deepEqual({ ...db.prepare("SELECT provider_status,language FROM email_outbox WHERE reference=? AND template='update'").get(receipt.reference_short) },
+      { provider_status: 'sent', language: emailLanguage });
+    assert.equal(db.prepare('SELECT language FROM intake_episodes WHERE episode_id=?').get(start.episode_id).language, language, 'email choice never rewrites report language');
+    assert.equal((await call(acting ? adminToken : ownToken, '/reports/update', { protocol: receipt.protocol, language: emailLanguage === 'en' ? 'es' : 'en' })).status, 429, 'changing language cannot bypass the cooldown');
+    assert.equal((await call(acting ? ownToken : otherToken, '/reports/update', { protocol: receipt.protocol, language: 'en' })).status, 404);
   }
-  assert.equal(sent.length, 18);
+  assert.equal(sent.length, 72);
+  for (const language of [null, '', 'fr', 'EN', 1, {}, ['en']]) {
+    assert.equal((await call(ownToken, '/reports/update', { protocol: crypto.randomUUID(), language })).status, 422);
+  }
+  assert.equal((await call(ownToken, '/reports/update', { protocol: crypto.randomUUID(), language: 'en', customer_id: 'bruno' })).status, 422);
 });

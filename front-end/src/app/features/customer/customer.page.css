@@ -59,6 +59,7 @@
    sidebar; at 960px and below the sidebar is a sticky header, so the panel drops below it, anchored to the header. */
 .user-menu > summary { cursor: pointer; list-style: none; border-radius: var(--radius-md); } .user-menu > summary::-webkit-details-marker { display: none; }
 .user-panel { margin-top: 12px; padding: 16px; gap: 8px; } .user-panel .ar-btn { align-self: flex-start; }
+.user-panel .ar-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 @media (max-width: 960px) {
   .user-panel { position: absolute; top: 100%; right: 16px; z-index: 5; width: min(300px, calc(100% - 32px)); margin-top: 4px; }
 }

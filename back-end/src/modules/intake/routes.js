@@ -228,7 +228,8 @@ export async function getServiceTimes(request, env, store) {
 }
 
 /**
- * POST /reports/update ``{ protocol }``: email the session customer the status of one of their acknowledged reports.
+ * POST /reports/update ``{ protocol, language? }``: email an own report status in the chosen interface language.
+ * Older clients omit language and use the report language; this choice does not change automatic notifications.
  * Foreign and missing reports get the same 404; no target 409; one queued or SES-accepted ``update`` email per report
  * per 5 minutes (429). A failed or skipped attempt stays auditable in the outbox and can be retried after 10 seconds.
  * On an act-as session the email (and its outbox row and window) is the signed-in admin's own, never the customer's.
@@ -239,24 +240,26 @@ export async function requestUpdate(request, env, store, ctx) {
   const body = await readJsonBody(request);
   if (body.error) return body.error;
   const value = body.value;
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).join() !== 'protocol'
-    || typeof value.protocol !== 'string' || !UUID.test(value.protocol)) return fail(422, 'Invalid protocol');
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !['protocol', 'language,protocol'].includes(Object.keys(value).sort().join())
+    || typeof value.protocol !== 'string' || !UUID.test(value.protocol)
+    || ('language' in value && !['es', 'pt', 'en'].includes(value.language))) return fail(422, 'Invalid protocol or language');
   // An admin acting as a customer asked for this update, so it goes to the admin's own address (ADR-007, decision 10).
   const customerId = current.acting_admin_customer_id ?? current.customer_id;
   const report = await store.findCustomerReport(current.customer_id, value.protocol.toLowerCase(), customerId);
   if (!report) return fail(404, 'Report not found');
   if (!report.has_target) return fail(409, 'No email on file for this sign-in');
   const reference = report.reference_short ?? report.protocol;
+  const language = value.language ?? report.language;
   const now = Date.now();
   const messageId = crypto.randomUUID();
   // The window is checked inside the insert, so concurrent requests queue one; only a refusal reads the newest row.
-  if (!(await store.enqueueEmail({ messageId, now, customerId, template: 'update', language: report.language, reference })).length) {
+  if (!(await store.enqueueEmail({ messageId, now, customerId, template: 'update', language, reference })).length) {
     const retryAt = await store.recentEmailRetryAt(customerId, reference, now - UPDATE_EVERY_MS);
     return fail(429, 'An update request is already in progress or was accepted recently',
       { 'Retry-After': String(Math.max(1, Math.ceil(((retryAt ?? now + EMAIL_FAILURE_RETRY_MS) - now) / 1000))) });
   }
-  ctx?.waitUntil?.(deliver(env, createStore(env.DB), { messageId, customerId, language: report.language, reference,
-    template: 'update', status: STATUS_TEXT[report.status][report.language] }));
+  ctx?.waitUntil?.(deliver(env, createStore(env.DB), { messageId, customerId, language, reference,
+    template: 'update', status: STATUS_TEXT[report.status][language] }));
   return json({ queued: true }, 202);
 }
 
