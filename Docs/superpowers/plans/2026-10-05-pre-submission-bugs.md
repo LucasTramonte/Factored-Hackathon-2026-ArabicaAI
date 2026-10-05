@@ -374,3 +374,11 @@ Expected: 0 failures everywhere. The build succeeds, with the existing 500 kB wa
   3. PR review and merge; the normal deploy publishes the client fixes.
 
 - [ ] **Step 3: After merge and the remote update, smoke-test in production** (a person, signed in as Elena): "I can't find it" → "um táxi que não reconheço" → the receipt offers the two Taxi Seguro charges.
+
+---
+
+## Added during execution (user requests, 2026-10-05)
+
+- **AI help panel says "unavailable or the report changed" (Task 5).** The customer route answers 503 while `ASSIST_CUSTOMER_ENABLED` is absent, or for a dataset customer (ADR-016). The client now hides the panel for the session on a 503 (`assistOff`), as Task 1 does for the search button. A non-503 failure keeps the panel and its message. Tests: `customer.page.assist.spec.ts`. Making it answer needs the switch on (a person's change).
+- **Every demo account sees the tour again (Task 6).** The "seen" flag lives in each browser's localStorage, so the server cannot reset it. The key moves from `arabica.customer-tour.v1` to `v2`, so every browser is offered the tour once more.
+- **Demo accounts start with no reported charges (Task 7).** `back-end/scripts/reset-demo-accounts.sql` deletes only the six demo customers' activity, in foreign-key order: reports, messages, suggestions, feedback, alert answers, email outbox, charge views and sessions. Kept: their charges, context cards and enrolled sign-in emails, and every other customer's activity. Test: `intake-storage.test.js`, "the demo-accounts reset clears only the six demo customers' activity…". A person runs it with `--remote`, after a Time Travel bookmark.
