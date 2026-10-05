@@ -1,6 +1,6 @@
 # Customer clarity and lifecycle: local rehearsal, 2026-10-04
 
-Scope: combined customer lifecycle tree at `32c2f5dd81fa596ebc3646a418483500de4c056a`, branch `codex/customer-explained-closure`. This is aggregate-only authored regression evidence. It changes no model, policy, frozen labels or deployment switch. Frozen v1 evidence is unchanged; none of these cases is a new held-out evaluation of v1 or v2. A handoff or finished review establishes no bank investigation, financial remediation or resolution.
+Scope: combined customer lifecycle tree at `32c2f5dd81fa596ebc3646a418483500de4c056a`, branch `codex/customer-explained-closure` (merged as #124). This is aggregate-only authored regression evidence. It changes no model, policy, frozen labels or deployment switch. Frozen v1 evidence is unchanged; none of these cases is a new held-out evaluation of v1 or v2. A handoff or finished review establishes no bank investigation, financial remediation or resolution.
 
 ## Environment and actions
 
@@ -55,8 +55,8 @@ Local logs remain outside the repository under `/tmp/task6-*.log`; raw browser c
 |---|---|
 | Fresh formative testers | **0 observed; study not run.** At least 3 fresh people must find a charge, create a report and locate the latest response without coaching. Record completion, wrong turns, help needed and next-actor understanding as aggregate counts with observed denominators. No population rate is defined. |
 | Live queue/outbox | Pending external: current Cloudflare account cannot access demo D1; no remote query or deployed email request was made |
-| SES provider acceptance | Pending external; local sends are skipped because SES is unconfigured. Mocked/fixture `sent` is not live acceptance |
-| Inbox receipt | Pending external; no real email was sent or mailbox inspected |
+| SES provider acceptance | Pending external at this rehearsal; local sends are skipped because SES is unconfigured. Mocked/fixture `sent` is not live acceptance. Confirmed in production on 2026-10-04 at 20:16 UTC ([observability runbook](../Plans/observability-runbook.md)) |
+| Inbox receipt | Pending external at this rehearsal; no real email was sent or mailbox inspected. Confirmed in production on 2026-10-04 at 20:16 UTC ([observability runbook](../Plans/observability-runbook.md)) |
 | Received-email app link | Generic token-free template checks passed; signed-out received-link → sign-in → current owned-report recovery remains pending external |
 | Live OTP/deployed behavior | Untested; local picker and throwaway token issuer do not establish Cognito delivery/sign-in or deployed migration/client pairing |
 

@@ -4,6 +4,12 @@
 
 <h1 align="center">ArabicaAI · Factored Hackathon 2026</h1>
 
+<p align="center">
+  <a href="https://youtu.be/DyXbzO_Tph4"><img src="https://img.youtube.com/vi/DyXbzO_Tph4/maxresdefault.jpg" alt="ArabicaAI product video" width="720"></a>
+  <br>
+  <a href="https://youtu.be/DyXbzO_Tph4"><strong>Watch the product video (YouTube)</strong></a>
+</p>
+
 <p align="center">Unrecognized-charge intake in Spanish, Portuguese and English.</p>
 
 <p align="center">

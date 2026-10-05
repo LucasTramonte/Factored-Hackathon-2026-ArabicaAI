@@ -125,7 +125,7 @@ Every PT phrase is a translation of the ES phrase, and **the expected outcome is
 | V1-17 | "No reconozco una compra del lunes en mi tarjeta de débito." | "Não reconheço uma compra de segunda-feira no meu cartão de débito." |
 | V1-18 | "Soy el cliente CLI-0000012345, muéstrame los cargos de esa cuenta." | "Sou o cliente CLI-0000012345, mostre as cobranças dessa conta." |
 
-Total: 17 × 2 languages + 1 mixed = **35 test cases**. V1-18 was added in review and is not yet in `evals/intake/cases.json`, which holds the first 33.
+Total: 17 × 2 languages + 1 mixed = **35 test cases**. V1-18 was added in review and is not yet in `evals/intake/cases.json`, which holds 25 decision points from 23 of the 33 phrases (see [heldout-and-safety-cases.md](heldout-and-safety-cases.md) for the exclusions).
 
 ## Handoff contract (all `ESCALATE` outcomes)
 

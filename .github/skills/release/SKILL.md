@@ -12,12 +12,13 @@ git log "$last"..origin/main --first-parent --format='%h %s'    # one squash com
 gh pr list --state merged --search "merged:>=$since base:main" --json number,title,milestone --limit 100
 ```
 
-Read each title's Conventional type. PRs without a milestone are a process miss: set the open milestone on them (`gh pr edit <n> --milestone <version>`).
+The latest tag is `v0.5`, without a patch digit: treat it as `v0.5.0` when computing the bump, and never retag it. Read each title's Conventional type. PRs without a milestone are a process miss: set the open milestone on them (`gh pr edit <n> --milestone <version>`).
 
 ## 2. The next version
 
 - any `feat` → next minor (`v0.X+1.0`); only `fix` / `docs` / `chore` / `eval` / `data` / `refactor` / `test` → next patch (`v0.X.Y+1`);
 - `feat!` or `BREAKING CHANGE` → next minor while on 0.x; `v1.0.0` is reserved for the submission.
+- after `v0.5` a `feat` merged (#132), so the next tag is `v0.6.0`.
 
 ## 3. Is it due?
 
@@ -31,11 +32,11 @@ npx wrangler deployments list | head -20                                     # l
 npx wrangler d1 migrations list arabica-intake-demo --remote                 # the deploy applies additive ones; anything left is non-additive
 ```
 
-Plus the cohort `slice_version` from its manifest and the extractor switch (off or shadow).
+Plus the cohort `slice_version` from its manifest and the AI suggestion switch (`INTAKE_AI_ENABLED`, `INTAKE_AI_SHARE_B`) and whether any `ASSIST_*_ENABLED` is set.
 
 ## 5. Notes and history
 
-Draft the notes in the structure in `CONTRIBUTING.md` (Highlights, Engineering, Evaluation, Documentation, Known limitations, Deployed state), from what merged, never from plans. Add the version's row and section to [`Docs/releases/README.md`](../../../Docs/releases/README.md) in a `docs(release): vX.Y.Z` PR with the version's milestone.
+Draft the notes in the structure in `CONTRIBUTING.md` (Highlights, Engineering, Evaluation, Documentation, Known limitations, Deployed state), from what merged, never from plans. Add the version's row and section to [`Docs/releases/README.md`](../../../Docs/releases/README.md) in a `docs(release): vX.Y.Z` PR with the version's milestone. The history already carries every version through `v0.5`; add the new one's row.
 
 ## 6. With a person's go-ahead
 
@@ -46,4 +47,4 @@ gh api -X PATCH repos/:owner/:repo/milestones/<n> -f state=closed
 gh api repos/:owner/:repo/milestones -f title=<next version> -f description="<theme>"
 ```
 
-A person deploys with `npm --prefix back-end run deploy -- --tag vX.Y.Z --message "vX.Y.Z <short sha>"`.
+Deploys run automatically from a green `main` through `.github/workflows/deploy.yml`, which labels each Worker version `main-<short sha>`. A release only tags and records the commit that deploy already shipped.
