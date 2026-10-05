@@ -14,7 +14,7 @@ import { close } from '../support/close.js';
 const env = { DEMO_PICKER: '1' };
 const EPISODES = 100;
 // A 77-code-point statement (the typical length used by ADR-004) and the 2,000-code-point maximum.
-const TYPICAL = 'No reconozco el cargo de Mercado Demo del 25 de septiembre; no hice la compra';
+const TYPICAL = 'No reconozco el cargo de Mercado Central del 25 de septiembre; no hice la compra';
 const VARIANTS = { typical: TYPICAL, max_ascii: 'x'.repeat(2000), max_4byte: '\u{1F600}'.repeat(2000) };
 // Bytes of retained pages per episode (rows, index entries and B-tree free space), about 10% above the values
 // measured on 2026-09-30; ADR-004 uses these bounds. Sessions are excluded: they are purged at expiry.
@@ -109,6 +109,42 @@ test('the documented demo-activity reset respects intake foreign keys and keeps 
   db.exec(readFileSync(new URL('../../scripts/reset-demo-activity.sql', import.meta.url), 'utf8'));
   for (const table of [...TABLES, 'sessions', 'charge_views', 'report_feedback', 'handoff_status_history', 'handoff_messages', 'support_assist_runs', 'proactive_answers', 'admin_actions']) assert.equal(rows(db, table), 0, table);
   assert.deepEqual(['customers', 'transactions', 'context_cards', 'sample_provenance'].map(t => rows(db, t)), seed);
+  assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
+  db.close();
+});
+
+test('the demo-accounts reset clears only the six demo customers\' activity and keeps their charges and enrolled emails', async () => {
+  const { db, call } = setup();
+  db.exec(`INSERT INTO customers(customer_id,display_name,source) VALUES ('CLI-KEEP','Dataset customer','dataset');
+    INSERT INTO transactions(transaction_id,customer_id,occurred_at,source_occurred_at,merchant_name,amount,currency) VALUES ('keep-tx','CLI-KEEP','2026-09-25T14:00:00+00:00',NULL,'Uber','10.00','USD');`);
+  const activity = async (customer, tx) => {
+    assert.equal((await call('/demo/session', { customer_id: customer })).status, 200);
+    for (const complete of [true, false]) {
+      const start = await call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine', customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() });
+      const done = complete
+        ? await call('/intake/confirm', { episode_id: start.body.episode_id, transaction_id: tx, customer_confirmed: true, idempotency_key: crypto.randomUUID() })
+        : await call('/intake/handoff', { episode_id: start.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() });
+      assert.equal(done.status, 201);
+      if (!complete) assert.equal((await call(`/intake/handoff/${done.body.protocol}/messages`, { body: 'Hola', idempotency_key: crypto.randomUUID() })).status, 201);
+    }
+    db.prepare("INSERT INTO proactive_answers(customer_id,transaction_id,answered_by,answer,answered_at) VALUES (?,?,'customer','mine',1)").run(customer, tx);
+  };
+  await activity('demo-ana', 'demo-tx-001'); await activity('CLI-KEEP', 'keep-tx');
+  const of = (sql, customer) => db.prepare(sql).get(customer).n;
+  const counts = customer => ({
+    episodes: of('SELECT count(*) n FROM intake_episodes WHERE customer_id=?', customer),
+    handoffs: of('SELECT count(*) n FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=?', customer),
+    messages: of('SELECT count(*) n FROM handoff_messages m JOIN intake_handoffs h USING(handoff_id) JOIN intake_episodes e USING(episode_id) WHERE e.customer_id=?', customer),
+    cases: of('SELECT count(*) n FROM cases WHERE customer_id=?', customer),
+    answers: of('SELECT count(*) n FROM proactive_answers WHERE customer_id=?', customer),
+    sessions: of('SELECT count(*) n FROM sessions WHERE customer_id=?', customer) });
+  const kept = counts('CLI-KEEP');
+  assert.ok(counts('demo-ana').episodes > 0 && counts('demo-ana').messages > 0);
+  const charges = rows(db, 'transactions');
+  db.exec(readFileSync(new URL('../../scripts/reset-demo-accounts.sql', import.meta.url), 'utf8'));
+  assert.deepEqual(counts('demo-ana'), { episodes: 0, handoffs: 0, messages: 0, cases: 0, answers: 0, sessions: 0 });
+  assert.deepEqual(counts('CLI-KEEP'), kept);
+  assert.equal(rows(db, 'transactions'), charges);
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
   db.close();
 });
