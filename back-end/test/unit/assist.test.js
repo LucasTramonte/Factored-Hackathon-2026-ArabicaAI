@@ -85,3 +85,61 @@ test('malformed or oversized open provider streams are cancelled without waiting
     assert.equal(result.kind,'provider_error');assert.equal(result.usage.usage_unavailable_calls,1);assert.equal(cancelled,true);
   }
 });
+
+const discoveryValue = { intent: 'transaction_search',
+  criteria: { merchant_hint: 'Streaming', date_from: '2026-04-01', date_to: '2026-04-30', currency: 'ARS', amount_operator: 'gt', amount: 85000 },
+  missing_fields: [], confidence: 0.9 };
+
+for (const mode of ['discovery']) {
+  test(`${mode} uses its dedicated schema and projects only bounded input in each language`, async () => {
+    const { PROMPTS, SCHEMAS } = await import('../../src/modules/intake/assist-prompts.js');
+    for (const language of ['es', 'pt', 'en']) {
+      resetTokenCache();
+      const output = discoveryValue;
+      const g = mock(JSON.stringify(output));
+      const key = 'description';
+      const text = '😀'.repeat(2000);
+      const result = await runAssist({ ...env, ASSIST_DISCOVERY_ENABLED: '1' },
+        { mode, language, input: { [key]: text, customer_id: 'PRIVATE', history: 'PRIVATE', transactions: ['PRIVATE'] } }, { fetcher: g.fetcher });
+      assert.equal(result.ok, true);
+      assert.deepEqual(result.value, output);
+      const calls = g.calls.filter(call => call.url.endsWith('/chat/completions'));
+      assert.equal(calls.length, 1);
+      const body = JSON.parse(calls[0].init.body);
+      assert.equal(body.max_tokens, 256);
+      assert.equal(body.messages[0].content, PROMPTS[mode]);
+      assert.deepEqual(body.response_format.json_schema, { name: `support_${mode}`, strict: true, schema: SCHEMAS[mode] });
+      const context = JSON.parse(body.messages[1].content);
+      assert.deepEqual(Object.keys(context).sort(), ['language', key, 'operators', 'intents'].sort());
+      assert.equal(context[key], text); assert.equal(context.language, language);
+      assert.ok(!JSON.stringify(body).includes('PRIVATE'));
+    }
+  });
+
+  test(`${mode} rejects invalid input before any authentication or model call`, async () => {
+    for (const text of ['', ' \t', '\ud800', 'a\0b', '😀'.repeat(2001), 12, null]) {
+      const g = mock();
+      const result = await runAssist({ ...env, ASSIST_DISCOVERY_ENABLED: '1' },
+        { mode, language: 'en', input: { description: text } }, { fetcher: g.fetcher });
+      assert.equal(result.kind, 'config_error'); assert.equal(result.usage.llm_calls, 0); assert.equal(g.calls.length, 0);
+    }
+  });
+}
+
+test('discovery extraction stays off unless its own flag is exactly the string 1', async () => {
+  for (const flag of [undefined, '0', 'true', true, 1]) {
+    const g = mock();
+    const result = await runAssist({ ...env, ASSIST_DISCOVERY_ENABLED: flag },
+      { mode: 'discovery', language: 'en', input: { description: 'Streaming in April' } }, { fetcher: g.fetcher });
+    assert.equal(result.kind, 'config_error'); assert.equal(g.calls.length, 0);
+  }
+});
+
+test('the discovery flag alone enables discovery independently of customer and reviewer assistance', async () => {
+  resetTokenCache();
+  const g = mock(JSON.stringify(discoveryValue));
+  const result = await runAssist({ ...env, ASSIST_CUSTOMER_ENABLED: undefined, ASSIST_REVIEWER_ENABLED: undefined, ASSIST_DISCOVERY_ENABLED: '1' },
+    { mode: 'discovery', language: 'en', input: { description: 'Streaming in April' } }, { fetcher: g.fetcher });
+  assert.equal(result.ok, true, 'ADR-016 defines discovery as independently enabled');
+  assert.equal(g.calls.filter(call => call.url.endsWith('/chat/completions')).length, 1);
+});

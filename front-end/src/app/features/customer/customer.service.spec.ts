@@ -55,3 +55,28 @@ describe('CustomerService guided intake', () => {
   });
 
 });
+
+
+describe('CustomerService transaction discovery', () => {
+  for (const language of ['es', 'pt', 'en'] as const) {
+    it(`posts only description and explicit ${language} language and returns the server result`, async () => {
+      const api = jasmine.createSpyObj<ApiService>('ApiService', ['request']);
+      const response = { status: 'none' as const, items: [], confidence: 0, missing_fields: [],
+        criteria: { merchant_hint: null, date_from: null, date_to: null, currency: null, amount_operator: null, amount: null } };
+      api.request.and.resolveTo(response);
+      TestBed.configureTestingModule({ providers: [{ provide: ApiService, useValue: api }] });
+      TestBed.inject(LangService).set(language === 'en' ? 'pt' : 'en');
+      const result = await TestBed.inject(CustomerService).discoverTransactions('Streaming in April', language, 'episode-id', 'request-id');
+      expect(api.request).toHaveBeenCalledOnceWith('/intake/transaction-discovery', { description: 'Streaming in April', language, episode_id: 'episode-id', request_id: 'request-id' });
+      expect(result).toBe(response);
+    });
+  }
+
+  it('propagates API rejection without retry or fallback requests', async () => {
+    const api = jasmine.createSpyObj<ApiService>('ApiService', ['request']);
+    const failure = new Error('unavailable'); api.request.and.rejectWith(failure);
+    TestBed.configureTestingModule({ providers: [{ provide: ApiService, useValue: api }] });
+    await expectAsync(TestBed.inject(CustomerService).discoverTransactions('Streaming in April', 'en', 'episode-id', 'request-id')).toBeRejectedWith(failure);
+    expect(api.request).toHaveBeenCalledTimes(1);
+  });
+});
