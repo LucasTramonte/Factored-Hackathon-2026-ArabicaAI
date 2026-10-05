@@ -257,6 +257,7 @@
                       @if (r.status !== 'closed' && thread()?.status !== 'closed' && thread()?.items?.at(-1)?.author === 'customer') {
                         <p class="ar-caption messages-waiting" role="status">{{ t().messagesWaiting }}</p>
                       }
+                      @if (!assistOff()) {
                       <section class="customer-assist ar-panel" aria-labelledby="customer-assist-title">
                         <h3 id="customer-assist-title">{{ t().customerAssistTitle }}</h3>
                         <p class="ar-caption" id="customer-assist-notice">{{ t().customerAssistNotice }}</p>
@@ -280,6 +281,7 @@
                           </div>
                         }
                       </section>
+                      }
                       <p class="ar-caption">{{ t().customerSavedMessages }}</p>
                       <app-message-thread viewer="customer" idPrefix="customer-messages" [scope]="r.protocol" [thread]="thread()" [sending]="messageSending() === r.protocol"
                         [acceptedDraft]="acceptedQuestion()" [retry]="!!messageFailed()" [failed]="messageFailed() || threadRefreshError()" [sent]="messagesSent()" (send)="sendMessage($event)" />

@@ -863,6 +863,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
   readonly assistBusy = signal(false);
   readonly questionError = signal('');
+  /** The server answered 503: AI help is switched off, or not offered to this customer (ADR-016), so the panel goes away. */
+  // ponytail: learned from the first 503, not from config; a config read would need an API change.
+  readonly assistOff = signal(false);
   readonly questionAnswer = signal<{result: CustomerAssist; report: Report; checked: number; question: string} | null>(null);
   readonly acceptedQuestion = signal<MessageDraft | null>(null);
   assistQuestion = '';
@@ -899,6 +902,7 @@ export class CustomerPage implements OnInit, OnDestroy {
       }
       this.questionAnswer.set({result,report,checked:Date.now(),question});
     } catch (e) {
+      if (e instanceof ApiError && e.status === 503) { this.assistOff.set(true); this.clearQuestionHelp(); return; }
       if (current()) { this.questionError.set(this.t().customerAssistUnavailable); if (e instanceof ApiError && e.status === 401) { this.clearQuestionHelp(); this.pauseUnauthorized(); } }
     } finally { if (current()) this.assistBusy.set(false); }
   }

@@ -76,4 +76,25 @@ describe('Customer bounded assistance', () => {
   const {fixture,page}=opened();let finish!:(v:CustomerAssist)=>void;service.assist.and.returnValue(new Promise(r=>finish=r));page.assistQuestion='status';void page.askReportQuestion();void page.askReportQuestion();flushMicrotasks();expect(service.assist).toHaveBeenCalledTimes(1);finish(classified);flushMicrotasks();fixture.detectChanges();expect(page.questionAnswer()).not.toBeNull();page.thread.set({status:'received',can_post:true,items:[customerMessage]});fixture.detectChanges();expect(page.questionAnswer()).toBeNull();fixture.destroy();
  }));
 
+
+ it('hides the AI help panel for the session once the server answers 503 (switched off or not offered to this customer)', fakeAsync(() => {
+  const {fixture,page,el}=opened();
+  expect(el.querySelector('.customer-assist')).not.toBeNull();
+  service.assist.and.rejectWith(new ApiError(503));
+  page.assistQuestion='de que es este reporte?'; void page.askReportQuestion(); flushMicrotasks(); fixture.detectChanges();
+  expect(page.assistOff()).toBeTrue();
+  expect(el.querySelector('.customer-assist')).toBeNull();
+  expect(el.textContent).not.toContain(page.t().customerAssistUnavailable);
+  expect(el.querySelector('#customer-messages-draft')).not.toBeNull(); // the human thread stays usable
+  fixture.destroy();
+ }));
+
+ it('keeps the panel and its message after a failure that is not 503', fakeAsync(() => {
+  const {fixture,page,el}=opened();
+  service.assist.and.rejectWith(new ApiError(500));
+  page.assistQuestion='status?'; void page.askReportQuestion(); flushMicrotasks(); fixture.detectChanges();
+  expect(page.assistOff()).toBeFalse(); expect(el.querySelector('.customer-assist')).not.toBeNull();
+  expect(el.textContent).toContain(page.t().customerAssistUnavailable);
+  fixture.destroy();
+ }));
 });
