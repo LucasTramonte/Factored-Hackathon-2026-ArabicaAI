@@ -8,6 +8,7 @@ import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logou
 import { startIntake, confirmIntake, confirmSuggestion, getMessages, getServiceTimes, getSuggestions, handoffIntake, listReports, postMessage, recordFeedback, requestUpdate } from './modules/intake/routes.js';
 import { listAgentIntakes, getAgentIntakeDetail, getAgentMessages, markSuggestion, postAgentMessage, startAgentSession, transitionIntake } from './modules/agent/routes.js';
 import { customerAssist } from './modules/intake/assist-routes.js';
+import { discoverTransactions } from './modules/intake/discovery-routes.js';
 import { reviewerAssist } from './modules/agent/assist-routes.js';
 import { listAuditEvents } from './modules/audit/routes.js';
 import { actAs, listCustomers } from './modules/admin/routes.js';
@@ -43,6 +44,7 @@ export const API_ROUTES = {
   '/intake/handoff/{reference}/suggestions': { GET: getSuggestions },
   '/intake/handoff/{reference}/suggestions/confirm': { POST: confirmSuggestion },
   '/intake/handoff/{reference}/assist': { POST: customerAssist },
+  '/intake/transaction-discovery': { POST: discoverTransactions },
   '/intake/handoff/{reference}/messages': { GET: getMessages, POST: postMessage },
   '/agent/intake-messages': { GET: getAgentMessages, POST: postAgentMessage }
 };
@@ -86,6 +88,7 @@ export const ROUTE_ROLES = {
   '/intake/handoff/{reference}/suggestions': 'customer',
   '/intake/handoff/{reference}/suggestions/confirm': 'customer',
   '/intake/handoff/{reference}/assist': 'customer',
+  '/intake/transaction-discovery': 'customer',
   '/intake/handoff/{reference}/messages': 'customer',
   '/agent/intake-messages': 'agent'
 };

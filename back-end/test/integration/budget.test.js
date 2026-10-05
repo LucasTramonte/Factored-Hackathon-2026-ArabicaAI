@@ -26,6 +26,8 @@ const CEILING = {
   customerAssist: [10, 300, 6, 9],
   customerAssistFull: [10, 550, 6, 9],
   customerAssistDuplicate: [5, 40, 0, 4],
+  transactionDiscovery: [8, 300, 6, 7],
+  transactionDiscoveryDuplicate: [5, 40, 0, 4],
   reviewerAssist: [7, 225, 6, 6],
   reviewerAssistFull: [7, 500, 6, 6],
   reviewerAssistDuplicate: [4, 20, 0, 3],
@@ -601,4 +603,12 @@ test('customer classification stays within its own complete API budgets for shor
  for(let i=0;i<50;i++)assert.equal((await customer.call(`/intake/handoff/${receipt.body.protocol}/messages`,{body:'Synthetic detail '+i,idempotency_key:crypto.randomUUID()})).status,201);
  const full=await customer.call(path,{...body,request_id:crypto.randomUUID()});assert.equal(full.status,200);within('customerAssistFull',full.metrics);
  console.log('D1_CUSTOMER_ASSIST '+JSON.stringify({generation:generated.metrics,duplicate:duplicate.metrics,full:full.metrics}));
+});
+
+test('transaction discovery stays within its own complete API budget', async () => {
+ const customer=client();await customer.call('/demo/session',{customer_id:'demo-ana'});const start=await customer.call('/intake/start',startBody());assert.equal(start.status,201);
+ const body={description:'Mercado this week DISCOVER={"merchant_hint":"Mercado"}',language:'es',request_id:crypto.randomUUID(),episode_id:start.body.episode_id};
+ const found=await customer.call('/intake/transaction-discovery',body);assert.equal(found.status,200);assertContract('transactionDiscovery',found.body);within('transactionDiscovery',found.metrics);
+ const duplicate=await customer.call('/intake/transaction-discovery',body);assert.equal(duplicate.status,409);within('transactionDiscoveryDuplicate',duplicate.metrics);
+ console.log('D1_TRANSACTION_DISCOVERY '+JSON.stringify({found:found.metrics,duplicate:duplicate.metrics}));
 });

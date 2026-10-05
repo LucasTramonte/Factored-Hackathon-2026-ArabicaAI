@@ -17,6 +17,7 @@
 | `request` | `route` (route-table key, never the raw path), `method`, `status`, `ms`, `ray` (`cf-ray`), `d1_queries`, `d1_rows_read`, `d1_rows_written` | Every request |
 | `unhandled_error` | `route`, `method`, `error` (the class only, e.g. `TypeError`), `ray` | An exception reached the top; the customer got a 503 |
 | `suggestion_run` | `outcome`, `arm`, `llm_calls`, `ms`, `breaker`, `suggested`, `location` | Each AI suggestion run, after the response |
+| `transaction_discovery` | `outcome` (`candidates`, `none`, `ambiguous`, an intent, an assist failure kind, `stale`, `search_failure`, `needs_clarification`), `language`, `ms`, `intent`, `candidates`, `blocked` | Each discovery request after the switch and source checks (PR #133); never the description, criteria or charges |
 
 **Privacy invariant** (AGENTS.md): no statement, message, email address, customer id, token, raw path or query string is ever logged. `test/unit/observability.test.js` fails if a reference or query text leaks.
 
@@ -27,6 +28,7 @@
    - `event = "request" AND status >= 500`: server errors;
    - `event = "request"`, grouped by `route`, p95 of `ms`: slow routes;
    - `event = "suggestion_run"`, grouped by `outcome`: how the AI is doing; `breaker = true` means the circuit breaker is skipping the model.
+   - `event = "transaction_discovery" AND outcome IN ("candidates", "none", "ambiguous")`, p95 of `ms` for successful searches only. Separately count failures by `outcome` and divide by the full discovery request count (all outcomes in the same window, including local blocks): the discovery gate is successful p95 ≤ 4 s and failures ≤ 5% (`evals/support_assist/README.md`); `blocked = "local"` is the regex block that cost no model call. Spend and token usage live in D1 `support_assist_runs` rows with version `support-discovery-v1@…`, not in logs.
 3. **Live tail from a terminal:** `cd back-end && npx wrangler tail --format json`. Wrangler's OAuth login has the `workers_tail` scope.
 
 **To query the logs from a terminal or script** (optional): wrangler's OAuth login has no observability scope, so a person creates an **account API token** with the **Workers Observability Read** permission (dashboard → My Profile → API Tokens → Create Custom Token; the permission name comes from third-party documentation). Keep it in a password manager or an environment variable, never in the repository.

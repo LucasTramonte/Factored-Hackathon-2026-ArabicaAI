@@ -374,7 +374,22 @@
                   <textarea class="ar-textarea" id="chat-details" #detailsField [(ngModel)]="chatDetails" name="chat-details" rows="3" [attr.maxlength]="room" required
                     [attr.aria-describedby]="chatError() ? 'chat-error' : promptLast() ? 'chat-prompt' : null" [attr.aria-invalid]="chatError() ? true : null"></textarea>
                 </fieldset>
-                <div class="report-actions chat-actions"><button type="button" class="ar-btn" (click)="handoff()" [disabled]="busy()">{{ frozen() ? t().retry : t().chatSend }}</button></div>
+                <div class="report-actions chat-actions">
+                  <button type="button" class="ar-btn ar-btn-secondary" (click)="discover()" [disabled]="busy() || discoveryBusy() || !chatDetails.trim()">{{ discoveryBusy() ? t().working : t().recent }}</button>
+                  <button type="button" class="ar-btn" (click)="handoff()" [disabled]="busy()">{{ frozen() ? t().retry : t().chatSend }}</button>
+                </div>
+                @if (discoveryError(); as why) { <p class="ar-caption" role="status">{{ why === 'narrow' ? t().discoveryNarrow : t().discoveryUnavailable }}</p> }
+                @if (discovery(); as found) {
+                  <section class="ar-panel suggestions" aria-live="polite">
+                    @if (found.status === 'none') { <p>{{ t().suggestNoMatch }}</p> }
+                    @else {
+                      <p>{{ found.status === 'ambiguous' ? t().chatChoose : t().suggestIntro }}</p>
+                      @for (tx of found.items; track tx.transaction_id) {
+                        <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm" (click)="useDiscovery(tx.transaction_id)" [disabled]="busy()">{{ tx.merchant_name || t().noMerchant }} · {{ money(tx.amount,tx.currency) }} · {{ tx.source_occurred_at ? sourceTime(tx.source_occurred_at) : (tx.occurred_at | date:'yyyy-MM-dd':'UTC') }}</button>
+                      }
+                    }
+                  </section>
+                }
               }
               @case ('receipt') {
                 @if (suggestionReport(); as report) { <p class="ar-ref ar-mono">{{ report.reference_short ?? report.protocol }}</p> }

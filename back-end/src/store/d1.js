@@ -894,6 +894,17 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + 'ORDER BY occurred_at DESC,source_occurred_at DESC,transaction_id LIMIT ?', customerId, SUGGESTION_PURCHASES]]);
       return { country: customer.results[0]?.country ?? null, purchases: purchases.results };
     },
+    /** Deterministic, owner-scoped discovery lookup. Criteria are validated upstream; SQL parameters never contain model SQL. */
+    searchOwnedTransactions: async (customerId, criteria) => {
+      const c = criteria ?? {}, clauses = ['customer_id=?'], values = [customerId];
+      if (c.merchant_hint) { clauses.push("lower(merchant_name) LIKE ? ESCAPE '\\'"); values.push('%' + c.merchant_hint.toLowerCase().replace(/[\\%_]/g, '\\$&') + '%'); }
+      if (c.date_from) { clauses.push('substr(occurred_at,1,10)>=?'); values.push(c.date_from); }
+      if (c.date_to) { clauses.push('substr(occurred_at,1,10)<=?'); values.push(c.date_to); }
+      if (c.currency) { clauses.push('currency=?'); values.push(c.currency); }
+      if (c.amount_operator) { clauses.push('CAST(amount AS REAL) ' + ({eq:'=',gt:'>',gte:'>=',lt:'<',lte:'<='}[c.amount_operator]) + ' ?'); values.push(c.amount); }
+      return all('SELECT transaction_id,merchant_name,amount,currency,occurred_at,source_occurred_at FROM transactions WHERE ' + clauses.join(' AND ')
+        + ' ORDER BY occurred_at DESC,source_occurred_at DESC,transaction_id LIMIT 4', ...values);
+    },
     /**
      * Record a run's outcome once, in one atomic batch: the outcome and usage (only while still pending), up to three
      * suggested charges (each insert re-checks in SQL that the charge is the handoff customer's own), and one

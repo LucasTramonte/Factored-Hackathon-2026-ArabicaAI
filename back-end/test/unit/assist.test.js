@@ -28,6 +28,14 @@ test('one schema-constrained model call; prompt version and bounded context stay
 test('strict output rejects wrappers, extra keys, bad Unicode, HTML/injection-shaped structures and invalid fields',()=>{
   for(const x of ['prefix '+JSON.stringify(value),JSON.stringify({...value,tool:'refund'}),JSON.stringify({...value,draft:'\ud800'}),JSON.stringify({...value,draft:'<script>alert(1)</script>'}),JSON.stringify({...value,missing_fields:['date','date']}),JSON.stringify({...value,summary:''}),JSON.stringify({...value,draft:'x'.repeat(2001)})]) assert.throws(()=>parseAssist('reviewer',x));
   assert.deepEqual(parseAssist('customer','{"intent":"status","field":null}'),{intent:'status',field:null});
+  const criteria={merchant_hint:'Streaming',date_from:'2026-04-01',date_to:'2026-04-30',currency:'ARS',amount_operator:'gt',amount:85000};
+  assert.equal(parseAssist('discovery',JSON.stringify({intent:'transaction_search',criteria,missing_fields:[],confidence:.9})).criteria.amount_operator,'gt');
+  assert.equal(parseAssist('discovery',JSON.stringify({intent:'safety_or_injection',criteria:null,missing_fields:[],confidence:.9})).criteria,null);
+  for (const x of [{intent:'transaction_search',criteria:null,missing_fields:[],confidence:.9},{intent:'greeting_or_casual',criteria,missing_fields:[],confidence:.9},{intent:'refund',criteria:null,missing_fields:[],confidence:.9},
+    {intent:'transaction_search',action:'search_transactions',criteria,missing_fields:[],confidence:.9},{intent:'transaction_search',criteria:{...criteria,currency:'ars'},missing_fields:[],confidence:.9},
+    {intent:'transaction_search',criteria:{...criteria,amount_operator:null},missing_fields:[],confidence:.9},{intent:'transaction_search',criteria:{...criteria,date_from:'2026-02-30'},missing_fields:[],confidence:.9},
+    {intent:'transaction_search',criteria:{...criteria,date_from:'2026-05-01'},missing_fields:[],confidence:.9},{intent:'transaction_search',criteria:{...criteria,merchant_hint:'<b>x</b>'},missing_fields:[],confidence:.9},
+    {intent:'transaction_search',criteria,missing_fields:['date','date'],confidence:.9},{intent:'transaction_search',criteria,missing_fields:[],confidence:1.1}]) assert.throws(()=>parseAssist('discovery',JSON.stringify(x)),JSON.stringify(x));
   for(const x of [{intent:'status',field:'date'},{intent:'refund',field:null},{intent:'human',field:null,draft:'x'}]) assert.throws(()=>parseAssist('customer',JSON.stringify(x)));
 });
 test('reviewer keeps original statement/details and newest eight messages; trims oldest selected text first',()=>{
@@ -76,4 +84,62 @@ test('malformed or oversized open provider streams are cancelled without waiting
     const result=await runAssist(env,args,{fetcher:(url,init)=>url.endsWith('/chat/completions')?Promise.resolve(new Response(stream)):g.fetcher(url,init)});
     assert.equal(result.kind,'provider_error');assert.equal(result.usage.usage_unavailable_calls,1);assert.equal(cancelled,true);
   }
+});
+
+const discoveryValue = { intent: 'transaction_search',
+  criteria: { merchant_hint: 'Streaming', date_from: '2026-04-01', date_to: '2026-04-30', currency: 'ARS', amount_operator: 'gt', amount: 85000 },
+  missing_fields: [], confidence: 0.9 };
+
+for (const mode of ['discovery']) {
+  test(`${mode} uses its dedicated schema and projects only bounded input in each language`, async () => {
+    const { PROMPTS, SCHEMAS } = await import('../../src/modules/intake/assist-prompts.js');
+    for (const language of ['es', 'pt', 'en']) {
+      resetTokenCache();
+      const output = discoveryValue;
+      const g = mock(JSON.stringify(output));
+      const key = 'description';
+      const text = '😀'.repeat(2000);
+      const result = await runAssist({ ...env, ASSIST_DISCOVERY_ENABLED: '1' },
+        { mode, language, input: { [key]: text, customer_id: 'PRIVATE', history: 'PRIVATE', transactions: ['PRIVATE'] } }, { fetcher: g.fetcher });
+      assert.equal(result.ok, true);
+      assert.deepEqual(result.value, output);
+      const calls = g.calls.filter(call => call.url.endsWith('/chat/completions'));
+      assert.equal(calls.length, 1);
+      const body = JSON.parse(calls[0].init.body);
+      assert.equal(body.max_tokens, 256);
+      assert.equal(body.messages[0].content, PROMPTS[mode]);
+      assert.deepEqual(body.response_format.json_schema, { name: `support_${mode}`, strict: true, schema: SCHEMAS[mode] });
+      const context = JSON.parse(body.messages[1].content);
+      assert.deepEqual(Object.keys(context).sort(), ['language', key, 'operators', 'intents'].sort());
+      assert.equal(context[key], text); assert.equal(context.language, language);
+      assert.ok(!JSON.stringify(body).includes('PRIVATE'));
+    }
+  });
+
+  test(`${mode} rejects invalid input before any authentication or model call`, async () => {
+    for (const text of ['', ' \t', '\ud800', 'a\0b', '😀'.repeat(2001), 12, null]) {
+      const g = mock();
+      const result = await runAssist({ ...env, ASSIST_DISCOVERY_ENABLED: '1' },
+        { mode, language: 'en', input: { description: text } }, { fetcher: g.fetcher });
+      assert.equal(result.kind, 'config_error'); assert.equal(result.usage.llm_calls, 0); assert.equal(g.calls.length, 0);
+    }
+  });
+}
+
+test('discovery extraction stays off unless its own flag is exactly the string 1', async () => {
+  for (const flag of [undefined, '0', 'true', true, 1]) {
+    const g = mock();
+    const result = await runAssist({ ...env, ASSIST_DISCOVERY_ENABLED: flag },
+      { mode: 'discovery', language: 'en', input: { description: 'Streaming in April' } }, { fetcher: g.fetcher });
+    assert.equal(result.kind, 'config_error'); assert.equal(g.calls.length, 0);
+  }
+});
+
+test('the discovery flag alone enables discovery independently of customer and reviewer assistance', async () => {
+  resetTokenCache();
+  const g = mock(JSON.stringify(discoveryValue));
+  const result = await runAssist({ ...env, ASSIST_CUSTOMER_ENABLED: undefined, ASSIST_REVIEWER_ENABLED: undefined, ASSIST_DISCOVERY_ENABLED: '1' },
+    { mode: 'discovery', language: 'en', input: { description: 'Streaming in April' } }, { fetcher: g.fetcher });
+  assert.equal(result.ok, true, 'ADR-016 defines discovery as independently enabled');
+  assert.equal(g.calls.filter(call => call.url.endsWith('/chat/completions')).length, 1);
 });
