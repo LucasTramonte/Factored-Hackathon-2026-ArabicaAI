@@ -183,6 +183,18 @@ describe('CustomerPage', () => {
     }
   });
 
+  it('keeps the intro text clear of the boot disc while the page waits to restore a session', () => {
+    const fixture = TestBed.createComponent(CustomerPage);
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const disc = root.querySelector('.disc--boot svg')!.getBoundingClientRect();
+    for (const text of root.querySelectorAll<HTMLElement>('.intro .promise-line, .intro .ar-small')) {
+      const r = text.getBoundingClientRect();
+      const overlaps = r.bottom > disc.top && r.top < disc.bottom && r.right > disc.left && r.left < disc.right;
+      expect(overlaps).withContext(`${text.className}: ${r.top}-${r.bottom} vs disc ${disc.top}-${disc.bottom}`).toBeFalse();
+    }
+  });
+
   it('puts the promise above the email field on sign-in', async () => {
     const fixture = TestBed.createComponent(CustomerPage);
     const p = fixture.componentInstance;
