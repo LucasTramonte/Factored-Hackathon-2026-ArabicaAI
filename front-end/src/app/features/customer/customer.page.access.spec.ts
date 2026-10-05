@@ -16,6 +16,7 @@ describe('Evaluator access request on the sign-in screen', () => {
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [provideRouter([]), { provide: CustomerService, useValue: service }, { provide: CognitoService, useValue: { forget: () => undefined } }] });
   });
   afterEach(() => localStorage.removeItem('arabica.customer-tour.v2'));
+  /** Render the sign-in step in the document so access-request tests can inspect its content and focus. */
   function login() {
     const fixture = TestBed.createComponent(CustomerPage); document.body.append(fixture.nativeElement); fixture.detectChanges();
     const page = fixture.componentInstance; page.step.set('login'); fixture.detectChanges();

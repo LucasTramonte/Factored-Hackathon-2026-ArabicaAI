@@ -23,6 +23,7 @@ def test_committed_seed_matches_the_generator():
 
 
 def test_seed_loads_reruns_and_rejects_drift():
+    """Verify seed reruns preserve demo customers, charges and bank flags, and reject stored amount drift."""
     seed = fs.render_fictitious_seed()
     con = d1()
     con.executescript(seed)

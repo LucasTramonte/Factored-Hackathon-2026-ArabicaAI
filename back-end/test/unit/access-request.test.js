@@ -18,6 +18,7 @@ const ENV = { EMAIL_KEY: Buffer.alloc(32, 7).toString('base64'), ACCESS_REQUEST_
   SES_REGION: 'us-east-2', SES_FROM: 'ArabicaAI <from@example.com>' };
 const PATH = 'https://demo.example/auth/access-request';
 
+/** Build a migrated in-memory store and request helper with a captured, controllably failing email sender. */
 function setup() {
   const db = new DatabaseSync(':memory:'); db.exec('PRAGMA foreign_keys=ON');
   const dir = new URL('../../migrations/', import.meta.url);
