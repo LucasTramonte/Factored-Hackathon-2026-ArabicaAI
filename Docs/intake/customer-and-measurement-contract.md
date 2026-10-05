@@ -45,7 +45,7 @@ B0: safe handoff-only reference. It passes identity checks and routes recognized
 
 B1: deterministic checklist. Rules recognize a small documented Spanish/Portuguese phrase set and exact ISO date, explicit currency and decimal amount; customer-scoped lookup then asks for clarification or confirmation, or packages a confirmed record. Relative dates, implied currencies, grouping separators and unsupported phrasings are intentionally not guessed. This is a transparent initial floor for a learned extractor, not a complete language implementation.
 
-Development fixtures can drive rule improvements. The scenario-disjoint evaluation split is an authored regression suite, not a blinded holdout. Safety-review fixes were applied after the first scoring; subsequent results reuse that suite. A separately authored unseen set is required before a learned-system comparison. Cases are authored synthetic evaluation fixtures, not observed customer conversations or a representative prevalence sample. Record scenario families, language, split, source/version, case-level predictions and code/corpus hashes. Human review by Andrés/Lucas remains required before treating these authored expectations as accepted gold labels.
+Development fixtures can drive rule improvements. The scenario-disjoint evaluation split is an authored regression suite, not a blinded holdout. Safety-review fixes were applied after the first scoring; subsequent results reuse that suite. A separately authored unseen set is required before a learned-system comparison. Cases are authored synthetic evaluation fixtures, not observed customer conversations or a representative prevalence sample. Record scenario families, language, split, source/version, case-level predictions and code/corpus hashes. Human review by the current team remains required before treating these authored expectations as accepted gold labels.
 
 ### Fair checklist vs AI comparison (planned, not executed)
 
@@ -72,7 +72,7 @@ Pilot budget: 20 new families × 2 languages = 40 cases per system. This is a co
 
 ## Measurement implementation handoff
 
-Roberto maintains the metric definitions and baseline report; proposed review partners are Lucas for evaluation decisions, Andrés for language/intent gold labels, and Manoella for authenticated tools and event contracts. Review at each model/rule release and at the daily team checkpoint; ownership remains subject to team confirmation.
+Roberto maintains the metric definitions and baseline report; proposed review partners are Lucas for evaluation decisions and Manoella for authenticated tools and event contracts. Language/intent gold-label review ownership awaits confirmation by the current team. Review at each model/rule release and at the daily team checkpoint; ownership remains subject to team confirmation.
 
 Before reporting the episode primary KPI, emit versioned events `intake_started`, `clarification_requested`, `transaction_confirmed`, `handoff_created`, `handoff_accepted`, and `intake_ended`. Retain one stable case_id, event timestamp, authenticated-session reference, language, scenario/eligibility classification, rule/model version, tool-call status and evidence record references. Log actual model/tool usage for cost and monotonic request durations for latency. Keep customer identifiers and original statements in access-controlled case storage, not analytics exports. Event names are a proposed instrumentation contract; the offline harness does not implement a live event service.
 
