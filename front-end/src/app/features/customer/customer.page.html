@@ -378,7 +378,7 @@
                   <button type="button" class="ar-btn ar-btn-secondary" (click)="discover()" [disabled]="busy() || discoveryBusy() || !chatDetails.trim()">{{ discoveryBusy() ? t().working : t().recent }}</button>
                   <button type="button" class="ar-btn" (click)="handoff()" [disabled]="busy()">{{ frozen() ? t().retry : t().chatSend }}</button>
                 </div>
-                @if (discoveryError(); as why) { <p class="ar-caption" role="status">{{ why === 'narrow' ? t().chatChoose : t().suggestUnavailable }}</p> }
+                @if (discoveryError(); as why) { <p class="ar-caption" role="status">{{ why === 'narrow' ? t().discoveryNarrow : t().discoveryUnavailable }}</p> }
                 @if (discovery(); as found) {
                   <section class="ar-panel suggestions" aria-live="polite">
                     @if (found.status === 'none') { <p>{{ t().suggestNoMatch }}</p> }

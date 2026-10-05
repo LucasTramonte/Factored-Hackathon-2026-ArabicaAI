@@ -42,6 +42,11 @@ describe('Customer report support', () => {
     const { fixture, page, el } = home(); void page.toggleMessages('P'); flushMicrotasks(); fixture.detectChanges();
     expect(el.querySelectorAll('.report-progress').length).toBe(1);
     expect(el.querySelector('app-message-thread h3')?.textContent).toBe('Messages with the review team');
+    // Before sending, the composer says a person reads it; the AI panel says it is automatic and session-only.
+    expect(el.querySelector('app-message-thread .message-human-note')?.textContent).toContain('human review team, not by AI');
+    expect(el.querySelector('#customer-messages-draft')?.getAttribute('aria-describedby')).toContain('customer-messages-human');
+    expect(el.querySelector('app-message-thread .message-send')?.textContent?.trim()).toBe('Send message to the team');
+    expect(el.querySelector('#customer-assist-title')?.textContent).toBe('AI help · this session only');
     fixture.destroy();
   }));
 

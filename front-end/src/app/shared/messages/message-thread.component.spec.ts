@@ -35,6 +35,26 @@ describe('MessageThreadView', () => {
     });
   }
 
+  for (const [lang, note, send] of [
+    ['es', 'Este mensaje lo lee y responde el equipo humano de revisión, no una IA. Queda guardado en tu reporte.', 'Enviar mensaje al equipo'],
+    ['pt', 'Esta mensagem é lida e respondida pela equipe humana de análise, não por uma IA. Ela fica salva no seu relato.', 'Enviar mensagem à equipe'],
+    ['en', 'This message is read and answered by the human review team, not by AI. It is saved with your report.', 'Send message to the team']] as const) {
+    it(`tells the customer before sending, in ${lang}, that a person reads the message, and describes the textarea with it`, () => {
+      const { fixture, el } = render(THREAD); TestBed.inject(LangService).set(lang); fixture.detectChanges();
+      const human = el.querySelector<HTMLElement>('.message-human-note')!;
+      expect(human.textContent).toBe(note); expect(human.getAttribute('role')).toBe('note'); expect(human.id).toBe('messages-human');
+      expect(el.querySelector('textarea')?.getAttribute('aria-describedby')).toBe('messages-human');
+      expect(el.querySelector('.message-send')?.textContent?.trim()).toBe(send); fixture.destroy();
+    });
+  }
+  it('keeps the human note in the description once an error is shown, and the agent composer carries no customer note', () => {
+    const { fixture, el, c } = render(THREAD); c.draft = ''; c.submit(); fixture.detectChanges();
+    expect(el.querySelector('textarea')?.getAttribute('aria-describedby')).toBe('messages-human messages-error');
+    const agent = render(THREAD, 'agent').el;
+    expect(agent.querySelector('.message-human-note')).toBeNull(); expect(agent.querySelector('textarea')?.getAttribute('aria-describedby')).toBeNull();
+    expect(agent.querySelector('.message-send')?.textContent?.trim()).toBe('Send message');
+  });
+
   it('emits the trimmed text, refuses an empty one with an alert, and clears the draft once the page reports it sent', () => {
     const { fixture, el, c } = render(THREAD);
     const sent: string[] = [];

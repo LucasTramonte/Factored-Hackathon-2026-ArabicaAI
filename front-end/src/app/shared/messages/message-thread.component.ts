@@ -29,9 +29,11 @@ import { MessageThread, MessageDraft } from '../models/intake.model';
       </ol>
       @if (thread()?.can_post || draft) {
         <label class="ar-field" [for]="idPrefix() + '-draft'"><span class="ar-field-label">{{ t().messageLabel }}</span></label>
+        <!-- The customer must know before sending that a person, not the AI help, reads this (ADR-002). -->
+        @if (viewer() === 'customer') { <p class="ar-caption message-human-note" role="note" [id]="idPrefix() + '-human'">{{ t().messageHumanNote }}</p> }
         <textarea class="ar-textarea" [id]="idPrefix() + '-draft'" [(ngModel)]="draft" rows="3" maxlength="2000" [readOnly]="!thread()?.can_post"
-          [attr.aria-invalid]="empty ? true : null" [attr.aria-describedby]="empty || failed() ? idPrefix() + '-error' : null"></textarea>
-        <div class="report-actions"><button type="button" class="ar-btn ar-btn-sm message-send" (click)="submit()" [disabled]="!thread()?.can_post || sendBlocked()" [attr.aria-disabled]="sending() || !thread()?.can_post || sendBlocked()">{{ retry() ? t().messageRetry : t().messageSend }}</button></div>
+          [attr.aria-invalid]="empty ? true : null" [attr.aria-describedby]="describedBy()"></textarea>
+        <div class="report-actions"><button type="button" class="ar-btn ar-btn-sm message-send" (click)="submit()" [disabled]="!thread()?.can_post || sendBlocked()" [attr.aria-disabled]="sending() || !thread()?.can_post || sendBlocked()">{{ retry() ? t().messageRetry : viewer() === 'customer' ? t().messageSendTeam : t().messageSend }}</button></div>
       }
       @if (thread() && !thread()!.can_post) {
         <p class="ar-caption messages-readonly">{{ thread()!.status === 'closed' ? t().messagesClosed : t().messagesFull }}</p>
@@ -46,6 +48,7 @@ import { MessageThread, MessageDraft } from '../models/intake.model';
       background: var(--surface-sunken); }
     .message-mine { align-self: flex-end; background: var(--accent-soft); }
     .message p { margin: 2px 0 0; white-space: pre-wrap; font: 400 14px/20px var(--font-sans); }
+    .message-human-note { margin: -4px 0 0; }
   `]
 })
 export class MessageThreadView {
@@ -82,6 +85,12 @@ export class MessageThreadView {
         }
       });
     });
+  }
+
+  /** The customer's textarea is described by the human-team note, plus the error once there is one. */
+  describedBy(): string | null {
+    const ids = [this.viewer() === 'customer' ? this.idPrefix() + '-human' : '', this.empty || this.failed() ? this.idPrefix() + '-error' : ''].filter(Boolean);
+    return ids.length ? ids.join(' ') : null;
   }
 
   submit(): void {
