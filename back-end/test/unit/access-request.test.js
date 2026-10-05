@@ -5,6 +5,7 @@
  * the log keep, the contract and the D1 cost.
  */
 import { test } from 'node:test';
+import { createHash, createHmac, hkdfSync } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -13,7 +14,7 @@ import { route } from '../../src/router.js';
 import { DAILY_CAP, requestAccess } from '../../src/modules/access/routes.js';
 import { assertContract } from '../support/contract.js';
 
-const ENV = { ACCESS_REQUEST_TO: 'team@example.com', SES_ACCESS_KEY_ID: 'AKIDEXAMPLE', SES_SECRET_ACCESS_KEY: 'secret',
+const ENV = { EMAIL_KEY: Buffer.alloc(32, 7).toString('base64'), ACCESS_REQUEST_TO: 'team@example.com', SES_ACCESS_KEY_ID: 'AKIDEXAMPLE', SES_SECRET_ACCESS_KEY: 'secret',
   SES_REGION: 'us-east-2', SES_FROM: 'ArabicaAI <from@example.com>' };
 const PATH = 'https://demo.example/auth/access-request';
 
@@ -63,6 +64,39 @@ test('a request emails the team once, as typed, with a fixed subject; D1 keeps o
   assert.match(rows(db)[0].email_hash, /^[0-9a-f]{64}$/);
   assert.ok(!/judge|factored/i.test(stored), 'no address, name or note in D1');
   assert.deepEqual(lines.map(l => JSON.parse(l)), [{ event: 'access_request', outcome: 'sent' }]);
+});
+
+test('reservations use a domain-separated HMAC, depend on the secret, and never look up legacy SHA-256', async () => {
+  const email = 'judge@factored.ai';
+  const legacy = createHash('sha256').update(email).digest('hex');
+  const { db, sent, ask } = setup();
+  db.prepare('INSERT INTO access_requests(email_hash,day,token,created_at) VALUES (?,?,?,?)')
+    .run(legacy, new Date().toISOString().slice(0, 10), 'legacy', Date.now());
+  assert.equal((await ask({ email: ' JUDGE@Factored.ai ' })).status, 200);
+  assert.equal(sent.length, 1, 'an unkeyed hash is never used for duplicate lookup');
+  const derived = hkdfSync('sha256', Buffer.from(ENV.EMAIL_KEY, 'base64'), Buffer.alloc(0),
+    'arabicaai:access-request:email:v1', 32);
+  const expected = createHmac('sha256', derived).update(email).digest('hex');
+  assert.ok(rows(db).some(row => row.email_hash === expected));
+  assert.notEqual(expected, legacy);
+  assert.notEqual(expected, createHmac('sha256', Buffer.from(ENV.EMAIL_KEY, 'base64')).update(email).digest('hex'));
+  const other = setup();
+  await other.ask({ email }, { env: { ...ENV, EMAIL_KEY: Buffer.alloc(32, 8).toString('base64') } });
+  assert.notEqual(rows(other.db)[0].email_hash, expected, 'a different secret changes the stored identifier');
+});
+
+test('a missing or invalid EMAIL_KEY fails closed before any D1 or email operation', async () => {
+  const { store, sent, ask } = setup();
+  const lines = await logged(async () => {
+    for (const key of [undefined, null, '', ' ', 'not-base64!', Buffer.alloc(31).toString('base64'), Buffer.alloc(33).toString('base64')]) {
+      const res = await ask({ email: 'judge@factored.ai' }, { env: { ...ENV, EMAIL_KEY: key } });
+      assert.equal(res.status, 503);
+      assertContract('error', res.body);
+    }
+  });
+  assert.equal(sent.length, 0);
+  assert.equal(store.metrics().queries, 0);
+  assert.ok(lines.every(line => line === JSON.stringify({ event: 'access_request', outcome: 'unavailable' })));
 });
 
 test('the same address again the same day, in any case, answers the same and sends no second email', async () => {

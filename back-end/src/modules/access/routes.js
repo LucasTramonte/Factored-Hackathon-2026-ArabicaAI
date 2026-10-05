@@ -5,11 +5,10 @@
  * whether an address is enrolled: every accepted request gets the same answer.
  *
  * Abuse bounds: the per-IP API limit, one email per address a day, at most ``DAILY_CAP`` addresses a day, a fixed subject, a
- * conservative address shape, and nothing ever sent to the requester. D1 keeps only a hash of the address (migration 0031);
+ * conservative address shape, and nothing ever sent to the requester. D1 keeps only a keyed hash of the address (migration 0031);
  * the log carries the outcome only.
  */
 import { fail, json, readJsonBody } from '../../http.js';
-import { tokenHash } from '../../auth/session.js';
 import { sendEmail } from '../../notify/email.js';
 import { logEvent } from '../../log.js';
 
@@ -46,6 +45,19 @@ function recipient(env) {
   return ses && typeof to === 'string' && ADDRESS.test(to) ? to : null;
 }
 
+/** Stable, domain-separated HMAC of a normalized address; throws without a valid 256-bit EMAIL_KEY. */
+async function emailHash(email, env) {
+  const raw = Uint8Array.from(atob(env.EMAIL_KEY ?? ''), c => c.charCodeAt(0));
+  if (raw.length !== 32) throw new Error('EMAIL_KEY must be 32 bytes, base64');
+  const encoder = new TextEncoder();
+  const material = await crypto.subtle.importKey('raw', raw, 'HKDF', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(),
+    info: encoder.encode('arabicaai:access-request:email:v1') }, material,
+  { name: 'HMAC', hash: 'SHA-256', length: 256 }, false, ['sign']);
+  const digest = await crypto.subtle.sign('HMAC', key, encoder.encode(email.trim().toLowerCase()));
+  return [...new Uint8Array(digest)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
 /** The team's email: the request as typed, labelled untrusted, and how to grant it. */
 const message = ({ email, name, note }) => [
   'Someone asked for access to the ArabicaAI demo from the sign-in screen.', '',
@@ -69,8 +81,11 @@ export async function requestAccess(request, env, store, ctx, send = sendEmail) 
   const log = outcome => logEvent('access_request', { outcome });
   const to = recipient(env);
   if (!to) { log('unavailable'); return fail(503, UNAVAILABLE); }
+  let hash;
+  try { hash = await emailHash(fields.email, env); }
+  catch { log('unavailable'); return fail(503, UNAVAILABLE); }
   const now = Date.now(), day = new Date(now).toISOString().slice(0, 10);
-  const reservation = { emailHash: await tokenHash(fields.email.toLowerCase()), day, token: crypto.randomUUID() };
+  const reservation = { emailHash: hash, day, token: crypto.randomUUID() };
   const held = await store.reserveAccessRequest({ ...reservation, now, cap: DAILY_CAP,
     keepFrom: new Date(now - KEEP_DAYS * DAY_MS).toISOString().slice(0, 10) });
   if (held === 'capped') { log('capped'); return fail(429, 'Too many access requests today', { 'Retry-After': '3600' }); }

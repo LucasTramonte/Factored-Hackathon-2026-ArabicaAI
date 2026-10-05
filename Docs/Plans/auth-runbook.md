@@ -61,7 +61,7 @@ Idempotent. It creates or finds the pool `arabicaai-demo`, the immutable attribu
 | `SES_FROM` (sender `noreply@arabicaai-demo.com`) | `npx wrangler secret put SES_FROM` | Secret by policy; the deploy guard refuses it in `vars`. Its domain must not publish DMARC `p=reject` unless the domain itself is verified in SES with DKIM |
 | `APP_URL` | `vars` | Public: the deployed origin, the target of the notification emails' "see my reports" button (the logo is embedded in the message, not fetched) |
 | `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | `npx wrangler secret put …` | Secret ([SES runbook](intake-demo.md#notification-email-ses)) |
-| `EMAIL_KEY` | `npx wrangler secret put EMAIL_KEY` (`openssl rand -base64 32`) | Secret: encrypts stored notification addresses |
+| `EMAIL_KEY` | `npx wrangler secret put EMAIL_KEY` (`openssl rand -base64 32`) | Secret: encrypts stored notification addresses and derives the domain-separated HMAC key for access requests; this route returns 503 when the key is missing or invalid |
 | `ACCESS_REQUEST_TO` | `npx wrangler secret put ACCESS_REQUEST_TO` | Secret by policy (the deploy guard refuses it in `vars`): the team inbox that receives evaluator access requests (section 11). Without it the sign-in form's request answers "try later" |
 | `DEMO_PICKER`, `COGNITO_TEST_JWKS` | `back-end/.dev.vars` only | Local only; the deploy guard refuses them in `vars` |
 
@@ -163,7 +163,7 @@ back-end/scripts/cognito/enroll.sh <judge email> demo-sofia admin               
 2. Enrol the address as `admin` on one of `demo-diego`, `demo-elena` or `demo-marco`, or on a new fictitious identity added to `fictitious.json` and `identities.json` and loaded as above: `enroll.sh <email> demo-diego admin`.
 3. Reply to the person that they can sign in with that email.
 
-Requests are bounded: one email per address a day, at most 20 addresses a day (then 429 until the next UTC day), and D1 keeps only a hash of each address for seven days (migration 0031). The same identities are reused for later test runs; `scripts/reset-demo-accounts.sql` clears all ten fictitious customers' activity before judging.
+Requests are bounded: one email per address a day, at most 20 addresses a day (then 429 until the next UTC day), and D1 keeps only a domain-separated HMAC of each normalized address for seven days (migration 0031), derived from the stable `EMAIL_KEY`. Keep this secret stable: rotating it resets address deduplication for existing rows. Legacy SHA-256 rows are not looked up and expire through normal retention. The same identities are reused for later test runs; `scripts/reset-demo-accounts.sql` clears all ten fictitious customers' activity before judging.
 
 ## Known limitations
 
