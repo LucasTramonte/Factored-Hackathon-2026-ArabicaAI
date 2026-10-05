@@ -194,7 +194,8 @@ test('waitUntil with mocked Vertex: timeout, invalid output, provider error and 
   const ana = await customer();
   const cases = [['Não lembro, MOCK-TIMEOUT aqui.', 'timeout', [1, 1]], ['Não lembro, MOCK-INVALID aqui.', 'invalid_output', [2, 0]],
     ['Não lembro, MOCK-PROVIDER aqui.', 'provider_error', [1, 1]], ['Não lembro de nada mesmo.', 'no_match', [1, 0]],
-    ['Era uma loja qualquer. FACTS={"currency":"BRL"}', 'ambiguous', [1, 0]]];
+    ['Era uma loja qualquer. FACTS={"currency":"BRL"}', 'ambiguous', [1, 0]],
+    ['Foram uns reais. FACTS={"currency":"reais"}', 'ambiguous', [1, 0]]];
   const receipts = await Promise.all(cases.map(([details]) => handoff(ana, details)));
   for (const [i, [details, kind, [calls, unknown]]] of cases.entries()) {
     const shown = await settled(ana, receipts[i]);

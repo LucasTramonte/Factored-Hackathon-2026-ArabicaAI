@@ -16,7 +16,7 @@
  */
 import { VOCABULARY, extract, registeredVersion, vertexUrl } from './ai-transport.js';
 import { accessToken, credentialConfig } from './vertex-auth.js';
-import { suggest } from './matcher.js';
+import { norm, suggest } from './matcher.js';
 import { logEvent } from '../../log.js';
 
 /**
@@ -109,6 +109,14 @@ function record(t) {
 }
 
 /**
+ * Currency words the evaluated rule doesn't know, as the code a charge carries. The prompt returns the customer's own word
+ * ("reais", "R$"), and ``label_rules._currency`` knows only dollars and pesos (the dataset has no reais), so "reais" read as
+ * ``REAIS`` and never fit a BRL charge, the demo identities' currency. Resolved before the rule, which stays the evaluated
+ * one; any other word reaches it unchanged.
+ */
+const CURRENCY_WORDS = new Map([['real', 'BRL'], ['reais', 'BRL'], ['reales', 'BRL'], ['r$', 'BRL']]);
+
+/**
  * The outcome and suggested ids for ``extracted`` against the customer's own purchases, with the ``as_of`` sent to the
  * model: ``suggested`` (1–3 ids in ``transaction_id`` order, a stable display order, not a relevance ranking), ``ambiguous``
  * (more than 3 fit; nothing is shown) or ``no_match``. Exported for tests (``suggestion-contract.test.js``).
@@ -117,8 +125,11 @@ export function suggestionFor(extracted, { country, purchases }, asOf = null) {
   const records = purchases.map(record);
   // systems.customers_from: without card data, the customer's cards are the currencies of their own purchases.
   const cards = [...new Set(records.map(t => t.currency))].map(currency => ({ product_type: null, last4: null, currency }));
+  const stated = extracted.stated_facts?.currency;
+  const code = typeof stated === 'string' ? CURRENCY_WORDS.get(norm(stated)) : undefined;
+  const facts = code ? { ...extracted.stated_facts, currency: code } : extracted.stated_facts;
   try {
-    return suggest({ ...extracted, as_of: asOf }, { country, cards }, records); // at most MAX_SUGGESTIONS ids
+    return suggest({ ...extracted, stated_facts: facts, as_of: asOf }, { country, cards }, records); // at most MAX_SUGGESTIONS ids
   } catch {
     return { outcome: 'no_match', ids: [] }; // a purchase the policy cannot read: suggest nothing
   }

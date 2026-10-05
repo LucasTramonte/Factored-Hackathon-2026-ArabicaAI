@@ -33,6 +33,18 @@ test('an amount fits exactly, or within 10% when the customer said "about"; anot
   assert.deepEqual(suggestionFor(facts({ amount: { value: '100', approx: true }, currency: 'ARS' }), purchases, AS_OF).ids, ['T1']);
 });
 
+test('"reais", "real", "reales" or "R$" fits the customer\'s BRL charges; any other word is the evaluated rule\'s, unchanged', () => {
+  const purchases = own(buy('T1', 'Mercado Central', '125.50', '2026-06-10', 'BRL'), buy('T2', 'Mercado Central', '125.50', '2026-06-10', 'USD'));
+  for (const currency of ['reais', 'Reais', ' R$ ', 'real', 'reales', 'BRL']) {
+    assert.deepEqual(suggestionFor(facts({ amount: { value: '125.50', approx: false }, currency }), purchases, AS_OF), { outcome: 'suggested', ids: ['T1'] }, currency);
+  }
+  assert.deepEqual(suggestionFor(facts({ amount: { value: '125.50', approx: false }, currency: 'dólares' }), purchases, AS_OF).ids, ['T2']);
+  const pesos = own(buy('T1', 'Uber', '10.00'));
+  for (const currency of ['reais', 'R$', 'constructor', 'yenes']) {
+    assert.deepEqual(suggestionFor(facts({ merchant: 'Uber', currency }), pesos, AS_OF), { outcome: 'no_match', ids: [] }, currency);
+  }
+});
+
 test('a card, last four digits, country or "abroad" fact fits no online purchase: D1 holds none of them', () => {
   const purchases = own(buy('T1', 'Uber', '10.00'));
   for (const extra of [{ card: { type: 'débito' } }, { card: { last4: '4821' } }, { country: 'Argentina' }, { abroad: false }]) {
