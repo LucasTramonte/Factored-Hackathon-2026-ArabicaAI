@@ -110,4 +110,25 @@ describe('Agent reviewer assistance', () => {
     expect(service.postMessage.calls.mostRecent().args[3]).toEqual(result.snapshot);
   });
 
+  it('completes the delayed initial human-thread load across an interface language change', async () => {
+    let finish!: (thread: import('../../shared/models/intake.model').MessageThread) => void;
+    service.messages.and.returnValue(new Promise(r => finish = r));
+    await page.open(protocol, document.createElement('button')); fixture.detectChanges();
+    expect(page.thread()).toBeNull(); lang.set('pt'); fixture.detectChanges();
+    finish({ status: 'received', can_post: true, items: [] }); await fixture.whenStable(); fixture.detectChanges();
+    expect(page.thread()?.can_post).toBeTrue(); expect(fixture.nativeElement.querySelector('textarea#agent-messages-draft')).not.toBeNull();
+    expect(service.messages).toHaveBeenCalledTimes(2);
+  });
+  it('acknowledges a delayed manual save across language change without permitting a second saved reply', async () => {
+    const stored = { message_id: protocol, author: 'agent' as const, body: 'Manual once', created_at: '2026-10-04T18:00:00Z' };
+    let finish!: () => void;
+    service.postMessage.and.returnValue(new Promise(r => finish = () => r(stored)));
+    service.messages.and.resolveTo({ status: 'received', can_post: true, items: [stored] });
+    composer().draft = stored.body; composer().submit(); lang.set('pt'); fixture.detectChanges();
+    expect(composer().draft).toBe(stored.body); finish(); await fixture.whenStable(); fixture.detectChanges();
+    expect(page.messagesSent()).toBe(1); expect(composer().draft).toBe(''); expect(page.thread()?.items).toEqual([stored]);
+    expect(page.assistance()).toBeNull(); expect(page.replySnapshot()).toBeNull();
+    composer().submit(); expect(service.postMessage).toHaveBeenCalledTimes(1);
+  });
+
 });

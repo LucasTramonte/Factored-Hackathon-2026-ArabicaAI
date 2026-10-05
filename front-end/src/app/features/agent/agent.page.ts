@@ -323,8 +323,13 @@ export class AgentPage {
   private draftVersion = 0;
   private readonly composer = viewChild(MessageThreadView);
 
+  /** Stored human messages belong to the report/open/session, independently of interface language. */
+  private messageScope(): string {
+    return `${this.detailRequest}:${this.detail()?.protocol}:${this.roles().join(',')}`;
+  }
+
   private assistScope(): string {
-    return `${this.detailRequest}:${this.detail()?.protocol}:${this.lang.lang()}:${this.roles().join(',')}`;
+    return `${this.messageScope()}:${this.lang.lang()}`;
   }
 
   /** Forget transient AI state and invalidate outstanding requests; manual text stays in the composer. */
@@ -399,12 +404,12 @@ export class AgentPage {
 
   /** Read the thread; a reload after a post keeps the current thread and any error on screen until it answers. */
   private async loadMessages(protocol: string): Promise<void> {
-    const scope = this.assistScope();
+    const scope = this.messageScope();
     try {
       const thread = await this.service.messages(protocol);
-      if (scope === this.assistScope()) this.thread.set(thread);
+      if (scope === this.messageScope()) this.thread.set(thread);
     } catch (e) {
-      if (scope === this.assistScope()) {
+      if (scope === this.messageScope()) {
         if (e instanceof ApiError && e.status === 401) this.fail(e);
         else this.messageFailed.set(errorText(this.t(), e));
       }
@@ -425,8 +430,8 @@ export class AgentPage {
     this.messageSending.set(protocol);
     this.messageFailed.set('');
     // The result belongs to the report that posted; if the agent opened another one meanwhile, it touches nothing there.
-    const scope = this.assistScope();
-    const stillOpen = () => this.assistScope() === scope;
+    const scope = this.messageScope();
+    const stillOpen = () => this.messageScope() === scope;
     try {
       const snapshot = this.replySnapshot();
       if (snapshot) await this.service.postMessage(protocol, body, key.key, snapshot);
