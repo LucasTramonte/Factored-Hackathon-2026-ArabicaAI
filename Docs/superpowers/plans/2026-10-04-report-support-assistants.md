@@ -8,7 +8,7 @@
 
 **Tech Stack:** Node 22+, existing Angular, Worker JavaScript, D1, Vertex workload identity federation; no new runtime or framework.
 
-**Spec:** [Approved design](../specs/2026-10-04-report-support-assistant-design.md). User approved the design on October 4, 2026. This execution plan still requires review before implementation/model activation.
+**Spec:** [Approved design](../specs/2026-10-04-report-support-assistant-design.md). User approved the design on October 4, 2026. The user approved execution of all six tasks on October 4, 2026, on one branch with a final PR. Live model pilot and activation require separate approval.
 
 ## Global constraints
 
@@ -32,9 +32,9 @@
 
 One coordinator holds the source briefing. One coder per task, strictly sequential; independent spec review then quality review after each task, maximum three correction rounds. Each brief includes the approved spec, this plan, exact file ownership, consumed/produced interfaces and test evidence. Never revert another worker's changes.
 
-Three phase PRs: Tasks 1; Tasks 2–4; Tasks 5–6. Create each branch from current `main` after the prior phase merges; do not rebase or force-push reviewed branches. The existing design branch contains documentation only and is not a production feature branch.
+User-approved delivery: execute all six tasks sequentially on `codex/report-support-assistants`, with task-scoped commits and spec/quality reviews, then open one final PR. The earlier per-phase merge stops are superseded. Do not rebase or force-push reviewed history.
 
-Before opening each PR: Conventional Commit title, type label (plus accessibility for UI work), author assignee, another teammate reviewer, next open version milestone resolved from CONTRIBUTING.md/GitHub. Attach every PR to this chat. Humans review/merge and approve activation. The normal green-main pipeline deploys. Verify the live deployment version and app after every merge; do not manually upload local development assets.
+Before opening the final PR: Conventional Commit title, type label (plus accessibility for UI work), author assignee, another teammate reviewer, next open version milestone resolved from CONTRIBUTING.md/GitHub. Attach every PR to this chat. Humans review/merge and approve activation. The normal green-main pipeline deploys. Verify the live deployment version and app after every merge; do not manually upload local development assets.
 
 ## Fixed interfaces and limits
 
@@ -59,11 +59,11 @@ These values are proposed release constraints for review with this plan, not mea
 **Consumes:** existing `MessageThread`, customer report list, `messages`, refresh and send methods. **Produces:** one visible report/progress header; localized waiting/reply state; `checkReportStatus(protocol: string): Promise<void>` using the existing owned report-list refresh; no new API.
 
 - [ ] Write failing tests: expanded report has one progress header; successful customer post then last customer author shows waiting; failed post preserves draft and never claims saved; subsequent human reply announces receipt once; closed view shows actual closing note or existing missing-note fallback.
-- [ ] Add tests for `checkReportStatus`: ES/PT/EN received/in-review/closed explanations match latest returned record, include source update time and checked-at time distinctly, and show a stale/unavailable notice on failure. Assert zero message/status writes and zero model calls.
+- [ ] Add tests for `checkReportStatus`: ES/PT/EN received/in-review/closed explanations match latest returned record, distinguish receipt time and checked-at time; explicitly state that the last status-update timestamp is unavailable in the existing owned report API, and show a stale/unavailable notice on failure. Assert zero message/status writes and zero model calls.
 - [ ] Run `npm --prefix front-end test -- --watch=false --browsers=ChromeHeadless --include='**/customer.page.support.spec.ts'`; confirm intended failures before editing.
 - [ ] Implement within existing components. Label thread as messages with the review team; status answer as automatic. Keep waiting state derived from persisted data. Discard late refreshes on session/report changes; use existing focus and announcement patterns.
 - [ ] Run focused tests, then full Angular tests/build. Browser-check 320px, 390px and desktop, long messages, keyboard navigation and failed refresh. Perform local customer→human reply→explained closure journey using synthetic records.
-- [ ] Obtain spec/quality reviews; commit `fix(customer): clarify report messages and status help`; open phase-1 PR with test evidence. No AI credentials or activation needed.
+- [ ] Obtain spec/quality reviews; commit `fix(customer): clarify report messages and status help`; retain the scoped commit and test evidence for the final PR. No AI credentials or activation needed.
 
 ## Task 2 — Bounded assistance transport and accounting (phase 2)
 
@@ -103,7 +103,7 @@ These values are proposed release constraints for review with this plan, not mea
 - [ ] Run focused Angular tests and confirm failures; implement the existing-page UI without a new chatbot shell. Keep manual messaging functional with the switch off or provider unavailable.
 - [ ] Author separate development and held-out fixtures using the evaluation gate below; pin immutable acceptance fixture hash before model trials. `score.py` uses stdlib and consumes reviewed JSONL results, never live credentials. Do not tune on acceptance failures; a new prompt version requires a new acceptance set.
 - [ ] Run full Angular and backend checks, build and mobile/desktop review. Run synthetic live Vertex pilot only after the ADR/data scope and spending are approved; otherwise leave activation pending explicitly.
-- [ ] Review, commit `feat(agent): add human-reviewed reply drafts`, and open phase-2 PR. Human steps: ADR review, live pilot/activation approval, PR approval. Existing WIF should require no broader IAM role; any unexpected permission need must be reviewed, not silently granted.
+- [ ] Review, commit `feat(agent): add human-reviewed reply drafts`, and retain the scoped commits for the final PR. Human steps: ADR review, live pilot/activation approval, PR approval. Existing WIF should require no broader IAM role; any unexpected permission need must be reviewed, not silently granted.
 
 ## Task 5 — Customer question assistant (phase 3)
 
@@ -127,11 +127,11 @@ These values are proposed release constraints for review with this plan, not mea
 - [ ] Acceptance: zero cross-customer leaks, unauthorized writes, fabricated case facts or promised financial outcomes in reviewed outputs; every deterministic status answer matches its stored source. At least 90% correct supported classifications overall and at least 85% per language; every unknown/invalid result falls back safely. Require at least 80% of reviewer drafts rated usable with no factual correction, separately reporting unchanged acceptance and edited acceptance. Any safety failure blocks activation.
 - [ ] Proposed performance gate: successful generation p95≤8s and failure/timeout rate≤5%, with all-attempt elapsed distribution reported separately and the 10s hard deadline tested. Phase 1 status target remains the existing <2s request target. Measure actual token usage and unit prices, unknown usage and per-attempt costs; do not substitute extractor timing or cost.
 - [ ] Run at least 10 synthetic two-party journeys covering ES/PT/EN: customer message persisted, waiting state, factual status, reviewer draft edited/sent, human reply observed, explained closure, closed follow-up, provider outage and identity switch. Report first-human-response timing separately from automated answers. Compare human handling time against the same tasks without assist; present this small pilot as descriptive, not causal proof.
-- [ ] Open phase-3 PR after code checks and both reviews. Human steps list evidence review, PR approval and per-feature activation approval. The deploy applies additive migrations through normal workflow; no agent runs remote migrations.
+- [ ] Open the final PR after all six tasks, code checks and both reviews. Human steps list evidence review, PR approval and per-feature activation approval. The deploy applies additive migrations through normal workflow; no agent runs remote migrations.
 - [ ] After authorized activation, confirm deployment SHA/frontend assets, login/OTP/logo, locale-specific email requests, message persistence and both assistant switches on the actual production URL. Observe errors/latency/cost; disable only the failing assistant switch if its gate is breached. Manual messages, factual status and existing extraction remain usable.
 
 ## Completion and handoff
 
 All tasks start red, finish green, record exact commands/results and commit scoped work. A failed review gets at most three correction rounds before escalation. Do not mark a phase complete solely because CI passes: require the stated UI and data-flow checks. Unperformed live tests stay explicitly pending.
 
-Plan review is the next checkpoint. Preserve the user's requested coordinator/subagent execution method; do not ask them to choose it again. After approval, execute Task 1 first and stop at its PR/human-merge boundary before starting the next phase branch.
+Execute all six approved tasks with the coordinator/subagent method and one final PR. Human review/merge, live model pilot, activation and deployment remain separate human-controlled steps.

@@ -1,6 +1,6 @@
 # Report support assistant — proposed design
 
-Status: design approved by the user on October 4, 2026. The execution plan requires review before implementation; model activation requires separate approval.
+Status: design approved by the user on October 4, 2026. The user approved all six implementation tasks on one branch with one final PR on October 4, 2026. Live model pilot and activation require separate approval.
 
 ## Outcome
 
@@ -78,15 +78,15 @@ For each phase run relevant Angular, Worker unit, local-D1 isolation/concurrency
 
 ## Delivery and coordination
 
-Use three sequential phase PRs: (1) message clarity and factual status help; (2) reviewer copilot plus its decision record/evaluation; (3) bounded customer assistant plus its evaluation. Within each phase use one coder per task, then spec and quality review, capped at three correction rounds. The coordinator holds the briefing and assigns exact file ownership and interfaces in short briefs.
+Execute the three feature phases as six sequential tasks on one branch with scoped commits and one final PR, as approved by the user on October 4, 2026. Within each phase use one coder per task, then spec and quality review, capped at three correction rounds. The coordinator holds the briefing and assigns exact file ownership and interfaces in short briefs.
 
-Create each phase branch from current main after the previous phase merges. This avoids a long stack requiring repeated rebases; never rewrite reviewed history. Each PR gets its type label, assignee, teammate reviewer and next open version milestone before opening, plus only genuine human steps before merge. Humans review/merge and approve model activation; the normal green-main pipeline deploys. Verify the live version and rendered app afterward, given the recent out-of-band deployment incident.
+Use `codex/report-support-assistants` for all six tasks; the earlier per-phase merge stops are superseded. Never rewrite reviewed history. Each PR gets its type label, assignee, teammate reviewer and next open version milestone before opening, plus only genuine human steps before merge. Humans review/merge and approve model activation; the normal green-main pipeline deploys. Verify the live version and rendered app afterward, given the recent out-of-band deployment incident.
 
 ## Design review decisions
 
-Approved direction: plan all three phases and release each separately; Phase 3 stays off until its own evaluation passes.
+Approved direction: implement all six tasks on one branch with one final PR; both assistance switches stay off pending their evaluations and separate activation approval.
 
-After design review, write the execution plan with exact files, endpoint/response contracts, limits, test assertions, rollout checks and task interfaces. This draft is intentionally not an approved implementation plan.
+After design review, write the execution plan with exact files, endpoint/response contracts, limits, test assertions, rollout checks and task interfaces. The resulting six-task implementation plan is approved; this approval does not authorize a live model pilot or activation.
 
 ## References
 

@@ -254,6 +254,14 @@ export class CustomerPage implements OnInit, OnDestroy {
     || (this.known()?.display_name ?? '').replace(/\s*\(demo\)$/, ''));
 
   constructor() {
+    effect(() => {
+      const language = this.lang.lang();
+      if (language === this.statusCheckLanguage) return;
+      this.statusCheckLanguage = language;
+      this.statusCheckWatch++;
+      this.statusExplanation.set(null);
+      this.statusChecking.set(null);
+    });
     // Move focus to the receipt, the choose step (it replaces the focused Send button), the details field (it replaces the
     // focused "can't find" button) and the chat heading when each appears; the heading is last, so opening the panel focuses it.
     for (const name of ['codeField', 'intakeReceiptEl', 'chooseStep', 'detailsField', 'chatPanel'] as const) {
@@ -775,6 +783,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   private stopThreadRefresh(): void {
+    this.statusCheckWatch++; this.statusExplanation.set(null); this.statusChecking.set(null); this.messageSaved.set(null);
     this.threadWatch++; clearTimeout(this.threadTimer); this.threadAbort?.abort();
     this.threadAbort = null; this.threadRead = null; this.threadDelay = 30000; this.threadStarted = -Infinity; this.threadRetryAt = 0;
     this.threadChecked.set(null); this.threadFailed.set(false); this.agentReplyNotice.set(false);
@@ -807,6 +816,31 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly messageSending = signal<string | null>(null);
   readonly messageFailed = signal('');
   readonly messagesSent = signal(0);
+  readonly messageSaved = signal<string | null>(null);
+  readonly statusChecking = signal<string | null>(null);
+  readonly statusExplanation = signal<{ protocol: string; report: Report | null; checked: number | null; failed: boolean } | null>(null);
+  private statusCheckWatch = 0;
+  private statusCheckLanguage = this.lang.lang();
+
+  /** Read only the owned report list; receipt time is not a status-change timestamp. */
+  async checkReportStatus(protocol: string): Promise<void> {
+    if (this.statusChecking() || !this.client() || this.destroyed || !this.reports()?.items.some(r => r.protocol === protocol)) return;
+    const generation = this.generation, watch = this.threadWatch, language = this.lang.lang(), check = ++this.statusCheckWatch;
+    this.statusCheckLanguage = language;
+    this.statusChecking.set(protocol);
+    this.statusExplanation.set(null);
+    if (this.canRefresh()) await this.loadReports();
+    if (generation !== this.generation || watch !== this.threadWatch || language !== this.lang.lang() || check !== this.statusCheckWatch) return;
+    const report = this.reports()?.items.find(r => r.protocol === protocol) ?? null;
+    this.statusExplanation.set({ protocol, report, checked: this.reportsChecked(),
+      failed: this.reportsFailed() || !report || !this.canRefresh() });
+    this.statusChecking.set(null);
+  }
+
+  /** Approved process copy selected by the persisted report state, never a promised outcome. */
+  statusHelp(report: Report): string {
+    return this.t()[report.status === 'closed' ? 'statusClosedHelp' : report.status === 'in_review' ? 'statusReviewHelp' : 'statusReceivedHelp'];
+  }
   /** Per report, one key per message text: a retry of the same text reuses it (one stored message); new text gets a new key. */
   private readonly messageKeys = new Map<string, { body: string; key: string }>();
 
@@ -826,14 +860,14 @@ export class CustomerPage implements OnInit, OnDestroy {
     let key = this.messageKeys.get(protocol);
     if (key?.body !== body) this.messageKeys.set(protocol, key = { body, key: crypto.randomUUID() });
     this.messageSending.set(protocol);
-    this.messageFailed.set('');
+    this.messageFailed.set(''); this.messageSaved.set(null);
     // The result belongs to the report that posted; if the customer opened another one meanwhile, it touches nothing there.
     const g = this.generation, watch = this.threadWatch;
     const stillOpen = () => g === this.generation && watch === this.threadWatch && this.openThread() === protocol;
     try {
       await this.service.postMessage(protocol, body, key.key);
       this.messageKeys.delete(protocol);
-      if (stillOpen()) this.messagesSent.update(n => n + 1);
+      if (stillOpen()) { this.messagesSent.update(n => n + 1); this.messageSaved.set(protocol); }
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) this.messageKeys.delete(protocol);
       if (stillOpen()) this.messageFailed.set(messageErrorText(this.t(), e));

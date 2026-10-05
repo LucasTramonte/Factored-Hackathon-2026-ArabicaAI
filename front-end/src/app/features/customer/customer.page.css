@@ -66,3 +66,8 @@
 
 .help-section summary { cursor: pointer; font-weight: 600; }
 .help-section[open] > * + * { margin-top: 12px; }
+
+/* Automatic explanations stay distinct from the saved human thread and contain long source notes. */
+.status-explanation { margin: 8px 0; padding: 12px; background: var(--surface-sunken); border-radius: var(--radius-md); overflow-wrap: anywhere; }
+.status-explanation p { margin: 4px 0; }
+.status-closing { white-space: pre-wrap; }

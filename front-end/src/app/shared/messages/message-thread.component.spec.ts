@@ -28,6 +28,13 @@ describe('MessageThreadView', () => {
     expect(render(THREAD, 'agent').el.querySelectorAll('.message')[0].textContent).toContain('You');
   });
 
+  for (const [lang, title] of [['es', 'Mensajes con el equipo de revisión'], ['pt', 'Mensagens com a equipe de análise'], ['en', 'Messages with the review team']] as const) {
+    it(`labels the customer human thread in ${lang}`, () => {
+      const { fixture, el } = render(THREAD); TestBed.inject(LangService).set(lang); fixture.detectChanges();
+      expect(el.querySelector('h3')?.textContent).toBe(title); fixture.destroy();
+    });
+  }
+
   it('emits the trimmed text, refuses an empty one with an alert, and clears the draft once the page reports it sent', () => {
     const { fixture, el, c } = render(THREAD);
     const sent: string[] = [];

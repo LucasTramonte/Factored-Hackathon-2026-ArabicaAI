@@ -15,7 +15,7 @@ import { MessageThread } from '../models/intake.model';
   imports: [DatePipe, FormsModule],
   template: `
     <section class="message-thread" [attr.aria-labelledby]="idPrefix() + '-title'">
-      <h3 [id]="idPrefix() + '-title'">{{ t().messagesTitle }}</h3>
+      <h3 [id]="idPrefix() + '-title'">{{ viewer() === 'customer' ? t().messagesTeamTitle : t().messagesTitle }}</h3>
       <ol class="messages" role="log" aria-live="polite">
         @for (m of thread()?.items ?? []; track m.message_id) {
           <li [class]="'message message-' + m.author + (m.author === viewer() ? ' message-mine' : '')">
@@ -31,7 +31,7 @@ import { MessageThread } from '../models/intake.model';
         <label class="ar-field" [for]="idPrefix() + '-draft'"><span class="ar-field-label">{{ t().messageLabel }}</span></label>
         <textarea class="ar-textarea" [id]="idPrefix() + '-draft'" [(ngModel)]="draft" rows="3" maxlength="2000" [readOnly]="!thread()?.can_post"
           [attr.aria-invalid]="empty ? true : null" [attr.aria-describedby]="empty || failed() ? idPrefix() + '-error' : null"></textarea>
-        <div class="report-actions"><button type="button" class="ar-btn ar-btn-sm message-send" (click)="submit()" [disabled]="!thread()?.can_post" [attr.aria-disabled]="sending() || !thread()?.can_post">{{ t().messageSend }}</button></div>
+        <div class="report-actions"><button type="button" class="ar-btn ar-btn-sm message-send" (click)="submit()" [disabled]="!thread()?.can_post" [attr.aria-disabled]="sending() || !thread()?.can_post">{{ retry() ? t().messageRetry : t().messageSend }}</button></div>
       }
       @if (thread() && !thread()!.can_post) {
         <p class="ar-caption messages-readonly">{{ thread()!.status === 'closed' ? t().messagesClosed : t().messagesFull }}</p>
@@ -56,6 +56,7 @@ export class MessageThreadView {
   readonly idPrefix = input('messages');
   readonly sending = input(false);
   readonly failed = input('');
+  readonly retry = input(false);
   /** Bumped by the page after a successful post on this report, which clears the draft. */
   readonly sent = input(0);
   /** The report shown (its protocol): a different report never inherits the previous one's draft. */
