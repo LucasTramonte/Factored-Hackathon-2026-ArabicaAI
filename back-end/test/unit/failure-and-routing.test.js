@@ -149,6 +149,10 @@ test('identity list joins the committed fictitious identities with dataset custo
     { customer_id: 'demo-diego', display_name: 'Diego (demo)', country: null },
     { customer_id: 'demo-elena', display_name: 'Elena (demo)', country: null },
     { customer_id: 'demo-marco', display_name: 'Marco (demo)', country: null },
+    { customer_id: 'demo-sofia', display_name: 'Sofía (demo)', country: null },
+    { customer_id: 'demo-pablo', display_name: 'Pablo (demo)', country: null },
+    { customer_id: 'demo-lucia', display_name: 'Lucía (demo)', country: null },
+    { customer_id: 'demo-tomas', display_name: 'Tomás (demo)', country: null },
     { customer_id: 'CLI-U53R5AZVLET0', display_name: 'Dataset customer (synthetic)', country: null },
     { customer_id: 'CLI-COHORT-1', display_name: 'Zoë O.', country: 'México' }]);
 });

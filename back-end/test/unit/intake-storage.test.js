@@ -113,7 +113,7 @@ test('the documented demo-activity reset respects intake foreign keys and keeps 
   db.close();
 });
 
-test('the demo-accounts reset clears only the six demo customers\' activity and keeps their charges and enrolled emails', async () => {
+test('the demo-accounts reset clears only the ten demo customers\' activity and keeps their charges and enrolled emails', async () => {
   const { db, call } = setup();
   db.exec(`INSERT INTO customers(customer_id,display_name,source) VALUES ('CLI-KEEP','Dataset customer','dataset');
     INSERT INTO transactions(transaction_id,customer_id,occurred_at,source_occurred_at,merchant_name,amount,currency) VALUES ('keep-tx','CLI-KEEP','2026-09-25T14:00:00+00:00',NULL,'Uber','10.00','USD');`);
@@ -129,7 +129,7 @@ test('the demo-accounts reset clears only the six demo customers\' activity and 
     }
     db.prepare("INSERT INTO proactive_answers(customer_id,transaction_id,answered_by,answer,answered_at) VALUES (?,?,'customer','mine',1)").run(customer, tx);
   };
-  await activity('demo-ana', 'demo-tx-001'); await activity('CLI-KEEP', 'keep-tx');
+  await activity('demo-ana', 'demo-tx-001'); await activity('demo-tomas', 'demo-tx-042'); await activity('CLI-KEEP', 'keep-tx');
   const of = (sql, customer) => db.prepare(sql).get(customer).n;
   const counts = customer => ({
     episodes: of('SELECT count(*) n FROM intake_episodes WHERE customer_id=?', customer),
@@ -142,7 +142,9 @@ test('the demo-accounts reset clears only the six demo customers\' activity and 
   assert.ok(counts('demo-ana').episodes > 0 && counts('demo-ana').messages > 0);
   const charges = rows(db, 'transactions');
   db.exec(readFileSync(new URL('../../scripts/reset-demo-accounts.sql', import.meta.url), 'utf8'));
-  assert.deepEqual(counts('demo-ana'), { episodes: 0, handoffs: 0, messages: 0, cases: 0, answers: 0, sessions: 0 });
+  for (const customer of ['demo-ana', 'demo-tomas']) {
+    assert.deepEqual(counts(customer), { episodes: 0, handoffs: 0, messages: 0, cases: 0, answers: 0, sessions: 0 }, customer);
+  }
   assert.deepEqual(counts('CLI-KEEP'), kept);
   assert.equal(rows(db, 'transactions'), charges);
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
