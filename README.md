@@ -40,6 +40,8 @@ The repository is private; CI and release links require repository access and sh
 
 **Try the [live demo](https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/):** customers, agents and evaluators sign in with an email one-time code from Amazon Cognito. Ask the team to enrol your email; see the [auth runbook](Docs/Plans/auth-runbook.md) and [demo runbook](Docs/Plans/intake-demo.md).
 
+> **Evaluators: requesting access.** Judges are assigned at random, so we may not have enrolled your email yet. On the [sign-in screen](https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/), choose **"Evaluating this project and have no access? Request it"**, then enter your email (a name and a note are optional) and send it. The team enrols your email and replies to you, after which you sign in with a one-time code sent to that address. You are enrolled on a **fictitious demo customer**: its charges are invented, the rest of the demo uses the organizers' synthetic dataset, and nothing refunds money or blocks a card. As an evaluator you can also open the reviewer view and switch to other demo customers. Details are in [section 11 of the auth runbook](Docs/Plans/auth-runbook.md#11-evaluator-access).
+
 1. **Customer:** report an unrecognized charge, select your own transaction or choose “I can't find it,” and keep the saved reference.
 2. **Reviewer:** sign in with an enrolled reviewer account to inspect the agent queue and update the review status; see the [demo runbook](Docs/Plans/intake-demo.md) for the walkthrough.
 

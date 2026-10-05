@@ -167,7 +167,7 @@ Human steps (the access key never passes through an agent or the repository):
    npx wrangler secret put EMAIL_KEY   # 32 random bytes, base64: openssl rand -base64 32
    ```
 
-3. Judges need no SES verification: production access is on. Enrol their email in Cognito (auth runbook, section 6).
+3. Judges need no SES verification: production access is on. Enrol their email in Cognito (auth runbook, sections 6 and 11). A judge we haven't enrolled requests access from the sign-in screen, which emails the team inbox in the `ACCESS_REQUEST_TO` secret.
 4. Before the demo, sign in as that customer, request one report update, confirm the message arrives in that mailbox, and have an operator check the corresponding reference-only outbox row. Agents do not run the remote query or inspect a person's inbox. Bounce and complaint events are tracked; delivery events are not. Mailbox receipt is the delivery proof, while the stored provider message id proves only SES acceptance.
 
 ## Known limits
