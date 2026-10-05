@@ -1,6 +1,6 @@
 # Support-assist offline pilot evidence
 
-**Decision: implementation is ready for its final review/checks; live pilot and activation remain pending.** Both production assistant switches stay absent/off. This record contains aggregate synthetic/local evidence, not observed model quality, human handling improvement or production verification. The final PR and final checks belong to the coordinator; no live model calls, spend approval, deploy, remote migration, merge, tag or permission change occurred in Task 6.
+**Decision: implementation and the final complete test/build wave pass; the strongest final review, live pilot and activation remain pending.** Both production assistant switches stay absent/off. This record contains aggregate synthetic/local evidence, not observed model quality, human handling improvement or production verification. The coordinator recorded the final checks; the final PR awaits the strongest combined quality/whole-branch review; no live model calls, spend approval, deploy, remote migration, merge, tag or permission change occurred in Task 6.
 
 ## Provenance and fixed populations
 
@@ -32,13 +32,28 @@ Commands run at repository root on `codex/report-support-assistants`, Task 6 bas
 
 | Exact check | Exit / result | What it establishes |
 |---|---|---|
-| `python3 -m unittest evals.support_assist.test_score` | 0, **12/12** | Complete denominators; missing/duplicate/reused attempts; version/hash mismatch; malformed/unreviewed/invalid metrics; safety/status/fallback blocking; customer per-language accuracy; failures/partial unknown tokens; shared daily and rolling caps; absent/malformed live evidence; unreserved gate failures retained; one late success blocks even when p95 passes |
+| `python3 -m unittest evals.support_assist.test_score` | 0, **14/14** | Complete denominators; missing/duplicate/reused attempts; version/hash mismatch; malformed/unreviewed/invalid metrics; safety/status/fallback blocking; customer per-language accuracy; failures/partial unknown tokens; shared daily and rolling caps; absent/malformed live evidence; unreserved gate failures retained; one late success blocks even when p95 passes; actual unsupported unsafe fallback blocks despite accuracy; failed generation cannot claim draft acceptance |
 | `python3 -m evals.support_assist.score --check` | 0, all frozen bytes match | 30 development + 60 acceptance per feature, 10/20 per language, separate IDs/wording and ≥20 adversarial/unsupported per feature; unchanged transport/prompt freeze |
 | `ONLY=support-assist-journeys.test.js npm --prefix back-end run test:integration` | 0, **10/10** | Real local Worker/D1 persistence and isolation with controlled provider/session seams |
 | `python3 -m evals.support_assist.score --results .superpowers/sdd/2026-10-04-report-support-assistants/task-6-contract-results.jsonl --manifest .superpowers/sdd/2026-10-04-report-support-assistants/task-6-contract-manifest.json --ledger .superpowers/sdd/2026-10-04-report-support-assistants/task-6-contract-reservations.jsonl --require-pass` | **2**, `pending_external` | Artificial unit-test records exercise the CLI contract; mock-only evidence cannot pass the live gate. These rows are not observed model results and their numeric metrics are not published |
 | `git diff --check` | 0 | No whitespace errors in scoped work |
 
 The initial scorer RED command exited 1 because the scorer module did not exist, before implementation. The first native journey execution failed at the existing logout response (the test expected 200; the endpoint returns 204); correcting the expectation produced 10/10 without runtime changes. Intermediate scorer fixtures were corrected to place timestamps after the freeze and to make status review inapplicable after intentionally changing a predicted status to unsupported. These were test-contract corrections, not hidden model failures. No broad backend/frontend/build wave was repeated here.
+
+The separate Task 6 spec re-review is clean after two scorer corrections: actual unsupported outputs are audited for safe fallback even on supported cases, and failed/no-draft reviewer attempts must be rejected rather than counted as unchanged/edited acceptance. Two focused RED regressions reproduced three failed assertions; the corrected scorer passes 14/14 and preserves every frozen corpus/bundle byte. No runtime changed.
+
+### Final complete verification wave (coordinator)
+
+The coordinator ran one complete wave against `e5ccb32` runtime. Subsequent `3262bca` changes only the offline scorer/tests/README and passed the focused 14-check/freeze gate. No runtime changed during verification, and no tests were repeated for this docs-only completion.
+
+| Exact command | Exit / result | Retained limits |
+|---|---|---|
+| `make intake-ui-build` | 0; Angular build and Worker assets prepared | Initial bundle **542.69 KB**, estimated transfer **135.65 KB**; exceeds existing **500 KB warning** by 42.69 KB, below **1 MB error** limit |
+| `npm --prefix back-end test` | 0; **275 unit + 4 native accounting + 153 integration + 10 budget checks**; no failures, cancelled, skipped or todo | Ten native support journeys are included in the 153 integration checks. Controlled sanitized error-path log output is asserted test evidence, not a failed suite |
+| `CHROME_BIN='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npm --prefix front-end test -- --watch=false --browsers=ChromeHeadless` | 0; **395/395** success, 2 min 17.973 s | **56 Karma HTTP 404 `/auth/me` warnings**, the same count as the unchanged 339-test baseline; no new warning count, failures or browser disconnect |
+| `python3 -m unittest evals.support_assist.test_score` and `python3 -m evals.support_assist.score --check` | 0; **14/14** and unchanged hashes | Focused checks cover final scorer-only fixes; no live model/operator results implied |
+
+The strongest independent combined Task 6 quality/whole-branch reviewer is still running and must inspect these outputs and the small completion diff before a ready verdict. The final PR remains coordinator-owned after that gate. Complete test/build success does not establish live model quality, operator timing, production verification or activation approval.
 
 **Ten scripted two-party journeys: ES 4, PT 3, EN 3.** Each actually creates a handoff, saves and rereads a customer message, asserts waiting from last persisted customer author, classifies status against owned stored state/count without creating a message, prepares an unsaved reviewer draft, explicitly sends different edited human text with its snapshot, rereads the human-author reply, replays Send once, and preserves manual status/messages on a provider outage. The changed message count rejects stale assisted sending. Logout during a delayed classifier call, a different customer session and foreign/missing equivalence verify identity isolation. A human-commanded explained closure makes the old thread read-only; linked follow-up creates a different report and keeps its source closed. Local claims are direct assertions about stored data, not asserted provider semantics.
 
@@ -84,4 +99,4 @@ These reproduce every `Ruling:` decision in the retained orchestration ledger, i
 | Retain ignored SDD ledger/packages/reviews/screenshots until root inspection and PR creation; durable aggregates/rulings committed here | Explicit handoff-evidence requirement overrides immediate skill scratch cleanup | Temporary ignored local artifacts remain until later cleanup |
 | After separate Task 6 spec review, the fresh strongest whole-branch reviewer independently performs Task 6 quality, concurrently with coordinator's final full build/tests; reviewer inspects final outputs before ready verdict | Latest explicit user/coordinator efficiency instruction | One combined review seat instead of two overlapping quality passes |
 
-Task 6 spec review, combined independent quality/whole-branch review, final complete stack/build checks and the final PR remain coordinator-owned at this record's creation. Private scratch is retained; this public record contains no run question, draft, customer record, credential or raw transcript.
+Task 6 spec re-review is clean and the coordinator's final complete stack/build checks pass. Combined independent quality/whole-branch review remains running; the final PR awaits that verdict. Private scratch is retained; this public record contains no run question, draft, customer record, credential or raw transcript.
