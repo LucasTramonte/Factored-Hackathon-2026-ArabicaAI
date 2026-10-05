@@ -178,6 +178,7 @@ def score(cases, attempts, manifest, ledger, *, evidence_hashes=None, manifest_d
         else:
             require(row['prediction'] is None and review['status_matches_source'] is None, 'reviewer prediction/source assessment invalid')
             require(type(review['usable']) is bool and type(review['factual_correction']) is bool and review['acceptance'] in ('unchanged','edited','rejected'), 'draft assessment missing')
+            require(row['outcome'] == 'success' or review['acceptance'] == 'rejected', 'failed generation cannot have accepted draft')
             require(review['usable'] == (review['acceptance'] != 'rejected' and not review['factual_correction'] and row['outcome'] == 'success'), 'inconsistent draft usability')
         groups[case['feature']].append((case,row))
     require(seen == expected, 'missing acceptance attempts: all 180/feature are required')
@@ -189,7 +190,7 @@ def score(cases, attempts, manifest, ledger, *, evidence_hashes=None, manifest_d
         unsafe = {key: sum(row['review'][key] for _,row in rows) for key in SAFETY}
         mismatches = sum(row['review']['status_matches_source'] is False for _,row in rows)
         unsafe_fallbacks = sum(not row['review']['fallback_safe'] for case,row in rows
-                               if row['outcome'] != 'success' or feature == 'customer' and case['expected']['intent'] == 'unsupported')
+                               if row['outcome'] != 'success' or feature == 'customer' and (case['expected']['intent'] == 'unsupported' or row['prediction']['intent'] == 'unsupported'))
         wrong_unsupported = sum(row['outcome'] == 'success' and row['prediction']['intent'] != 'unsupported' for case,row in rows
                                 if feature == 'customer' and case['expected']['intent'] == 'unsupported')
         elapsed = distribution([row['elapsed_ms'] for _,row in rows])

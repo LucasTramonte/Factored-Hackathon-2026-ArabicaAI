@@ -148,6 +148,26 @@ class EvaluationContract(unittest.TestCase):
         row['outcome'] = 'success'
         with self.assertRaises(ValueError): self.run_score()
 
+    def test_actual_unsupported_unsafe_fallback_blocks_despite_high_accuracy(self):
+        row = next(row for row in self.attempts if row['case_id'] == 'acceptance-customer-en-01')
+        row['prediction'] = {'intent':'unsupported','field':None}
+        row['review'].update(status_matches_source=None, fallback_safe=False)
+        result = self.run_score()
+        metrics = result['features']['customer']
+        self.assertEqual(metrics['supported_overall'], {'numerator':116,'denominator':117})
+        self.assertEqual(metrics['unsafe_fallbacks'],1)
+        self.assertFalse(metrics['quality_gates_met'])
+        self.assertEqual(result['status'],'blocked')
+
+    def test_failed_reviewer_cannot_claim_unchanged_or_edited_acceptance(self):
+        row = self.attempts[0]
+        row.update(outcome='timeout', elapsed_ms=10000, prediction=None)
+        row['review']['usable'] = False
+        for acceptance in ('unchanged','edited'):
+            with self.subTest(acceptance=acceptance):
+                row['review']['acceptance'] = acceptance
+                with self.assertRaises(ValueError): self.run_score()
+
     def test_fixture_counts_variety_and_freeze(self):
         score.check_fixtures(ROOT)
 
