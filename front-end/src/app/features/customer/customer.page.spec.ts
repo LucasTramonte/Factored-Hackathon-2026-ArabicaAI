@@ -345,12 +345,23 @@ describe('CustomerPage', () => {
       await p.requestCode();
     }
 
+    it('passes the selected language for request and resend', async () => {
+      const { p } = await open(false);
+      const lang = TestBed.inject(LangService);
+      p.email = ' ana@example.com ';
+      lang.set('pt'); await p.requestCode();
+      lang.set('en'); await p.requestCode();
+      expect(cognito.requestCode.calls.allArgs()).toEqual([['ana@example.com', 'pt'], ['ana@example.com', 'en']]);
+      expect(lang.t().codeHelp).toContain('Your ArabicaAI code');
+      lang.set('pt'); expect(lang.t().codeHelp).toContain('Seu código ArabicaAI');
+    });
+
     it('sends a code, shows where it went, and verifies into the home', async () => {
       const { fixture, p, el } = await open(false);
       expect(el.querySelector<HTMLInputElement>('input[type=email]')?.labels?.[0].textContent).toContain(p.t().emailLabel);
       await toCode(p);
       fixture.detectChanges();
-      expect(cognito.requestCode).toHaveBeenCalledWith('ana@example.com');
+      expect(cognito.requestCode).toHaveBeenCalledWith('ana@example.com', p.lang.lang());
       expect(el.querySelector('#code-sent')?.textContent).toContain('ana@example.com');
       const code = el.querySelector<HTMLInputElement>('#login-code')!;
       expect([code.inputMode, code.autocomplete, code.maxLength, code.pattern]).toEqual(['numeric', 'one-time-code', 8, '[0-9]*']);
@@ -423,7 +434,7 @@ describe('CustomerPage', () => {
 
     it('after Cognito accepts the code, a failed Worker exchange returns to the email step for a new code', async () => {
       const real = new CognitoService();
-      cognito.requestCode.and.callFake(e => real.requestCode(e));
+      cognito.requestCode.and.callFake((e, locale) => real.requestCode(e, locale));
       cognito.submitCode.and.callFake((e, c) => real.submitCode(e, c));
       const fetchSpy = spyOn(globalThis, 'fetch');
       const reply = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));

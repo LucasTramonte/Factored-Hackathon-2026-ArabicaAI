@@ -1,0 +1,221 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Pool-scoped Cognito email delivery adapter; install zip before attaching.",
+  "Parameters": {
+    "PoolId": {
+      "Type": "String"
+    },
+    "SesIdentityArn": {
+      "Type": "String"
+    },
+    "SesFrom": {
+      "Type": "String",
+      "Default": "Arabica AI <noreply@arabicaai-demo.com>"
+    },
+    "ClientLocales": {
+      "Type": "String",
+      "Default": "{}"
+    }
+  },
+  "Resources": {
+    "Key": {
+      "Type": "AWS::KMS::Key",
+      "Properties": {
+        "Description": "Cognito native email code encryption",
+        "KeyPolicy": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:root"
+                }
+              },
+              "Action": "kms:*",
+              "Resource": "*"
+            }
+          ]
+        }
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Encrypt native Cognito codes; no persistent customer data.",
+          "must": "Never log codes, recipients or raw events; preserve pool identity and native verification."
+        }
+      }
+    },
+    "Role": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "EmailDelivery",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "kms:Decrypt",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "Key",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": "ses:SendEmail",
+                  "Resource": {
+                    "Ref": "SesIdentityArn"
+                  },
+                  "Condition": {
+                    "StringEquals": {
+                      "ses:FromAddress": "noreply@arabicaai-demo.com"
+                    }
+                  }
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}:*"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Allow this sender only its key, verified sender identity and logs.",
+          "must": "Never log codes, recipients or raw events; preserve pool identity and native verification."
+        }
+      }
+    },
+    "Logs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${AWS::StackName}"
+        },
+        "RetentionInDays": 7
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Bound authentication-delivery diagnostics to seven days.",
+          "must": "Never log codes, recipients or raw events; preserve pool identity and native verification."
+        }
+      }
+    },
+    "Sender": {
+      "Type": "AWS::Lambda::Function",
+      "DependsOn": "Logs",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "AWS::StackName"
+        },
+        "Runtime": "nodejs22.x",
+        "Handler": "index.handler",
+        "Role": {
+          "Fn::GetAtt": [
+            "Role",
+            "Arn"
+          ]
+        },
+        "Timeout": 5,
+        "MemorySize": 256,
+        "Environment": {
+          "Variables": {
+            "POOL_ID": {
+              "Ref": "PoolId"
+            },
+            "KEY_ARN": {
+              "Fn::GetAtt": [
+                "Key",
+                "Arn"
+              ]
+            },
+            "SES_FROM": {
+              "Ref": "SesFrom"
+            },
+            "CLIENT_LOCALES": {
+              "Ref": "ClientLocales"
+            }
+          }
+        },
+        "Code": {
+          "ZipFile": "exports.handler = async () => { throw new Error('Sender package not installed'); };"
+        }
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Authentication delivery adapter only, never a business API.",
+          "must": "Never log codes, recipients or raw events; preserve pool identity and native verification."
+        }
+      }
+    },
+    "Invoke": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "Sender"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "cognito-idp.amazonaws.com",
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::Sub": "arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${PoolId}"
+        }
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Only the selected Cognito pool may invoke the adapter.",
+          "must": "Never log codes, recipients or raw events; preserve pool identity and native verification."
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "SenderArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Sender",
+          "Arn"
+        ]
+      }
+    },
+    "KeyArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Key",
+          "Arn"
+        ]
+      }
+    }
+  },
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@2"
+    }
+  }
+}

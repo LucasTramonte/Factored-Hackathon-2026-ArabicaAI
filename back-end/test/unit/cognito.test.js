@@ -61,3 +61,10 @@ test('a validly signed token without exp or sub is rejected', async () => {
   await assert.rejects(verifyIdToken(await base().setSubject('sub-1').sign(ours.privateKey), opts));
   await assert.rejects(verifyIdToken(await base().setExpirationTime('1h').sign(ours.privateKey), opts));
 });
+
+test('explicit locale audiences pass but another client in the same pool does not', async () => {
+  const localized = { ...opts, clientId: ['test-client', 'test-en', 'test-pt'] };
+  for (const aud of localized.clientId) assert.equal((await verifyIdToken(await sign({}, { aud }), localized)).customerId, 'demo-ana');
+  await assert.rejects(verifyIdToken(await sign({}, { aud: 'unlisted-client' }), localized));
+  await assert.rejects(verifyIdToken(await sign({ token_use: 'access' }, { aud: 'test-en' }), localized));
+});

@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { ApiError } from '../http/api.service';
 import { cognito } from './cognito.config';
+import { Lang } from '../../shared/i18n/lang.service';
 
 /** The fields read from a Cognito JSON reply (success or error). */
 interface CognitoReply {
@@ -22,34 +23,50 @@ const STATUS: Record<string, number> = { UserNotFoundException: 401, NotAuthoriz
 @Injectable({ providedIn: 'root' })
 export class CognitoService {
   private session = '';
+  private email = '';
+  private clientId = '';
+  private attempt = 0;
 
-  /** Ask Cognito to email a code. Only an EMAIL_OTP challenge is accepted; the pool's password factor is never used. */
-  async requestCode(email: string): Promise<void> {
+  /** Snapshot the language's public client; only the newest request can keep a challenge Session. */
+  async requestCode(email: string, locale: Lang): Promise<void> {
+    const attempt = ++this.attempt;
     this.session = '';
-    const r = await this.call('InitiateAuth', { AuthFlow: 'USER_AUTH', ClientId: cognito.clientId,
+    this.email = '';
+    this.clientId = '';
+    const lang = ['es', 'pt', 'en'].includes(locale) ? locale : 'es';
+    const clientId = cognito.clientIds[lang];
+    const selected = await this.call('InitiateAuth', { AuthFlow: 'USER_AUTH', ClientId: clientId,
       AuthParameters: { USERNAME: email, PREFERRED_CHALLENGE: 'EMAIL_OTP' } });
-    if (r.ChallengeName !== 'EMAIL_OTP' || !this.session) {
-      this.session = '';
-      throw new ApiError(503);
-    }
+    if (attempt !== this.attempt || selected.ChallengeName !== 'EMAIL_OTP' || !selected.Session) throw new ApiError(503);
+    this.session = selected.Session;
+    this.email = email;
+    this.clientId = clientId;
   }
 
-  /** Answer the challenge; resolves the ID token and forgets the Session. A wrong code keeps the newest Session for another try. */
+  /** Answer the native code challenge; stale responses cannot return a token or change a newer attempt's Session. */
   async submitCode(email: string, code: string): Promise<string> {
-    const r = await this.call('RespondToAuthChallenge', { ChallengeName: 'EMAIL_OTP', ClientId: cognito.clientId, Session: this.session,
-      ChallengeResponses: { USERNAME: email, EMAIL_OTP_CODE: code } });
+    if (!this.session || this.email !== email) throw new ApiError(401);
+    const attempt = ++this.attempt;
+    const r = await this.call('RespondToAuthChallenge', { ChallengeName: 'EMAIL_OTP', ClientId: this.clientId, Session: this.session,
+      ChallengeResponses: { USERNAME: email, EMAIL_OTP_CODE: code } }, reply => {
+        if (attempt === this.attempt && typeof reply.Session === 'string' && reply.Session) this.session = reply.Session;
+      });
+    if (attempt !== this.attempt) throw new ApiError(503);
     const token = r.AuthenticationResult?.IdToken;
     if (!token) throw new ApiError(503);
-    this.session = '';
+    this.forget();
     return token;
   }
 
-  /** Drop the pending challenge ("use another email"). */
+  /** Drop the pending challenge and invalidate in-flight replies ("use another email"). */
   forget(): void {
+    ++this.attempt;
     this.session = '';
+    this.email = '';
+    this.clientId = '';
   }
 
-  private async call(target: string, body: unknown): Promise<CognitoReply> {
+  private async call(target: string, body: unknown, onReply?: (reply: CognitoReply) => void): Promise<CognitoReply> {
     let response: Response;
     try {
       response = await fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/x-amz-json-1.1',
@@ -58,7 +75,7 @@ export class CognitoService {
       throw new ApiError(0);
     }
     const data: CognitoReply = await response.json().catch(() => ({}));
-    if (typeof data.Session === 'string' && data.Session) this.session = data.Session;
+    onReply?.(data);
     if (!response.ok) throw new ApiError(STATUS[String(data.__type ?? '').split('#').pop()!] ?? 503);
     return data;
   }
