@@ -790,6 +790,21 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     serviceTiming: () => all(
       'SELECT version,published_on,metric,unit,p50,p90,n,missing,negative,population,subcategory,window_start,window_end_exclusive,source '
       + 'FROM service_timing WHERE version=(SELECT version FROM service_timing ORDER BY published_on DESC,version DESC LIMIT 1) ORDER BY metric'),
+    /** Read-only, case-local synthetic context; no opened marker, history, identity or transaction projection. */
+    findReviewerContext: async protocol => {
+      const [where, params] = messageScope(null, protocol, '');
+      return first('SELECT h.status,h.first_opened_at,e.customer_statement,c.source,'
+        + '(SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id) AS message_count,'
+        + "(SELECT json_group_array(json_object('author',author,'body',body)) FROM (SELECT author,body FROM handoff_messages "
+        + 'WHERE handoff_id=h.handoff_id ORDER BY created_at,rowid LIMIT 50)) AS messages_json '
+        + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) JOIN customers c ON c.customer_id=e.customer_id WHERE ' + where, ...params);
+    },
+    /** Read the current monotonic snapshot without loading content or writing reviewer markers. */
+    assistSnapshot: async protocol => {
+      const [where, params] = messageScope(null, protocol, '');
+      return first('SELECT h.status,(SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id) AS message_count '
+        + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE ' + where, ...params);
+    },
     /**
      * One report's message thread (migration 0028, ADR-015), oldest first, at most ``MESSAGES_PER_REPORT`` + 1 rows so an
      * overflow is visible. ``customerId`` scopes it to that customer's own acknowledged report (a protocol or a short
@@ -808,22 +823,28 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /**
      * Post one message in one statement: only on an acknowledged report that isn't closed and has fewer than
      * ``MESSAGES_PER_REPORT`` messages, once per (report, author, idempotency key). Then read back what that key holds.
-     * Customer writes and readbacks both require the supplied session to remain live and owned by that customer.
+     * Customer writes/readbacks require a live owned session; route-supplied agent sessions are checked too.
+     * An optional expectedSnapshot constrains the insert atomically, while readback still replays an earlier same-key message.
      * Resolves null when the report isn't found for this caller, else ``{ status, total, message }`` (``message`` null when
      * nothing was stored for the key: closed or full).
      */
-    postMessage: async ({ customerId = null, protocol, short = '', author, body, key, now, agentSessionRef = null, messageId, sessionHash }) => {
+    postMessage: async ({ customerId = null, protocol, short = '', author, body, key, now, agentSessionRef = null, messageId, sessionHash, expectedSnapshot }) => {
       let [where, params] = messageScope(customerId, protocol, short);
       if (customerId !== null) {
         where += " AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=? AND expires_at>?)";
         params = [...params, sessionHash, customerId, now];
+      } else if (sessionHash) {
+        where += " AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='agent' AND expires_at>?)";
+        params = [...params, sessionHash, now];
       }
+      const snapshotPredicate = expectedSnapshot ? ' AND h.status=? AND (SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id)=? ' : '';
       const [, read] = await batch([
         ['INSERT INTO handoff_messages(message_id,handoff_id,author,body,idempotency_key,created_at,agent_session_ref) '
           + 'SELECT ?,h.handoff_id,?,?,?,?,? FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE ' + where
           + " AND h.status<>'closed' AND (SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id)<? "
-          + 'ON CONFLICT(handoff_id,author,idempotency_key) DO NOTHING',
-          messageId, author, body, key, now, agentSessionRef, ...params, MESSAGES_PER_REPORT],
+          + snapshotPredicate + 'ON CONFLICT(handoff_id,author,idempotency_key) DO NOTHING',
+          messageId, author, body, key, now, agentSessionRef, ...params, MESSAGES_PER_REPORT,
+          ...(expectedSnapshot ? [expectedSnapshot.status, expectedSnapshot.message_count] : [])],
         ['SELECT h.status,(SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id) AS total,'
           + 'm.message_id,m.author,m.body,m.created_at FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
           + 'LEFT JOIN handoff_messages m ON m.handoff_id=h.handoff_id AND m.author=? AND m.idempotency_key=? WHERE ' + where,
@@ -831,7 +852,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       const row = read.results[0];
       if (!row) return null;
       const { status, total, message_id, created_at } = row;
-      return { status, total, message: message_id ? { message_id, author: row.author, body: row.body, created_at } : null };
+      return { status, total, stale: !!expectedSnapshot && (status !== expectedSnapshot.status || total !== expectedSnapshot.message_count), message: message_id ? { message_id, author: row.author, body: row.body, created_at } : null };
     },
     /** Count the call before it runs as one call with unknown usage, so a Worker stopped mid-call never makes it free. */
     startSuggestionCall: ({ handoffId, producer }) => all(

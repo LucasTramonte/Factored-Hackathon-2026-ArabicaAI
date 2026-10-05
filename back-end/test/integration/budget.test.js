@@ -22,6 +22,11 @@ import { runSuggestion } from '../../src/modules/intake/suggestions.js';
 // Ceilings per request: [queries, rows_read, rows_written, round_trips]. D1 Free allows 50 queries per invocation;
 // round trips drive latency (about 150 ms each when the Worker runs far from D1).
 const CEILING = {
+  // Dedicated support paths; reservation reads scale only with the shared <=200/day bounded probe.
+  reviewerAssist: [7, 225, 6, 6],
+  reviewerAssistFull: [7, 500, 6, 6],
+  reviewerAssistDuplicate: [4, 20, 0, 3],
+  assistedMessagePost: [3, 16, 4, 2],
   // One query listing the dataset cohort. It reads every customers row: 16 rows_read measured with the four evaluator
   // identities; no margin. About 800 with the cohort loaded (ADR-004).
   identities: [1, 16, 0, 1],
@@ -564,4 +569,22 @@ test("the dispute managers' KPI read stays bounded by its window: a constant for
     measured.fixture = within('kpisFixture', fixture.metrics);
   });
   console.log('D1_INTAKE_KPIS ' + JSON.stringify({ episodes: KPI_FIXTURE + 1, answers: 3, ...measured }));
+});
+
+test('reviewer assistance and atomic assisted sends stay within separate complete API budgets', async () => {
+  const customer = client(); await customer.call('/demo/session', { customer_id: 'demo-ana' });
+  const start = await customer.call('/intake/start', startBody()); assert.equal(start.status, 201);
+  const receipt = await customer.call('/intake/handoff', { episode_id: start.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() }); assert.equal(receipt.status, 201);
+  const agent = client(); await agent.call('/demo/agent-session', {});
+  const body = { protocol: receipt.body.protocol, language: 'es', request_id: crypto.randomUUID() };
+  const generated = await agent.call('/agent/intake-assist', body); assert.equal(generated.status, 200); assertContract('reviewerAssist', generated.body);
+  within('reviewerAssist', generated.metrics);
+  const duplicate = await agent.call('/agent/intake-assist', body); assert.equal(duplicate.status, 409); within('reviewerAssistDuplicate', duplicate.metrics);
+  const message = { protocol: receipt.body.protocol, body: 'Pregunta revisada', idempotency_key: crypto.randomUUID(), expected_snapshot: generated.body.snapshot };
+  const sent = await agent.call('/agent/intake-messages', message); assert.equal(sent.status, 201); within('assistedMessagePost', sent.metrics);
+  const replay = await agent.call('/agent/intake-messages', message); assert.equal(replay.status, 200); within('assistedMessagePost', replay.metrics);
+  const stale = await agent.call('/agent/intake-messages', { ...message, idempotency_key: crypto.randomUUID() }); assert.equal(stale.status, 409); within('assistedMessagePost', stale.metrics);
+  for (let i = 1; i < 50; i++) assert.equal((await customer.call(`/intake/handoff/${receipt.body.protocol}/messages`, { body: 'Dato ' + i, idempotency_key: crypto.randomUUID() })).status, 201);
+  const full = await agent.call('/agent/intake-assist', { ...body, request_id: crypto.randomUUID() }); assert.equal(full.status, 200); within('reviewerAssistFull', full.metrics);
+  console.log('D1_REVIEWER_ASSIST ' + JSON.stringify({ generation: generated.metrics, full: full.metrics, duplicate: duplicate.metrics, send: sent.metrics, replay: replay.metrics, stale: stale.metrics }));
 });

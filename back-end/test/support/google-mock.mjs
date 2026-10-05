@@ -37,6 +37,14 @@ const mock = createServer(async (request, response) => {
       const user = JSON.parse(JSON.parse(text).messages[1].content);
       received.push(user);
       if (received.length > 500) received.shift();
+      if (JSON.parse(text).response_format?.json_schema?.name === 'support_reviewer') {
+        const content = JSON.stringify({ summary: 'El cliente solicita una revisión.', missing_fields: ['merchant'], draft: '¿Puedes indicar el comercio?' });
+        const answer = () => send(200, { choices: [{ finish_reason: 'stop', message: { role: 'assistant', content } }], usage: { prompt_tokens: 120, completion_tokens: 30 } });
+        if (user.statement.includes('MOCK-DELAY')) return setTimeout(answer, 500);
+        if (user.statement.includes('MOCK-PROVIDER')) return send(500, '');
+        if (user.statement.includes('MOCK-INVALID')) return send(200, { choices: [{ finish_reason: 'stop', message: { content: 'bad' } }] });
+        return answer();
+      }
       const message = String(user.message);
       if (message.includes('MOCK-TIMEOUT')) return undefined; // never answers; the Worker's deadline abandons it
       if (message.includes('MOCK-PROVIDER')) return send(500, '');

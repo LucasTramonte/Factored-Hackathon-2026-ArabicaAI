@@ -163,9 +163,10 @@ export async function postAgentMessage(request, env, store) {
   if (parsed.error) return parsed.error;
   const checked = validateMessage(parsed.value, { withProtocol: true });
   if (checked.error) return checked.error;
-  const agentSessionRef = (await tokenHash(readCookies(request)[COOKIE.agent])).slice(0, 12);
+  const sessionHash = await tokenHash(readCookies(request)[COOKIE.agent]);
+  const agentSessionRef = sessionHash.slice(0, 12);
   const messageId = crypto.randomUUID();
   const found = await store.postMessage({ protocol: checked.value.protocol, author: 'agent', body: checked.value.body,
-    key: checked.value.key, now: Date.now(), agentSessionRef, messageId });
+    key: checked.value.key, now: Date.now(), agentSessionRef, messageId, sessionHash, expectedSnapshot: checked.value.expectedSnapshot });
   return postOutcome(found, messageId, checked.value.body);
 }

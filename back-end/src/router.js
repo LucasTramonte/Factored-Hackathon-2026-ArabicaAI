@@ -7,6 +7,7 @@ import { GRANTED } from './auth/cognito.js';
 import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession, whoAmI } from './modules/customer/routes.js';
 import { startIntake, confirmIntake, confirmSuggestion, getMessages, getServiceTimes, getSuggestions, handoffIntake, listReports, postMessage, recordFeedback, requestUpdate } from './modules/intake/routes.js';
 import { listAgentIntakes, getAgentIntakeDetail, getAgentMessages, markSuggestion, postAgentMessage, startAgentSession, transitionIntake } from './modules/agent/routes.js';
+import { reviewerAssist } from './modules/agent/assist-routes.js';
 import { listAuditEvents } from './modules/audit/routes.js';
 import { actAs, listCustomers } from './modules/admin/routes.js';
 import { answerAlert, getAlert } from './modules/proactive/routes.js';
@@ -31,6 +32,7 @@ export const API_ROUTES = {
   '/agent/intakes': { GET: listAgentIntakes },
   '/agent/intake-detail': { GET: getAgentIntakeDetail },
   '/agent/intake-status': { POST: transitionIntake },
+  '/agent/intake-assist': { POST: reviewerAssist },
   '/agent/suggestion-mark': { POST: markSuggestion },
   '/audit/events': { GET: listAuditEvents },
   '/admin/customers': { GET: listCustomers },
@@ -72,6 +74,7 @@ export const ROUTE_ROLES = {
   '/agent/intakes': 'agent',
   '/agent/intake-detail': 'agent',
   '/agent/intake-status': 'agent',
+  '/agent/intake-assist': 'agent',
   '/agent/suggestion-mark': 'agent',
   '/audit/events': 'auditor',
   '/admin/customers': 'admin',
