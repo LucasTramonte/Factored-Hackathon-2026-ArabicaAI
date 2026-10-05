@@ -122,10 +122,14 @@ export async function runAssist(env, { mode, language, input }, { fetcher = fetc
             const part = await reader.read();
             if (part.done) break;
             bytes += part.value.byteLength;
-            if (bytes > 65536) { await reader.cancel(); return fail('provider_error'); }
+            if (bytes > 65536) throw new Error('Provider body limit');
             raw += decoder.decode(part.value, { stream: true });
           }
           raw += decoder.decode();
+        } catch (error) {
+          // Cancellation can itself stall: request it, then release the lock and return the safe failure.
+          cancelRead();
+          throw error;
         } finally {
           controller.signal.removeEventListener('abort', cancelRead);
           reader.releaseLock();

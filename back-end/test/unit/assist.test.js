@@ -69,3 +69,11 @@ test('existing idle sweep invokes assistance cleanup once even when episode maxP
   const store={closeIdleIntakes:async()=>[],hasDueIdleIntakes:async()=>false,closeStaleSuggestionRuns:async()=>[],metrics:()=>({}),sweepAssistRuns:async bounds=>{calls++;assert.equal(bounds.limit,100);return {abandoned:100,deleted:100};}};
   const result=await closeIdleIntakes(store,{now:Date.now(),maxPages:100});assert.equal(calls,1);assert.equal(result.assist_abandoned,100);assert.equal(result.assist_deleted,100);
 });
+test('malformed or oversized open provider streams are cancelled without waiting for cancellation',async()=>{
+  for(const chunk of [new Uint8Array([255]),new Uint8Array(65537)]) {
+    resetTokenCache();let cancelled=false;const g=mock();
+    const stream=new ReadableStream({start(controller){controller.enqueue(chunk);},cancel(){cancelled=true;return new Promise(()=>{});}});
+    const result=await runAssist(env,args,{fetcher:(url,init)=>url.endsWith('/chat/completions')?Promise.resolve(new Response(stream)):g.fetcher(url,init)});
+    assert.equal(result.kind,'provider_error');assert.equal(result.usage.usage_unavailable_calls,1);assert.equal(cancelled,true);
+  }
+});
