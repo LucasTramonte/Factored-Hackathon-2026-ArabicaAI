@@ -33,7 +33,7 @@
 
 **Limits** ([Cloudflare, 2026-10-02](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)): on the Workers Free plan, 200,000 log events a day with 3 days of retention. Each request writes two events (the invocation log and the `request` line), so the demo's few hundred requests a day use under 1%. If volume grows, lower `head_sampling_rate` before the cap is reached.
 
-**Request metrics without a token:** the GraphQL Analytics API (`workersInvocationsAdaptive`) works with wrangler's `account (read)` login. On 2026-10-04 it showed 277 requests in 24 hours with 0 Worker errors.
+**Request metrics:** the [Cloudflare traffic evidence record](../Evidence/cloudflare-traffic.md) provides the read-only GraphQL query, metric definitions and export checklist for judges. A historical note on 2026-10-04 reported 277 requests in 24 hours with 0 Worker errors, but retained no exact UTC bounds, deployment version or export. It is not fresh auditable evidence; production-account export is pending. Invocation errors are not the HTTP error rate.
 
 ## 2. Alerts (GCP Cloud Monitoring)
 
