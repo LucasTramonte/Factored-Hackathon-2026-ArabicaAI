@@ -1110,6 +1110,25 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     },
 
     /**
+     * Reserve today's access request for ``emailHash`` (migration 0031) in one batch: delete days before ``keepFrom``, insert
+     * unless the address already asked today or ``cap`` addresses already did, then read the address's row back. Resolves
+     * ``'reserved'`` (this ``token`` holds it), ``'duplicate'`` (it asked earlier today) or ``'capped'``.
+     */
+    reserveAccessRequest: async ({ emailHash, day, token, now, cap, keepFrom }) => {
+      const [, , held] = await batch([
+        ['DELETE FROM access_requests WHERE day<?', keepFrom],
+        ['INSERT INTO access_requests(email_hash,day,token,created_at) SELECT ?,?,?,? '
+          + 'WHERE (SELECT COUNT(*) FROM access_requests WHERE day=?)<? ON CONFLICT(email_hash,day) DO NOTHING', emailHash, day, token, now, day, cap],
+        ['SELECT token FROM access_requests WHERE email_hash=? AND day=?', emailHash, day]]);
+      const holder = held.results[0]?.token;
+      return holder === token ? 'reserved' : holder ? 'duplicate' : 'capped';
+    },
+    /** Release a reservation whose email failed, so the person can ask again; only the holding ``token`` can. */
+    releaseAccessRequest: async ({ emailHash, day, token }) => {
+      await all('DELETE FROM access_requests WHERE email_hash=? AND day=? AND token=?', emailHash, day, token);
+    },
+
+    /**
      * The auditor's read (``GET /audit/events``): the newest ``limit`` sign-in events and review-status changes, newest
      * first by primary key / rowid (no sort, ``limit`` rows read each), in one round trip. References only.
      */

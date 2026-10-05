@@ -47,6 +47,7 @@ test('the guard refuses a config that would ship the local test JWKS or the demo
   assert.throws(() => assertNoLocalVars({ vars: { COGNITO_REGION: 'r', COGNITO_TEST_JWKS: '{"keys":[]}' } }), /COGNITO_TEST_JWKS/);
   for (const value of ['1', '0', '']) assert.throws(() => assertNoLocalVars({ vars: { COGNITO_REGION: 'r', DEMO_PICKER: value } }), /DEMO_PICKER/);
   assert.throws(() => assertNoLocalVars({ vars: { SES_FROM: 'Demo <someone@example.com>' } }), /secret put SES_FROM/);
+  assert.throws(() => assertNoLocalVars({ vars: { ACCESS_REQUEST_TO: 'team@example.com' } }), /secret put ACCESS_REQUEST_TO/);
   assert.doesNotThrow(() => assertNoLocalVars({ vars: { COGNITO_REGION: 'r' } }));
   assert.doesNotThrow(() => assertNoLocalVars({}));
   const shipped = await readWranglerConfig();
@@ -91,5 +92,12 @@ test('every migration after the 0014 rebuild is additive, so the deploy can appl
   for (const file of (await localMigrations()).filter(f => f > '0014_english_reports.sql')) {
     const sql = await readFile(new URL('../../migrations/' + file, import.meta.url), 'utf8');
     assert.deepEqual(additiveProblems(sql), [], `${file} is not additive: split it, or a person applies it before the deploy`);
+  }
+});
+
+
+test('the access-request inbox cannot be committed in vars even with an empty or non-string value', () => {
+  for (const value of ['', null, false, 0, undefined]) {
+    assert.throws(() => assertNoLocalVars({ vars: { ACCESS_REQUEST_TO: value } }), /secret put ACCESS_REQUEST_TO/);
   }
 });

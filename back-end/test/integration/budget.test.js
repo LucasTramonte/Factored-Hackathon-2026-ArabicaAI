@@ -32,9 +32,13 @@ const CEILING = {
   reviewerAssistFull: [7, 500, 6, 6],
   reviewerAssistDuplicate: [4, 20, 0, 3],
   assistedMessagePost: [3, 16, 4, 2],
-  // One query listing the dataset cohort. It reads every customers row: 16 rows_read measured with the four evaluator
-  // identities; no margin. About 800 with the cohort loaded (ADR-004).
-  identities: [1, 16, 0, 1],
+  // One query listing the dataset cohort. It reads every customers row: 20 rows_read measured with the ten fictitious
+  // identities (four more evaluator identities on 2026-10-05: 16 -> 20); no margin. About 800 with the cohort loaded (ADR-004).
+  identities: [1, 20, 0, 1],
+  // POST /auth/access-request without ACCESS_REQUEST_TO and SES (local): refused before any D1 query. The configured path is
+  // one batch (retention delete, insert guarded by the daily count, read-back: 3 queries, 1 round trip), pinned in
+  // test/unit/access-request.test.js; its reads are bounded by the 20-a-day cap over the seven days it keeps.
+  accessRequest: [0, 0, 0, 0],
   // Every session start and logout also writes one auth_events row in its existing batch (migration 0012): one query,
   // 1 read and 2 writes (the row and auth_events_time), no round trip; logout's insert also checks the session (ADR-004).
   login: [6, 10, 6, 3],
@@ -57,10 +61,10 @@ const CEILING = {
   // (agent) cookie adds one session read. Measured, no margin.
   authMe: [2, 1, 0, 2],
   // GET /admin/customers (ADR-007, decision 10): the session read, then the identities query above (every customers row:
-  // 16 measured here, about 800 with the cohort loaded). POST /admin/act-as: session, customerSource and context card
+  // 20 measured here, about 800 with the cohort loaded). POST /admin/act-as: session, customerSource and context card
   // reads, then actAsSession's single-use batch: its inserts each check a session by primary key (the presented admin
   // session, then the new one twice), which adds 4 reads over a plain rotation. Measured, no margin (ADR-004).
-  adminCustomers: [2, 17, 0, 2],
+  adminCustomers: [2, 21, 0, 2],
   adminActAs: [8, 9, 8, 4],
   // ADR-011. GET /alerts: the session read, then one read over the customer's own flagged charges (each checked against
   // proactive_answers and cases by key). POST /alerts/answer: session, then one batch (a guarded insert and its read-back);
@@ -198,6 +202,7 @@ test('a customer episode and an agent read stay within the D1 budget', async () 
   const c = client();
   const measured = {};
   measured.identities = within('identities', (await c.call('/demo/identities')).metrics);
+  measured.accessRequest = within('accessRequest', (await c.call('/auth/access-request', { email: 'judge@example.com' })).metrics);
   measured.login = within('login', (await c.call('/demo/session', { customer_id: 'demo-ana' })).metrics);
   // This bounded cohort identity has no email sign-in in earlier suites; admin act-as never stores its address.
   // Assert absence so a warm fixture cannot silently hide the first-login write. The demo login above already

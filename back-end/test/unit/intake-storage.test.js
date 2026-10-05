@@ -37,7 +37,7 @@ function setup(before = '~') {
     const set = response.headers.get('set-cookie'); if (set) cookie = set.split(';', 1)[0];
     return { status: response.status, body: await response.json() };
   };
-  return { db, store, call };
+  return { db, store, call, clearCookie: () => { cookie = ''; } };
 }
 
 /** Bytes per table group (table plus its indexes) from dbstat; page granularity is amortized over 100 episodes. */
@@ -113,11 +113,13 @@ test('the documented demo-activity reset respects intake foreign keys and keeps 
   db.close();
 });
 
-test('the demo-accounts reset clears only the six demo customers\' activity and keeps their charges and enrolled emails', async () => {
-  const { db, call } = setup();
+test('the demo-accounts reset clears only the ten demo customers\' activity and keeps their charges and enrolled emails', async t => {
+  const { db, call, clearCookie } = setup();
+  t.after(() => db.close());
   db.exec(`INSERT INTO customers(customer_id,display_name,source) VALUES ('CLI-KEEP','Dataset customer','dataset');
     INSERT INTO transactions(transaction_id,customer_id,occurred_at,source_occurred_at,merchant_name,amount,currency) VALUES ('keep-tx','CLI-KEEP','2026-09-25T14:00:00+00:00',NULL,'Uber','10.00','USD');`);
   const activity = async (customer, tx) => {
+    clearCookie(); // Each evaluator uses a separate browser; signing in must not revoke the prior customer's session.
     assert.equal((await call('/demo/session', { customer_id: customer })).status, 200);
     for (const complete of [true, false]) {
       const start = await call('/intake/start', { language: 'es', mode: 'guided', report_type: 'unrecognized_charge', reason: 'not_mine', customer_statement: 'No reconozco este cargo.', idempotency_key: crypto.randomUUID() });
@@ -126,10 +128,40 @@ test('the demo-accounts reset clears only the six demo customers\' activity and 
         : await call('/intake/handoff', { episode_id: start.body.episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() });
       assert.equal(done.status, 201);
       if (!complete) assert.equal((await call(`/intake/handoff/${done.body.protocol}/messages`, { body: 'Hola', idempotency_key: crypto.randomUUID() })).status, 201);
+      const handoff = db.prepare('SELECT * FROM intake_handoffs WHERE episode_id=?').get(start.body.episode_id);
+      db.prepare('INSERT INTO report_feedback(handoff_id,easy,created_at) VALUES (?,1,1)').run(handoff.handoff_id);
+      db.prepare("INSERT INTO handoff_status_history(handoff_id,status,changed_at,agent_session_ref) VALUES (?,'in_review',1,'aaaaaaaaaaaa')").run(handoff.handoff_id);
+      for (const protocol of [handoff.handoff_id, start.body.episode_id, ...(handoff.complete_case_id ? [handoff.complete_case_id] : [])]) {
+        db.prepare("INSERT INTO support_assist_runs(request_id,session_hash,mode,protocol,created_at,version) VALUES (?,?,'customer',?,1,'v')")
+          .run(crypto.randomUUID(), 'a'.repeat(64), protocol);
+      }
+      if (!complete) {
+        // Exercise the self-reference the reset must detach before deleting the handoff.
+        db.prepare('UPDATE intake_episodes SET previous_handoff_id=? WHERE episode_id=?').run(handoff.handoff_id, start.body.episode_id);
+        db.prepare("INSERT INTO handoff_suggestion_runs(handoff_id,arm,created_at) VALUES (?,'B',1)").run(handoff.handoff_id);
+        db.prepare("INSERT INTO handoff_suggestions(handoff_id,rank,transaction_id,producer,created_at) VALUES (?,1,?,'fixture',1)").run(handoff.handoff_id, tx);
+        db.prepare("INSERT INTO handoff_suggestion_choices(handoff_id,choice,transaction_id,chosen_at) VALUES (?,'confirmed',?,1)").run(handoff.handoff_id, tx);
+        db.prepare("INSERT INTO handoff_suggestion_marks(handoff_id,mark,agent_session_ref,marked_at) VALUES (?,'correct','aaaaaaaaaaaa',1)").run(handoff.handoff_id);
+      }
     }
     db.prepare("INSERT INTO proactive_answers(customer_id,transaction_id,answered_by,answer,answered_at) VALUES (?,?,'customer','mine',1)").run(customer, tx);
   };
-  await activity('demo-ana', 'demo-tx-001'); await activity('CLI-KEEP', 'keep-tx');
+  const demos = db.prepare("SELECT customer_id FROM customers WHERE source='fictitious' ORDER BY customer_id").all().map(c => c.customer_id);
+  assert.equal(demos.length, 10);
+  const activityTables = [...TABLES, 'sessions', 'charge_views', 'proactive_answers', 'email_outbox', 'handoff_messages',
+    'report_feedback', 'handoff_status_history', 'handoff_suggestion_runs', 'handoff_suggestions', 'handoff_suggestion_choices',
+    'handoff_suggestion_marks', 'support_assist_runs'];
+  const snapshot = table => db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all();
+  let keptActivity;
+  for (const customer of ['CLI-KEEP', ...demos]) {
+    const tx = db.prepare('SELECT transaction_id FROM transactions WHERE customer_id=? ORDER BY transaction_id LIMIT 1').get(customer).transaction_id;
+    await activity(customer, tx);
+    db.prepare("INSERT INTO notification_targets(customer_id,email_enc,updated_at) VALUES (?,'synthetic-ciphertext',1)").run(customer);
+    db.prepare("INSERT INTO context_cards(customer_id,card_version,snapshot_at,card_json) VALUES (?,1,'2026-10-05','{}')").run(customer);
+    db.prepare("INSERT INTO charge_views(view_ref,customer_id,language,row_count,has_more,coverage,retrieved_at) VALUES (?,?,'en',1,0,'all',1)").run(crypto.randomUUID(), customer);
+    db.prepare("INSERT INTO email_outbox(message_id,created_at,customer_id,template,language,reference,provider_status) VALUES (?,1,?,'received','en','fixture','sent')").run(crypto.randomUUID(), customer);
+    if (customer === 'CLI-KEEP') keptActivity = Object.fromEntries(activityTables.map(table => [table, snapshot(table)]));
+  }
   const of = (sql, customer) => db.prepare(sql).get(customer).n;
   const counts = customer => ({
     episodes: of('SELECT count(*) n FROM intake_episodes WHERE customer_id=?', customer),
@@ -140,13 +172,23 @@ test('the demo-accounts reset clears only the six demo customers\' activity and 
     sessions: of('SELECT count(*) n FROM sessions WHERE customer_id=?', customer) });
   const kept = counts('CLI-KEEP');
   assert.ok(counts('demo-ana').episodes > 0 && counts('demo-ana').messages > 0);
-  const charges = rows(db, 'transactions');
-  db.exec(readFileSync(new URL('../../scripts/reset-demo-accounts.sql', import.meta.url), 'utf8'));
-  assert.deepEqual(counts('demo-ana'), { episodes: 0, handoffs: 0, messages: 0, cases: 0, answers: 0, sessions: 0 });
-  assert.deepEqual(counts('CLI-KEEP'), kept);
-  assert.equal(rows(db, 'transactions'), charges);
-  assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
-  db.close();
+  const preservedTables = ['customers', 'transactions', 'context_cards', 'notification_targets'];
+  const preserved = Object.fromEntries(preservedTables.map(table => [table, snapshot(table)]));
+  for (const table of activityTables) {
+    assert.ok(keptActivity[table].length > 0, `${table} fixture must exercise preservation`);
+    assert.ok(snapshot(table).length > keptActivity[table].length, `${table} fixture must exercise deletion`);
+  }
+  const reset = readFileSync(new URL('../../scripts/reset-demo-accounts.sql', import.meta.url), 'utf8');
+  for (let run = 0; run < 2; run++) {
+    db.exec(reset);
+    for (const customer of demos) {
+      assert.deepEqual(counts(customer), { episodes: 0, handoffs: 0, messages: 0, cases: 0, answers: 0, sessions: 0 }, customer);
+    }
+    assert.deepEqual(counts('CLI-KEEP'), kept);
+    for (const table of preservedTables) assert.deepEqual(snapshot(table), preserved[table], table);
+    for (const table of activityTables) assert.deepEqual(snapshot(table), keptActivity[table], table);
+    assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  }
 });
 
 test('migration 0014 admits English and keeps every episode, foreign key and index of intake_episodes', async () => {

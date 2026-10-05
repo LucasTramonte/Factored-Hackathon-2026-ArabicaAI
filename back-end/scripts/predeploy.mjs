@@ -101,14 +101,15 @@ export function additiveProblems(sql) {
  * Throws when ``vars`` would ship a local-only variable: ``COGNITO_TEST_JWKS`` lets anyone holding its private key sign in,
  * and ``DEMO_PICKER`` lets anyone become any customer or agent without signing in; ``VERTEX_TEST_ORIGIN`` and
  * ``INTAKE_AI_TEST_ARM`` point the AI suggestion path at a local mock and fix its pilot arm. ``SES_FROM`` is a person's
- * address and ``VERTEX_WIF_SIGNING_KEY`` the Worker's private key, so both are secrets, never committed vars (issue #70).
+ * address, ``ACCESS_REQUEST_TO`` the team's inbox and ``VERTEX_WIF_SIGNING_KEY`` the Worker's private key, so all three are
+ * secrets, never committed vars (issue #70).
  * Secrets are not checked here.
  */
 export function assertNoLocalVars(config) {
   for (const name of ['COGNITO_TEST_JWKS', 'DEMO_PICKER', 'VERTEX_TEST_ORIGIN', 'INTAKE_AI_TEST_ARM']) {
     if (config.vars && name in config.vars) throw new Error(`wrangler.jsonc vars contain ${name} (local only); remove it before deploying`);
   }
-  for (const name of ['SES_FROM', 'VERTEX_WIF_SIGNING_KEY']) {
+  for (const name of ['SES_FROM', 'ACCESS_REQUEST_TO', 'VERTEX_WIF_SIGNING_KEY']) {
     if (config.vars && name in config.vars) throw new Error(`wrangler.jsonc vars contain ${name}; set it with \`wrangler secret put ${name}\` instead`);
   }
 }

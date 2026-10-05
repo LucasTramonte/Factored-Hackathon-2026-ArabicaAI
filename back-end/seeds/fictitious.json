@@ -1,5 +1,5 @@
 {
-  "description": "Fictitious charges for the demo identities, named after merchants in the extractor vocabulary (back-end/src/modules/intake/ai-transport.js) so AI suggestions can match them, marked 'fictitious' in back-end/src/config/identities.json. Regenerate seed_fictitious.sql with: python -m data_pipelines.gold.fictitious_seed. Three small charges carry bank_flagged (ADR-011), authored for the evaluator identities to show that the proactive alert follows the bank's own flag, not the amount; dataset customers are not flagged until fraud_score's provenance is confirmed",
+  "description": "Fictitious charges for the demo identities, named after merchants in the extractor vocabulary (back-end/src/modules/intake/ai-transport.js) so AI suggestions can match them, marked 'fictitious' in back-end/src/config/identities.json. Regenerate seed_fictitious.sql with: python -m data_pipelines.gold.fictitious_seed. Each evaluator identity (demo-diego, demo-elena, demo-marco, and demo-sofia, demo-pablo, demo-lucia, demo-tomas, one per enrolled judge) has five charges: a small purchase, a duplicate pair a minute apart, a 03:00 subscription and a charge above the BRL 2,500 urgency amount. Its small subscription charge carries bank_flagged (ADR-011), authored to show that the proactive alert follows the bank's own flag, not the amount; dataset customers are not flagged until fraud_score's provenance is confirmed",
   "transactions": [
     { "transaction_id": "demo-tx-001", "customer_id": "demo-ana", "occurred_at": "2026-09-25T14:00:00+00:00", "merchant_name": "Mercado Central", "amount": "125.50", "currency": "BRL" },
     { "transaction_id": "demo-tx-002", "customer_id": "demo-ana", "occurred_at": "2026-09-26T15:00:00+00:00", "merchant_name": "Tienda General", "amount": "89.90", "currency": "BRL" },
@@ -26,6 +26,26 @@
     { "transaction_id": "demo-tx-023", "customer_id": "demo-marco", "occurred_at": "2026-09-27T09:00:00+00:00", "merchant_name": "Tienda Don José", "amount": "24.00", "currency": "BRL" },
     { "transaction_id": "demo-tx-024", "customer_id": "demo-marco", "occurred_at": "2026-09-27T09:01:00+00:00", "merchant_name": "Tienda Don José", "amount": "24.00", "currency": "BRL" },
     { "transaction_id": "demo-tx-025", "customer_id": "demo-marco", "occurred_at": "2026-09-29T03:00:00+00:00", "merchant_name": "Cable TV", "amount": "15.90", "currency": "BRL", "bank_flagged": true },
-    { "transaction_id": "demo-tx-026", "customer_id": "demo-marco", "occurred_at": "2026-09-30T20:05:00+00:00", "merchant_name": "Centro Comercial", "amount": "4120.00", "currency": "BRL" }
+    { "transaction_id": "demo-tx-026", "customer_id": "demo-marco", "occurred_at": "2026-09-30T20:05:00+00:00", "merchant_name": "Centro Comercial", "amount": "4120.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-027", "customer_id": "demo-sofia", "occurred_at": "2026-09-24T09:10:00+00:00", "merchant_name": "Mercado Central", "amount": "64.30", "currency": "BRL" },
+    { "transaction_id": "demo-tx-028", "customer_id": "demo-sofia", "occurred_at": "2026-09-27T20:15:00+00:00", "merchant_name": "Restaurante El Buen Sabor", "amount": "112.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-029", "customer_id": "demo-sofia", "occurred_at": "2026-09-27T20:16:00+00:00", "merchant_name": "Restaurante El Buen Sabor", "amount": "112.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-030", "customer_id": "demo-sofia", "occurred_at": "2026-09-30T03:00:00+00:00", "merchant_name": "Streaming Music", "amount": "24.90", "currency": "BRL", "bank_flagged": true },
+    { "transaction_id": "demo-tx-031", "customer_id": "demo-sofia", "occurred_at": "2026-10-02T16:40:00+00:00", "merchant_name": "Boutique Moda", "amount": "2980.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-032", "customer_id": "demo-pablo", "occurred_at": "2026-09-23T07:50:00+00:00", "merchant_name": "Super Ahorro", "amount": "22.40", "currency": "BRL" },
+    { "transaction_id": "demo-tx-033", "customer_id": "demo-pablo", "occurred_at": "2026-09-26T18:05:00+00:00", "merchant_name": "Estación de Servicio", "amount": "198.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-034", "customer_id": "demo-pablo", "occurred_at": "2026-09-26T18:06:00+00:00", "merchant_name": "Estación de Servicio", "amount": "198.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-035", "customer_id": "demo-pablo", "occurred_at": "2026-09-29T03:00:00+00:00", "merchant_name": "Internet Plus", "amount": "39.90", "currency": "BRL", "bank_flagged": true },
+    { "transaction_id": "demo-tx-036", "customer_id": "demo-pablo", "occurred_at": "2026-10-01T13:25:00+00:00", "merchant_name": "Centro Comercial", "amount": "3340.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-037", "customer_id": "demo-lucia", "occurred_at": "2026-09-25T12:30:00+00:00", "merchant_name": "Farmacia Salud", "amount": "58.70", "currency": "BRL" },
+    { "transaction_id": "demo-tx-038", "customer_id": "demo-lucia", "occurred_at": "2026-09-28T23:10:00+00:00", "merchant_name": "Taxi Seguro", "amount": "37.50", "currency": "BRL" },
+    { "transaction_id": "demo-tx-039", "customer_id": "demo-lucia", "occurred_at": "2026-09-28T23:11:00+00:00", "merchant_name": "Taxi Seguro", "amount": "37.50", "currency": "BRL" },
+    { "transaction_id": "demo-tx-040", "customer_id": "demo-lucia", "occurred_at": "2026-09-30T03:00:00+00:00", "merchant_name": "Cable TV", "amount": "17.90", "currency": "BRL", "bank_flagged": true },
+    { "transaction_id": "demo-tx-041", "customer_id": "demo-lucia", "occurred_at": "2026-10-02T11:00:00+00:00", "merchant_name": "Conciertos Live", "amount": "2760.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-042", "customer_id": "demo-tomas", "occurred_at": "2026-09-24T15:20:00+00:00", "merchant_name": "Tienda Don José", "amount": "28.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-043", "customer_id": "demo-tomas", "occurred_at": "2026-09-27T10:45:00+00:00", "merchant_name": "Tienda General", "amount": "76.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-044", "customer_id": "demo-tomas", "occurred_at": "2026-09-27T10:46:00+00:00", "merchant_name": "Tienda General", "amount": "76.00", "currency": "BRL" },
+    { "transaction_id": "demo-tx-045", "customer_id": "demo-tomas", "occurred_at": "2026-10-01T03:00:00+00:00", "merchant_name": "Streaming Music", "amount": "21.90", "currency": "BRL", "bank_flagged": true },
+    { "transaction_id": "demo-tx-046", "customer_id": "demo-tomas", "occurred_at": "2026-10-03T17:35:00+00:00", "merchant_name": "Ferretería", "amount": "3420.00", "currency": "BRL" }
   ]
 }

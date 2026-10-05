@@ -35,6 +35,14 @@
         "next_step_code": { "const": "await_human_review" }
       }
     },
+    "accessRequestReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "const": "received", "description": "POST /auth/access-request: the team has the request (or already had it today). It never says whether an address is enrolled." }
+      }
+    },
     "error": {
       "type": "object",
       "additionalProperties": false,

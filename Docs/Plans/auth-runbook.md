@@ -61,7 +61,8 @@ Idempotent. It creates or finds the pool `arabicaai-demo`, the immutable attribu
 | `SES_FROM` (sender `noreply@arabicaai-demo.com`) | `npx wrangler secret put SES_FROM` | Secret by policy; the deploy guard refuses it in `vars`. Its domain must not publish DMARC `p=reject` unless the domain itself is verified in SES with DKIM |
 | `APP_URL` | `vars` | Public: the deployed origin, the target of the notification emails' "see my reports" button (the logo is embedded in the message, not fetched) |
 | `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | `npx wrangler secret put …` | Secret ([SES runbook](intake-demo.md#notification-email-ses)) |
-| `EMAIL_KEY` | `npx wrangler secret put EMAIL_KEY` (`openssl rand -base64 32`) | Secret: encrypts stored notification addresses |
+| `EMAIL_KEY` | `npx wrangler secret put EMAIL_KEY` (`openssl rand -base64 32`) | Secret: encrypts stored notification addresses and derives the domain-separated HMAC key for access requests; this route returns 503 when the key is missing or invalid |
+| `ACCESS_REQUEST_TO` | `npx wrangler secret put ACCESS_REQUEST_TO` | Secret by policy (the deploy guard refuses it in `vars`): the team inbox that receives evaluator access requests (section 11). Without it the sign-in form's request answers "try later" |
 | `DEMO_PICKER`, `COGNITO_TEST_JWKS` | `back-end/.dev.vars` only | Local only; the deploy guard refuses them in `vars` |
 
 ## 6. Enrol people
@@ -79,7 +80,7 @@ back-end/scripts/cognito/enroll.sh <email> <customer_id> admin     # team or eva
 - The customer id must already be loaded in remote D1 (the fictitious seed or the cohort), or sign-in answers 403.
 - Report emails may be sent to any address: SES production access was granted (checked 2026-10-04, `ProductionAccessEnabled` true, 50,000 a day), so recipients no longer need SES verification. Delivery still depends on the sender (section 5) and on the recipient's spam filter.
 
-**Fictitious identities.** `demo-ana` (Roberto), `demo-bruno` (Lucas), `demo-carla` (Manoella), and `demo-diego`, `demo-elena`, `demo-marco` (evaluators), each with charges shaped for every report reason and the urgency lane. Load them with `npx wrangler d1 execute arabica-intake-demo --remote --file seeds/seed_fictitious.sql` from `back-end/` (idempotent upserts).
+**Fictitious identities.** `demo-ana` (Roberto), `demo-bruno` (Lucas), `demo-carla` (Manoella), `demo-sofia`, `demo-pablo`, `demo-lucia` and `demo-tomas` (one per judge the organizers named, section 11), and `demo-diego`, `demo-elena`, `demo-marco` (evaluators who request access), each with fictitious BRL charges shaped for every report reason, the urgency lane and the proactive alert. Load them with `npx wrangler d1 execute arabica-intake-demo --remote --file seeds/seed_fictitious.sql` from `back-end/` (idempotent upserts).
 
 ## 7. Onboard dataset customers
 
@@ -145,9 +146,24 @@ A Worker session already open lasts at most one hour. To end it at once, a perso
 We asked the organizers (Factored) whether evaluators need a trusted identity service, and which emails to enrol. Their answer:
 
 - **A trusted identity service is not mandatory** for the evaluator flow. What judges value is a well-defined problem, backed by KPIs and values, and a demo whose limitations are fully listed.
-- **Judges' emails:** after the submission, we ping the organizers' contacts and ask for them. We don't guess or hard-code evaluator emails.
+- **Judges' emails:** after the submission, we ping the organizers' contacts and ask for them. We don't guess or hard-code evaluator emails, and the emails we receive stay out of Git.
 
-Evaluator admins can open individual reports in the approved agent queue (statement and verified evidence, no customer id); there is no unrestricted customer browser. When the emails arrive, each evaluator is enrolled as `admin` on one of `demo-diego`, `demo-elena` and `demo-marco` (synthetic data only). The same identities are reused for later test runs. Evaluators never receive production credentials or records outside the synthetic demo.
+**Every evaluator works on fictitious data only.** Each one is enrolled as `admin` on a fictitious customer whose charges are invented (`back-end/seeds/fictitious.json`), and can switch to any demo customer, including the synthetic dataset cohort, from the customer view. Evaluator admins can open individual reports in the approved agent queue (statement and verified evidence, no customer id); there is no unrestricted customer browser. Evaluators never receive production credentials or records outside the synthetic demo.
+
+**Judges the organizers named (2026-10-05).** Four judges each get their own fictitious customer, so no two judges share reports: `demo-sofia`, `demo-pablo`, `demo-lucia` and `demo-tomas`. The email-to-customer mapping is kept with the team, not in this repository. A person enrols each one:
+
+```bash
+cd back-end && npx wrangler d1 execute arabica-intake-demo --remote --file seeds/seed_fictitious.sql   # once: loads the four customers (idempotent)
+back-end/scripts/cognito/enroll.sh <judge email> demo-sofia admin                                      # and likewise demo-pablo, demo-lucia, demo-tomas
+```
+
+**Evaluators we didn't enrol.** Judges are assigned at random, so some will reach the sign-in screen first. There, "Evaluating this project and have no access? Request it" (in Spanish, Portuguese and English) sends their email, and an optional name and note, to the team inbox in `ACCESS_REQUEST_TO` (`POST /auth/access-request`). The form says that all data is synthetic or fictitious and never says whether an address is already enrolled. When a request arrives:
+
+1. Check it looks like an evaluator (the name and note are what the requester typed; treat them as untrusted).
+2. Enrol the address as `admin` on one of `demo-diego`, `demo-elena` or `demo-marco`, or on a new fictitious identity added to `fictitious.json` and `identities.json` and loaded as above: `enroll.sh <email> demo-diego admin`.
+3. Reply to the person that they can sign in with that email.
+
+Requests are bounded: one email per address a day, at most 20 addresses a day (then 429 until the next UTC day), and D1 keeps only a domain-separated HMAC of each normalized address for seven days (migration 0031), derived from the stable `EMAIL_KEY`. Keep this secret stable: rotating it resets address deduplication for existing rows. Legacy SHA-256 rows are not looked up and expire through normal retention. The same identities are reused for later test runs; `scripts/reset-demo-accounts.sql` clears all ten fictitious customers' activity before judging.
 
 ## Known limitations
 

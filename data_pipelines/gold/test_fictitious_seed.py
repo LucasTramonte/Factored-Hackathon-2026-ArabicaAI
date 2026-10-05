@@ -23,17 +23,22 @@ def test_committed_seed_matches_the_generator():
 
 
 def test_seed_loads_reruns_and_rejects_drift():
+    """Verify seed reruns preserve demo customers, charges and bank flags, and reject stored amount drift."""
     seed = fs.render_fictitious_seed()
     con = d1()
     con.executescript(seed)
     con.executescript(seed)
     assert con.execute("SELECT customer_id, display_name FROM customers ORDER BY 1").fetchall() == [
         ("demo-ana", "Ana (demo)"), ("demo-bruno", "Lucas (demo)"), ("demo-carla", "Manoella (demo)"),
-        ("demo-diego", "Diego (demo)"), ("demo-elena", "Elena (demo)"), ("demo-marco", "Marco (demo)")]
-    assert con.execute("SELECT count(*) FROM transactions WHERE source_occurred_at IS NULL").fetchone() == (26,)
+        ("demo-diego", "Diego (demo)"), ("demo-elena", "Elena (demo)"), ("demo-lucia", "Lucía (demo)"),
+        ("demo-marco", "Marco (demo)"), ("demo-pablo", "Pablo (demo)"), ("demo-sofia", "Sofía (demo)"),
+        ("demo-tomas", "Tomás (demo)")]
+    assert con.execute("SELECT count(*) FROM transactions WHERE source_occurred_at IS NULL").fetchone() == (46,)
     assert con.execute("SELECT customer_id, transaction_id FROM transactions WHERE bank_flagged=1 ORDER BY 1").fetchall() == [
-        ("demo-diego", "demo-tx-015"), ("demo-elena", "demo-tx-020"), ("demo-marco", "demo-tx-025")], \
-        "three small charges carry the ADR-011 flag, and a rerun keeps them"
+        ("demo-diego", "demo-tx-015"), ("demo-elena", "demo-tx-020"), ("demo-lucia", "demo-tx-040"),
+        ("demo-marco", "demo-tx-025"), ("demo-pablo", "demo-tx-035"), ("demo-sofia", "demo-tx-030"),
+        ("demo-tomas", "demo-tx-045")], \
+        "one small charge per evaluator identity carries the ADR-011 flag, and a rerun keeps them"
     con.execute("UPDATE transactions SET amount='1.00' WHERE transaction_id='demo-tx-001'")
     with pytest.raises(sqlite3.IntegrityError):
         con.executescript(seed)

@@ -13,6 +13,7 @@ import { reviewerAssist } from './modules/agent/assist-routes.js';
 import { listAuditEvents } from './modules/audit/routes.js';
 import { actAs, listCustomers } from './modules/admin/routes.js';
 import { answerAlert, getAlert } from './modules/proactive/routes.js';
+import { requestAccess } from './modules/access/routes.js';
 
 export const API_ROUTES = {
   '/demo/identities': { GET: listIdentities },
@@ -20,6 +21,7 @@ export const API_ROUTES = {
   '/auth/session': { POST: startEmailSession },
   '/auth/me': { GET: whoAmI },
   '/auth/logout': { POST: logout },
+  '/auth/access-request': { POST: requestAccess },
   '/transactions': { GET: listTransactions },
   '/transactions/displayed': { POST: acknowledgeDisplay },
   '/cases': { POST: createCase },
@@ -64,6 +66,7 @@ export const ROUTE_ROLES = {
   '/auth/session': 'public',
   '/auth/me': 'public',
   '/auth/logout': 'public',
+  '/auth/access-request': 'public',
   '/transactions': 'customer',
   '/transactions/displayed': 'customer',
   '/cases': 'customer',

@@ -9,7 +9,7 @@ const update = readFileSync(new URL('../../scripts/demo-merchant-names.sql', imp
 const merchants = [...seed.matchAll(/INSERT INTO transactions\([^)]*\) VALUES \('[^']*','[^']*','[^']*',NULL,'([^']*)'/g)].map(m => m[1]);
 
 test('every fictitious demo charge names a vocabulary merchant', () => {
-  assert.equal(merchants.length, 26);
+  assert.equal(merchants.length, 46);
   for (const name of merchants) assert.ok(Object.hasOwn(VOCABULARY.merchants, name), name);
 });
 
