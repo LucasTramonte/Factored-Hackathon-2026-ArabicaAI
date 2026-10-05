@@ -9,6 +9,10 @@ To trace a change, go from the release to its PRs, then from each PR to the ADR,
 | `v0.1.0` Factored checkpoint baseline | 2026-10-01 | `518fe3c` | — (before milestones) | #1–#55 | ADR-002 to ADR-006 | [v0.1.0](#v010-factored-checkpoint-baseline) | Worker `77f72eb4`; D1 0001–0007; cohort `c32369c464eec13a`; extractor off | [v0.1.0](#v010-factored-checkpoint-baseline) |
 | `v0.2.0` Customer reporting and team access | 2026-10-03 | `64ae03a` | [`v0.2.0`](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/milestone/1?closed=1) | #56–#84 | ADR-007 to ADR-010; ADR-004 notes | [v0.2.0](#v020-customer-reporting-and-team-access) | Worker `f76c7f7b` (`main-64ae03a`); D1 0001–0017; extractor off | [v0.2.0](#v020-customer-reporting-and-team-access) |
 | `v0.3.0` Admin, alerts and the measured extractor | 2026-10-04 | `0a743bb` | [`v0.3.0`](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/milestone/2?closed=1) | #85–#113 | ADR-011 to ADR-014; ADR-006 amendments 6–9 | [v0.3.0](#v030-admin-alerts-and-the-measured-extractor) | Worker `22e99b3f` (`main-0a743bb`); D1 0001–0025; extractor and AI suggestions off | Extractor and AI suggestions off online; demo alert flags are authored; SES sandbox |
+| `v0.4.0` | 2026-10-04 | `45d933d` | `v0.4.0` | #114–#120 | ADR-012 amendment 1, ADR-014, ADR-015 | [v0.4.0](#v040) | Deploy run 21:06 UTC; Worker version not recorded; D1 0001–0028; AI suggestions on | Worker version not recorded; the extractor v2 held-out evaluation is owed |
+| `v0.5` | 2026-10-05 | `d5cd089` | `v0.5.0` | #122–#131 | ADR-015 explained closure contract (migration 0029) | [v0.5](#v05) | Deploy run 02:19 UTC; Worker version not recorded; D1 0001–0029; AI suggestions on | Tagged `v0.5`, without a patch number; Worker version not recorded; no support assistants |
+
+Unreleased on main: #132 (report support assistants, off) and #134, milestone v0.6.0.
 
 `v1.0.0` is the final hackathon submission ([`CONTRIBUTING.md`](../../CONTRIBUTING.md#versioning)).
 
@@ -122,3 +126,19 @@ Tagged on `0a743bb` (#113), the deployed `main`, on 2026-10-04; [GitHub Release]
 - Cohort: 796 dataset customers, `slice_version` `c32369c464eec13a` (one part, `4fe90381be8d8fef`), from the cohort manifest (`data/gold_cohort/2026-06-17/manifest.json`). Remote `seed_loads` holds that part, `4fe90381be8d8fef`, loaded 2026-10-01 12:45:10 (a person's read-only query, 2026-10-04).
 - Demo alert flags (#106): the fictitious seed's three `bank_flagged` updates (`demo-tx-015`, `-020`, `-025` for Diego, Elena and Marco) were missing on remote D1 and were applied by a person on 2026-10-04; a read-back shows all three set.
 - Switches: extractor off; `INTAKE_AI_ENABLED` `"0"`. The `VERTEX_WIF_SIGNING_KEY` secret is set but unused while the switch is off.
+
+## `v0.4.0`
+
+Tagged on `45d933d` and published 2026-10-04 21:08 UTC; [GitHub Release](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.4.0).
+
+- **Scope:** PRs #114–#120: AI and KPI work recovered after #113 (#114); the v0.3.0 tag docs (#115); AI suggestions live on extractor v2, wait times from bank history and receipt fixes (#116); the progress map (#117); agent–customer messages (ADR-015), visible form errors, clearer agent status and Worker observability (#118); Outcome 1 cuts, DF-028, the first-response appendix and the architecture diagram (#119); branded HTML emails (#120).
+- **Decisions:** ADR-012 amendment 1 (AI suggestions on in the demo), ADR-014, ADR-015.
+- **Deployed state:** deploy run on `45d933d` succeeded 2026-10-04 21:06 UTC; Worker version not recorded; D1 migrations 0001–0028; AI suggestions on (`INTAKE_AI_ENABLED = "1"`, `INTAKE_AI_SHARE_B = "1"`).
+
+## `v0.5`
+
+Tagged on `d5cd089` and published 2026-10-05 02:39 UTC; [GitHub Release](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.5). The tag has no patch number; its milestone is `v0.5.0`.
+
+- **Scope:** PRs #122–#131: clearer reports and an optional guided tour (#122); saved suggestion outcomes and report progress refresh (#123); explained report closure (migration 0029) with preserved lifecycle updates (#124); README intro (#125); team ownership (#126); sign-in code email layout (#127); sign-in code emails in the selected language (#128); Cloudflare traffic evidence (#129); the help entry's choose step (#130); report email language and the account badge (#131).
+- **Decisions:** no new ADR; ADR-015's explained closure contract (2026-10-04).
+- **Deployed state:** deploy run on `d5cd089` succeeded 2026-10-05 02:19 UTC; Worker version not recorded; D1 migrations 0001–0029; AI suggestions on. No support assistants.

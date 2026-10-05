@@ -13,7 +13,7 @@
 | `Docs/ADRs/` | Decision records (format and index in `Docs/ADRs/README.md`). Read ADR-002 to ADR-004 before changing intake scope, runtime or capacity. |
 | `Docs/Plans/` | Runbooks and roadmaps (`intake-demo.md`, `intake-roadmap.md`). |
 | `Docs/superpowers/plans/` | Implementation plans executed by agent orchestration (one task per coder agent, two QA agents per task). Archived to `Docs/archive/superpowers/` when done. |
-| `intake_agent/` | The context card and the learned extractor (offline; online only behind a switch that is off). |
+| `intake_agent/` | The context card and the learned extractor (extractor v2 runs online only on the "I can't find it" path, on in the demo: ADR-012 amendment 1, ADR-014). |
 
 ## Current data workflow
 
@@ -39,7 +39,7 @@
   - **reviewer:** at least one other teammate, chosen for the area (Manoella approves extractor behaviour and frozen labels);
   - **milestone:** the next open version; `CONTRIBUTING.md` ("Versioning" and "When to release") says which.
 
-  Pass them when opening, for example `gh pr create --label documentation --assignee @me --reviewer Robertzu43 --milestone v0.3.0`; `CONTRIBUTING.md` lists the labels. After a merge, check the release cadence with [`.github/skills/release/SKILL.md`](.github/skills/release/SKILL.md) and tell a person when a release is due.
+  Pass them when opening, for example `gh pr create --label documentation --assignee @me --reviewer Robertzu43 --milestone v0.6.0`; `CONTRIBUTING.md` lists the labels. After a merge, check the release cadence with [`.github/skills/release/SKILL.md`](.github/skills/release/SKILL.md) and tell a person when a release is due.
 
 ## Intake service rules
 
@@ -48,7 +48,7 @@
 - Schema changes go through `wrangler d1 migrations`, are additive, and are applied to local D1 in tests before `--remote`. **The deploy applies them, so nobody runs `--remote` for a migration**: `npm run deploy` (`back-end/scripts/predeploy.mjs`, run by `.github/workflows/deploy.yml` after CI passes on `main`) applies every pending *additive* migration to remote D1 before the new Worker goes live. A migration that drops, renames or rebuilds stops the deploy for a person to apply on purpose, and `test/unit/predeploy.test.js` fails the PR's CI first, so split it into additive steps instead. Before this, five builds in two days failed because a migration merged before anyone applied it by hand. Alembic is not used; ADR-003 explains why and what would change that.
 - The Worker never reads S3, DuckDB or Silver. Online data arrives only as a reviewed Gold slice seed. The slice keeps the Bronze source amount and currency and the timezone-free source timestamp.
 - Any API change comes with adversarial tests: the gate, method and path matrix; session swap, forgery and expiry; the isolation oracle; hostile input; concurrent idempotency; contract validation against `front-end/contracts/`; and the D1 budget ceilings. A budget increase must be justified in ADR-004.
-- A reference is returned only after the case row has been read back. A handoff is not a resolution. Nothing refunds, blocks a card or decides fraud. The MVP calls no model ([ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)), and adding one needs its own ADR.
+- A reference is returned only after the case row has been read back. A handoff is not a resolution. Nothing refunds, blocks a card or decides fraud. A model is called only on paths an ADR allows (ADR-012/014 suggestions; ADR-016 support assistants, off), and any new one needs its own ADR.
 - Events and logs carry references, never customer statements or identifiers (`Docs/intake/intake-events.md`).
 - The Worker and client need Node 22 or newer.
 

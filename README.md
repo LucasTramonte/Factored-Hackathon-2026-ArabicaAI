@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/actions/workflows/quality.yml?query=branch%3Amain"><code>Quality CI · main ↗</code></a>
-  <a href="https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.4.0"><code>Release v0.4.0 ↗</code></a>
+  <a href="https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.5"><code>Release v0.5 ↗</code></a>
   <a href="https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/latest"><code>Latest release ↗</code></a>
 </p>
 
@@ -97,13 +97,13 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 
 The Worker and D1 remain the single runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito proves who signs in, and the Worker issues its own session from the verified token. SES only delivers email; cases stay in D1. These integrations are deployed, with Cognito replacing the former shared gates ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). SES has production access, so recipients need no verification; delivery still depends on the sender's domain policy.
 
-For published versions, see the [latest release](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/latest) and [release history](Docs/releases/README.md); the header records published release v0.4.0, while the CI link tracks `main`, which may contain newer changes. Release snapshots are updated when a release is published. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan).
+For published versions, see the [latest release](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/latest) and [release history](Docs/releases/README.md); the header records published release v0.5, while the CI link tracks `main`, which may contain newer changes. Release snapshots are updated when a release is published. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan).
 
 | Component | Path | What it does |
 |---|---|---|
 | Data pipeline | `data_pipelines/bronze`, `silver`, `quality` | Reproducible, read-only S3 → typed Silver tables with a readiness audit |
 | Gold intake slice | `data_pipelines/gold` | Bounded, quality-gated sample → versioned D1 seed with provenance |
-| Intake API | `back-end/` | One online runtime: sessions from Cognito sign-in, customer-scoped retrieval, idempotent cases, reference after commit, the customer's reports, review status, notification emails, agent view |
+| Intake API | `back-end/` | One online runtime: sessions from Cognito sign-in, customer-scoped retrieval, idempotent cases, reference after commit, the customer's reports, review status, notification emails, agent view, agent–customer messages, closing explanations, alerts, and the report support assistants (built, off by default) |
 | Web client | `front-end/` | Customer and agent views; API contracts in `front-end/contracts/` |
 | Evaluation | `evals/intake`, [`EVALUATION.md`](Docs/deliverables/EVALUATION.md) | Team-built ES/PT test sets, checklist baseline, learned-component harness, episode KPI scorer |
 | Data quality register | [`DATA_ENGINEERING.md`](Docs/deliverables/DATA_ENGINEERING.md), `data_profiles/findings/` | Every dataset finding that changes or limits a decision, with its query, impact and handling |
@@ -119,6 +119,7 @@ Extractor v1 was compared offline with hand-written rules on 60 held-out Spanish
 - **The model reads, code decides, a person reviews.** Suggestions come only from the customer's own charges.
 - **Every failure is today's flow.** Timeout, provider error, invalid output, no match or a retired model all leave the incomplete handoff as it is.
 - **It is measured and can be disabled.** The demo records usage and agent marks; setting `INTAKE_AI_SHARE_B = "0.5"` restores the randomized pilot. Operators set `INTAKE_AI_ENABLED = "0"` under the plan's stop rules. The circuit breaker and retirement guard stop calls automatically.
+- **The support assistants are built and off.** The [ADR-016](Docs/ADRs/ADR-016-report-support-assistants.md) assistants (a reviewer draft and answers to a customer's report questions) stay off until a live acceptance run and a separate approval.
 
 What each version contains and what is deployed: [release history](Docs/releases/README.md). What comes next: [intake roadmap](Docs/Plans/intake-roadmap.md).
 

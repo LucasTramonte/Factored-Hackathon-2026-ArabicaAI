@@ -7,7 +7,7 @@ Technical and product-scope decisions for the ArabicaAI hackathon solution. Each
 | ADR | Title | Status |
 |---|---|---|
 | [001](ADR-001-workflow-prioritization.md) | Prioritize a read-only inquiry workflow for evaluation (comparison of the four official workflows) | Superseded by 002 for the V1 choice |
-| [002](ADR-002-v1-workflow-unrecognized-charge-intake.md) | V1 workflow: unrecognized-charge intake with human handoff | Accepted (2026-09-29); 008 proposes to supersede decision 3 for English; 014 proposes to lift "no model" behind a switch |
+| [002](ADR-002-v1-workflow-unrecognized-charge-intake.md) | V1 workflow: unrecognized-charge intake with human handoff | Accepted (2026-09-29); 008 proposes to supersede decision 3 for English; 014 lifts the no-model rule for the "I can't find it" path; 016 proposes the support assistants |
 | [003](ADR-003-intake-single-runtime-worker-d1.md) | Intake runtime: one online API on Cloudflare Workers + D1, Python for batch | Proposed (2026-09-29); decision 5 superseded by 007 |
 | [004](ADR-004-intake-capacity-and-cost.md) | Capacity, cost and where each layer runs (the single record for cloud cost and sizing) | Proposed (revised 2026-09-30) |
 | [005](ADR-005-evaluation-data-protocol.md) | Evaluation data protocol: design and holdout windows, and a blind frozen set | Proposed (2026-09-29) |
@@ -19,9 +19,9 @@ Technical and product-scope decisions for the ArabicaAI hackathon solution. Each
 | [011](ADR-011-proactive-alert-bank-flag.md) | Proactive alert: the bank's own fraud flag as an input, never the charge amount | Proposed (2026-10-04) |
 | [012](ADR-012-ai-online-only-where-evidence-shows.md) | AI online only where the evidence shows the deterministic flow falls short: not yet | Proposed (2026-10-04); amendment 1 turns AI suggestions on in the demo |
 | [013](ADR-013-gcp-sso-and-persistent-sessions.md) | Persistent sessions and Google sign-in for staff on GCP | Proposed (2026-10-04) |
-| [014](ADR-014-online-ai-suggestions-and-no-fraud-model.md) | Online AI only for "I can't find it" suggestions, off until a pilot; no fraud model | Proposed (2026-10-04) |
+| [014](ADR-014-online-ai-suggestions-and-no-fraud-model.md) | Online AI only for "I can't find it" suggestions, enabled in the demo; no fraud model | Proposed (2026-10-04) |
 | [015](ADR-015-agent-customer-messages.md) | Messages between the reviewing agent and the customer, on one report | Proposed (2026-10-04) |
-| [016](ADR-016-report-support-assistants.md) | Bounded report support assistants, independently off pending synthetic pilot | Proposed (2026-10-04) |
+| [016](ADR-016-report-support-assistants.md) | Bounded report support assistants | Proposed; implementation approved, live pilot and activation pending (2026-10-04) |
 
 ## Format
 

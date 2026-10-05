@@ -43,9 +43,9 @@ Add a scope when it helps, for example `feat(intake): …`, `fix(front-end): …
   - **label,** by branch prefix: `feat` → `enhancement`, `fix` → `bug`, `docs` → `documentation`, `eval` → `evaluation`, `data` → `data`, `chore` → `chore`, plus `accessibility` when it applies. A branch without one of these prefixes (`claude/…`, `codex/…`) takes the label of what the PR actually does, read from its Conventional title type (`feat` → `enhancement`, and so on);
   - **assignee:** the PR's owner, normally its author;
   - **reviewer:** at least one other teammate;
-  - **milestone:** the next open version (`gh api repos/:owner/:repo/milestones -q '.[].title'`). If none is open, create the next one by the [cadence rules](#when-to-release).
+  - **milestone:** the next open version (`gh api repos/:owner/:repo/milestones -q '.[].title'`). If none is open, create the next one by the [cadence rules](#when-to-release). A released version's milestone is closed at release; if more than one is open, use the lowest unreleased one.
 
-  For example: `gh pr create --label documentation --assignee @me --reviewer Robertzu43 --milestone v0.3.0 --fill`.
+  For example: `gh pr create --label documentation --assignee @me --reviewer Robertzu43 --milestone v0.6.0 --fill`.
 - **Fill in the [PR template](.github/pull_request_template.md):**
   - what changed and why;
   - the evidence (ADR, finding, evaluation run, issue or review comment);
@@ -99,9 +99,9 @@ A release is cut from `main`, on a green squash commit, by a person.
    - the Worker version from `npx wrangler deployments list`, in `back-end/`;
    - the D1 migration level from `npx wrangler d1 migrations list arabica-intake-demo --remote`;
    - the cohort `slice_version` from its manifest and `seed_loads`;
-   - the extractor switch (off, or shadow).
+   - the AI switches: `INTAKE_AI_ENABLED` and `INTAKE_AI_SHARE_B`, and whether any `ASSIST_*_ENABLED` is set.
 2. **When deploying, label the Worker version with the release:** `npm --prefix back-end run deploy -- --tag v0.X.Y --message "v0.X.Y <short sha>"`. Without a label, `wrangler deployments list` can't say which commit is live.
-3. **Tag the commit:** `git tag -a v0.X.Y <sha> -m "v0.X.Y: <milestone name>"`, then `git push origin v0.X.Y`.
+3. **Tag the commit:** `git tag -a v0.X.Y <sha> -m "v0.X.Y: <milestone name>"`, then `git push origin v0.X.Y`. `v0.5` was tagged without a patch number; tags are not rewritten, and later tags use `v0.X.Y`.
 4. **Publish the release:** `gh release create v0.X.Y --verify-tag --title "v0.X.Y: <milestone name>" --notes-file <notes.md>`.
 5. **Add a row to the [release history](Docs/releases/README.md)** in a small `docs(release): …` PR, or in the PR that prepares the release.
 6. **Close the milestone** and open the next one.

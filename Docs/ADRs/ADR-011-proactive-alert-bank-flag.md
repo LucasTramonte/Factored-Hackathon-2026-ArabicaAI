@@ -39,7 +39,7 @@ Roberto's plan (#100) designed the experience: one dismissible banner on the hom
    - "Yes, it's mine" records the answer.
    - "I don't recognize it, report it" opens the guided chat on that charge; it then follows the normal confirmation path.
    - It never says fraud, blocked or refunded, and it says that a person reviews every report (ADR-002).
-3. **Email is designed, not built for the demo.** It needs something that runs without the customer signing in (a scheduled trigger), and SES production access. When both exist, it sends **one** email per flagged charge, keyed by the transaction in the outbox (idempotent under retries), with reference-level content only.
+3. **Email is designed, not built for the demo.** It needs something that runs without the customer signing in (a scheduled trigger), and SES production access (SES production access granted 2026-10-04). When both exist, it sends **one** email per flagged charge, keyed by the transaction in the outbox (idempotent under retries), with reference-level content only.
 4. **No repeated or unnecessary alerts.**
    - One alert per charge.
    - Once answered either way, it never shows again; the answer is stored server-side by customer and transaction.
@@ -63,7 +63,7 @@ Roberto's plan (#100) designed the experience: one dismissible banner on the hom
 - **+** Nothing new to run or pay for.
 - **−** In this prototype the flags are authored. Until the organizers confirm `fraud_score`'s provenance, the alert demonstrates the experience, not a measured detection rate.
 - **−** Even if the provenance is confirmed, about half of fraud would not be flagged (no score, or a score in the legitimate range). The alert supplements the customer-initiated report; it doesn't replace it.
-- **−** Email waits for a scheduled trigger and SES production access.
+- **−** Email waits for a scheduled trigger and SES production access (SES production access granted 2026-10-04).
 
 ## Alternatives considered
 
@@ -71,5 +71,5 @@ Roberto's plan (#100) designed the experience: one dismissible banner on the hom
 - **Above the customer's own p95 (the lane's second rule).** By definition about 5% of any customer's charges sit above their own p95, so every customer with enough history would see banners. Rejected: unbounded volume with no evidence of urgency. Reopen with a target that shows it separates.
 - **Derive the flag from `fraud_score > 30` now, for the dataset cohort.** The numbers look perfect, which is exactly why the team treats the score as possible leakage. Rejected for now: it would put a possibly leaky field in front of customers and evaluators. Reopen when the organizers confirm that the score is assigned before the label (decision 1).
 - **A trained classifier (logistic regression or gradient boosting, SageMaker).** The label has no availability time, the tested fields don't separate it one at a time, and the strongest field may leak it. Rejected: nothing trustworthy to train or evaluate on. Reopen with a timestamped label or new pre-outcome fields (device, velocity, merchant history) that separate on held-out periods.
-- **Email only.** It needs a scheduled trigger and SES production access, and it reaches customers outside the session where they can act. Rejected for the demo. Reopen when both exist (decision 3).
+- **Email only.** It needs a scheduled trigger and SES production access (SES production access granted 2026-10-04), and it reaches customers outside the session where they can act. Rejected for the demo. Reopen when both exist (decision 3).
 - **No proactive alert.** The product requirement stands, and the bank's own flag is a legitimate input even when this dataset can't validate it. Rejected: the experience can be built and demonstrated honestly with authored flags. Reopen if the bank has no fraud engine whose flag the service can receive.
