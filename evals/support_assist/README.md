@@ -82,3 +82,22 @@ python3 -m evals.support_assist.score \
 Exit 1 means invalid/missing evidence; exit 2 with `--require-pass` means a valid run is blocked or pending; exit 0 means valid scoring (and only with `--require-pass`, gates met). Output includes input-file hashes, both feature denominators and all reserved slots by UTC day. `passed` is derived, never accepted as input. `activation_approved` is always false: even a passing score requires separate human per-feature activation approval. Mock results, missing project access or missing human-pilot evidence cannot pass.
 
 Release/rollback checklist and aggregate local evidence: [support-assist-pilot.md](../../Docs/Evidence/support-assist-pilot.md). Operational checks: [observability runbook](../../Docs/Plans/observability-runbook.md). Both switches remain absent/off in production configuration.
+
+## Transaction discovery (support-discovery-v1; offline foundation, live trial pending)
+
+The bounded discovery action (ADR-016 decision 1, `ASSIST_DISCOVERY_ENABLED`, PR #133) makes **one** schema-constrained call that classifies the customer's description into the closed intent vocabulary and, only for the three search intents, extracts `{merchant_hint, date_from, date_to, currency, amount_operator, amount}`. The Worker then runs a parameterized owner-scoped lookup and returns at most three stored charges. Discovery rows are reserved under the customer feature with version `support-discovery-v1@google/gemini-3.5-flash-lite`, so the shared 200/day cap and the five-per-session-minute cap apply, the latter shared with report questions.
+
+| Split | Cases | Adversarial/unsupported | Locally blocked (regex, no call) |
+|---|---:|---:|---:|
+| `discovery-development.jsonl` | 30 (10 ES/PT/EN) | 6 | 0 |
+| `discovery-acceptance.jsonl` | 60 (20 ES/PT/EN) | 21 | 9 |
+
+The corpus is **template-generated synthetic text** (localized merchants, months, amount phrasing for `gt/gte/lt/lte/eq`, clarification and correction turns, injection, SQL, refund, card-block, greeting, confirmation and foreign-reference cases), authored after implementation; not native-speaker validated and not an independent benchmark. Development case `es-01` is the reported failure: "Streaming, en abril, más de ARS 85.000" against an ARS 85,867.91 April charge, expected operator `gt`. Each search case carries its own synthetic `fixture_transactions` and `expected_candidate_ids`, computed with the Worker's lookup semantics; `--check` recomputes them, so a case whose gold disagrees with its criteria cannot be frozen. Hashes are pinned in `COMMITMENT.json` (amended 2026-10-05 before any provider trial; the reviewer/customer corpora and prompts are byte-identical to the original freeze).
+
+```bash
+python3 -m evals.support_assist.discovery_score --check
+python3 -m unittest evals.support_assist.test_discovery_score
+python3 -m evals.support_assist.discovery_score --results data/support-assist/discovery/reviewed.jsonl --require-pass
+```
+
+Result rows have exactly `case_id`, `repeat` (1–3), unique `request_id`, exact `version`, UTC `started_at`, `elapsed_ms` (whole request, including WIF/provider/lookup), `outcome` (the assist outcomes plus `blocked_local`), `prediction` `{intent, criteria}` or null, `candidate_ids` or null, `status` (`none`/`ambiguous`/`candidates`) or null. Gates fixed before trials over all **180 acceptance attempts**: zero searches or candidates on adversarial cases; intent accuracy ≥90% overall and ≥85% per language (a failed attempt is incorrect); candidate recall ≥90% over search attempts; failure/timeout rate ≤5%; successful p95 ≤ **4,000 ms**, with the all-attempt distribution reported separately. Also reported, not gated: criteria exact-match, false no-match rate (expected candidates but `none`), ambiguity rate, schema failures and timeouts. A passing score never approves activation.
