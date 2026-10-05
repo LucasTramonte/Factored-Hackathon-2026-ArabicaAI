@@ -311,18 +311,25 @@
                 <div class="report-actions chat-actions"><button type="button" class="ar-btn" (click)="send()" [disabled]="busy()">{{ frozen() ? t().retry : t().chatSend }}</button></div>
               }
               @case ('choose') {
-                <fieldset class="chat-form" id="chat-choose" #chooseStep tabindex="-1" [disabled]="busy() || !!frozen()" [attr.aria-describedby]="promptLast() ? 'chat-prompt' : null">
-                  <legend class="sr-only">{{ t().charges }}</legend>
-                  @for (tx of choosable(); track tx.transaction_id) {
-                    <label class="ar-check"><input type="radio" name="chat-choice" [value]="tx.transaction_id" [(ngModel)]="choice" (ngModelChange)="chatConfirmed = false">
-                      {{ tx.merchant_name || t().noMerchant }} · <span class="ar-mono">{{ money(tx.amount, tx.currency) }}</span></label>
-                  }
-                  <label class="ar-check"><input type="checkbox" name="chat-confirmed" [(ngModel)]="chatConfirmed" [disabled]="!choice"> {{ t().confirm }}</label>
-                </fieldset>
-                <div class="report-actions chat-actions">
-                  <button type="button" class="ar-btn" [class.ar-btn-secondary]="general()" (click)="frozen() ? run() : confirmCharge()" [disabled]="busy() || frozen()?.path === 'handoff'">{{ frozen()?.path === 'confirm' ? t().retry : t().chatConfirmCharge }}</button>
-                  <button type="button" class="ar-btn" [class.ar-btn-secondary]="!general()" (click)="frozen() ? run() : cannotFind()" [disabled]="busy() || frozen()?.path === 'confirm'">{{ frozen()?.path === 'handoff' ? t().retry : t().chatCannotFind }}</button>
-                </div>
+                @if (general()) {
+                  <!-- From the "?" entry no charge is chosen here: the guide points at the row's Report button (ADR-010, decision 5) and offers only "I can't find it". -->
+                  <div class="report-actions chat-actions">
+                    <button type="button" class="ar-btn" id="chat-choose" #chooseStep (click)="frozen() ? run() : cannotFind()" [disabled]="busy()" [attr.aria-describedby]="promptLast() ? 'chat-prompt' : null">{{ frozen()?.path === 'handoff' ? t().retry : t().chatCannotFind }}</button>
+                  </div>
+                } @else {
+                  <fieldset class="chat-form" id="chat-choose" #chooseStep tabindex="-1" [disabled]="busy() || !!frozen()" [attr.aria-describedby]="promptLast() ? 'chat-prompt' : null">
+                    <legend class="sr-only">{{ t().charges }}</legend>
+                    @for (tx of choosable(); track tx.transaction_id) {
+                      <label class="ar-check"><input type="radio" name="chat-choice" [value]="tx.transaction_id" [(ngModel)]="choice" (ngModelChange)="chatConfirmed = false">
+                        {{ tx.merchant_name || t().noMerchant }} · <span class="ar-mono">{{ money(tx.amount, tx.currency) }}</span></label>
+                    }
+                    <label class="ar-check"><input type="checkbox" name="chat-confirmed" [(ngModel)]="chatConfirmed" [disabled]="!choice"> {{ t().confirm }}</label>
+                  </fieldset>
+                  <div class="report-actions chat-actions">
+                    <button type="button" class="ar-btn" (click)="frozen() ? run() : confirmCharge()" [disabled]="busy() || frozen()?.path === 'handoff'">{{ frozen()?.path === 'confirm' ? t().retry : t().chatConfirmCharge }}</button>
+                    <button type="button" class="ar-btn ar-btn-secondary" (click)="frozen() ? run() : cannotFind()" [disabled]="busy() || frozen()?.path === 'confirm'">{{ frozen()?.path === 'handoff' ? t().retry : t().chatCannotFind }}</button>
+                  </div>
+                }
               }
               @case ('details') {
                 <fieldset class="chat-form" [disabled]="busy() || !!frozen()">

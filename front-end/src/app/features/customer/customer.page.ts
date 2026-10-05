@@ -892,6 +892,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   openChat(transactionId?: string, general = false): void {
     this.opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     const restart = (!!transactionId || general) && !this.busy() && !this.frozen() && (this.chatStep() === 'receipt' || this.chatStep() === 'ended');
+    const wasGeneral = this.general();
     this.general.set(general); // before clearChat(), which picks the greeting from it
     if (general && !this.frozen()) { this.choice = ''; this.chatConfirmed = false; } // "?" never keeps a row's charge selected
     if (restart) {
@@ -904,8 +905,9 @@ export class CustomerPage implements OnInit, OnDestroy {
     if (transactionId && !this.frozen() && this.chatStep() !== 'receipt' && this.chatStep() !== 'ended') {
       this.choice = transactionId;
       this.chatConfirmed = false;
-      // The customer found the charge after all: back to choosing, with the guide's choose prompt as the current line.
-      if (this.asking()) {
+      // The customer found the charge after all (while the guide waited for details, or from the "?" entry, which lists no
+      // charges): back to choosing, with the guide's choose prompt as the current line.
+      if (this.asking() || (wasGeneral && this.chatStep() === 'choose')) {
         this.asking.set(false);
         this.log.update(l => [...l, { from: 'bot', key: 'chatChoose' }]);
       }
@@ -1217,7 +1219,8 @@ export class CustomerPage implements OnInit, OnDestroy {
       this.frozen.set(null);
       if (frozen.path === 'start') {
         this.episode.set(result as IntakeStart);
-        this.log.update(l => [...l, { from: 'bot', key: 'chatChoose' }]);
+        // From the "?" entry nothing is chosen in the chat: the guide points at the list's Report button instead.
+        this.log.update(l => [...l, { from: 'bot', key: this.general() ? 'chatChooseGeneral' : 'chatChoose' }]);
       } else {
         this.intakeReceipt.set(result as IntakeReceipt);
         // Only "I can't find it" with what the customer remembers can get suggestions; the receipt never waits for them.

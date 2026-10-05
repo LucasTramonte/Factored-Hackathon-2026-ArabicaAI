@@ -2332,7 +2332,7 @@ describe('CustomerPage', () => {
         expect(fab(el).textContent!.trim()).toBe('?');
       });
 
-      it('opens the chat greeting the customer by first name, with no charge chosen and "I can\'t find it" first', async () => {
+      it('opens the chat greeting the customer by first name; its choose step points at the list\'s Report button and offers only "I can\'t find it"', async () => {
         const { fixture, p, el } = await home({ version: 1, snapshot_at: '2026-06-01', first_name: 'Bruno', locale_hint: 'es-CO', products: [] });
         problem(el).click();
         fixture.detectChanges();
@@ -2341,9 +2341,39 @@ describe('CustomerPage', () => {
         expect(p.choice).toBe('');
         await toChoose(p);
         fixture.detectChanges();
+        expect(p.log().at(-1)).toEqual({ from: 'bot', key: 'chatChooseGeneral' });
+        const panel = el.querySelector('#intake-chat')!;
+        expect(panel.textContent).toContain(p.t().chatChooseGeneral);
+        expect(panel.textContent).not.toContain(p.t().chatChoose);
+        expect(panel.querySelector('input[name="chat-choice"]')).toBeNull();
+        expect(panel.querySelector('input[name="chat-confirmed"]')).toBeNull();
         const { confirm, cannot } = actions(el, p);
+        expect(confirm).toBeUndefined();
+        expect([...panel.querySelectorAll('.chat-actions button')]).toEqual([cannot]);
         expect([cannot.classList.contains('ar-btn'), cannot.classList.contains('ar-btn-secondary')]).toEqual([true, false]);
-        expect(confirm.classList).toContain('ar-btn-secondary');
+        expect(cannot.getAttribute('aria-describedby')).toBe('chat-prompt');
+        expect(cannot.disabled).toBeFalse();
+      });
+
+      it('Report on a charge row during a general choose step lists the charges with that one chosen, under the usual prompt', async () => {
+        const { fixture, p, el } = await home();
+        problem(el).click();
+        fixture.detectChanges();
+        await toChoose(p);
+        fixture.detectChanges();
+        el.querySelector<HTMLButtonElement>('.td-state .ar-btn')!.click();
+        fixture.detectChanges();
+        expect(p.general()).toBeFalse();
+        expect(p.chatStep()).toBe('choose');
+        expect(p.choice).toBe('demo-tx-001');
+        expect(p.log().at(-1)).toEqual({ from: 'bot', key: 'chatChoose' });
+        expect(service.startIntake).toHaveBeenCalledTimes(1);
+        const panel = el.querySelector('#intake-chat')!;
+        expect(panel.querySelectorAll('input[name="chat-choice"]').length).toBe(p.choosable().length);
+        expect(panel.querySelector('input[name="chat-confirmed"]')).not.toBeNull();
+        const { confirm, cannot } = actions(el, p);
+        expect(confirm.classList).not.toContain('ar-btn-secondary');
+        expect(cannot.classList).toContain('ar-btn-secondary');
       });
 
       it('after a receipt starts a fresh general chat, greeting by display name without a card', async () => {
