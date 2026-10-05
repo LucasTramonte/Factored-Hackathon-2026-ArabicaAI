@@ -95,4 +95,19 @@ describe('Agent reviewer assistance', () => {
     expect(page.detail()).toBeNull(); expect(page.assistance()).toBeNull(); expect(page.roles()).toEqual([]);
   });
 
+  for (const change of ['language', 'session']) it(`cannot send unchanged applied AI text as manual after ${change} invalidation`, async () => {
+    await page.prepareReply(); page.applyReply(); fixture.detectChanges(); await fixture.whenStable();
+    expect(composer().draft).toBe(result.draft); expect(page.replySnapshot()).toEqual(result.snapshot);
+    if (change === 'language') lang.set('pt'); else service.roles.set([]);
+    fixture.detectChanges(); await fixture.whenStable();
+    expect(composer().draft).toBe(''); expect(page.composerDraft()).toBeNull(); expect(page.replySnapshot()).toBeNull();
+    composer().submit(); expect(service.postMessage).not.toHaveBeenCalled();
+  });
+  it('retains assisted provenance across provider failure until an explicit manual review', async () => {
+    await page.prepareReply(); page.applyReply(); fixture.detectChanges(); await fixture.whenStable();
+    service.prepareReply.and.rejectWith(new ApiError(503)); await page.prepareReply(); fixture.detectChanges();
+    expect(composer().draft).toBe(result.draft); composer().submit(); await fixture.whenStable();
+    expect(service.postMessage.calls.mostRecent().args[3]).toEqual(result.snapshot);
+  });
+
 });
