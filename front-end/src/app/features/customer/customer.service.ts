@@ -85,8 +85,8 @@ export class CustomerService {
   }
 
   /** One transient natural-language interpretation followed by a server-side, owner-scoped lookup. */
-  discoverTransactions(description: string, language: IntakeLang): Promise<TransactionDiscovery> {
-    return this.api.request<TransactionDiscovery>('/intake/transaction-discovery', { description, language });
+  discoverTransactions(description: string, language: IntakeLang, episodeId: string, requestId: string): Promise<TransactionDiscovery> {
+    return this.api.request<TransactionDiscovery>('/intake/transaction-discovery', { description, language, request_id: requestId, episode_id: episodeId });
   }
 
   /** Write to the agent on an own report; the same ``key`` on a retry stores one message (409 once it is closed). */

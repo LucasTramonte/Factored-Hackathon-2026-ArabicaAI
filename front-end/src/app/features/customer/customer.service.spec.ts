@@ -19,8 +19,10 @@ describe('CustomerService guided intake', () => {
     await service.signInWithToken('a.b.c');
     await service.logout();
     await service.reports();
+    await service.discoverTransactions('Streaming en abril, más de 85000 ARS', 'es', 'e', 'r');
     expect(api.request.calls.allArgs()).toEqual([['/intake/start', start], ['/intake/confirm', confirm], ['/intake/handoff', handoff],
-      ['/demo/session', { customer_id: 'demo-ana' }], ['/auth/session', {}, { Authorization: 'Bearer a.b.c' }], ['/auth/logout', {}], ['/reports', undefined, {}, undefined]]);
+      ['/demo/session', { customer_id: 'demo-ana' }], ['/auth/session', {}, { Authorization: 'Bearer a.b.c' }], ['/auth/logout', {}], ['/reports', undefined, {}, undefined],
+      ['/intake/transaction-discovery', { description: 'Streaming en abril, más de 85000 ARS', language: 'es', request_id: 'r', episode_id: 'e' }]]);
   });
 
   it('uses the language selected when each status email is requested', async () => {

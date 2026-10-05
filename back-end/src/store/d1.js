@@ -897,7 +897,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /** Deterministic, owner-scoped discovery lookup. Criteria are validated upstream; SQL parameters never contain model SQL. */
     searchOwnedTransactions: async (customerId, criteria) => {
       const c = criteria ?? {}, clauses = ['customer_id=?'], values = [customerId];
-      if (c.merchant_hint) { clauses.push('lower(merchant_name) LIKE ?'); values.push('%' + c.merchant_hint.toLowerCase() + '%'); }
+      if (c.merchant_hint) { clauses.push("lower(merchant_name) LIKE ? ESCAPE '\\'"); values.push('%' + c.merchant_hint.toLowerCase().replace(/[\\%_]/g, '\\$&') + '%'); }
       if (c.date_from) { clauses.push('substr(occurred_at,1,10)>=?'); values.push(c.date_from); }
       if (c.date_to) { clauses.push('substr(occurred_at,1,10)<=?'); values.push(c.date_to); }
       if (c.currency) { clauses.push('currency=?'); values.push(c.currency); }

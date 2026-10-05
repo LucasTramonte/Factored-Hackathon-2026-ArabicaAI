@@ -54,6 +54,17 @@ const mock = createServer(async (request, response) => {
         if (question.includes('MOCK-INVALID')) return send(200,{choices:[{finish_reason:'stop',message:{content:'{"intent":"status","field":"amount"}'}}]});
         return answer();
       }
+      if (JSON.parse(text).response_format?.json_schema?.name === 'support_discovery') {
+        const d = String(user.description), given = /DISCOVER=(\{.*\})/.exec(d)?.[1];
+        const value = /CASUAL/.test(d) ? { intent:'greeting_or_casual', criteria:null, missing_fields:[], confidence:.9 }
+          : /INJECT/.test(d) ? { intent:'safety_or_injection', criteria:null, missing_fields:[], confidence:.9 }
+          : { intent:'transaction_search', criteria:{ merchant_hint:'Demo', date_from:null, date_to:null, currency:null, amount_operator:null, amount:null, ...(given ? JSON.parse(given) : {}) }, missing_fields:[], confidence:.8 };
+        const answer = () => send(200, { choices:[{ finish_reason:'stop', message:{ role:'assistant', content:JSON.stringify(value) } }], usage:{ prompt_tokens:80, completion_tokens:20 } });
+        if (d.includes('MOCK-DELAY')) return setTimeout(answer, 500);
+        if (d.includes('MOCK-PROVIDER')) return send(500, '');
+        if (d.includes('MOCK-INVALID')) return send(200, { choices:[{ finish_reason:'stop', message:{ content:'{"intent":"transaction_search","criteria":null,"missing_fields":[],"confidence":0.5}' } }] });
+        return answer();
+      }
       const message = String(user.message);
       if (message.includes('MOCK-TIMEOUT')) return undefined; // never answers; the Worker's deadline abandons it
       if (message.includes('MOCK-PROVIDER')) return send(500, '');
