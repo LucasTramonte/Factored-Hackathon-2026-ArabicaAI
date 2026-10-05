@@ -210,17 +210,18 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     return { handoff, replayed: handoff?.handoff_id !== handoffId };
   };
   return {
-    /** Atomically reserve one UUID under the shared 200/day and session-feature 5/minute caps; failures retain slots. */
-    reserveAssist: async ({ requestId, sessionHash, mode, protocol, now }) => {
+    /** Atomically reserve one UUID under the shared 200/day and session-feature 5/minute caps; failures retain slots and the original prompt/model version. */
+    reserveAssist: async ({ requestId, sessionHash, mode, protocol, now, version }) => {
       if (!EPISODE_CURSOR.test(requestId) || !/^[0-9a-f]{64}$/.test(sessionHash) || !['reviewer', 'customer'].includes(mode)
-        || !EPISODE_CURSOR.test(protocol) || !Number.isSafeInteger(now) || now < 0) throw new Error('Invalid assistance reservation');
+        || !EPISODE_CURSOR.test(protocol) || !Number.isSafeInteger(now) || now < 0
+        || typeof version !== 'string' || !version || version.length > 160) throw new Error('Invalid assistance reservation');
       const day = Math.floor(now / 86400000) * 86400000;
       const [inserted, existing] = await batch([
-        ['INSERT INTO support_assist_runs(request_id,session_hash,mode,protocol,created_at) SELECT ?,?,?,?,? '
+        ['INSERT INTO support_assist_runs(request_id,session_hash,mode,protocol,created_at,version) SELECT ?,?,?,?,?,? '
           + 'WHERE NOT EXISTS(SELECT 1 FROM support_assist_runs WHERE request_id=?) '
           + 'AND (SELECT COUNT(*) FROM (SELECT 1 FROM support_assist_runs WHERE created_at>=? AND created_at<? LIMIT 200))<200 '
           + 'AND (SELECT COUNT(*) FROM (SELECT 1 FROM support_assist_runs WHERE session_hash=? AND mode=? AND created_at>? AND created_at<=? LIMIT 5))<5 '
-          + 'RETURNING request_id', requestId, sessionHash, mode, protocol, now, requestId, day, day + 86400000, sessionHash, mode, now - 60000, now],
+          + 'RETURNING request_id', requestId, sessionHash, mode, protocol, now, version, requestId, day, day + 86400000, sessionHash, mode, now - 60000, now],
         ['SELECT request_id FROM support_assist_runs WHERE request_id=? AND changes()=0', requestId]
       ]);
       return inserted.results.length ? 'reserved' : existing.results.length ? 'duplicate' : 'limited';
@@ -231,8 +232,8 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         || !Number.isSafeInteger(latencyMs) || latencyMs < 0 || typeof version !== 'string' || !version || version.length > 160
         || !usage || !['llm_calls','known_input_tokens','known_output_tokens','usage_unavailable_calls'].every(k=>Number.isSafeInteger(usage[k]) && usage[k]>=0)
         || usage.llm_calls > 1 || usage.usage_unavailable_calls > usage.llm_calls) throw new Error('Invalid assistance outcome');
-      await all('UPDATE support_assist_runs SET outcome=?,latency_ms=?,llm_calls=?,known_input_tokens=?,known_output_tokens=?,usage_unavailable_calls=?,version=? '
-        + 'WHERE request_id=? AND outcome IS NULL', outcome, latencyMs, usage.llm_calls, usage.known_input_tokens, usage.known_output_tokens, usage.usage_unavailable_calls, version, requestId);
+      await all('UPDATE support_assist_runs SET outcome=?,latency_ms=?,llm_calls=?,known_input_tokens=?,known_output_tokens=?,usage_unavailable_calls=? '
+        + 'WHERE request_id=? AND outcome IS NULL AND version=?', outcome, latencyMs, usage.llm_calls, usage.known_input_tokens, usage.known_output_tokens, usage.usage_unavailable_calls, requestId, version);
     },
     /** One indexed bounded sweep: abandon at most 100 older-than-ten-minute runs; delete at most 100 older-than-seven-day rows. */
     sweepAssistRuns: async ({ now, limit = 100 }) => {

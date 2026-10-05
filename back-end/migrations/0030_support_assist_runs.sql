@@ -11,7 +11,7 @@ CREATE TABLE support_assist_runs (
   known_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK(known_input_tokens>=0),
   known_output_tokens INTEGER NOT NULL DEFAULT 0 CHECK(known_output_tokens>=0),
   usage_unavailable_calls INTEGER NOT NULL DEFAULT 1 CHECK(usage_unavailable_calls BETWEEN 0 AND llm_calls),
-  version TEXT
+  version TEXT NOT NULL CHECK(length(version) BETWEEN 1 AND 160)
 );
 CREATE INDEX support_assist_time ON support_assist_runs(created_at);
 CREATE INDEX support_assist_session ON support_assist_runs(session_hash,mode,created_at);
