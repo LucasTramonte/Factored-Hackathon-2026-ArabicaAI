@@ -257,7 +257,6 @@
                       @if (r.status !== 'closed' && thread()?.status !== 'closed' && thread()?.items?.at(-1)?.author === 'customer') {
                         <p class="ar-caption messages-waiting" role="status">{{ t().messagesWaiting }}</p>
                       }
-                      @if (!assistOff()) {
                       <section class="customer-assist ar-panel" aria-labelledby="customer-assist-title">
                         <h3 id="customer-assist-title">{{ t().customerAssistTitle }}</h3>
                         <p class="ar-caption" id="customer-assist-notice">{{ t().customerAssistNotice }}</p>
@@ -281,7 +280,6 @@
                           </div>
                         }
                       </section>
-                      }
                       <p class="ar-caption">{{ t().customerSavedMessages }}</p>
                       <app-message-thread viewer="customer" idPrefix="customer-messages" [scope]="r.protocol" [thread]="thread()" [sending]="messageSending() === r.protocol"
                         [acceptedDraft]="acceptedQuestion()" [retry]="!!messageFailed()" [failed]="messageFailed() || threadRefreshError()" [sent]="messagesSent()" (send)="sendMessage($event)" />
@@ -377,7 +375,7 @@
                     [attr.aria-describedby]="chatError() ? 'chat-error' : promptLast() ? 'chat-prompt' : null" [attr.aria-invalid]="chatError() ? true : null"></textarea>
                 </fieldset>
                 <div class="report-actions chat-actions">
-                  @if (!discoveryOff()) { <button type="button" class="ar-btn ar-btn-secondary" (click)="discover()" [disabled]="busy() || discoveryBusy() || !chatDetails.trim()">{{ discoveryBusy() ? t().working : t().discoverySearch }}</button> }
+                  <button type="button" class="ar-btn ar-btn-secondary" (click)="discover()" [disabled]="busy() || discoveryBusy() || !chatDetails.trim()">{{ discoveryBusy() ? t().working : t().discoverySearch }}</button>
                   <button type="button" class="ar-btn" (click)="handoff()" [disabled]="busy()">{{ frozen() ? t().retry : t().chatSend }}</button>
                 </div>
                 @if (discoveryError(); as why) { <p class="ar-caption" role="status">{{ why === 'narrow' ? t().discoveryNarrow : t().discoveryUnavailable }}</p> }

@@ -222,9 +222,6 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly discovery = signal<TransactionDiscovery | null>(null);
   readonly discoveryBusy = signal(false);
   readonly discoveryError = signal<'narrow' | 'unavailable' | null>(null);
-  /** The server answered 503: discovery is switched off (or unavailable) for this session, so the button goes away. */
-  // ponytail: learned from the first 503, not from config; a config read would need an API change.
-  readonly discoveryOff = signal(false);
   choice = '';
   chatConfirmed = false;
   private bootTimer: ReturnType<typeof setTimeout> | undefined;
@@ -863,9 +860,6 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
   readonly assistBusy = signal(false);
   readonly questionError = signal('');
-  /** The server answered 503: AI help is switched off, or not offered to this customer (ADR-016), so the panel goes away. */
-  // ponytail: learned from the first 503, not from config; a config read would need an API change.
-  readonly assistOff = signal(false);
   readonly questionAnswer = signal<{result: CustomerAssist; report: Report; checked: number; question: string} | null>(null);
   readonly acceptedQuestion = signal<MessageDraft | null>(null);
   assistQuestion = '';
@@ -902,8 +896,8 @@ export class CustomerPage implements OnInit, OnDestroy {
       }
       this.questionAnswer.set({result,report,checked:Date.now(),question});
     } catch (e) {
-      if (e instanceof ApiError && e.status === 503) { this.assistOff.set(true); this.clearQuestionHelp(); return; }
-      if (current()) { this.questionError.set(this.t().customerAssistUnavailable); if (e instanceof ApiError && e.status === 401) { this.clearQuestionHelp(); this.pauseUnauthorized(); } }
+      // A 503 is the switch off, a customer not offered AI help, or a provider failure: say so, keep the retry (ADR-016).
+      if (current()) { this.questionError.set(this.t()[e instanceof ApiError && e.status === 503 ? 'customerAssistOff' : 'customerAssistUnavailable']); if (e instanceof ApiError && e.status === 401) { this.clearQuestionHelp(); this.pauseUnauthorized(); } }
     } finally { if (current()) this.assistBusy.set(false); }
   }
 
@@ -1166,7 +1160,6 @@ export class CustomerPage implements OnInit, OnDestroy {
       const found = await this.service.discoverTransactions(description, this.reportLang(), episode.episode_id, crypto.randomUUID());
       if (this.episode()?.episode_id === episode.episode_id) this.discovery.set(found);
     } catch (error) {
-      if (error instanceof ApiError && error.status === 503) this.discoveryOff.set(true);
       this.discoveryError.set(error instanceof ApiError && error.status === 422 ? 'narrow' : 'unavailable');
     }
     finally { this.discoveryBusy.set(false); }

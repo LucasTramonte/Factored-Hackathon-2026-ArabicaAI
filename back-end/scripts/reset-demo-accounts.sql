@@ -24,6 +24,8 @@ DELETE FROM handoff_messages WHERE handoff_id IN (SELECT h.handoff_id FROM intak
   WHERE e.customer_id IN ('demo-ana','demo-bruno','demo-carla','demo-diego','demo-elena','demo-marco'));
 DELETE FROM support_assist_runs WHERE protocol IN (SELECT h.handoff_id FROM intake_handoffs h JOIN intake_episodes e USING(episode_id)
   WHERE e.customer_id IN ('demo-ana','demo-bruno','demo-carla','demo-diego','demo-elena','demo-marco'))
+  OR protocol IN (SELECT h.complete_case_id FROM intake_handoffs h JOIN intake_episodes e USING(episode_id)
+    WHERE e.customer_id IN ('demo-ana','demo-bruno','demo-carla','demo-diego','demo-elena','demo-marco'))
   OR protocol IN (SELECT episode_id FROM intake_episodes WHERE customer_id IN ('demo-ana','demo-bruno','demo-carla','demo-diego','demo-elena','demo-marco'));
 DELETE FROM intake_events WHERE episode_id IN (SELECT episode_id FROM intake_episodes
   WHERE customer_id IN ('demo-ana','demo-bruno','demo-carla','demo-diego','demo-elena','demo-marco'));

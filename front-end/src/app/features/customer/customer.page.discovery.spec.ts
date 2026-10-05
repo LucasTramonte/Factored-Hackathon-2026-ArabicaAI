@@ -163,7 +163,7 @@ describe('Customer transaction discovery', () => {
     fresh.destroy();
   });
 
-  it('labels the button as an AI search in every language, and hides it for the session once the server answers 503', async () => {
+  it('labels the button as an AI search in every language, and keeps it for a retry after a 503', async () => {
     for (const language of ['es', 'pt', 'en'] as const) {
       page.lang.set(language); fixture.detectChanges();
       const button = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(b => b.textContent!.trim() === page.t().discoverySearch);
@@ -172,16 +172,9 @@ describe('Customer transaction discovery', () => {
     }
     service.discoverTransactions.and.rejectWith(new ApiError(503));
     await page.discover(); fixture.detectChanges();
-    expect(page.discoveryOff()).toBeTrue();
     const text = (fixture.nativeElement as HTMLElement).textContent!;
     expect(text).toContain(page.t().discoveryUnavailable);
-    expect(text).not.toContain(page.t().discoverySearch);
-  });
-
-  it('keeps the button for a deliberate retry after a failure that is not 503', async () => {
-    service.discoverTransactions.and.rejectWith(new ApiError(500));
-    await page.discover();
-    expect(page.discoveryOff()).toBeFalse(); expect(page.discoveryError()).toBe('unavailable');
+    expect(text).toContain(page.t().discoverySearch); // a 503 can be a passing provider failure: the customer may retry
   });
 
   it('from the Help entry, a picked search result shows the normal choose step and can be confirmed', async () => {
