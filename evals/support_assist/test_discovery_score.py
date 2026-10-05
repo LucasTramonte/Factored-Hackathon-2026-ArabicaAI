@@ -1,6 +1,8 @@
 """Offline contract checks for the discovery scorer; fabricated attempts exercise gates, never model quality."""
 import copy
+import json
 import unittest
+from pathlib import Path
 from evals.support_assist import discovery_score as ds, score
 
 class DiscoveryScorer(unittest.TestCase):
@@ -257,7 +259,9 @@ class DiscoveryLookup(unittest.TestCase):
                     ('earlier-source', '2026-04-01', '2026-04-02')]]
         self.assertEqual(ds.expected_ids(self.criteria, rows), ['new', 'a', 'b', 'earlier-source'])
         self.assertEqual(ds.expected_ids(self.criteria, list(reversed(rows))), ['new', 'a', 'b', 'earlier-source'])
-        self.assertEqual(ds.expected_ids({**self.criteria, 'date_from': '2026-06-01'}, rows), [])
+        # A charge stored with only its source timestamp (dataset rows) is dated by it, as in the Worker (issue #141).
+        self.assertEqual(ds.expected_ids({**self.criteria, 'date_from': '2026-06-01'}, rows), ['null'])
+        self.assertEqual(ds.expected_ids({**self.criteria, 'date_from': '2026-06-02'}, rows), [])
 
     def test_all_amount_operators_compare_numeric_values_at_the_boundary(self):
         expected = {'eq': [False, True, False], 'gt': [True, False, False], 'gte': [True, True, False],
@@ -266,6 +270,18 @@ class DiscoveryLookup(unittest.TestCase):
             for amount, answer in zip((9.99, 10, 10.01), answers):
                 with self.subTest(operator=operator, amount=amount):
                     self.assertEqual(ds.matches({**self.criteria, 'amount_operator': operator, 'amount': amount}, self.row), answer)
+
+    def test_approx_keeps_amounts_within_ten_percent_inclusive(self):
+        for stored, answer in (('22.49', False), ('22.50', True), ('24.90', True), ('27.50', True), ('27.51', False)):
+            with self.subTest(stored=stored):
+                self.assertEqual(ds.matches({**self.criteria, 'amount_operator': 'approx', 'amount': 25}, {**self.row, 'amount': stored}), answer)
+
+    def test_shared_merchant_hint_cases_match_the_worker_fixture(self):
+        """Same cases as back-end/test/unit/discovery-store.test.js, so scorer and Worker agree (issue #141)."""
+        fixture = json.loads((Path(__file__).resolve().parents[2] / 'back-end' / 'test' / 'fixtures' / 'merchant-hints.json').read_text(encoding='utf-8'))
+        for case in fixture['cases']:
+            with self.subTest(hint=case['hint']):
+                self.assertEqual([m for m in fixture['merchants'] if ds.merchant_matches(case['hint'], m)], case['expected'])
 
 
 if __name__ == '__main__':

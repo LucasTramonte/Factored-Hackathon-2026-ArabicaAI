@@ -83,9 +83,9 @@ Exit 1 means invalid/missing evidence; exit 2 with `--require-pass` means a vali
 
 Release/rollback checklist and aggregate local evidence: [support-assist-pilot.md](../../Docs/Evidence/support-assist-pilot.md). Operational checks: [observability runbook](../../Docs/Plans/observability-runbook.md). Both switches remain absent/off in production configuration.
 
-## Transaction discovery (support-discovery-v1; offline foundation, live trial pending)
+## Transaction discovery (support-discovery-v2; offline foundation, live trial pending)
 
-The bounded discovery action (ADR-016 decision 1, `ASSIST_DISCOVERY_ENABLED`, PR #133) makes **one** schema-constrained call that classifies the customer's description into the closed intent vocabulary and, only for the three search intents, extracts `{merchant_hint, date_from, date_to, currency, amount_operator, amount}`. The Worker then runs a parameterized owner-scoped lookup and returns at most three stored charges. Discovery rows are reserved under the customer feature with version `support-discovery-v1@google/gemini-3.5-flash-lite`, so the shared 200/day cap and the five-per-session-minute cap apply, the latter shared with report questions.
+The bounded discovery action (ADR-016 decision 1, `ASSIST_DISCOVERY_ENABLED`, PR #133) makes **one** schema-constrained call that classifies the customer's description into the closed intent vocabulary and, only for the three search intents, extracts `{merchant_hint, date_from, date_to, currency, amount_operator, amount}`. The Worker then runs a parameterized owner-scoped lookup and returns at most three stored charges. Discovery rows are reserved under the customer feature with version `support-discovery-v2@google/gemini-3.5-flash-lite`, so the shared 200/day cap and the five-per-session-minute cap apply, the latter shared with report questions.
 
 | Split | Cases | Adversarial/unsupported | Locally blocked (regex, no call) |
 |---|---:|---:|---:|
@@ -93,6 +93,15 @@ The bounded discovery action (ADR-016 decision 1, `ASSIST_DISCOVERY_ENABLED`, PR
 | `discovery-acceptance.jsonl` | 60 (20 ES/PT/EN) | 21 | 9 |
 
 The corpus is **template-generated synthetic text** (localized merchants, months, amount phrasing for `gt/gte/lt/lte/eq`, clarification and correction turns, injection, SQL, refund, card-block, greeting, confirmation and foreign-reference cases), authored after implementation; not native-speaker validated and not an independent benchmark. Development case `es-01` is the reported failure: "Streaming, en abril, más de ARS 85.000" against an ARS 85,867.91 April charge, expected operator `gt`. Each search case carries its own synthetic `fixture_transactions` and `expected_candidate_ids`, computed with the Worker's lookup semantics (occurred_at descending, source_occurred_at descending, transaction_id ascending, limited to four including the ambiguity sentinel); `--check` recomputes them, so a case whose gold disagrees with its criteria cannot be frozen. Hashes are pinned in `COMMITMENT.json` (amended 2026-10-05 before any provider trial; the reviewer/customer corpora and prompts are byte-identical to the original freeze).
+
+**v2 (issue #141, 2026-10-05, before any provider trial).** Three gaps made a natural description of a stored charge find nothing; v2 closes them.
+1. The merchant was a contiguous substring, so "music streaming" missed "Streaming Music". The lookup now ORs three alternatives: the literal substring; every non-generic word in any order; and the vocabulary merchants whose concepts in [`merchant-concepts.json`](../../back-end/src/config/merchant-concepts.json) cover every non-generic word ("music streaming subscription" → Streaming Music; "restaurant" → only Restaurante El Buen Sabor; "subscription" alone → nothing).
+2. "About 25" became `eq 25`, which 24.90 fails. The prompt now maps approximate amounts to a new `approx` operator, which keeps stored amounts within 10%, the same tolerance as `matcher.js`.
+3. The model had no date to resolve "end of September" against. It now receives `today`.
+
+Dates also fall back to `source_occurred_at`, since dataset charges are stored without `occurred_at`. `discovery_score.py` applies the same rule. Both implementations are tested against the hand-reviewed cases in `back-end/test/fixtures/merchant-hints.json`.
+
+The corpora and their gold are unchanged: no case has a missing `occurred_at`, and `--check` still reproduces every expected candidate. The rule was designed from the issue's Sofía fixture and the development split, not from acceptance outcomes. Neither corpus contains an approximate amount or a vague date, so v2's new behaviour is covered by the Worker regression tests, not by the frozen acceptance set. Fresh acceptance cases for it remain owed before a live trial.
 
 ```bash
 python3 -m evals.support_assist.discovery_score --check

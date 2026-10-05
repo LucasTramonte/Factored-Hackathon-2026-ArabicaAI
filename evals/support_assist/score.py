@@ -31,7 +31,7 @@ def digest(path):
 
 def load_jsonl(path):
     """Read bounded synthetic/evaluation JSONL, refusing blank or non-object rows."""
-    rows = [json.loads(line) for line in Path(path).read_text().splitlines()]
+    rows = [json.loads(line) for line in Path(path).read_text(encoding='utf-8').splitlines()]
     require(all(isinstance(row, dict) for row in rows), 'JSONL rows must be objects')
     return rows
 
@@ -68,7 +68,7 @@ def distribution(values):
 def check_fixtures(root=ROOT):
     """Verify fixed corpus/bundle hashes, split counts, unique content and coverage."""
     root = Path(root)
-    commitment = json.loads((root / 'COMMITMENT.json').read_text())
+    commitment = json.loads((root / 'COMMITMENT.json').read_text(encoding='utf-8'))
     require(commitment['version'] == VERSION, 'freeze version mismatch')
     stamp(commitment['frozen_at'])
     for name, expected in commitment['sha256'].items():

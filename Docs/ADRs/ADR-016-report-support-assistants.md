@@ -61,3 +61,30 @@ Ten scripted local Worker/D1 journeys establish protocol/persistence only. **No 
 ### Transaction discovery accounting and evaluation (2026-10-05, PR #133)
 
 Discovery makes **one** model call per `request_id`: the closed intent classification and the criteria extraction share one schema, so a request cannot cost two calls and the `llm_calls ≤ 1` accounting invariant holds. The reservation is taken before the call under the existing caps with mode `customer` (migration 0030 admits two modes and is not rebuilt) and version `support-discovery-v1@google/gemini-3.5-flash-lite`, which separates discovery rows in accounting; the five-per-minute session cap is therefore shared between report questions and discovery. The reference stored is the customer's own open intake episode, checked for ownership before any reservation; a foreign or missing episode is an identical 404. A deterministic blocklist refuses obvious instruction attacks before the reservation. LIKE wildcards in a merchant hint are escaped, so a hint cannot widen the owner-scoped lookup. Measured D1 ceilings are in ADR-004. The offline corpus, scorer and gates (successful p95 ≤ 4 s) are in `evals/support_assist/README.md`; no live trial, spend or activation has occurred, and `ASSIST_DISCOVERY_ENABLED` stays absent.
+
+### Transaction discovery for every customer, and natural merchant descriptions (2026-10-05, issue #141)
+
+**Scope.** Bounded transaction discovery is available to both `fictitious` and `dataset` customers. The `customers.source = 'fictitious'` check in `discovery-routes.js` was a synthetic-demo guard, not a technical requirement of discovery. Every customer in this deployment is synthetic: the dataset cohort is the challenge's generated data. The issue reports that remote D1 has transactions for all 797 dataset customers (2,907 charges, with no missing merchant, amount, currency or date). The reviewer API's source boundary above is unchanged.
+
+What does not change:
+- a live customer session and the customer's own open episode;
+- one reserved, bounded model call with strict schema validation and the local injection block;
+- a parameterized lookup with `customer_id` taken from the session alone;
+- at most three candidates, plus the four-row ambiguity sentinel;
+- the customer's explicit confirmation before anything is linked;
+- telemetry without descriptions or identifiers;
+- the `ASSIST_DISCOVERY_ENABLED` switch.
+
+**Matching.** A customer's own words had to reproduce the stored merchant string. The fix stays deterministic and owner-scoped, with no embeddings or model-generated filters:
+- **Merchant.** `merchant_hint` matches through three alternatives (`merchant-hint.js`):
+  - the literal substring, as before;
+  - every non-generic word in any order;
+  - the vocabulary merchants whose ES/PT/EN concepts in `src/config/merchant-concepts.json` cover every non-generic word.
+  - **Why it is safe:** generic words ("subscription", "charge", "de") never select anything, and one overlapping word cannot reach an unrelated merchant.
+  - **Bound:** the concept list covers exactly the 24 dataset merchants (`ai-transport.js` `VOCABULARY`), so the `IN` list has at most 24 names.
+  - **Precision over recall:** a word that no concept lists ("Spotify", "premium") leaves only the literal and word alternatives, so such a hint usually finds nothing and continues to the human review path rather than guessing.
+  - **ASCII-only case folding:** SQLite folds only ASCII case. A literal hint therefore matches an accented capital ("Óptica") only through the concepts, which cover every stored name.
+- **Amount.** A new `approx` operator keeps stored amounts within 10% of the stated amount, the same tolerance `matcher.js` applies. `eq` stays exact.
+- **Date.** The model receives today's date, so a month without a year resolves to its latest occurrence. It is the UTC date, because no customer time zone is stored, so in a late LATAM evening "today" can already be the next day. Date filters compare `coalesce(occurred_at, source_occurred_at)`, because dataset charges are stored with only the timezone-free source timestamp.
+
+The prompt change makes this bundle `support-discovery-v2@google/gemini-3.5-flash-lite`. `evals/support_assist/COMMITMENT.json` is amended before any provider trial. The offline scorer applies the same matching, tested on shared hand-reviewed cases. Measured cost: D1 work falls to 7 / 21 / 6 / 6 (queries / rows read / rows written / round trips), within ADR-004's ceilings, and building the merchant alternatives takes about 8 µs per hint. Fresh acceptance cases for approximate amounts and vague dates remain owed before a live trial. The real model's `merchant_hint` for natural descriptions has not been observed: capturing it requires live provider calls, which need a person's approval.

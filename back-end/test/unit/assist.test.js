@@ -100,7 +100,7 @@ for (const mode of ['discovery']) {
       const key = 'description';
       const text = '😀'.repeat(2000);
       const result = await runAssist({ ...env, ASSIST_DISCOVERY_ENABLED: '1' },
-        { mode, language, input: { [key]: text, customer_id: 'PRIVATE', history: 'PRIVATE', transactions: ['PRIVATE'] } }, { fetcher: g.fetcher });
+        { mode, language, input: { [key]: text, today: '2026-10-05', customer_id: 'PRIVATE', history: 'PRIVATE', transactions: ['PRIVATE'] } }, { fetcher: g.fetcher });
       assert.equal(result.ok, true);
       assert.deepEqual(result.value, output);
       const calls = g.calls.filter(call => call.url.endsWith('/chat/completions'));
@@ -110,8 +110,9 @@ for (const mode of ['discovery']) {
       assert.equal(body.messages[0].content, PROMPTS[mode]);
       assert.deepEqual(body.response_format.json_schema, { name: `support_${mode}`, strict: true, schema: SCHEMAS[mode] });
       const context = JSON.parse(body.messages[1].content);
-      assert.deepEqual(Object.keys(context).sort(), ['language', key, 'operators', 'intents'].sort());
-      assert.equal(context[key], text); assert.equal(context.language, language);
+      assert.deepEqual(Object.keys(context).sort(), ['language', key, 'today', 'operators', 'intents'].sort());
+      assert.equal(context[key], text); assert.equal(context.language, language); assert.equal(context.today, '2026-10-05');
+      assert.ok(context.operators.includes('approx'));
       assert.ok(!JSON.stringify(body).includes('PRIVATE'));
     }
   });
@@ -120,8 +121,14 @@ for (const mode of ['discovery']) {
     for (const text of ['', ' \t', '\ud800', 'a\0b', '😀'.repeat(2001), 12, null]) {
       const g = mock();
       const result = await runAssist({ ...env, ASSIST_DISCOVERY_ENABLED: '1' },
-        { mode, language: 'en', input: { description: text } }, { fetcher: g.fetcher });
+        { mode, language: 'en', input: { description: text, today: '2026-10-05' } }, { fetcher: g.fetcher });
       assert.equal(result.kind, 'config_error'); assert.equal(result.usage.llm_calls, 0); assert.equal(g.calls.length, 0);
+    }
+    for (const today of [undefined, null, '', '05/10/2026', '2026-10-05T00:00:00Z', 20261005]) {
+      const g = mock();
+      const result = await runAssist({ ...env, ASSIST_DISCOVERY_ENABLED: '1' },
+        { mode, language: 'en', input: { description: 'Streaming in April', today } }, { fetcher: g.fetcher });
+      assert.equal(result.kind, 'config_error', String(today)); assert.equal(g.calls.length, 0);
     }
   });
 }
@@ -130,7 +137,7 @@ test('discovery extraction stays off unless its own flag is exactly the string 1
   for (const flag of [undefined, '0', 'true', true, 1]) {
     const g = mock();
     const result = await runAssist({ ...env, ASSIST_DISCOVERY_ENABLED: flag },
-      { mode: 'discovery', language: 'en', input: { description: 'Streaming in April' } }, { fetcher: g.fetcher });
+      { mode: 'discovery', language: 'en', input: { description: 'Streaming in April', today: '2026-10-05' } }, { fetcher: g.fetcher });
     assert.equal(result.kind, 'config_error'); assert.equal(g.calls.length, 0);
   }
 });
@@ -139,7 +146,7 @@ test('the discovery flag alone enables discovery independently of customer and r
   resetTokenCache();
   const g = mock(JSON.stringify(discoveryValue));
   const result = await runAssist({ ...env, ASSIST_CUSTOMER_ENABLED: undefined, ASSIST_REVIEWER_ENABLED: undefined, ASSIST_DISCOVERY_ENABLED: '1' },
-    { mode: 'discovery', language: 'en', input: { description: 'Streaming in April' } }, { fetcher: g.fetcher });
+    { mode: 'discovery', language: 'en', input: { description: 'Streaming in April', today: '2026-10-05' } }, { fetcher: g.fetcher });
   assert.equal(result.ok, true, 'ADR-016 defines discovery as independently enabled');
   assert.equal(g.calls.filter(call => call.url.endsWith('/chat/completions')).length, 1);
 });
