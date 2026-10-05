@@ -3,7 +3,7 @@ import { ApiService } from '../../core/http/api.service';
 import { LangService } from '../../shared/i18n/lang.service';
 import type { SessionState } from '../../shared/models/intake.model';
 import { ContextCard, CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeReceipt, IntakeStart, IntakeStartBody,
-  CustomerAssist, IntakeLang, ReportList, Role, SuggestionChoice, SuggestionList, TransactionList, AlertResponse, ServiceTimes, MessageThread, ReportMessage } from '../../shared/models/intake.model';
+  CustomerAssist, IntakeLang, ReportList, Role, SuggestionChoice, SuggestionList, TransactionList, TransactionDiscovery, AlertResponse, ServiceTimes, MessageThread, ReportMessage } from '../../shared/models/intake.model';
 
 /** Customer calls: email sign-in (simulated in local development), own charges and the guided intake. */
 @Injectable({ providedIn: 'root' })
@@ -82,6 +82,11 @@ export class CustomerService {
   /** One transient classification attempt; questions are never saved as human messages. */
   assist(reference: string, question: string, language: IntakeLang, requestId: string): Promise<CustomerAssist> {
     return this.api.request<CustomerAssist>(`/intake/handoff/${encodeURIComponent(reference)}/assist`, {question, language, request_id: requestId});
+  }
+
+  /** One transient natural-language interpretation followed by a server-side, owner-scoped lookup. */
+  discoverTransactions(description: string, language: IntakeLang): Promise<TransactionDiscovery> {
+    return this.api.request<TransactionDiscovery>('/intake/transaction-discovery', { description, language });
   }
 
   /** Write to the agent on an own report; the same ``key`` on a retry stores one message (409 once it is closed). */

@@ -2,7 +2,7 @@
 import { accessToken, credentialConfig } from './vertex-auth.js';
 import { vertexUrl } from './ai-transport.js';
 import { testOrigin, retired } from './suggestions.js';
-import { FIELDS, INTENTS, PROMPTS, SCHEMAS } from './assist-prompts.js';
+import { DISCOVERY_OPERATORS, FIELDS, INTENTS, PROMPTS, SCHEMAS } from './assist-prompts.js';
 
 export const ASSIST_TIMEOUT_MS = 10000;
 export const ASSIST_MODEL = 'google/gemini-3.5-flash-lite';
@@ -42,23 +42,35 @@ export function parseAssist(mode, content) {
   } else if (mode === 'customer') {
     if (!exact(value, ['intent', 'field']) || !INTENTS.includes(value.intent) || !(value.field === null || FIELDS.includes(value.field))
       || (value.intent !== 'provide_details' && value.field !== null)) invalid();
+  } else if (mode === 'discovery') {
+    const c = value.criteria;
+    if (!exact(value, ['intent','action','criteria','missing_fields','confidence']) || value.intent !== 'transaction_search' || value.action !== 'search_transactions'
+      || !object(c) || !exact(c,['merchant_hint','date_from','date_to','currency','amount_operator','amount'])
+      || ![c.merchant_hint,c.date_from,c.date_to,c.currency,c.amount_operator,c.amount].every(v => v === null || typeof v === 'string' || typeof v === 'number')
+      || (c.merchant_hint !== null && !text(c.merchant_hint,100)) || (c.date_from !== null && !/^\d{4}-\d{2}-\d{2}$/.test(c.date_from))
+      || (c.date_to !== null && !/^\d{4}-\d{2}-\d{2}$/.test(c.date_to)) || (c.currency !== null && !/^[A-Z]{3}$/.test(c.currency))
+      || (c.amount_operator !== null && !DISCOVERY_OPERATORS.includes(c.amount_operator)) || (c.amount !== null && (!Number.isFinite(c.amount) || c.amount < 0))
+      || ((c.amount === null) !== (c.amount_operator === null)) || !Array.isArray(value.missing_fields) || value.missing_fields.length > 3
+      || new Set(value.missing_fields).size !== value.missing_fields.length || value.missing_fields.some(f => !FIELDS.includes(f))
+      || typeof value.confidence !== 'number' || !Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1) invalid();
   } else invalid();
   return value;
 }
 
 /** Both assistance paths default off; enabling one does not enable the other. */
-export const assistEnabled = (env, mode) => env[mode === 'reviewer' ? 'ASSIST_REVIEWER_ENABLED' : 'ASSIST_CUSTOMER_ENABLED'] === '1';
+export const assistEnabled = (env, mode) => env[mode === 'reviewer' ? 'ASSIST_REVIEWER_ENABLED' : mode === 'discovery' ? 'ASSIST_DISCOVERY_ENABLED' : 'ASSIST_CUSTOMER_ENABLED'] === '1';
 
 /** Run one attempt; only safe outcome kinds and known/unknown token accounting leave the transport. */
 export async function runAssist(env, { mode, language, input }, { fetcher = fetch, signal } = {}) {
   const usage = { llm_calls: 0, known_input_tokens: 0, known_output_tokens: 0, usage_unavailable_calls: 0 };
   const fail = kind => ({ ok: false, kind, usage });
-  if (!['reviewer', 'customer'].includes(mode) || !['es', 'pt', 'en'].includes(language)
+  if (!['reviewer', 'customer', 'discovery'].includes(mode) || !['es', 'pt', 'en'].includes(language)
     || !assistEnabled(env, mode) || retired(env, Date.now())) return fail('config_error');
   let context;
   try {
     context = mode === 'reviewer' ? boundedReviewerInput(input)
-      : text(input?.question, 2000) ? { question: input.question, intents: INTENTS, fields: FIELDS } : invalid();
+      : mode === 'customer' && text(input?.question, 2000) ? { question: input.question, intents: INTENTS, fields: FIELDS }
+        : mode === 'discovery' && text(input?.description, 2000) ? { description: input.description, operators: DISCOVERY_OPERATORS } : invalid();
   } catch { return fail('config_error'); }
   const config = credentialConfig(env);
   const origin = testOrigin(env);
@@ -95,7 +107,7 @@ export async function runAssist(env, { mode, language, input }, { fetcher = fetc
       const body = {
         model: ASSIST_MODEL,
         messages: [{ role: 'system', content: PROMPTS[mode] }, { role: 'user', content: JSON.stringify({ language, ...context }) }],
-        temperature: 0, reasoning_effort: 'minimal', max_tokens: mode === 'reviewer' ? 1024 : 128,
+        temperature: 0, reasoning_effort: 'minimal', max_tokens: mode === 'reviewer' ? 1024 : mode === 'discovery' ? 256 : 128,
         response_format: { type: 'json_schema', json_schema: { name: 'support_' + mode, strict: true, schema: SCHEMAS[mode] } }
       };
       usage.llm_calls = 1;

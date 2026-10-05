@@ -11,7 +11,7 @@ import { CustomerPicker } from '../../shared/customer-picker/customer-picker.com
 import { MessageThreadView } from '../../shared/messages/message-thread.component';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
-  CustomerAssist, MessageDraft, MessageThread, REASONS, REASON_LABEL, Reason, Report, ReportList, ServiceTimes, SuggestedCharge, SuggestionAnswer, SuggestionList, Transaction } from '../../shared/models/intake.model';
+  CustomerAssist, MessageDraft, MessageThread, REASONS, REASON_LABEL, Reason, Report, ReportList, ServiceTimes, SuggestedCharge, SuggestionAnswer, SuggestionList, Transaction, TransactionDiscovery } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { AgentService } from '../agent/agent.service';
@@ -211,6 +211,10 @@ export class CustomerPage implements OnInit, OnDestroy {
   identity = '';
   chatStatement = '';
   chatDetails = '';
+  /** Discovery is browser-only: a correction replaces this result and no assistant state survives reload. */
+  readonly discovery = signal<TransactionDiscovery | null>(null);
+  readonly discoveryBusy = signal(false);
+  readonly discoveryError = signal(false);
   choice = '';
   chatConfirmed = false;
   private bootTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1137,6 +1141,23 @@ export class CustomerPage implements OnInit, OnDestroy {
       this.log.update(l => [...l, details ? { from: 'me', text: details } : { from: 'me', key: 'chatCannotFind' }]);
     }
     await this.run();
+  }
+
+  /** Interpret remembered details once, then present only server-returned own charges for the existing confirmation step. */
+  async discover(): Promise<void> {
+    const description = this.chatDetails.trim();
+    if (this.discoveryBusy() || !description || [...description].length < 10) return;
+    this.discoveryBusy.set(true); this.discoveryError.set(false); this.discovery.set(null);
+    try { this.discovery.set(await this.service.discoverTransactions(description, this.reportLang())); }
+    catch { this.discoveryError.set(true); }
+    finally { this.discoveryBusy.set(false); }
+  }
+
+  /** Selecting a returned candidate still requires the existing explicit confirmation checkbox. */
+  useDiscovery(transactionId: string): void {
+    if (!this.discovery()?.items.some(i => i.transaction_id === transactionId)) return;
+    this.choice = transactionId; this.chatConfirmed = false; this.asking.set(false);
+    this.log.update(l => [...l, { from:'bot', key:'chatChoose' }]);
   }
 
   /**

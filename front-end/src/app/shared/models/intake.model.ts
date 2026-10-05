@@ -328,3 +328,5 @@ export interface MessageDraft { body: string; scope: string; version: number }
 
 /** Closed classifier vocabulary; client renders only approved process copy from fresh owned facts. */
 export interface CustomerAssist { intent: 'status' | 'next_step' | 'provide_details' | 'human' | 'unsupported'; field: AssistField | null; language: IntakeLang; snapshot: AssistSnapshot }
+/** Ephemeral deterministic candidates from the bounded discovery action; neither the description nor criteria are stored. */
+export interface TransactionDiscovery { criteria: { merchant_hint:string|null; date_from:string|null; date_to:string|null; currency:string|null; amount_operator:'eq'|'gt'|'gte'|'lt'|'lte'|null; amount:number|null }; missing_fields: AssistField[]; confidence:number; status:'none'|'ambiguous'|'candidates'; items: Transaction[] }
