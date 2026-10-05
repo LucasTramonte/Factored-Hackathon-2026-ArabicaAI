@@ -74,7 +74,7 @@ describe('Customer transaction discovery', () => {
     expect(page.discovery()).toBeNull(); expect(page.discoveryError()).toBe('unavailable'); expect(page.discoveryBusy()).toBeFalse();
     expect(page.chatDetails).toBe(description);
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain(page.t().suggestUnavailable);
+    expect(fixture.nativeElement.textContent).toContain(page.t().discoveryUnavailable);
     expect(fixture.nativeElement.textContent).not.toContain('private provider details');
     service.discoverTransactions.and.resolveTo(result); await page.discover();
     expect(page.discoveryError()).toBeNull(); expect(page.discovery()).toEqual(result);
@@ -150,7 +150,7 @@ describe('Customer transaction discovery', () => {
 
   it('renders a request to narrow the description for 422 and clears it on a new attempt', async () => {
     service.discoverTransactions.and.rejectWith(new ApiError(422)); await page.discover(); fixture.detectChanges();
-    expect(page.discoveryError()).toBe('narrow'); expect(fixture.nativeElement.textContent).toContain(page.t().chatChoose);
+    expect(page.discoveryError()).toBe('narrow'); expect(fixture.nativeElement.textContent).toContain(page.t().discoveryNarrow);
     service.discoverTransactions.and.resolveTo(result); await page.discover(); expect(page.discoveryError()).toBeNull();
   });
 
