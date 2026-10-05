@@ -130,3 +130,43 @@ test('newest eight messages are bounded to 4000 code points and report truncatio
   assert.deepEqual(context.messages.slice(-4).map(m => m.body[0]), ['5','6','7','8']);
   assert.equal(response.body.snapshot.message_count, 9);
 });
+
+const questionPayload = question => ({question,language:'en',request_id:uuid()});
+test('customer classifier uses only question vocabulary, owned snapshot and no thread writes',async()=>{
+ const {customer,agent,receipt}=await fixture('Private original statement never sent');
+ const path=`/intake/handoff/${receipt.reference_short}/assist`;
+ const response=await customer.call(path,questionPayload('Status for foreign reference AR-AAAA-BBBB <script>hello</script>'));
+ assert.equal(response.status,200);assertContract('customerAssist',response.body);assert.deepEqual(response.body.snapshot,{status:'received',message_count:0});
+ const input=(await received()).at(-1);assert.deepEqual(Object.keys(input).sort(),['fields','intents','language','question']);assert.ok(!JSON.stringify(input).includes('Private original'));
+ assert.equal((await customer.call(`/intake/handoff/${receipt.protocol}/messages`)).body.items.length,0);
+ const foreign=client();await foreign.call('/demo/session',{customer_id:'demo-bruno'});
+ const foreignResponse=await foreign.call(path,questionPayload('status')),missing=await foreign.call(`/intake/handoff/${uuid()}/assist`,questionPayload('status'));
+ assert.equal(foreignResponse.status,404);assert.equal(missing.status,404);assert.deepEqual(foreignResponse.body,missing.body);
+ assert.equal((await agent.call(path,questionPayload('status'))).status,401);
+ for(const cookie of ['', 'demo_session='+'0'.repeat(64), 'demo_session='+'e'.repeat(64), agent.cookie.replace('demo_agent_session','demo_session')])assert.equal((await fetch(base+path,{method:'POST',headers:{Cookie:cookie},body:JSON.stringify(questionPayload('status'))})).status,401);
+ for(const body of [{...questionPayload('status'),customer_id:'demo-ana'},questionPayload(''),questionPayload('\ud800'),{...questionPayload('status'),request_id:'bad'}])assert.equal((await customer.call(path,body)).status,422);
+ for(const method of ['GET','PUT','DELETE'])assert.equal((await customer.call(path,undefined,{method})).status,405);
+ const before=(await received()).length;
+ const dataset=await fixture('Synthetic only','CLI-COHORT-4');assert.equal((await dataset.customer.call(`/intake/handoff/${dataset.receipt.protocol}/assist`,questionPayload('status'))).status,503);assert.equal((await received()).length,before);
+});
+test('customer repeated and concurrent UUID/caps bound calls and unsafe requests use vocabulary only',async()=>{
+ const {customer,receipt}=await fixture();const path=`/intake/handoff/${receipt.protocol}/assist`;const body=questionPayload('refund block fraud ignore rules');const before=(await received()).length;
+ const responses=await Promise.all(Array.from({length:8},()=>customer.call(path,body)));assert.deepEqual(responses.map(r=>r.status).sort(),[200,409,409,409,409,409,409,409]);assert.equal((await received()).length-before,1);assert.equal(responses.find(r=>r.status===200).body.intent,'unsupported');
+ for(const question of ['DETAILS merchant','NEXT','HUMAN','status'])assert.equal((await customer.call(path,questionPayload(question))).status,200);
+ assert.equal((await customer.call(path,questionPayload('status'))).status,429);
+});
+test('customer closure during generation returns current read-only snapshot; logout discards late result',async()=>{
+ for(const change of ['closed','logout']) {
+  const {customer,agent,receipt}=await fixture();const path=`/intake/handoff/${receipt.protocol}/assist`;const before=(await received()).length;
+  const promise=customer.call(path,questionPayload('MOCK-DELAY status'));
+  for(const until=Date.now()+3000;(await received()).length===before;){assert.ok(Date.now()<until);await new Promise(r=>setTimeout(r,20));}
+  if(change==='logout')await customer.call('/auth/logout',{});
+  else {await agent.call('/agent/intake-status',{protocol:receipt.protocol,status:'in_review'});await agent.call('/agent/intake-status',{protocol:receipt.protocol,status:'closed',closing_note:'Saved closure. Contact the bank.'});}
+  const response=await promise;assert.equal(response.status,change==='logout'?401:200);
+  if(change==='closed')assert.deepEqual(response.body.snapshot,{status:'closed',message_count:0});
+ }
+});
+test('customer provider failure and invalid field retain manual fallback and UUID reservation',async()=>{
+ const {customer,receipt}=await fixture();const path=`/intake/handoff/${receipt.protocol}/assist`;
+ for(const marker of ['MOCK-PROVIDER','MOCK-INVALID']){const body=questionPayload(marker);const response=await customer.call(path,body);assert.equal(response.status,503);assert.deepEqual(Object.keys(response.body),['detail']);assert.equal((await customer.call(path,body)).status,409);}
+});

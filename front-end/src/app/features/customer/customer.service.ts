@@ -3,7 +3,7 @@ import { ApiService } from '../../core/http/api.service';
 import { LangService } from '../../shared/i18n/lang.service';
 import type { SessionState } from '../../shared/models/intake.model';
 import { ContextCard, CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeReceipt, IntakeStart, IntakeStartBody,
-  ReportList, Role, SuggestionChoice, SuggestionList, TransactionList, AlertResponse, ServiceTimes, MessageThread, ReportMessage } from '../../shared/models/intake.model';
+  CustomerAssist, IntakeLang, ReportList, Role, SuggestionChoice, SuggestionList, TransactionList, AlertResponse, ServiceTimes, MessageThread, ReportMessage } from '../../shared/models/intake.model';
 
 /** Customer calls: email sign-in (simulated in local development), own charges and the guided intake. */
 @Injectable({ providedIn: 'root' })
@@ -77,6 +77,11 @@ export class CustomerService {
   /** One own report's message thread with the agent (ADR-015), by protocol or short reference. */
   messages(reference: string, signal?: AbortSignal): Promise<MessageThread> {
     return this.api.request<MessageThread>(`/intake/handoff/${encodeURIComponent(reference)}/messages`, undefined, {}, signal);
+  }
+
+  /** One transient classification attempt; questions are never saved as human messages. */
+  assist(reference: string, question: string, language: IntakeLang, requestId: string): Promise<CustomerAssist> {
+    return this.api.request<CustomerAssist>(`/intake/handoff/${encodeURIComponent(reference)}/assist`, {question, language, request_id: requestId});
   }
 
   /** Write to the agent on an own report; the same ``key`` on a retry stores one message (409 once it is closed). */

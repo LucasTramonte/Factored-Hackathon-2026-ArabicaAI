@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const SUPPORTED = new Set(['type', 'const', 'pattern', 'minLength', 'maxLength', 'required', 'properties',
-  'additionalProperties', 'items', 'maxItems', '$ref', 'description', 'enum', 'minimum', 'maximum', 'uniqueItems']);
+  'additionalProperties', 'items', 'maxItems', '$ref', 'description', 'enum', 'minimum', 'maximum', 'uniqueItems', 'anyOf']);
 const schemaPath = resolve(import.meta.dirname, '../../../front-end/contracts/intake-api.schema.json');
 export const contract = JSON.parse(readFileSync(schemaPath, 'utf8'));
 
@@ -23,6 +23,7 @@ function check(schema, value, path, errors) {
   for (const key of Object.keys(schema)) {
     if (!SUPPORTED.has(key)) throw new Error(`Unsupported schema keyword ${key} at ${path}`);
   }
+  if (schema.anyOf && !schema.anyOf.some(branch => { const found = []; check(branch, value, path, found); return found.length === 0; })) errors.push(`${path}: no matching anyOf branch`);
   if (schema.$ref) {
     const name = schema.$ref.replace('#/$defs/', '');
     return check(contract.$defs[name], value, path, errors);

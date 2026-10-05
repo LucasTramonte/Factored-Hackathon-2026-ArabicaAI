@@ -73,7 +73,7 @@ try {
     + `COGNITO_TEST_JWKS='${jwks}'\n`
     // A throwaway address key; no SES secrets are written, so every local send is skipped.
     + `EMAIL_KEY="${randomBytes(32).toString('base64')}"\n`
-    + `ASSIST_REVIEWER_ENABLED="1"\n`
+    + `ASSIST_REVIEWER_ENABLED="1"\nASSIST_CUSTOMER_ENABLED="1"\n`
     + `INTAKE_AI_ENABLED="1"\nINTAKE_AI_TEST_ARM="B"\nINTAKE_AI_DAILY_CAP="100000"\nVERTEX_MODEL_RETIRES="2099-01-01"\n`
     + `VERTEX_TEST_ORIGIN="${testEnv.VERTEX_MOCK_URL}"\nVERTEX_WIF_SIGNING_KEY="${(await exportPKCS8(ai.privateKey)).trim().replace(/\n/g, '\\n')}"\n`);
   run(['d1', 'migrations', 'apply', 'arabica-intake-demo', '--local']);

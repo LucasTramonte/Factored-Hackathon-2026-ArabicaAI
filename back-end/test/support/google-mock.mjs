@@ -45,6 +45,15 @@ const mock = createServer(async (request, response) => {
         if (user.statement.includes('MOCK-INVALID')) return send(200, { choices: [{ finish_reason: 'stop', message: { content: 'bad' } }] });
         return answer();
       }
+      if (JSON.parse(text).response_format?.json_schema?.name === 'support_customer') {
+        const question = String(user.question);
+        const content = JSON.stringify({ intent: question.includes('DETAILS') ? 'provide_details' : question.includes('HUMAN') ? 'human' : /refund|fraud|block|ignore/i.test(question) ? 'unsupported' : question.includes('NEXT') ? 'next_step' : 'status', field: question.includes('DETAILS') ? 'merchant' : null });
+        const answer = () => send(200, { choices: [{ finish_reason:'stop', message:{role:'assistant',content} }],usage:{prompt_tokens:60,completion_tokens:10} });
+        if (question.includes('MOCK-DELAY')) return setTimeout(answer,500);
+        if (question.includes('MOCK-PROVIDER')) return send(500,'');
+        if (question.includes('MOCK-INVALID')) return send(200,{choices:[{finish_reason:'stop',message:{content:'{"intent":"status","field":"amount"}'}}]});
+        return answer();
+      }
       const message = String(user.message);
       if (message.includes('MOCK-TIMEOUT')) return undefined; // never answers; the Worker's deadline abandons it
       if (message.includes('MOCK-PROVIDER')) return send(500, '');

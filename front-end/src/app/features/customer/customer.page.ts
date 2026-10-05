@@ -11,7 +11,7 @@ import { CustomerPicker } from '../../shared/customer-picker/customer-picker.com
 import { MessageThreadView } from '../../shared/messages/message-thread.component';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
-  MessageThread, REASONS, REASON_LABEL, Reason, Report, ReportList, ServiceTimes, SuggestedCharge, SuggestionAnswer, SuggestionList, Transaction } from '../../shared/models/intake.model';
+  CustomerAssist, MessageDraft, MessageThread, REASONS, REASON_LABEL, Reason, Report, ReportList, ServiceTimes, SuggestedCharge, SuggestionAnswer, SuggestionList, Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { AgentService } from '../agent/agent.service';
@@ -254,6 +254,11 @@ export class CustomerPage implements OnInit, OnDestroy {
     || (this.known()?.display_name ?? '').replace(/\s*\(demo\)$/, ''));
 
   constructor() {
+    effect(() => { this.client(); this.roles(); this.lang.lang(); this.openThread(); this.clearQuestionHelp(); });
+    effect(() => {
+      const answer = this.questionAnswer();
+      if (answer && !this.questionSnapshotMatches(answer.result)) { this.questionAnswer.set(null); this.questionError.set(this.t().customerAssistUnavailable); }
+    });
     effect(() => {
       const language = this.lang.lang();
       if (language === this.statusCheckLanguage) return;
@@ -783,6 +788,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   private stopThreadRefresh(): void {
+    this.clearQuestionHelp();
     this.statusCheckWatch++; this.statusExplanation.set(null); this.statusChecking.set(null); this.messageSaved.set(null);
     this.threadWatch++; clearTimeout(this.threadTimer); this.threadAbort?.abort();
     this.threadAbort = null; this.threadRead = null; this.threadDelay = 30000; this.threadStarted = -Infinity; this.threadRetryAt = 0;
@@ -841,6 +847,69 @@ export class CustomerPage implements OnInit, OnDestroy {
   statusHelp(report: Report): string {
     return this.t()[report.status === 'closed' ? 'statusClosedHelp' : report.status === 'in_review' ? 'statusReviewHelp' : 'statusReceivedHelp'];
   }
+  readonly assistBusy = signal(false);
+  readonly questionError = signal('');
+  readonly questionAnswer = signal<{result: CustomerAssist; report: Report; checked: number; question: string} | null>(null);
+  readonly acceptedQuestion = signal<MessageDraft | null>(null);
+  assistQuestion = '';
+  private assistWatch = 0;
+  private questionVersion = 0;
+  private readonly customerComposer = viewChild(MessageThreadView);
+
+  private questionScope(): string { return JSON.stringify([this.generation,this.threadWatch,this.openThread(),this.client(),this.roles(),this.lang.lang()]); }
+  private clearQuestionHelp(): void { this.assistWatch++; this.assistBusy.set(false); this.questionAnswer.set(null); this.questionError.set(''); this.acceptedQuestion.set(null); this.assistQuestion = ''; }
+  private questionSnapshotMatches(result: CustomerAssist): boolean {
+    const report = this.reports()?.items.find(r => r.protocol === this.openThread()), thread = this.thread();
+    return !!report && !!thread && report.status === result.snapshot.status && thread.status === result.snapshot.status && thread.items.length === result.snapshot.message_count;
+  }
+
+  /** One deliberate classification followed by new owned report/thread reads; mismatch never triggers generation retry. */
+  async askReportQuestion(): Promise<void> {
+    const protocol = this.openThread(), question = this.assistQuestion.trim(), language = this.lang.lang();
+    if (!protocol || this.assistBusy() || !this.canRefresh()) return;
+    if (!question || [...question].length > 2000) { this.questionError.set(this.t().customerAssistEmpty); return; }
+    const scope = this.questionScope(), watch = ++this.assistWatch;
+    const current = () => scope === this.questionScope() && watch === this.assistWatch && !this.destroyed;
+    this.assistBusy.set(true); this.questionAnswer.set(null); this.questionError.set('');
+    try {
+      const result = await this.service.assist(protocol,question,language,crypto.randomUUID());
+      if (!current()) return;
+      // Settle earlier polls before starting the reads that validate this returned snapshot.
+      await Promise.all([this.reportRead,this.threadRead]);
+      if (!current() || !this.canRefresh()) return;
+      await Promise.all([this.loadReports(),this.loadThread()]);
+      if (!current()) return;
+      const report = this.reports()?.items.find(r => r.protocol === protocol);
+      if (result.language !== language || this.reportsFailed() || this.threadFailed() || !report || !this.questionSnapshotMatches(result)) {
+        this.questionError.set(this.t().customerAssistUnavailable); return;
+      }
+      this.questionAnswer.set({result,report,checked:Date.now(),question});
+    } catch (e) {
+      if (current()) { this.questionError.set(this.t().customerAssistUnavailable); if (e instanceof ApiError && e.status === 401) { this.clearQuestionHelp(); this.pauseUnauthorized(); } }
+    } finally { if (current()) this.assistBusy.set(false); }
+  }
+
+  /** Closed reports always use their stored closure/follow-up flow; only approved localized process copy is rendered. */
+  questionHelp(): string {
+    const answer = this.questionAnswer(); if (!answer) return '';
+    if (answer.report.status === 'closed' || ['status','next_step'].includes(answer.result.intent)) return this.statusHelp(answer.report);
+    return this.t()[answer.result.intent === 'provide_details' ? 'customerAssistDetails' : 'customerAssistHuman'];
+  }
+  /** Translate only the approved field identifier; provider prose is never rendered. */
+  questionField(): string {
+    const field = this.questionAnswer()?.result.field;
+    return field ? this.t()[({merchant:'merchant',amount:'amount',currency:'assistCurrency',date:'date',description:'describe'} as const)[field]] : '';
+  }
+
+  /** Explicitly copy the customer's accepted question into the existing composer; human Send remains separate. */
+  useQuestionDetails(): void {
+    const answer = this.questionAnswer(), protocol = this.openThread();
+    if (!answer || !protocol || !this.questionSnapshotMatches(answer.result) || !this.thread()?.can_post || answer.result.intent !== 'provide_details') return;
+    if (this.customerComposer()?.draft.trim() && !window.confirm(this.t().customerAssistReplace)) return;
+    this.acceptedQuestion.set({body:answer.question,scope:protocol,version:++this.questionVersion});
+    afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('#customer-messages-draft')?.focus(), {injector:this.injector});
+  }
+
   /** Per report, one key per message text: a retry of the same text reuses it (one stored message); new text gets a new key. */
   private readonly messageKeys = new Map<string, { body: string; key: string }>();
 

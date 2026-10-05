@@ -64,7 +64,7 @@ describe('Customer report support', () => {
   it('keeps an unsaved draft and offers retry without acknowledging persistence', fakeAsync(() => {
     const { fixture, page, el } = home(); page.lang.set('en'); void page.toggleMessages('P'); flushMicrotasks(); fixture.detectChanges();
     flushMicrotasks(); fixture.detectChanges();
-    const area = el.querySelector<HTMLTextAreaElement>('textarea')!;
+    const area = el.querySelector<HTMLTextAreaElement>('#customer-messages-draft')!;
     area.value = 'Unsent synthetic details'; area.dispatchEvent(new Event('input')); flushMicrotasks();
     service.postMessage.and.rejectWith(new ApiError(503)); el.querySelector<HTMLButtonElement>('.message-send')!.click(); flushMicrotasks(); fixture.detectChanges();
     expect(area.value).toBe('Unsent synthetic details'); expect(el.querySelector('.message-saved')).toBeNull();
@@ -81,7 +81,7 @@ describe('Customer report support', () => {
     service.reports.and.resolveTo({ items: [{ ...report, status: 'closed', next_step: 'closed_by_person', closing_note: 'Human explanation, no refund started.' }], has_more: false });
     service.messages.and.resolveTo({ status: 'closed', can_post: false, items: [customerMessage, humanMessage] });
     tick(30000); flushMicrotasks(); fixture.detectChanges(); expect(el.querySelector('.closing-explanation')?.textContent).toContain('Human explanation, no refund started.');
-    expect(el.querySelector('.messages-waiting')).toBeNull(); expect(el.querySelector('textarea')).toBeNull();
+    expect(el.querySelector('.messages-waiting')).toBeNull(); expect(el.querySelector('#customer-messages-draft')).toBeNull();
     page.reports.set({ items: [{ ...report, status: 'closed' }], has_more: false }); fixture.detectChanges();
     expect(el.querySelector('.closing-explanation')?.textContent).toContain(page.t().closingLegacy); fixture.destroy();
   }));

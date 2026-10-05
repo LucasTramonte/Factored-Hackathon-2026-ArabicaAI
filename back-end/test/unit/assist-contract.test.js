@@ -9,3 +9,10 @@ test('assistance contracts reject unknown vocabulary, duplicate fields and snaps
     { ...valid, missing_fields: ['other'] }, { ...valid, snapshot: { status: 'received', message_count: -1 } },
     { ...valid, snapshot: { status: 'received', message_count: 51 } }, { ...valid, extra: true } ]) assert.throws(() => assertContract('reviewerAssist', bad), /violated/);
 });
+test('customer contract validates every intent/field combination without allowing provider prose',()=>{
+ for(const intent of ['status','next_step','provide_details','human','unsupported'])for(const field of [null,'merchant','amount','currency','date','description']){
+  const value={intent,field,language:'en',snapshot:{status:'received',message_count:0}};
+  if(intent==='provide_details'||field===null)assertContract('customerAssist',value);else assert.throws(()=>assertContract('customerAssist',value),/violated/);
+ }
+ assert.throws(()=>assertContract('customerAssist',{intent:'status',field:null,language:'en',snapshot:{status:'received',message_count:0},text:'Refunded'}),/violated/);
+});

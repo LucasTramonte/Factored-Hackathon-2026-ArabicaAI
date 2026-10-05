@@ -325,3 +325,6 @@ export interface ReviewerAssist {
 }
 /** Seeded only by explicit reviewer acceptance into the shared composer. */
 export interface MessageDraft { body: string; scope: string; version: number }
+
+/** Closed classifier vocabulary; client renders only approved process copy from fresh owned facts. */
+export interface CustomerAssist { intent: 'status' | 'next_step' | 'provide_details' | 'human' | 'unsupported'; field: AssistField | null; language: IntakeLang; snapshot: AssistSnapshot }

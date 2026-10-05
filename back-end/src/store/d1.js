@@ -211,7 +211,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
   };
   return {
     /** Atomically reserve one UUID under the shared 200/day and session-feature 5/minute caps; failures retain slots and the original prompt/model version. */
-    reserveAssist: async ({ requestId, sessionHash, mode, protocol, now, version }) => {
+    reserveAssist: async ({ requestId, sessionHash, mode, protocol, now, version, customerId = null }) => {
       if (!EPISODE_CURSOR.test(requestId) || !/^[0-9a-f]{64}$/.test(sessionHash) || !['reviewer', 'customer'].includes(mode)
         || !EPISODE_CURSOR.test(protocol) || !Number.isSafeInteger(now) || now < 0
         || typeof version !== 'string' || !version || version.length > 160) throw new Error('Invalid assistance reservation');
@@ -221,7 +221,8 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + 'WHERE NOT EXISTS(SELECT 1 FROM support_assist_runs WHERE request_id=?) '
           + 'AND (SELECT COUNT(*) FROM (SELECT 1 FROM support_assist_runs WHERE created_at>=? AND created_at<? LIMIT 200))<200 '
           + 'AND (SELECT COUNT(*) FROM (SELECT 1 FROM support_assist_runs WHERE session_hash=? AND mode=? AND created_at>? AND created_at<=? LIMIT 5))<5 '
-          + 'RETURNING request_id', requestId, sessionHash, mode, protocol, now, version, requestId, day, day + 86400000, sessionHash, mode, now - 60000, now],
+          + (customerId === null ? '' : "AND EXISTS(SELECT 1 FROM sessions s JOIN intake_episodes e ON e.customer_id=s.customer_id JOIN customers c ON c.customer_id=e.customer_id JOIN intake_handoffs h USING(episode_id) WHERE s.token_hash=? AND s.actor='customer' AND s.expires_at>? AND s.customer_id=? AND c.source='fictitious' AND e.state=h.kind||'_handoff' AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))) ")
+          + 'RETURNING request_id', requestId, sessionHash, mode, protocol, now, version, requestId, day, day + 86400000, sessionHash, mode, now - 60000, now, ...(customerId === null ? [] : [sessionHash, now, customerId, protocol, protocol])],
         ['SELECT request_id FROM support_assist_runs WHERE request_id=? AND changes()=0', requestId]
       ]);
       return inserted.results.length ? 'reserved' : existing.results.length ? 'duplicate' : 'limited';
@@ -797,6 +798,12 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         + '(SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id) AS message_count,'
         + "(SELECT json_group_array(json_object('author',author,'body',body)) FROM (SELECT author,body FROM handoff_messages "
         + 'WHERE handoff_id=h.handoff_id ORDER BY created_at,rowid LIMIT 50)) AS messages_json '
+        + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) JOIN customers c ON c.customer_id=e.customer_id WHERE ' + where, ...params);
+    },
+    /** Ownership-scoped synthetic eligibility and bounded snapshot; no statement, message bodies or transactions. */
+    findCustomerAssist: async ({ customerId, protocol, short = '' }) => {
+      const [where, params] = messageScope(customerId, protocol, short);
+      return first('SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.status,c.source,(SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id) AS message_count '
         + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) JOIN customers c ON c.customer_id=e.customer_id WHERE ' + where, ...params);
     },
     /** Read the current monotonic snapshot without loading content or writing reviewer markers. */

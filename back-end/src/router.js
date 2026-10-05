@@ -7,6 +7,7 @@ import { GRANTED } from './auth/cognito.js';
 import { acknowledgeDisplay, createCase, listIdentities, listTransactions, logout, startCustomerSession, startEmailSession, whoAmI } from './modules/customer/routes.js';
 import { startIntake, confirmIntake, confirmSuggestion, getMessages, getServiceTimes, getSuggestions, handoffIntake, listReports, postMessage, recordFeedback, requestUpdate } from './modules/intake/routes.js';
 import { listAgentIntakes, getAgentIntakeDetail, getAgentMessages, markSuggestion, postAgentMessage, startAgentSession, transitionIntake } from './modules/agent/routes.js';
+import { customerAssist } from './modules/intake/assist-routes.js';
 import { reviewerAssist } from './modules/agent/assist-routes.js';
 import { listAuditEvents } from './modules/audit/routes.js';
 import { actAs, listCustomers } from './modules/admin/routes.js';
@@ -41,6 +42,7 @@ export const API_ROUTES = {
   '/alerts/answer': { POST: answerAlert },
   '/intake/handoff/{reference}/suggestions': { GET: getSuggestions },
   '/intake/handoff/{reference}/suggestions/confirm': { POST: confirmSuggestion },
+  '/intake/handoff/{reference}/assist': { POST: customerAssist },
   '/intake/handoff/{reference}/messages': { GET: getMessages, POST: postMessage },
   '/agent/intake-messages': { GET: getAgentMessages, POST: postAgentMessage }
 };
@@ -83,6 +85,7 @@ export const ROUTE_ROLES = {
   '/alerts/answer': 'customer',
   '/intake/handoff/{reference}/suggestions': 'customer',
   '/intake/handoff/{reference}/suggestions/confirm': 'customer',
+  '/intake/handoff/{reference}/assist': 'customer',
   '/intake/handoff/{reference}/messages': 'customer',
   '/agent/intake-messages': 'agent'
 };

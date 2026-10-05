@@ -23,6 +23,9 @@ import { runSuggestion } from '../../src/modules/intake/suggestions.js';
 // round trips drive latency (about 150 ms each when the Worker runs far from D1).
 const CEILING = {
   // Dedicated support paths; reservation reads scale only with the shared <=200/day bounded probe.
+  customerAssist: [10, 300, 6, 9],
+  customerAssistFull: [10, 550, 6, 9],
+  customerAssistDuplicate: [5, 40, 0, 4],
   reviewerAssist: [7, 225, 6, 6],
   reviewerAssistFull: [7, 500, 6, 6],
   reviewerAssistDuplicate: [4, 20, 0, 3],
@@ -587,4 +590,15 @@ test('reviewer assistance and atomic assisted sends stay within separate complet
   for (let i = 1; i < 50; i++) assert.equal((await customer.call(`/intake/handoff/${receipt.body.protocol}/messages`, { body: 'Dato ' + i, idempotency_key: crypto.randomUUID() })).status, 201);
   const full = await agent.call('/agent/intake-assist', { ...body, request_id: crypto.randomUUID() }); assert.equal(full.status, 200); within('reviewerAssistFull', full.metrics);
   console.log('D1_REVIEWER_ASSIST ' + JSON.stringify({ generation: generated.metrics, full: full.metrics, duplicate: duplicate.metrics, send: sent.metrics, replay: replay.metrics, stale: stale.metrics }));
+});
+
+
+test('customer classification stays within its own complete API budgets for short and full threads',async()=>{
+ const customer=client();await customer.call('/demo/session',{customer_id:'demo-ana'});const start=await customer.call('/intake/start',startBody());const receipt=await customer.call('/intake/handoff',{episode_id:start.body.episode_id,kind:'incomplete',idempotency_key:crypto.randomUUID()});assert.equal(receipt.status,201);
+ const path=`/intake/handoff/${receipt.body.protocol}/assist`,body={question:'Status?',language:'en',request_id:crypto.randomUUID()};
+ const generated=await customer.call(path,body);assert.equal(generated.status,200);assertContract('customerAssist',generated.body);within('customerAssist',generated.metrics);
+ const duplicate=await customer.call(path,body);assert.equal(duplicate.status,409);within('customerAssistDuplicate',duplicate.metrics);
+ for(let i=0;i<50;i++)assert.equal((await customer.call(`/intake/handoff/${receipt.body.protocol}/messages`,{body:'Synthetic detail '+i,idempotency_key:crypto.randomUUID()})).status,201);
+ const full=await customer.call(path,{...body,request_id:crypto.randomUUID()});assert.equal(full.status,200);within('customerAssistFull',full.metrics);
+ console.log('D1_CUSTOMER_ASSIST '+JSON.stringify({generation:generated.metrics,duplicate:duplicate.metrics,full:full.metrics}));
 });
