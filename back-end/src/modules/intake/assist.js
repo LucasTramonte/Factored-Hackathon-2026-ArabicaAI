@@ -2,7 +2,7 @@
 import { accessToken, credentialConfig } from './vertex-auth.js';
 import { vertexUrl } from './ai-transport.js';
 import { testOrigin, retired } from './suggestions.js';
-import { DISCOVERY_OPERATORS, FIELDS, INTENTS, PROMPTS, SCHEMAS } from './assist-prompts.js';
+import { DISCOVERY_INTENTS, DISCOVERY_OPERATORS, FIELDS, INTENTS, PROMPTS, SCHEMAS } from './assist-prompts.js';
 
 export const ASSIST_TIMEOUT_MS = 10000;
 export const ASSIST_MODEL = 'google/gemini-3.5-flash-lite';
@@ -53,6 +53,8 @@ export function parseAssist(mode, content) {
       || ((c.amount === null) !== (c.amount_operator === null)) || !Array.isArray(value.missing_fields) || value.missing_fields.length > 3
       || new Set(value.missing_fields).size !== value.missing_fields.length || value.missing_fields.some(f => !FIELDS.includes(f))
       || typeof value.confidence !== 'number' || !Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1) invalid();
+  } else if (mode === 'discovery_router') {
+    if (!exact(value,['intent']) || !DISCOVERY_INTENTS.includes(value.intent)) invalid();
   } else invalid();
   return value;
 }
@@ -64,13 +66,14 @@ export const assistEnabled = (env, mode) => env[mode === 'reviewer' ? 'ASSIST_RE
 export async function runAssist(env, { mode, language, input }, { fetcher = fetch, signal } = {}) {
   const usage = { llm_calls: 0, known_input_tokens: 0, known_output_tokens: 0, usage_unavailable_calls: 0 };
   const fail = kind => ({ ok: false, kind, usage });
-  if (!['reviewer', 'customer', 'discovery'].includes(mode) || !['es', 'pt', 'en'].includes(language)
+  if (!['reviewer', 'customer', 'discovery', 'discovery_router'].includes(mode) || !['es', 'pt', 'en'].includes(language)
     || !assistEnabled(env, mode) || retired(env, Date.now())) return fail('config_error');
   let context;
   try {
     context = mode === 'reviewer' ? boundedReviewerInput(input)
       : mode === 'customer' && text(input?.question, 2000) ? { question: input.question, intents: INTENTS, fields: FIELDS }
-        : mode === 'discovery' && text(input?.description, 2000) ? { description: input.description, operators: DISCOVERY_OPERATORS } : invalid();
+        : mode === 'discovery' && text(input?.description, 2000) ? { description: input.description, operators: DISCOVERY_OPERATORS }
+          : mode === 'discovery_router' && text(input?.message, 2000) ? { message:input.message, intents:DISCOVERY_INTENTS } : invalid();
   } catch { return fail('config_error'); }
   const config = credentialConfig(env);
   const origin = testOrigin(env);
@@ -107,7 +110,7 @@ export async function runAssist(env, { mode, language, input }, { fetcher = fetc
       const body = {
         model: ASSIST_MODEL,
         messages: [{ role: 'system', content: PROMPTS[mode] }, { role: 'user', content: JSON.stringify({ language, ...context }) }],
-        temperature: 0, reasoning_effort: 'minimal', max_tokens: mode === 'reviewer' ? 1024 : mode === 'discovery' ? 256 : 128,
+        temperature: 0, reasoning_effort: 'minimal', max_tokens: mode === 'reviewer' ? 1024 : mode === 'discovery' ? 256 : mode === 'discovery_router' ? 32 : 128,
         response_format: { type: 'json_schema', json_schema: { name: 'support_' + mode, strict: true, schema: SCHEMAS[mode] } }
       };
       usage.llm_calls = 1;

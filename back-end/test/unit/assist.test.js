@@ -28,6 +28,8 @@ test('one schema-constrained model call; prompt version and bounded context stay
 test('strict output rejects wrappers, extra keys, bad Unicode, HTML/injection-shaped structures and invalid fields',()=>{
   for(const x of ['prefix '+JSON.stringify(value),JSON.stringify({...value,tool:'refund'}),JSON.stringify({...value,draft:'\ud800'}),JSON.stringify({...value,draft:'<script>alert(1)</script>'}),JSON.stringify({...value,missing_fields:['date','date']}),JSON.stringify({...value,summary:''}),JSON.stringify({...value,draft:'x'.repeat(2001)})]) assert.throws(()=>parseAssist('reviewer',x));
   assert.deepEqual(parseAssist('customer','{"intent":"status","field":null}'),{intent:'status',field:null});
+  assert.deepEqual(parseAssist('discovery_router','{"intent":"transaction_search"}'),{intent:'transaction_search'});
+  assert.throws(()=>parseAssist('discovery_router','{"intent":"refund","extra":true}'));
   assert.deepEqual(parseAssist('discovery',JSON.stringify({intent:'transaction_search',action:'search_transactions',criteria:{merchant_hint:'Streaming',date_from:'2026-04-01',date_to:'2026-04-30',currency:'ARS',amount_operator:'gt',amount:85000},missing_fields:[],confidence:.9})).criteria.amount_operator,'gt');
   for (const x of [{intent:'transaction_search',action:'refund',criteria:{},missing_fields:[],confidence:.9},{intent:'transaction_search',action:'search_transactions',criteria:{merchant_hint:null,date_from:null,date_to:null,currency:'ars',amount_operator:null,amount:null},missing_fields:[],confidence:1.1}]) assert.throws(()=>parseAssist('discovery',JSON.stringify(x)));
   for(const x of [{intent:'status',field:'date'},{intent:'refund',field:null},{intent:'human',field:null,draft:'x'}]) assert.throws(()=>parseAssist('customer',JSON.stringify(x)));
