@@ -1,0 +1,152 @@
+Captured UTC: 2026-10-05T01:29:34.683Z
+Source: production Worker Observability; 2026-10-04T01:00:00Z through 2026-10-05T01:00:00Z; dashboard boundary inclusion unspecified.
+Query: event = "request"; group by numeric status; count, median(ms), p95(ms); limit100. No status exclusion.
+
+Query Builder
+
+Saved Queries
+Visualizations
+Add
+
+Median
+
+of
+
+N
+
+ms
+
+P95
+
+of
+
+N
+
+ms
+
+Count
+
+Filters
+Add
+S
+
+event
+
+request
+
+Group By
+Add
+N
+
+status
+
+Order By
+
+count
+
+in
+
+Descending
+
+order
+
+up to
+
+100
+
+results
+
+Save Query
+Run Query
+Visualizations
+Yesterday, 20:00 – Today, 20:00
+GMT-5
+You're on the free plan with 200K events per day. If you exceed your limit, your events will be sampled. Upgrade your plan.
+
+median(ms)
+
+Oct 3, 21:00
+Oct 3, 23:00
+Oct 4, 01:00
+Oct 4, 03:00
+Oct 4, 05:00
+Oct 4, 07:00
+Oct 4, 09:00
+Oct 4, 11:00
+Oct 4, 13:00
+Oct 4, 15:00
+Oct 4, 17:00
+Oct 4, 19:00
+0
+50
+100
+150
+200
+
+p95(ms)
+
+Oct 3, 21:00
+Oct 3, 23:00
+Oct 4, 01:00
+Oct 4, 03:00
+Oct 4, 05:00
+Oct 4, 07:00
+Oct 4, 09:00
+Oct 4, 11:00
+Oct 4, 13:00
+Oct 4, 15:00
+Oct 4, 17:00
+Oct 4, 19:00
+0
+500
+1k
+1.5k
+2k
+
+count
+
+Oct 3, 21:00
+Oct 3, 23:00
+Oct 4, 01:00
+Oct 4, 03:00
+Oct 4, 05:00
+Oct 4, 07:00
+Oct 4, 09:00
+Oct 4, 11:00
+Oct 4, 13:00
+Oct 4, 15:00
+Oct 4, 17:00
+Oct 4, 19:00
+0
+25
+50
+75
+100
+status
+median(ms)
+p95(ms)
+count
+200
+86
+276
+593
+201
+120
+1,031
+19
+401
+0
+1
+9
+202
+159
+171
+7
+422
+0
+0
+6
+204
+141
+141
+1

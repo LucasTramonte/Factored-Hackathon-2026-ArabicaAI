@@ -1,0 +1,21 @@
+Observed URL: https://dash.cloudflare.com/09752dbbdf4da990a77d1bf3574cf710/web-analytics/onboarding/add-site
+Captured UTC: 2026-10-05T01:25:15.818Z
+
+
+See page views and visits for your website for free
+
+1
+Set up hostname
+2
+Installation
+3
+Get Analytics
+Cloudflare does not track individual visitors.
+
+Enter your website's hostname for Web Analytics.
+
+Set up hostname
+Enter your website's hostname or select from your existing websites on Cloudflare.
+e.g. mydomain.com or blog.mydomain.com
+Cancel
+Done

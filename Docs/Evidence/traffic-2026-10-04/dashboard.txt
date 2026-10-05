@@ -1,0 +1,256 @@
+Observed URL: https://dash.cloudflare.com/09752dbbdf4da990a77d1bf3574cf710/workers/services/view/factored-hackathon-2026-arabicaai/production/metrics
+Captured UTC: 2026-10-05T01:23:57.338Z
+Window selected: 2026-10-03 20:00 through 2026-10-04 20:00 GMT-5 (2026-10-04 01:00 through 2026-10-05 01:00 UTC). Dashboard endpoint inclusion not exposed.
+
+All deployed versions
+Yesterday, 20:00 – Today, 20:00
+GMT-5
+Asset requests
+244
+↗ 106.8%
+Asset cache hit rate
+87.70%
+↗ 2.5%
+Invocations
+964
+↗ 372.5%
+Subrequests
+120
+↗ 76.5%
+Errors
+0
+CPU Time
+3 ms
+↗ 12.0%
+Wall Time
+94 ms
+↘ 66.9%
+Request duration
+94 ms
+↘ 66.9%
+Asset 4xx responses
+0
+No data
+Asset 5xx responses
+0
+No data
+Active deployment
+Version ID
+Deployed
+Traffic %
+About traffic percentage
+Requests/sec
+Error rate
+Median CPU time
+71e9e803
+25 minutes ago
+100%
+100%
+0 req/sec
+0%
+2.92ms
+Asset requests by status code
+2xx
+179
+3xx
+65
+4xx
+0
+5xx
+0
+Other
+0
+Invocations
+Count
+Invocations/s
+12ab6318
+5
+a8a1f74d
+5
+d8da20c6
+39
+976bcea1
+4
+c8f83379
+3
+2643e10d
+16
+22e99b3f
+6
+1b1f9fd3
+50
+52591deb
+69
+81641f9e
+112
+9e1c0fa5
+25
+712d2a13
+55
++6 more
+Subrequests
+All
+2xx
+3xx
+4xx
+5xx
+Host
+
+Requests
+
+Request Duration
+
+email.us-east-2.amazonaws.com
+2xx
+10
+4xx
+11
+	238.7ms
+cognito-idp.us-east-2.amazonaws.com
+2xx
+12
+	227.1ms
+iamcredentials.googleapis.com
+2xx
+4
+	129.8ms
+sts.googleapis.com
+2xx
+4
+	177.7ms
+aiplatform.us.rep.googleapis.com
+2xx
+4
+	1.01s
+Showing 1-5 of 5
+Errors by version
+Count
+RPS
+12ab6318
+0
+a8a1f74d
+0
+d8da20c6
+0
+976bcea1
+0
+c8f83379
+0
+2643e10d
+0
+22e99b3f
+0
+1b1f9fd3
+0
+52591deb
+0
+81641f9e
+0
+9e1c0fa5
+0
+712d2a13
+0
++6 more
+Errors by invocation status
+Count
+RPS
+Exceeded Memory
+0
+Exceeded CPU Time Limits
+0
+Internal
+0
+Load Shed
+0
+Uncaught Exception
+0
+Client disconnected by version
+Count
+RPS
+No client disconnects in this time range.
+Client disconnected by type
+Count
+RPS
+Cancelled
+0
+Response stream disconnected
+0
+Request Distribution
+Count
+RPS
+Miami, US (MIA)
+425
+Dulles, US (IAD)
+119
+Seattle, US (SEA)
+94
+Chicago, US (ORD)
+91
+Singapore, SG (SIN)
+81
+Paris, FR (CDG)
+81
+Sao Paulo, BR (GRU)
+36
+Portland, US (PDX)
+16
+San Jose, US (SJC)
+10
+Toronto, CA (YYZ)
+3
+Los Angeles, US (LAX)
+3
+Frankfurt-am-Main, DE (FRA)
+3
+Las Vegas, US (LAS)
+2
+Placement Performance
+Last analyzed at
+2026-10-05 00:58:07
+UTC
+Request location
+
+P90 placement near request location
+
+P90 Smart Placement
+
+Impact
+
+Sao Paulo, BR	1,114 ms	291 ms
+74%
+CPU Time
+P50
+2.4
+P90
+4.8
+P99
+8.1
+P999
+8.1
+Wall Time
+P50
+84.19
+P90
+283
+P99
+604
+P999
+604
+Memory usage
+P50
+2.37 MB
+P90
+2.48 MB
+P99
+2.57 MB
+P999
+2.57 MB
+Request duration
+P50
+83.95
+P90
+239
+P99
+366
+P999
+366
