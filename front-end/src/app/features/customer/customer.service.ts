@@ -54,6 +54,11 @@ export class CustomerService {
     return this.api.request('/alerts/answer', { transaction_id: transactionId, answer });
   }
 
+  /** Ask the team for evaluator access from the sign-in screen (no session); the answer never says whether an address is enrolled. */
+  requestAccess(body: { email: string; name?: string; note?: string }): Promise<{ status: 'received' }> {
+    return this.api.request<{ status: 'received' }>('/auth/access-request', body);
+  }
+
   /** Revoke the browser's customer and agent sessions and clear both cookies (always 204). */
   logout(): Promise<unknown> {
     return this.api.request('/auth/logout', {});

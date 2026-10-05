@@ -63,6 +63,34 @@
               </form>
             }
             @if (busy()) { <p class="status-line" role="status">{{ t().working }}</p> }
+            @if (accessOpen()) {
+              <section class="login-email" style="padding-top: 12px; border-top: var(--hairline) solid var(--line)" aria-labelledby="access-title">
+                <h2 class="ar-field-label" id="access-title">{{ t().accessAsk }}</h2>
+                <p class="ar-small" id="access-intro">{{ t().accessIntro }}</p>
+                @if (accessState() === 'sent') {
+                  <p class="status-line" role="status" id="access-sent">{{ t().accessSent }}</p>
+                } @else {
+                  <form class="login-email" ngNativeValidate (ngSubmit)="sendAccessRequest()">
+                    <label class="ar-field" for="access-email"><span class="ar-field-label">{{ t().emailLabel }}</span></label>
+                    <input class="ar-input" id="access-email" type="email" autocomplete="email" name="access-email" required maxlength="254"
+                      [(ngModel)]="accessEmail" [attr.aria-describedby]="accessState() === 'idle' ? 'access-intro' : 'access-intro access-error'">
+                    <label class="ar-field" for="access-name"><span class="ar-field-label">{{ t().accessName }}</span></label>
+                    <input class="ar-input" id="access-name" autocomplete="name" name="access-name" maxlength="100" [(ngModel)]="accessName">
+                    <label class="ar-field" for="access-note"><span class="ar-field-label">{{ t().accessNote }}</span></label>
+                    <textarea class="ar-textarea" id="access-note" name="access-note" rows="2" maxlength="500" [(ngModel)]="accessNote"></textarea>
+                    @if (accessState() !== 'idle') {
+                      <div class="ar-alert" role="alert" id="access-error"><p>{{ accessState() === 'invalid' ? t().accessInvalid : accessState() === 'limited' ? t().accessLimited : t().accessFailed }}</p></div>
+                    }
+                    <div class="login-actions">
+                      <button type="submit" class="ar-btn ar-btn-secondary" [disabled]="busy()">{{ t().accessSend }}</button>
+                      <button type="button" class="link-btn" (click)="accessOpen.set(false)" [disabled]="busy()">{{ t().accessClose }}</button>
+                    </div>
+                  </form>
+                }
+              </section>
+            } @else {
+              <p class="ar-small"><button type="button" class="link-btn" id="access-open" style="white-space: normal; text-align: start" (click)="openAccessRequest()" [disabled]="busy()">{{ t().accessAsk }}</button></p>
+            }
             @if (demoPicker) {
               <section class="login-email" aria-labelledby="local-identities">
                 <h2 class="ar-field-label" id="local-identities">{{ t().localIdentities }}</h2>

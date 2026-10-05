@@ -61,6 +61,12 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly codeSent = signal(false);
   email = '';
   code = '';
+  /** The evaluator access request under the sign-in form: closed, open, then its one outcome (never "you are enrolled"). */
+  readonly accessOpen = signal(false);
+  readonly accessState = signal<'idle' | 'sent' | 'invalid' | 'limited' | 'failed'>('idle');
+  accessEmail = '';
+  accessName = '';
+  accessNote = '';
   readonly lang = inject(LangService);
   readonly t = this.lang.t;
   readonly busy = signal(false);
@@ -391,6 +397,30 @@ export class CustomerPage implements OnInit, OnDestroy {
       this.codeSent.set(true);
     } catch (e) {
       this.error.set(this.signInError(e, 'errSendCode'));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  /** Open the access request with the address typed so far, and focus its email field. */
+  openAccessRequest(): void {
+    this.accessEmail ||= this.email.trim();
+    this.accessState.set('idle');
+    this.accessOpen.set(true);
+    afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('#access-email')?.focus(), { injector: this.injector });
+  }
+
+  /** Send the request to the team. 422 reads as a bad address, 429 as today's cap; anything else as "try later". */
+  async sendAccessRequest(): Promise<void> {
+    if (this.busy()) return;
+    this.busy.set(true);
+    try {
+      const name = this.accessName.trim(), note = this.accessNote.trim();
+      await this.service.requestAccess({ email: this.accessEmail.trim(), ...(name && { name }), ...(note && { note }) });
+      this.accessState.set('sent');
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : 0;
+      this.accessState.set(status === 422 ? 'invalid' : status === 429 ? 'limited' : 'failed');
     } finally {
       this.busy.set(false);
     }
