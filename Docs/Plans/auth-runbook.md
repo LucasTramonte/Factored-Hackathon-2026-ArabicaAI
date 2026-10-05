@@ -29,7 +29,7 @@ email + one-time code ──► Amazon Cognito ──► signed ID token (groups
 |---|---|---|---|---|
 | `customer` | `customer` + a loaded `custom:customer_id` | See only its own charges, reports and intake episodes; start, confirm and hand off its own reports | Open any agent or audit route (401/403); act as another customer (404 that looks like "missing") | `adversarial.test.js`, `charges-resolution.test.js` (isolation), `email-session.test.js` |
 | `agent` | `agent` | Read the approved queue and one report's detail; move a report one step | Open customer routes (401) or the audit (403); see cases outside the queue (`GET /agent/cases` was removed) | `agent-intake.test.js`, `failure-and-routing.test.js` |
-| `admin` | `admin` + a loaded `custom:customer_id` | Everything a customer (on its own synthetic identity), an agent and an auditor may; the client shows an evaluation banner | Browse any customer's records outside the agent queue; there is no admin-only route | `email-session.test.js` (decision 8), `audit.test.js` |
+| `admin` | `admin` + a loaded `custom:customer_id` | Everything a customer (on its own synthetic identity), an agent and an auditor may; the client shows an evaluation banner | Browse any customer's records outside the agent queue. Its own routes are `GET /admin/customers` and `POST /admin/act-as`, on an admin-marked customer session (ADR-007 decision 10) | `email-session.test.js` (decision 8), `audit.test.js` |
 | `auditor` | `auditor` | `GET /audit/events`: the newest sign-in events and review-status changes, references only | Any customer or agent route; any write | `audit.test.js` |
 | anyone else | not enrolled | Nothing: Cognito sends no code, and the client says only that it could not send one | — | `cognito.service.spec.ts` |
 
@@ -49,15 +49,16 @@ back-end/scripts/cognito/setup.sh
 
 Idempotent. It creates or finds the pool `arabicaai-demo`, the immutable attribute `custom:customer_id`, the public app client `arabicaai-web` (no secret, `USER_AUTH` with `EMAIL_OTP`, user-existence errors hidden) and the four groups, then prints three values.
 
-**The sign-in code email.** The pool sends through SES (`EmailSendingAccount` `DEVELOPER`, sender `Arabica AI <a team member's verified address>`, set by hand on 2026-10-04 after production access; the address itself is not committed, issue #70). The code email itself is branded with `back-end/scripts/cognito/otp-email.html` (logo, the code large in a monospace box, Spanish, Portuguese and English): a person applies it once with `back-end/scripts/cognito/otp-email.sh <pool id>`. Cognito uses the MFA message template for passwordless codes, so the script sets MFA to `OPTIONAL` with that template; nobody has an MFA preference, so sign-in keeps its single code. Email clients run no scripts, so there is no copy button: the code is large and selectable, and Apple Mail and Safari autofill it from the message.
+**The sign-in code email.** The pool sends through SES (`EmailSendingAccount` `DEVELOPER`, sender `Arabica AI <noreply@arabicaai-demo.com>`, in `back-end/scripts/cognito/custom-email-sender/template.json`). The code email itself is branded with `back-end/scripts/cognito/otp-email.html` (logo, the code large in a monospace box, Spanish, Portuguese and English): a person applies it once with `back-end/scripts/cognito/otp-email.sh <pool id>`. Cognito uses the MFA message template for passwordless codes, so the script sets MFA to `OPTIONAL` with that template; nobody has an MFA preference, so sign-in keeps its single code. Email clients run no scripts, so there is no copy button: the code is large and selectable, and Apple Mail and Safari autofill it from the message.
 
 ## 5. Configure the Worker
 
 | Name | Where | Kind |
 |---|---|---|
 | `COGNITO_REGION`, `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` | `vars` in `back-end/wrangler.jsonc` (the values `setup.sh` printed) | Public: they identify the pool and client and grant nothing |
+| `COGNITO_CLIENT_IDS` | `vars` in `back-end/wrangler.jsonc` | Public: the app client ids the Worker accepts as a token's audience; when absent it accepts only `COGNITO_CLIENT_ID` |
 | `SES_REGION` | `vars` | Public |
-| `SES_FROM` (`ArabicaAI demo <address>`) | `npx wrangler secret put SES_FROM` | Secret, because it is a person's address; the deploy guard refuses it in `vars`. Its domain must not publish DMARC `p=reject` unless the domain itself is verified in SES with DKIM |
+| `SES_FROM` (sender `noreply@arabicaai-demo.com`) | `npx wrangler secret put SES_FROM` | Secret by policy; the deploy guard refuses it in `vars`. Its domain must not publish DMARC `p=reject` unless the domain itself is verified in SES with DKIM |
 | `APP_URL` | `vars` | Public: the deployed origin, the target of the notification emails' "see my reports" button (the logo is embedded in the message, not fetched) |
 | `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | `npx wrangler secret put …` | Secret ([SES runbook](intake-demo.md#notification-email-ses)) |
 | `EMAIL_KEY` | `npx wrangler secret put EMAIL_KEY` (`openssl rand -base64 32`) | Secret: encrypts stored notification addresses |
@@ -66,10 +67,10 @@ Idempotent. It creates or finds the pool `arabicaai-demo`, the immutable attribu
 ## 6. Enrol people
 
 ```bash
-sh back-end/scripts/cognito/enroll.sh <email> <customer_id>           # a customer (group customer)
-sh back-end/scripts/cognito/enroll.sh <email> - agent                  # an agent: no customer id
-sh back-end/scripts/cognito/enroll.sh <email> - auditor                # an auditor: no customer id
-sh back-end/scripts/cognito/enroll.sh <email> <customer_id> admin     # team or evaluator: needs a loaded customer id
+back-end/scripts/cognito/enroll.sh <email> <customer_id>           # a customer (group customer)
+back-end/scripts/cognito/enroll.sh <email> - agent                  # an agent: no customer id
+back-end/scripts/cognito/enroll.sh <email> - auditor                # an auditor: no customer id
+back-end/scripts/cognito/enroll.sh <email> <customer_id> admin     # team or evaluator: needs a loaded customer id
 ```
 
 - No invitation email is sent; the person signs in with a code at once.
@@ -101,7 +102,7 @@ npm --prefix back-end test     # unit tests, then integration tests on a throwaw
 |---|---|
 | expired, forged and wrong-audience tokens are refused | `test/unit/cognito.test.js`, `test/integration/audit.test.js` |
 | a customer cookie can't act as an agent, and the reverse (session swap) | `test/integration/adversarial.test.js` ("sessions: actors cannot swap…") |
-| a customer can't see, confirm or acknowledge another customer's records | `adversarial.test.js`, `charges-resolution.test.js`, `extractor-switch.test.js` |
+| a customer can't see, confirm or acknowledge another customer's records | `adversarial.test.js`, `charges-resolution.test.js`, `suggestions.test.js` |
 | each route refuses the other role; no route lacks a role | `test/unit/failure-and-routing.test.js` |
 | expiry and logout are enforced and audited | `test/integration/auth-audit.test.js` |
 
@@ -146,16 +147,16 @@ We asked the organizers (Factored) whether evaluators need a trusted identity se
 - **A trusted identity service is not mandatory** for the evaluator flow. What judges value is a well-defined problem, backed by KPIs and values, and a demo whose limitations are fully listed.
 - **Judges' emails:** after the submission, we ping the organizers' contacts and ask for them. We don't guess or hard-code evaluator emails.
 
-Evaluator admins can open individual reports in the approved agent queue (statement and verified evidence, no customer id); there is no unrestricted customer browser. When the emails arrive, each evaluator is enrolled as `admin` on one of `demo-diego`, `demo-elena` and `demo-marco` (synthetic data only), and their address is verified in SES if they should receive report emails. The same identities are reused for later test runs. Evaluators never receive production credentials or records outside the synthetic demo.
+Evaluator admins can open individual reports in the approved agent queue (statement and verified evidence, no customer id); there is no unrestricted customer browser. When the emails arrive, each evaluator is enrolled as `admin` on one of `demo-diego`, `demo-elena` and `demo-marco` (synthetic data only). The same identities are reused for later test runs. Evaluators never receive production credentials or records outside the synthetic demo.
 
 ## Known limitations
 
 - **No per-agent assignment.** Every agent works the one approved queue. Assigning reports to people needs the agent's Cognito `sub` on the session (the `sessions` table allows no identity on agent rows today) and an assignee column; it is future work.
 - **Agent sessions are anonymous in the audit:** a review-status change records a 12-character session reference, not a person.
 - **The admin banner lives in the tab;** a reload drops it with the sign-in.
-- **`admin` has no route of its own:** "configuration and aggregate insights" are the repository and the operator scripts, not an online console.
+- **`admin` has two routes of its own,** `GET /admin/customers` and `POST /admin/act-as` (an admin-marked customer session, ADR-007 decision 10); "configuration and aggregate insights" are the repository and the operator scripts, not an online console.
 - **The auditor sees references only:** no customer id, email, statement or token, by design ([`intake-events.md`](../intake/intake-events.md)).
 - **No RLS on D1;** isolation rests on Worker predicates and their tests.
 - **Sessions last one hour** and survive a Cognito disable until they expire, unless a person deletes them (section 9).
 - **Sender domain:** SES signs nothing for a bare address identity, so a sender whose domain publishes DMARC `p=reject` (a company domain, typically) gets bounced. Send from a verified domain with DKIM, or from an address whose domain does not reject.
-- **Email is attempted once,** after the response; a failure is not retried, and "sent" means SES accepted the request, not that it was delivered.
+- **No automatic retry;** after a failed or skipped send the customer may request it again after 10 seconds. "Sent" means SES accepted the request, not that it was delivered.

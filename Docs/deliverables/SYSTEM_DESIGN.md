@@ -1,6 +1,6 @@
 # System design: unrecognized-charge intake for a LATAM bank
 
-*ArabicaAI, Factored AI & Data Hackathon 2026. Status as of 2026-10-04.*
+*ArabicaAI, Factored AI & Data Hackathon 2026. Status as of 2026-10-05.*
 
 This is the narrative: who the customer is, what we built, how it works, how we know, what it costs and what is missing. Each number lives in one document and is linked from here.
 
@@ -18,7 +18,7 @@ These decided every trade-off below. We would change them only on new evidence.
 
 ## The customer and the problem
 
-There are two customers. The **account holder** sees a card charge they don't recognize, describes it in Spanish or Portuguese, and wants to know that the bank understood which charge they mean and what happens next. The **dispute agent** receives the case and needs the right transaction, the customer's own statement and what was already checked. Without those, they call the customer back.
+There are two customers. The **account holder** sees a card charge they don't recognize, describes it in Spanish, Portuguese or English, and wants to know that the bank understood which charge they mean and what happens next. The **dispute agent** receives the case and needs the right transaction, the customer's own statement and what was already checked. Without those, they call the customer back.
 
 Over the full dataset (2023-06-17 to 2026-06-18), complaints (`Queja`) are 17.05% of 686,296 call-center interactions. Only 43.60% of them carry a resolved flag, and they account for 41.18% of all unresolved contacts. `Cargo no reconocido` is the largest complaint type: 12,297 of 67,095, stable at 18.2–18.4% a year. [`BUSINESS_OUTCOMES.md`](BUSINESS_OUTCOMES.md) uses the design window only (to 2025-12-31; 10,370 of 56,736), as ADR-005 requires for design decisions. The full sizing, today's handling and satisfaction are in [`BUSINESS_OUTCOMES.md`](BUSINESS_OUTCOMES.md).
 
@@ -34,7 +34,7 @@ A "?" button on the home lets a customer report a charge they don't see in their
 
 An earlier design read free text and routed other requests (another language, a recognized charge, a lost card, a balance question) with an explicit message. That routing exists only in the evaluation harness. The online service accepts only an unrecognized-charge report, and no step needs it to understand free text: the charge comes from a list and the reason from a closed set.
 
-**Deployed state:** release [v0.3.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.3.0) (`0a743bb`, Worker `22e99b3f`, D1 migrations 0001–0025), deployed 2026-10-04 by the GitHub Actions deploy workflow. AI suggestions on "I can't find it" are on in the demo from the deploy that carries [ADR-012 amendment 1](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3). Every later deploy is in the [release history](../releases/README.md) and `wrangler deployments list`.
+**Deployed state:** `main` `0483e39` (latest release [v0.5](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.5)); D1 migrations 0001–0030, deployed by the GitHub Actions deploy workflow. AI suggestions on "I can't find it" are on in the demo from the deploy that carries [ADR-012 amendment 1](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3). Every later deploy is in the [release history](../releases/README.md) and `wrangler deployments list`.
 
 | Stage | State | What it does |
 |---|---|---|
@@ -44,7 +44,7 @@ An earlier design read free text and routed other requests (another language, a 
 | Reports that outlive the tab | Deployed | "Tus reportes": the customer's own reports from the server, each with status and next step |
 | Review status | Deployed | A person moves a report received → in review → closed, with a history. "Closed" means a person finished the review. No bank resolution, refund or verdict is recorded |
 | One open report per charge | Deployed (#87) | An acknowledged report blocks the charge until a person closes it. Checked atomically at write time; pending reservations expire after one hour; delayed acknowledgements superseded by a newer report are rejected even after that replacement closes |
-| Notification emails | Deployed | Amazon SES sends receipt and status emails after the response, and on the customer's request (at most one per report per five minutes). "Sent" means SES accepted it. Sandbox only |
+| Notification emails | Deployed | Amazon SES sends receipt and status emails after the response, and on the customer's request (at most one per report per five minutes). "Sent" means SES accepted it |
 | Urgency lane | Deployed | A confirmed charge is high when it reaches a fixed amount per currency or sits above the 95th percentile of at least 5 of the customer's other purchases in that currency. High reports lead the agent queue |
 | Other reports and first open | Deployed (#88) | The agent sees a bounded summary of the customer's other acknowledged reports, with partial-history disclosure. First open is written once |
 | Receipt feedback | Deployed (#89) | One thumbs answer per report, checked against the live owner session. Wording is a prototype awaiting bank approval |
@@ -53,9 +53,12 @@ An earlier design read free text and routed other requests (another language, a 
 | Proactive alert | Deployed (#106) | One in-app banner on a charge the bank flagged ([below](#the-proactive-alert)) |
 | Session restore | Deployed (#110) | A reload restores the live session from the cookie |
 | "How long does it take?" | Deployed (#116) | Answered from this bank's history, a reviewed Gold aggregate seeded into D1 (migration 0027): half of unrecognized-charge reports got a first response in about 1 day (p50 25 h) and 9 in 10 within 2 days (p90 44 h), n = 6,045 of 10,370. Resolution times are described, never quoted, because they cover resolved reports only. Not a prediction or a service level |
-| Messages on a report | Deployed (this PR) | The agent asks the customer for what's missing and explains the next step, on the report; the customer answers there. In-app only, 50 per report, read-only once closed ([ADR-015](../ADRs/ADR-015-agent-customer-messages.md)) |
-| Observability | Deployed (this PR) | Structured Worker logs and traces in Cloudflare (requests, errors, AI runs; references only), an external `/healthz` check from 6 regions, and alerts on the model provider ([runbook](../Plans/observability-runbook.md)) |
+| Messages on a report | Deployed (#118) | The agent asks the customer for what's missing and explains the next step, on the report; the customer answers there. In-app only, 50 per report, read-only once closed ([ADR-015](../ADRs/ADR-015-agent-customer-messages.md)) |
+| Observability | Deployed (#118) | Structured Worker logs and traces in Cloudflare (requests, errors, AI runs; references only), an external `/healthz` check from 6 regions, and alerts on the model provider ([runbook](../Plans/observability-runbook.md)) |
 | AI suggestions on "I can't find it" | Deployed (#113), on in the demo (ADR-012 amendment 1) | After the reference, extractor v2 (Gemini 3.5 Flash-Lite with v1's prompt) reads the customer's description on Vertex AI; code suggests up to three of their own charges; the customer confirms or declines; a person reviews ([below](#the-learned-component-and-where-ai-belongs)) |
+| Guided tour | Deployed (#122) | An optional tour of the customer page, replayed from Help; the agent console has none |
+| Closing explanations | Deployed (#124) | Closing a report requires a person's explanation, shown to the customer and the agent (migration 0029, [ADR-015](../ADRs/ADR-015-agent-customer-messages.md)) |
+| Report support assistants | Built, off (#132) | A reviewer draft and AI help on a customer's report question, each behind its own switch that is absent in production (migration 0030, [ADR-016](../ADRs/ADR-016-report-support-assistants.md)) |
 
 The customer and measurement contracts are in [`Docs/intake/`](../intake/customer-and-measurement-contract.md).
 
@@ -69,7 +72,7 @@ A large charge you don't recognize causes panic. The customer wants it handled f
 
 **Never "Done".** The server picks one of three receipts: "Report accepted in the demo"; "Sent for human review without a confirmed charge"; "We could not check the charge; sent for human review". Each continues "Next step: an agent reviews this case. No refund has been initiated." and lists what was checked.
 
-**Follow-up after the tab closes.** An email goes out when a report is received and when a person moves it to in review or closed, and the customer can ask for one. It carries the short reference and status, never the customer's words. SES production access was requested and denied on 2026-10-02, so every recipient must be a verified SES identity. No reduction in customer follow-up has been measured.
+**Follow-up after the tab closes.** An email goes out when a report is received and when a person moves it to in review or closed, and the customer can ask for one. It carries the short reference and status, never the customer's words. SES production access was denied on 2026-10-02 and granted on 2026-10-04, so recipients need no verification. No reduction in customer follow-up has been measured.
 
 **Urgency for high amounts.** The data has no high-value tail to calibrate on ([DF-024](DATA_ENGINEERING.md#df-024-purchase-amounts-are-almost-flat-up-to-usd-509-with-no-high-value-tail)), so the thresholds in the stage table are a stated policy in `back-end/src/config/urgency.json`. The receipt and "received" email tell a high-charge customer to call their bank to block the card; the service never blocks one.
 
@@ -133,7 +136,7 @@ Migrations are additive and are applied to remote D1 by the deploy workflow afte
 
 ### Production targets: AWS and GCP
 
-If a bank ran this workflow on its own cloud, the same design becomes one of the targets below. Neither has been deployed. A bank's requirement for private networking, a standby database and its own keys would trigger the move, not traffic (next section). Today's AWS use is Cognito and SES next to the Cloudflare service, and today's GCP use is Vertex AI for the evaluation.
+If a bank ran this workflow on its own cloud, the same design becomes one of the targets below. Neither has been deployed. A bank's requirement for private networking, a standby database and its own keys would trigger the move, not traffic (next section). Today's AWS use is Cognito and SES next to the Cloudflare service, and today's GCP use is Vertex AI for the evaluation and the online suggestions through Workload Identity Federation.
 
 | | AWS | GCP |
 |---|---|---|
@@ -171,7 +174,7 @@ In production, the bank's identity provider (OIDC with MFA, step-up for a disput
 
 The brief asks where AI is appropriate and where deterministic logic is preferable. Our answer: every live path is deterministic except one. When a customer can't find the charge and describes it, a model reads the description after the reference is returned, and code suggests up to three of their own charges.
 
-**What the model does.** A pretrained `gpt-oss-20b` turns a message into facts from a closed vocabulary: amount, date, currency, merchant, card, country. The same written policy that drives the rule-based checklist then decides the action. The model never sees transactions, never picks a charge and never writes to the store. Only synthetic messages, the session's language and time, and the vocabulary reach it. Why this design and this model are in [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md).
+**What the model does.** A pretrained `gpt-oss-20b` turns a message into facts from a closed vocabulary: amount, date, currency, merchant, card, country. The same written policy that drives the rule-based checklist then decides the action. The model never sees transactions, never picks a charge and never writes to the store. Only synthetic messages, the session's language and time, and the vocabulary reach it. Why this design and this model are in [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md). Extractor v1 (`gpt-oss-20b`) is evaluated offline; extractor v2 (Gemini 3.5 Flash-Lite with v1's prompt) runs online on "I can't find it".
 
 **Where it runs.** Development started on Workers AI. Bedrock inference is blocked on the project's AWS Free plan, so amendment 7 moved the offline evaluation to Google Vertex AI (`openai/gpt-oss-20b-maas`, the same weights, the same prompt and parsing; only the transport differs).
 
@@ -195,7 +198,7 @@ The amount doesn't separate fraud in any period: fraud p50 is 452.5, 447.8 and 4
 
 So the alert fires only on a flag the bank provides, `bank_flagged`, on the customer's own charge. In this prototype the flag is set only on three authored fictitious charges, and the dataset cohort is not flagged from `fraud_score`. At sign-in the home shows at most one banner, for the newest unanswered flagged charge, asking "Do you recognize it?" "Yes, it's mine" records the answer. "I don't recognize it, report it" opens the guided chat on that charge. It never says fraud, blocked or refunded.
 
-There is one alert per charge. It never repeats once answered, never fires on a charge that already has a report, and an admin's answer while acting as a customer never silences the real customer's alert. A report on a flagged charge joins the urgent lane. Email alerts are designed but wait for a scheduled trigger and SES production access. No model, no new service.
+There is one alert per charge. It never repeats once answered, never fires on a charge that already has a report, and an admin's answer while acting as a customer never silences the real customer's alert. A report on a flagged charge joins the urgent lane. Email alerts are designed but wait for a scheduled trigger. No model, no new service.
 
 ## Results
 
@@ -215,8 +218,7 @@ Every box in the targets above has to be justified by a number. The rule we used
 
 **What one report costs the system.** These are the guided flow's measured figures from the D1 budget tests (CI ceilings; ADR-004, sections 2 and implementation notes). One complete episode, with sign-in and one agent look, takes:
 - 9 requests;
-- 318 rows read;
-- 51 rows written.
+- 48 rows written by the customer episode at its CI ceiling (`EPISODE_CEILING` in `back-end/test/integration/budget.test.js`: 37 queries, 125 rows read, 48 written, 20 round trips), plus 3 by the agent look (ADR-004, section 2): 51 rows written.
 
 A case is about 367 bytes with a typical statement and 4.3 KB at the 2,000-character maximum.
 
@@ -284,7 +286,6 @@ The deployed state is [above](#the-solution-and-what-exists-today); the extracto
 **After submission:**
 - the rest of ADR-013 phase 0 (sliding sessions), then Google sign-in for staff;
 - the cohort refresh path for new data ([section 8](DATA_ENGINEERING.md#8-if-new-data-arrives-tomorrow));
-- optionally, re-filing for SES production access, so mail reaches unverified addresses;
 - a five-person usability test.
 
 ## Where each detail lives
@@ -296,8 +297,9 @@ The deployed state is [above](#the-solution-and-what-exists-today); the extracto
 | Evaluation, test sets and leakage controls | [`EVALUATION.md`](EVALUATION.md) |
 | Capacity, cost and layer placement | [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md) |
 | Workflow choice and scope | [ADR-001](../ADRs/ADR-001-workflow-prioritization.md), [ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md) |
-| Runtime, learned component, AI online | [ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md), [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md), [ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md) |
+| Runtime, learned component, AI online | [ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md), [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md), [ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md), [ADR-014](../ADRs/ADR-014-online-ai-suggestions-and-no-fraud-model.md), [ADR-016](../ADRs/ADR-016-report-support-assistants.md) |
 | Identity and sessions | [ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md), [ADR-013](../ADRs/ADR-013-gcp-sso-and-persistent-sessions.md) |
+| Messages | [ADR-015](../ADRs/ADR-015-agent-customer-messages.md) |
 | Proactive alert | [ADR-011](../ADRs/ADR-011-proactive-alert-bank-flag.md) |
 | All decisions | [`Docs/ADRs/`](../ADRs/README.md) |
 | How to run it | [README](../../README.md), [runbook](../Plans/intake-demo.md) |

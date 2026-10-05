@@ -183,7 +183,7 @@ The table maps each question to a measure, gives the baseline in the supplied da
    - **How long until a change is visible.** The smallest change detectable between two equal periods (two-proportion test, α 0.05, power 0.80) shrinks with the square root of volume. At the dataset bank's 78 reports a week, a 5-point change in the mis-recorded share needs about 11 weeks per period. At a 20-a-week pilot it needs about 40 weeks. So a pilot's first weeks can show large effects only, and the plan says so in advance.
 
    ![Lines showing the smallest detectable change, in percentage points, falling with weeks of data for three KPIs at 78 and at 20 reports a week](../Evidence/business/charts/detectable-change.png)
-   - Comparisons between flow versions use the randomized A/B pilot (ADR-014, intention to treat) with the analysis fixed before the pilot starts.
+   - Comparisons between flow versions use the randomized A/B pilot (ADR-014, intention to treat) with the analysis fixed before the pilot starts, once `INTAKE_AI_SHARE_B` is set back to 0.5; today every eligible report is in arm B.
 3. **Instrumentation test set.**
    - Before the KPIs are trusted, a set of authored journeys, each with known expected counts, runs on local D1: abandon at each step, "I recognize it" on the alert, "can't find it", "none of these", a repeat reporter, a technical failure.
    - The KPI queries must reproduce those counts exactly.

@@ -231,7 +231,7 @@ These come from separate streams and are never pooled with the frozen result.
 - **Limit:** both splits were written with knowledge of the corpus, and development shaped v1's prompt. These results show that v2 reads our coverage set as well as v1 did, not how it does on unseen messages. The aggregates are in [`extractor-v2-development-safety-2026-10-04.json`](../Evidence/evaluation/extractor-v2-development-safety-2026-10-04.json).
 - **To reproduce:** `VERTEX_ACCESS_TOKEN=$(gcloud auth print-access-token) VERTEX_PROJECT=factored-hackathon-arabica-ai .venv/bin/python -m evals.intake.run --split safety --repetitions 3 --system extractor-v2=intake_agent.extractor.vertex_v2:extract`.
 
-**Live service:** 5 report episodes exported from remote D1 on 2026-10-02, all team and reviewer sessions since the last demo reset, on the guided flow, which calls no model.
+**Live service:** 5 report episodes exported from remote D1 on 2026-10-02, all team and reviewer sessions since the last demo reset, on the guided flow, which calls no model (the export predates suggestions going on).
 - **Outcomes:** 4 complete handoffs, 1 incomplete ("I can't find it"), 0 recorded unsafe. Safety is recorded as `not_assessed`, never as safe.
 - **Episode span:** p50 11.6 s, p95 14.7 s. That includes the customer's reading and typing.
 - **Cost:** $0 on Workers Free, with no model calls.
@@ -280,7 +280,7 @@ The frozen run, the custodian's commands (the run is not repeated for this versi
 - Harness, baselines and splits: [`evals/intake/`](../../evals/intake/README.md)
 - Frozen set method and review status: [`frozen_es_pt_v1/`](../../evals/intake/frozen_es_pt_v1/README.md), [`REVIEW_STATUS.md`](../../evals/intake/frozen_es_pt_v1/REVIEW_STATUS.md)
 - Pre-registration and the blind build: [`evals/intake/preregistration/`](../../evals/intake/preregistration/README.md)
-- Protocol and learned component: [ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md), [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md); whether the model goes online: [ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md)
+- Protocol and learned component: [ADR-005](../ADRs/ADR-005-evaluation-data-protocol.md), [ADR-006](../ADRs/ADR-006-learned-extractor-workers-ai.md); whether the model goes online: [ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md), [ADR-014](../ADRs/ADR-014-online-ai-suggestions-and-no-fraud-model.md) and [ADR-016](../ADRs/ADR-016-report-support-assistants.md)
 
 **References:**
 - Ribeiro et al., "Beyond Accuracy: Behavioral Testing of NLP Models with CheckList", ACL 2020.
