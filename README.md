@@ -1,27 +1,51 @@
-# ArabicaAI — Factored Hackathon 2026
+<p align="center">
+  <img src="front-end/public/arabicaai-logo.png" alt="ArabicaAI logo" width="192">
+</p>
 
-A customer reports a card charge they don't recognize, confirms which of their own transactions they mean, and gets a reference once the case is stored for human review. That is the V1 workflow ([ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)). It is intake with a human handoff: no fraud verdicts, refunds or card blocks. The request path is deterministic; extractor v2 suggestions run after the response for eligible "I can't find it" reports in the enabled demo. Extractor v1 was compared offline with hand-written rules on 60 held-out Spanish and Portuguese cases we wrote: by the majority of 3 runs it got 53 right against the checklist's 23, with 0 unsafe outcomes in 180 runs, and 46 of 52 on the cases whose content never leaked during the build ([evaluation](Docs/deliverables/EVALUATION.md)). Demo enablement and the remaining production gate are recorded in [ADR-012](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md), and how is the [AI suggestion plan](Docs/Plans/ai-suggestion-plan.md).
+<h1 align="center">ArabicaAI · Factored Hackathon 2026</h1>
 
-The data is a synthetic LATAM banking dataset. Descriptive counts from it are not measured bank outcomes.
+<p align="center">Unrecognized-charge intake in Spanish, Portuguese and English.</p>
 
-**Evaluators: start with [`SYSTEM_DESIGN.md`](Docs/deliverables/SYSTEM_DESIGN.md).** It tells the whole story in one narrative: the customer and the problem, what we built, how it works, how we know it works, what it costs, and what is missing. The [reading guide](Docs/README.md) then maps each point of the brief to the document that answers it.
+<p align="center">
+  <a href="https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/actions/workflows/quality.yml?query=branch%3Amain"><code>Quality CI · main ↗</code></a>
+  <a href="https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.4.0"><code>Release v0.4.0 ↗</code></a>
+  <a href="https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/latest"><code>Latest release ↗</code></a>
+</p>
 
-![Architecture: the organizers' read-only Amazon S3 bucket feeds a Python and DuckDB batch (Bronze Parquet, typed Silver, a quality gate, Gold tables and the serving slice), which produces a reviewed D1 seed. A Cloudflare Worker serves the Angular app and the API for customers, agents and admins and is deployed by GitHub Actions after CI. The Worker calls Amazon Cognito for email sign-in, Amazon SES for status emails, and in the demo extractor v2 on Vertex AI for "I can't find it" suggestions after the response. The offline evaluation runs gpt-oss-20b on Vertex AI against the checklist. The AWS and GCP targets were never deployed.](Docs/Evidence/diagrams/architecture.png)
+Customers report a card charge they don't recognize, confirm their own transaction when possible, and receive a saved reference for human review. Eligible “I can't find it” reports receive suggestions after the response in the enabled demo ([ADR-012](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md)). A handoff or completed review is not a financial resolution: the service does not decide fraud, refund money or block cards ([ADR-002](Docs/ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)).
 
-*Deployed state: release [v0.3.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.3.0) (`0a743bb`, Worker `22e99b3f`, D1 migrations 0001–0025), deployed 2026-10-04 by the GitHub Actions deploy workflow. AI suggestions on "I can't find it" are on in the demo from the deploy that carries [ADR-012 amendment 1](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3); later deploys are in the [release history](Docs/releases/README.md). Every path in the diagram is deployed or built; the offline evaluation ran once on the frozen set on 2026-10-04. The diagram is built by [`build_architecture.py`](Docs/Evidence/diagrams/build_architecture.py).*
+The supplied LATAM banking data is synthetic. Its descriptive counts are not measured bank outcomes.
 
-## Contents
+## Quick navigation
 
-- [Deliverables](#deliverables)
-- [Repository layout](#repository-layout)
-- [How it fits together](#how-it-fits-together)
-- [Where the AI goes online](#where-the-ai-goes-online)
-- [Data pipeline: start here](#data-pipeline-start-here)
-- [Offline baseline from supplied CSVs](#offline-baseline-from-supplied-csvs)
-- [Common commands](#common-commands)
-- [Where to look next](#where-to-look-next)
-- [About us](#about-us)
-- [Appendix: production targets on AWS and GCP](#appendix-production-targets-on-aws-and-gcp)
+| Start here | What you will find |
+|---|---|
+| [System design](Docs/deliverables/SYSTEM_DESIGN.md) · [Reading guide](Docs/README.md) | The story for evaluators and how it answers the challenge |
+| [Quick guide](#quick-guide) · [Demo runbook](Docs/Plans/intake-demo.md) | Try the service or start a local checkout |
+| [Evaluation](Docs/deliverables/EVALUATION.md) | Authored cases, denominators, leakage controls and limits |
+| [Data engineering](Docs/deliverables/DATA_ENGINEERING.md) · [Pipeline setup](#data-pipeline-start-here) | Quality, findings and reproducible data builds |
+| [Repository layout](#repository-layout) · [Architecture](#how-it-fits-together) | Code locations and the runtime |
+| [Common commands](#common-commands) · [Contributing](CONTRIBUTING.md) | Checks, review and release procedures |
+
+## Quick guide
+
+The repository is private; CI and release links require repository access and show the current GitHub state.
+
+**Try the [live demo](https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/):** customers, agents and evaluators sign in with an email one-time code from Amazon Cognito. Ask the team to enrol your email; see the [auth runbook](Docs/Plans/auth-runbook.md) and [demo runbook](Docs/Plans/intake-demo.md).
+
+1. **Customer:** report an unrecognized charge, select your own transaction or choose “I can't find it,” and keep the saved reference.
+2. **Reviewer:** sign in with an enrolled reviewer account to inspect the agent queue and update the review status; see the [demo runbook](Docs/Plans/intake-demo.md) for the walkthrough.
+
+**Start locally:** use Python 3.10+ and GNU Make for the data checks; the Worker and Angular client also need Node 22+ and Chrome/Chromium for the headless client tests.
+
+```bash
+make setup          # install declared Python dependencies in .venv
+make test           # offline fixtures; no S3 access needed
+make intake-setup   # install Worker and Angular dependencies
+make intake-test    # Gold, client and Worker/local-D1 checks
+```
+
+For local serving and seeds, follow the [demo runbook](Docs/Plans/intake-demo.md). For authorized S3 ingestion or supplied local CSVs, follow [pipeline setup](#data-pipeline-start-here) or the [offline route](#offline-baseline-from-supplied-csvs). Raw data and credentials are not included in this repository.
 
 ## Deliverables
 
@@ -56,6 +80,10 @@ The root keeps only what tools expect there: this README, [`CONTRIBUTING.md`](CO
 
 ## How it fits together
 
+![Architecture: the organizers' read-only Amazon S3 bucket feeds a Python and DuckDB batch (Bronze Parquet, typed Silver, a quality gate, Gold tables and the serving slice), which produces a reviewed D1 seed. A Cloudflare Worker serves the Angular app and the API for customers, agents and admins and is deployed by GitHub Actions after CI. The Worker calls Amazon Cognito for email sign-in, Amazon SES for status emails, and in the demo extractor v2 on Vertex AI for "I can't find it" suggestions after the response. The offline evaluation runs gpt-oss-20b on Vertex AI against the checklist. The AWS and GCP targets were never deployed.](Docs/Evidence/diagrams/architecture.png)
+
+*Historical deployment record: release [v0.3.0](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.3.0) (`0a743bb`, Worker `22e99b3f`, D1 migrations 0001–0025), deployed 2026-10-04 by the GitHub Actions deploy workflow. AI suggestions on "I can't find it" are on in the demo from the deploy that carries [ADR-012 amendment 1](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md#amendment-1-2026-10-04-ai-suggestions-on-in-the-demo-before-condition-3); later deploys are in the [release history](Docs/releases/README.md). Every path in the diagram is deployed or built; the offline evaluation ran once on the frozen set on 2026-10-04. The diagram is built by [`build_architecture.py`](Docs/Evidence/diagrams/build_architecture.py).*
+
 ```
 S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intake slice ─► reviewed D1 seed
                    data_pipelines/ (Python + DuckDB, batch)                      │
@@ -68,7 +96,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 
 The Worker and D1 remain the single runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito proves who signs in, and the Worker issues its own session from the verified token. SES only delivers email; cases stay in D1. These integrations are deployed, with Cognito replacing the former shared gates ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). SES has production access, so recipients need no verification; delivery still depends on the sender's domain policy.
 
-Everything merged through #106 and #110 is deployed, including the in-app alert when the bank flags a charge (ADR-011) and session restore on reload. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan). Extractor v1 was registered, tagged and run once on the frozen set on 2026-10-04: 88% correct against 38% for the rules, 0 unsafe, p95 2,048 ms ([results and limits](Docs/deliverables/EVALUATION.md#1-the-result)).
+For published versions, see the [latest release](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/latest) and [release history](Docs/releases/README.md); the header records published release v0.4.0, while the CI link tracks `main`, which may contain newer changes. Release snapshots are updated when a release is published. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan).
 
 | Component | Path | What it does |
 |---|---|---|
@@ -82,7 +110,7 @@ Everything merged through #106 and #110 is deployed, including the in-app alert 
 
 ## Where the AI goes online
 
-Extractor v1 read better than our rules on held-out cases (53 of 60 against 23 by majority of 3 runs; 46 of 52 against 20 on the never-exposed cases), but the guided flow only needs to read free text in one place: when a customer can't find the charge in their own list. Extractor v2 is enabled there in the demo (`INTAKE_AI_ENABLED = "1"`, `INTAKE_AI_SHARE_B = "1"`), with every eligible report assigned to arm B. Its held-out evaluation remains owed ([ADR-012](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md), [plan](Docs/Plans/ai-suggestion-plan.md)).
+Extractor v1 was compared offline with hand-written rules on 60 held-out Spanish and Portuguese cases authored by the team: 53 of 60 correct against 23 by majority of 3 runs, with 0 unsafe outcomes in 180 runs and p95 latency of 2,048 ms; 46 of 52 against 20 on the never-exposed cases ([results and limits](Docs/deliverables/EVALUATION.md#1-the-result)). It read better than our rules, but the guided flow only needs to read free text in one place: when a customer can't find the charge in their own list. Extractor v2 is enabled there in the demo (`INTAKE_AI_ENABLED = "1"`, `INTAKE_AI_SHARE_B = "1"`), with every eligible report assigned to arm B. Its held-out evaluation remains owed ([ADR-012](Docs/ADRs/ADR-012-ai-online-only-where-evidence-shows.md), [plan](Docs/Plans/ai-suggestion-plan.md)).
 
 ![Target workflow: the customer's request stays deterministic; for "I can't find it", Vertex AI reads the description after the reference, code suggests up to three of the customer's own charges, the customer confirms and a person reviews; every failure falls back to today's handoff; events feed the pilot measures and the offline evaluation](Docs/Evidence/diagrams/target-workflow.png)
 
@@ -91,14 +119,7 @@ Extractor v1 read better than our rules on held-out cases (53 of 60 against 23 b
 - **Every failure is today's flow.** Timeout, provider error, invalid output, no match or a retired model all leave the incomplete handoff as it is.
 - **It is measured and can be disabled.** The demo records usage and agent marks; setting `INTAKE_AI_SHARE_B = "0.5"` restores the randomized pilot. Operators set `INTAKE_AI_ENABLED = "0"` under the plan's stop rules. The circuit breaker and retirement guard stop calls automatically.
 
-**Live demo:** https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Customers, agents and evaluators sign in with an email one-time code from Amazon Cognito; ask the team to enrol your email. There is no team password ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md), [auth runbook](Docs/Plans/auth-runbook.md)).
-
 What each version contains and what is deployed: [release history](Docs/releases/README.md). What comes next: [intake roadmap](Docs/Plans/intake-roadmap.md).
-
-Quick starts:
-
-- **Data:** see below.
-- **Intake service:** see the [runbook](Docs/Plans/intake-demo.md).
 
 ## Data pipeline: start here
 
@@ -168,6 +189,10 @@ Docker reuses cached build layers on later runs. For a smaller first S3 check, f
 - [Marketing/Product evidence](data_foundation/reports/README.md) and [offline report hub](data_foundation/reports/index.html): reviewed aggregates, limits and reproducible source. This work predates the V1 intake choice; its [customer-backward brief](Docs/archive/marketing/Marketing-Product-PRFAQ.md) is archived.
 
 The dataset is synthetic. Descriptive counts from it should not be presented as measured bank outcomes or causal effects.
+
+## License status
+
+No license is currently declared: GitHub reports no license metadata, and the repository contains no `LICENSE` file.
 
 ## About us
 
