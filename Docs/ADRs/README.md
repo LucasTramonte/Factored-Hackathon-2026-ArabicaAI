@@ -21,7 +21,6 @@ Technical and product-scope decisions for the ArabicaAI hackathon solution. Each
 | [013](ADR-013-gcp-sso-and-persistent-sessions.md) | Persistent sessions and Google sign-in for staff on GCP | Proposed (2026-10-04) |
 | [014](ADR-014-online-ai-suggestions-and-no-fraud-model.md) | Online AI only for "I can't find it" suggestions, off until a pilot; no fraud model | Proposed (2026-10-04) |
 | [015](ADR-015-agent-customer-messages.md) | Messages between the reviewing agent and the customer, on one report | Proposed (2026-10-04) |
-
 | [016](ADR-016-report-support-assistants.md) | Bounded report support assistants, independently off pending synthetic pilot | Proposed (2026-10-04) |
 
 ## Format
