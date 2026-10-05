@@ -8,7 +8,7 @@ This is the only online implementation of the intake service ([ADR-003](../Docs/
 
 The Worker never reads S3, DuckDB or Silver. The data it serves is loaded as a reviewed seed from the Gold slice (`data_pipelines/gold/`).
 
-The service does not decide fraud, issue refunds or authenticate bank customers. It confirms a report only after D1 has stored it and read it back. It calls a model only on the AI suggestion path ([below](#ai-suggestions-on-i-cant-find-it-adr-012)), after the response, and only while its switch is on (on in the demo, ADR-012 amendment 1).
+The service does not decide fraud, issue refunds or authenticate bank customers. It confirms a report only after D1 has stored it and read it back. It calls a model only on the AI suggestion path ([below](#ai-suggestions-on-i-cant-find-it-adr-012)), after the response, and only while its switch is on (on in the demo, ADR-012 amendment 1). The report support assistant routes also call a model, only when their `ASSIST_*_ENABLED` switch is `'1'` (off, ADR-016).
 
 ## Layout
 
@@ -20,11 +20,14 @@ The service does not decide fraud, issue refunds or authenticate bank customers.
 | `src/auth/cognito.js` | Verifies Cognito ID tokens; `bearerClaims` is shared by customer and agent sign-in (422/401/503). |
 | `src/auth/session.js` | Random 256-bit tokens. Only their SHA-256 is stored, and customer and agent sessions are kept separate. |
 | `src/modules/customer/` | Login, own charges, and case creation with validation. |
-| `src/modules/intake/` | Guided intake: start, confirm and incomplete handoff, with strict validation. No free-text classification. The AI suggestion path (on in the demo, ADR-012 amendment 1): `ai-transport.js` (extractor v2 on Vertex AI, ported from `intake_agent/extractor/vertex_v2.py`), `vertex-auth.js` (Workload Identity Federation), `matcher.js` (the evaluation's facts → candidates policy) and `suggestions.js` (guards, run and outcome). |
-| `src/modules/agent/` | Agent session, the read-only case view, the intake queue and detail, and the received → in review → closed steps. |
+| `src/modules/intake/` | Guided intake: start, confirm and incomplete handoff, with strict validation. No free-text classification. The AI suggestion path (on in the demo, ADR-012 amendment 1): `ai-transport.js` (extractor v2 on Vertex AI, ported from `intake_agent/extractor/vertex_v2.py`), `vertex-auth.js` (Workload Identity Federation), `matcher.js` (the evaluation's facts → candidates policy) and `suggestions.js` (guards, run and outcome). `assist-routes.js` and `assist.js`: the customer's AI help on a report (off, ADR-016). |
+| `src/modules/agent/` | Agent session, the read-only case view, the intake queue and detail, and the received → in review → closed steps. `assist-routes.js`: the reviewer draft (off, ADR-016). |
+| `src/modules/admin/` | Admin routes: the demo customer list and act-as (ADR-007, decision 10). |
+| `src/modules/audit/` | The auditor's read-only sign-in and review-status events, references only. |
+| `src/modules/proactive/` | The bank-flag alert and its answer (ADR-011). |
 | `src/store/d1.js` | Every SQL statement. This is the only module to replace if the store changes. Multi-statement writes run as one atomic `db.batch()`. |
 | `src/config/identities.json` | Committed demo identities (fictitious, plus the one-day slice's customer), shared with the Gold slice. Dataset cohort customers are listed from D1 instead. |
-| `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. Remote D1 holds 0001–0008 (0006: customer source and country; 0007: the `seed_loads` load log; 0008: the short reference). 0009–0013 (notifications, review status, one open report per charge, auth audit, urgency) come with PRs #60 to #66 and go to remote D1 before each merges. |
+| `migrations/` | Versioned D1 schema (`wrangler d1 migrations`). Additive only. 0001–0030; the deploy applies pending additive migrations (`scripts/predeploy.mjs`). |
 | `scripts/intake-store.mjs` | Local D1 binding for the operator scripts, through Wrangler's `getPlatformProxy`. It uses the store in `src/store/d1.js`, so the scripts contain no SQL. |
 | `scripts/close-idle-intakes.mjs`, `scripts/export-intake-events.mjs` | Manual operator scripts: bounded idle closure and the privacy-checked event export (below). |
 | `scripts/intake-kpis.mjs` | Read-only: the dispute managers' KPIs for one window as JSON, aggregates only. Definitions and the test that proves them: `Docs/intake/intake-events.md`, "Dispute-manager KPIs". |
@@ -42,7 +45,7 @@ These steps need Node 22 or newer and no Cloudflare account. From the repository
 ```bash
 npm --prefix front-end ci && npm --prefix front-end run build
 npm --prefix back-end ci && npm --prefix back-end run prepare-assets
-npm --prefix back-end test          # unit tests, then integration tests on a throwaway local D1
+npm --prefix back-end test          # unit tests, then the native accounting check, then integration and budget tests on a throwaway local D1
 ```
 
 The event-export tests run the Python scorer `evals/intake/episodes.py`, which needs only the standard library (Python 3.10 or newer). The tests and the exporter pick the interpreter in this order (`scripts/scorer-python.mjs`):
@@ -73,6 +76,7 @@ There is no team password. Customers sign in with an email one-time code (`POST 
 | `GET /demo/identities` | none | Committed identities, then up to 1,000 dataset customers from D1, each with `country` (one query) | 200, 503; 404 without `DEMO_PICKER=1` |
 | `POST /demo/session` | none | Simulated customer login for a committed identity or a D1 dataset customer; malformed ids are rejected before any query | 200, 422, 503 (committed identity not loaded); 404 without `DEMO_PICKER=1` |
 | `GET /transactions` | customer | The customer's own charges, one page, with `has_more` | 200, 401 |
+| `POST /transactions/displayed` | customer | Body exactly `{ view_ref }` from `GET /transactions`: the client rendered that recorded view. Bound to the session customer; a replay keeps the first `displayed_at` | 200, 401, 404 (another customer's or unknown view), 422 |
 | `POST /cases` | customer | Legacy one-step confirmed case | 201, 200 (replay), 401, 404, 409, 422, 503 |
 | `POST /intake/start` | customer | Start an explicit guided ES/PT/EN unrecognized-charge report (10–2,000 code points, no U+0000, UUID key); optional `previous_protocol` links an own acknowledged closed report. No case reference is returned. A same-key replay returns the original, immutable start receipt (`state: selection_required`) even after the episode was abandoned or handed off, so it does not describe the current state | 201, 200 (same key and content), 401, 404 (previous report missing/foreign/unacknowledged), 409 (key conflict or previous report open), 422, 503 (retry the same key) |
 | `POST /intake/confirm` | customer | Confirm one owned transaction; returns the protocol only after the case and handoff are read back | 201, 200 (same key and content replays the receipt), 401 (expired or revoked, including in the reservation itself; renew as the same customer and retry the same key), 404 (episode or transaction not owned; foreign and missing look identical), 409 ("Episode already submitted with different content or key" once a handoff exists; "Episode is no longer open" after abandonment, when there is no reservation), 422, 503 (acceptance unknown; retry the same key) |
@@ -84,6 +88,7 @@ There is no team password. Customers sign in with an email one-time code (`POST 
 | `GET /auth/me` | none; reads the presented cookies | ADR-013 phase 0: `{ customer: { customer_id, roles, context_card } \| null, agent }` for the browser's live sessions, so a reload restores the signed-in state; never a token or expiry (`sessionState`) | 200, 422 (any query) |
 | `GET /intake/service-times` | customer | This bank's history for "How long does it take?": the newest reviewed `service_timing` baseline (migration 0027, from `gold.complaint_timing`) with its population (subcategory, window, complaints, source) and, per metric, p50, p90, `n`, `missing` and `negative`. `first_response` is what the customer is told; `creation_to_resolution` is marked `resolved_only` and never shown as an expected time. Not a prediction or a service level | 200, 401, 422 (any query parameter), 503 (no baseline loaded) |
 | `GET`, `POST /intake/handoff/{reference}/messages` | customer | The thread with the agent on an own acknowledged report ([ADR-015](../Docs/ADRs/ADR-015-agent-customer-messages.md)): `{ status, can_post, items }`, oldest first, at most 50. A post is exactly `{ body, idempotency_key }`, 1–2,000 characters: 201 when stored, 200 for a replay of the same key and text, 409 for the same key with other text, a closed report or a full thread. Messages are never emailed, logged or put in events | 200, 201, 401, 404 (another customer's or a missing report), 409, 422 |
+| `POST /intake/handoff/{reference}/assist` | customer | AI help on an own report ([ADR-016](../Docs/ADRs/ADR-016-report-support-assistants.md)): body exactly `{ question, language, request_id }`; classifies the question, saves no text and returns the fresh status snapshot. Off unless `ASSIST_CUSTOMER_ENABLED = '1'` | 200, 401, 404, 409 (`request_id` reused), 422, 429 (`Retry-After: 60`), 503 (switch off, dataset customer or provider failure: a localized manual fallback) |
 | `GET /reports` | customer | The customer's own acknowledged reports, newest first, 20 a page with `has_more`: reference, kind, status, next step and the confirmed charge id (null without one) | 200, 401, 422 (any query parameter) |
 | `GET /alerts` | customer session | The proactive alert ([ADR-011](../Docs/ADRs/ADR-011-proactive-alert-bank-flag.md)): `{ alert }`, the session customer's newest bank-flagged charge not yet answered or reported, or null (`proactiveAlert`). The fraud score never reaches D1; only the flag | 200, 401, 422 (any query) |
 | `POST /alerts/answer` | customer session | Body exactly `{ transaction_id, answer }` (`mine` or `report`) on the customer's own flagged charge; the first answer stands, concurrent answers store one (`alertAnswer`). An admin acting as the customer answers as `admin`, which never silences the customer's alert | 200, 401, 404 (not the customer's flagged charge), 422 |
@@ -93,6 +98,7 @@ There is no team password. Customers sign in with an email one-time code (`POST 
 | `GET /agent/intakes` | agent | Newest 50 acknowledged intake handoffs (complete, incomplete, technical) with `has_more`; pending reservations are excluded | 200, 401 |
 | `GET`, `POST /agent/intake-messages` | agent | The same thread, from the agent's side: `GET ?protocol=…`; a post is exactly `{ protocol, body, idempotency_key }`. The agent session is recorded as its 12-hex reference and never served | 200, 201, 401, 404, 409, 422 |
 | `GET /agent/intake-detail?protocol=<uuid>` | agent | Statement, verified evidence (or `null`), server actions, open questions and recorded service history (100 events, `history_has_more`); `model_reading` (`off` or `suggestion`, version and call count only) and `customer_suggestion` (the customer's answer to a suggestion: the confirmed owned charge or `none`, always `verified_by_bank: false`, with the agent's mark); `customer_history` summarises at most 20 other acknowledged reports in the customer's newest 21 episodes, with `has_more` when the window is full; `first_opened_at` is the UTC ISO first-agent-open timestamp (one epoch-ms write, then no writes on later reads) | 200, 401, 404, 422 (anything but exactly one valid `protocol`) |
+| `POST /agent/intake-assist` | agent | Unsaved reviewer draft for an acknowledged report ([ADR-016](../Docs/ADRs/ADR-016-report-support-assistants.md)): body exactly `{ protocol, language, request_id }`; a person sends messages and changes status. Off unless `ASSIST_REVIEWER_ENABLED = '1'` | 200, 401, 404, 409 (closed, `request_id` reused or report changed), 422, 429 (`Retry-After: 60`), 503 (switch off, dataset customer or provider failure: a localized manual fallback) |
 | `POST /agent/intake-status` | agent | Move a report one step, received → in review → closed, with a history row and one email to the customer; a replay writes nothing | 200, 401, 404, 409 (invalid step/different note), 422 (invalid body or missing/invalid closing note) |
 | `POST /agent/suggestion-mark` | agent | Body exactly `{ protocol, mark }` (`correct` or `wrong`): a person's label on the charge the customer confirmed from a suggestion, recorded with the agent session's 12-hex reference. The first mark stands; it changes no status and decides nothing (`suggestionMark`) | 200 (the same mark again too), 401, 404 (no confirmed suggestion), 409 (a different mark), 422 |
 | `GET /audit/events?limit=` | none; `Authorization: Bearer <Cognito ID token>` in group `auditor` or `admin` on every call | The newest sign-in events and review-status changes, `limit` (1–100, default 50) of each, with `has_more`; references only (no customer id, email, statement or token); writes nothing | 200, 401, 403 (not `auditor` or `admin`), 422 (no token, or a bad `limit`), 503 (JWKS unreachable) |
@@ -245,6 +251,10 @@ The client polls `GET …/suggestions` for at most about 15 s after such a recei
 | `VERTEX_MODEL_RETIRES` | var | `2027-01-31`, v2's review date (Google has announced no shutdown for Gemini 3.5 Flash-Lite): from that UTC day the Worker records `retired` and never calls the model; with the switch on, `predeploy.mjs` fails a day before. It can only move retirement earlier than the built-in 2027-01-31 |
 | `INTAKE_AI_DAILY_CAP` | optional var | Extractions per UTC day (each at most two calls); default 200 |
 | `VERTEX_WIF_SIGNING_KEY` | **secret** | The Worker's PKCS#8 PEM private key: `npx wrangler secret put VERTEX_WIF_SIGNING_KEY`. Never a var; `predeploy.mjs` refuses it in `vars` |
+| `ASSIST_REVIEWER_ENABLED`, `ASSIST_CUSTOMER_ENABLED` | optional var | The report support assistants ([ADR-016](../Docs/ADRs/ADR-016-report-support-assistants.md)). Exactly `"1"` turns one on; absent is off, as in production |
+| `SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY` | **secret** | The SES credentials for notification email; with `SES_REGION` (var, `us-east-2`) and `SES_FROM` missing, no email is attempted |
+| `SES_FROM` | **secret** | The sender address, today `Arabica AI <noreply@arabicaai-demo.com>`. It once held a person's address, so `predeploy.mjs` still refuses it in `vars` |
+| `EMAIL_KEY` | **secret** | 32 bytes, base64: the AES-GCM key that encrypts the stored email address. Without it sign-in proceeds and no address is stored |
 
 `VERTEX_TEST_ORIGIN` (honoured only for a loopback `http` origin) and `INTAKE_AI_TEST_ARM` are local test seams that `run-local.mjs` writes to `.dev.vars`; `predeploy.mjs` refuses both in `vars`.
 
@@ -258,7 +268,7 @@ The client polls `GET …/suggestions` for at most about 15 s after such a recei
 
 ## Resetting demo activity
 
-`scripts/reset-demo-activity.sql` deletes report feedback and handoff status history, then intake events, turns, handoffs and episodes, then cases, then sessions: that order respects `intake_handoffs.complete_case_id → cases`, which makes the older `DELETE FROM cases; DELETE FROM sessions;` fail. Customers, transactions, context cards and provenance stay. Locally:
+`scripts/reset-demo-activity.sql` deletes report feedback, handoff status history, handoff messages, alert answers (`proactive_answers`), act-as audit (`admin_actions`) and assist metadata (`support_assist_runs`), then intake events, turns, handoffs and episodes, then cases, then sessions: that order respects `intake_handoffs.complete_case_id → cases`, which makes the older `DELETE FROM cases; DELETE FROM sessions;` fail. Customers, transactions, context cards and provenance stay. Locally:
 
 ```bash
 npx wrangler d1 execute arabica-intake-demo --local --file scripts/reset-demo-activity.sql
@@ -319,12 +329,12 @@ Record the date and the results of each check in ADR-004's implementation notes:
 4. A confirmed case returns a reference, and a retry returns the same one.
 5. The agent view shows the case.
 6. The case is still there after a new deploy.
-7. A page load adds two Worker requests (the document and the identity list); bundles don't add any.
+7. A page load adds two Worker requests (the document and `/auth/me`); bundles don't add any.
 8. `GET /healthz` returns `{"status":"ok"}`.
 
 ## Limits
 
-Free plan: 100,000 Worker requests per day, 10 ms of CPU per request, 50 D1 queries per invocation, 5 million rows read and 100,000 rows written per day, and 500 MB per database. A page load adds 2 Worker requests (document + identity list) that touch no D1. Measured D1 cost on local D1 (budget test, 2026-09-30):
+Free plan: 100,000 Worker requests per day, 10 ms of CPU per request, 50 D1 queries per invocation, 5 million rows read and 100,000 rows written per day, and 500 MB per database. A page load adds 2 Worker requests (the document and `/auth/me`) that touch no D1. Measured D1 cost on local D1 (budget test, 2026-09-30):
 
 - **Legacy customer episode** (login, list, `POST /cases`): 3 API requests, 10 queries, 10 rows read, 7 rows written.
 - **Guided complete episode** (login, list, start, confirm): 4 API requests, 30 queries, 69 rows read, 36 rows written, 15 round trips.

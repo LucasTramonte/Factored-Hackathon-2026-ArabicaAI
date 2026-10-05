@@ -350,7 +350,7 @@ make transcript-labels \
 
 The target runs the transcript quality checks first (`make pipeline-with-labels` runs the whole pipeline before it; `python -m data_pipelines.transcript_labels --first ... --second ...` assumes a passing gate). Missing caches fail explicitly. `enrichment.interaction_labels` then holds 132,668 provisional + 38,653 review_required + 514,975 no_transcript = 686,296 interactions; the 171,321 transcript-bearing records share 546 distinct texts. Source labels are never overwritten, and no accuracy claim is made without human adjudication.
 
-**Offline evaluation checks.** The online service is deterministic, extractor off. These fixtures need no key and call no model or cloud:
+**Offline evaluation checks.** Extractor v2 suggestions are on in the demo. These fixtures need no key and call no model or cloud:
 
 ```bash
 .venv/bin/python -m pytest intake_agent/extractor/test_vertex.py \

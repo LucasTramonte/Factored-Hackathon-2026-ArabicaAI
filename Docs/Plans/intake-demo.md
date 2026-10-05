@@ -32,7 +32,7 @@ make intake-test           # Gold slice tests, Angular specs, Worker unit and in
 
 ## Customer lifecycle rehearsal (2026-10-04)
 
-The [dated evidence](../Evidence/customer-clarity-lifecycle-2026-10-04.md) records the local authored API rehearsal and automated UI checks. These are regression evidence, not fresh tester findings or held-out extractor results. A local Chrome customer and separate in-app-browser reviewer rehearsal also verified saved progress, replies, plain-text explanation, passive refresh and linked follow-up. Three fresh testers and live SES/inbox verification remain **pending external**; deployed OTP and assistive-technology checks remain untested.
+The [dated evidence](../Evidence/customer-clarity-lifecycle-2026-10-04.md) records the local authored API rehearsal and automated UI checks. These are regression evidence, not fresh tester findings or held-out extractor results. A local Chrome customer and separate in-app-browser reviewer rehearsal also verified saved progress, replies, plain-text explanation, passive refresh and linked follow-up. Three fresh testers remain **pending external**; SES acceptance and inbox delivery of a report email were confirmed in production on 2026-10-04 at 20:16 UTC ([observability runbook](observability-runbook.md)); deployed OTP and assistive-technology checks remain untested.
 
 ### Human-operated demonstration protocol
 
@@ -43,10 +43,12 @@ Repeat the following in Spanish and Portuguese, then smoke-check English. Record
 1. Find an owned charge, report it with an explicit confirmation, and note the acknowledged reference. Retry the same submission key: it must recover the same reference. A failed write/read-back must not say it was saved.
 2. Use the missing-charge entry: provide sufficient details for an eligible suggestion, confirm one suggested owned charge; on another report reject the suggestions. Demonstrate no clear match and service-unavailable fallback separately. Both keep a saved human handoff; no suggested charge becomes verified bank evidence.
 3. In the separate reviewer session, open that report, send a response and move `received → in_review`. Return to the customer view and observe the actual response/progress update. Refresh manually and refocus the tab; hidden/offline tabs pause background refresh. A failed refresh preserves the last confirmed state and reports staleness.
-4. Enter “Explica qué se revisó y qué debe hacer el cliente” and choose **Enviar explicación y terminar revisión** (equivalent PT/EN labels). The state becomes `closed`, with the stored plain-text explanation. Missing/invalid new explanations return 422; previous closed/null reports show the legacy missing-explanation message. Finishing this demo review is no bank investigation, refund, card block, fraud finding or resolution.
+4. In the field labelled “Explica qué se revisó y qué debe hacer el cliente”, enter an explanation and choose **Enviar explicación y terminar revisión** (equivalent PT/EN labels). The state becomes `closed`, with the stored plain-text explanation. Missing/invalid new explanations return 422; previous closed/null reports show the legacy missing-explanation message. Finishing this demo review is no bank investigation, refund, card block, fraud finding or resolution.
 5. In the customer view read the latest reply and explanation. Closed messages are read-only. Choose **Todavía necesito ayuda** / **Ainda preciso de ajuda** / **I still need help**, submit a linked follow-up and check its new reference while the source stays closed.
 6. Reload, log out and sign back in using a fresh customer session. Recover complete, incomplete and technical reports and their original content, messages and progress. Use another customer's session to verify the reports and threads are absent; foreign references must look like missing references. The recent list holds 20 reports; the “more reports” notice means older reports remain stored, not that this phase offers unlimited navigation.
 7. Open Help and replay the tour: check Tab/Shift-Tab containment, Escape, focus return, scroll/resize, completion/skip persistence, and ES/PT/EN copy. Tour steps must not submit or answer a report. Manually confirm this on the assembled page and with assistive technology before claiming that coverage.
+
+The customer "AI help · this session only" panel and the reviewer "Prepare reply" (#132, [ADR-016](../ADRs/ADR-016-report-support-assistants.md)) are off in production and not part of this demo.
 
 ### Status email checkpoints
 
@@ -55,8 +57,8 @@ With authorization, request **one** report update to the user's own test inbox. 
 | Checkpoint | Required evidence | Current Task 6 status |
 |---|---|---|
 | Queued | Owned request returns 202 and corresponding reference-only outbox row | Demonstrated locally; unconfigured local sender skips |
-| Provider accepted | Authorized operator observes SES message id / outbox `sent` | Pending external; current Cloudflare account cannot access demo D1 |
-| Inbox received | User confirms receipt or authorized inbox read | Pending external; no test inbox receipt obtained |
+| Provider accepted | Authorized operator observes SES message id / outbox `sent` | Confirmed 2026-10-04 20:16 UTC for a report email (see [observability runbook](observability-runbook.md)) |
+| Inbox received | User confirms receipt or authorized inbox read | Confirmed 2026-10-04 20:16 UTC (see [observability runbook](observability-runbook.md)) |
 | Link recovery/privacy | Inspect generic reference/status/language template and token-free app link; open received link signed out, then sign in and recover only owned reports | Template unit checks pass; received-link browser check pending external |
 
 HTTP 202 means queued, and schema `sent` means SES accepted, neither means delivered. Do not include customer statement or closing explanation in email. Respect the five-minute queued/accepted cooldown, ten-second failed/skipped retry and server `Retry-After`; do not keep clicking to collect evidence.
@@ -109,7 +111,7 @@ The observed customer CSV has fields such as `first_name`, `last_name` and `last
 
 ## Deployed preview
 
-The Worker `factored-hackathon-2026-arabicaai` runs at https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Customers and agents sign in with a Cognito email code; there is no team password once this branch deploys ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)). Until Phase 1 deploys, Cloudflare Access (email allowlist) still fronts the whole hostname.
+The Worker `factored-hackathon-2026-arabicaai` runs at https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/. Customers and agents sign in with a Cognito email code; there is no team password ([ADR-007](../ADRs/ADR-007-customer-identity-cognito-email-otp.md)).
 
 - On 2026-09-29, production D1 held both migrations, the fictitious seed and no cases.
 - Loading the Gold slice into production is a reviewed, manual step (`back-end/README.md`, "Deployment").
@@ -124,7 +126,7 @@ The full procedure (roles, enrolment, removal, tests, troubleshooting, evaluator
 
 Customers sign in with an email one-time code from the Amazon Cognito user pool `arabicaai-demo` (`us-east-2`, Essentials tier, account `arabica`). Email is the username, self sign-up is off, and each customer user carries the immutable attribute `custom:customer_id`, which the Worker maps to a customer loaded in D1. The pool id and the public app client id (`arabicaai-web`, no secret) are plain `vars` in `back-end/wrangler.jsonc`. Cognito requires `PASSWORD` in the pool's allowed first factors, so it is listed, but no user is ever given a known password, and the client requests and accepts only `EMAIL_OTP`. An admin-created user starts in `FORCE_CHANGE_PASSWORD`; on 2026-10-01 that status did not block the `EMAIL_OTP` challenge (no `admin-set-user-password` workaround was needed), and the first email-code sign-in confirmed the user, which is now `CONFIRMED`. Groups: `customer`, `agent`, `admin`, `auditor`.
 
-Production has no demo identity picker once Phase 1 deploys: `/demo/identities` and `/demo/session` exist only when `DEMO_PICKER=1` (local development), so customers sign in with their email code.
+Production has no demo identity picker: `/demo/identities` and `/demo/session` exist only when `DEMO_PICKER=1` (local development), so customers sign in with their email code.
 
 `COGNITO_TEST_JWKS` is a local-test variable only; never set it as a Worker var or secret (the deploy guard refuses it in `vars`). `DEMO_PICKER` must never be set as a Worker var or secret either: with no team gate it would let anyone become any customer or agent (the deploy guard refuses it in `vars`; it cannot see secrets).
 
@@ -134,15 +136,9 @@ back-end/scripts/cognito/enroll.sh <email> <customer_id> [group]   # customer; n
 back-end/scripts/cognito/enroll.sh <email> - agent                 # agent, admin or auditor: no customer id
 ```
 
-Both use `--profile ${AWS_PROFILE:-arabica}` and can be rerun. Judges' and teammates' emails are enrolled with `enroll.sh`; each person who reviews reports on `/agent` is enrolled with `enroll.sh <email> - agent` (a customer-only account gets 403 there); the customer id cannot change after creation, so delete the user first to re-map one. Once Phase 1 deploys, a person removes Cloudflare Access from the hostname in the Zero Trust dashboard; until then Access still fronts the sign-in page.
+Both use `--profile ${AWS_PROFILE:-arabica}` and can be rerun. Judges' and teammates' emails are enrolled with `enroll.sh`; each person who reviews reports on `/agent` is enrolled with `enroll.sh <email> - agent` (a customer-only account gets 403 there); the customer id cannot change after creation, so delete the user first to re-map one.
 
-#### Before deploying this change (agent sign-in)
-
-1. Enrol each agent with `back-end/scripts/cognito/enroll.sh <email> - agent`; otherwise nobody can open the agent view.
-2. Deploy.
-3. Sign in once as a customer and once as an agent on the live URL.
-4. Remove the Cloudflare Access application in the Zero Trust dashboard.
-5. Delete the `DEMO_ACCESS_USERNAME` and `DEMO_ACCESS_PASSWORD` Worker secrets (`cd back-end && npx wrangler secret delete DEMO_ACCESS_USERNAME && npx wrangler secret delete DEMO_ACCESS_PASSWORD`); the Worker no longer reads them.
+Agent sign-in shipped with the Cognito phases (PRs #61 and #65); its one-time deploy steps are history.
 
 ### Notification email (SES)
 

@@ -4,7 +4,7 @@
 
 | Layer | Where | What it answers | Set up |
 |---|---|---|---|
-| **Worker logs and traces** | Cloudflare Workers Logs (`observability` in `back-end/wrangler.jsonc`: logs and traces on, 100% sampled, persisted) | What each request did: route, status, latency, D1 work, unexpected errors, each AI suggestion run | On since #113; the Worker's own structured lines since this PR |
+| **Worker logs and traces** | Cloudflare Workers Logs (`observability` in `back-end/wrangler.jsonc`: logs and traces on, 100% sampled, persisted) | What each request did: route, status, latency, D1 work, unexpected errors, each AI suggestion run | On since #113; the Worker's own structured lines since #118 |
 | **External availability** | Cloud Monitoring uptime check `arabica-intake-healthz` (GCP) | Can customers reach the service at all (Worker plus D1)? | Created 2026-10-04 ([`scripts/gcp/monitoring/`](../../scripts/gcp/monitoring/README.md)) |
 | **Model provider** | Cloud Monitoring, Vertex AI's native metrics (GCP) | Is Gemini throttling, failing or slow? | Created 2026-10-04, same folder |
 
@@ -72,7 +72,7 @@ Use existing Worker request logs for status/latency grouped by route-table keys 
 
 Human release checklist, still unperformed:
 
-1. Inspect ADR/data scope, frozen labels/hashes, complete reviewed live safety/quality/performance/cost evidence, operator pilot and PR; separately approve each assistant switch. Normal green-main deployment applies additive migration 0030 before Worker release. No agent runs remote migrations, changes IAM, deploys, merges or activates.
+1. Inspect ADR/data scope, frozen labels/hashes, complete reviewed live safety/quality/performance/cost evidence, operator pilot and PR; separately approve each assistant switch. Migration 0030 was applied by the #132 deploy on 2026-10-05; both switches stay absent. No agent runs remote migrations, changes IAM, deploys, merges or activates.
 2. On the actual production URL, record deployment SHA and matching frontend assets; verify login/OTP/logo and ES/PT/EN email requests, owned customer message persistence, waiting/status, explicit reviewer edit/send, reply, closure/follow-up, source/identity isolation and each approved switch. Retain aggregate evidence and exact UTC observation bounds. Local screenshots do not prove production behavior or email receipt.
 3. Observe route errors/latency and dedicated usage/cost by feature. Any reviewed safety failure blocks the affected feature immediately; successful generation p95 > 8 s, failed/timeout share > 5%, deadline violation or spend beyond approved allowance requires investigation and disabling that feature. Report sample size/window and all failures; the existing provider alerts may also cover the extractor and are not a dedicated support gate.
 4. A person disables only the failing assistant switch and confirms the production configuration/deployment. Recheck manual messages, factual status and existing extraction. Preserve private failure evidence; no automatic banking action, closure or model retry is introduced. Re-enable only after human review and explicit approval.
