@@ -100,9 +100,14 @@ test('the documented demo-activity reset respects intake foreign keys and keeps 
   // The pre-intake recipe in ADR-004 now violates intake_handoffs.complete_case_id -> cases(case_id).
   assert.throws(() => db.exec('BEGIN; DELETE FROM cases; DELETE FROM sessions; COMMIT'), /FOREIGN KEY/);
   db.exec('ROLLBACK');
+  // Later activity tables: a thread message references its handoff (0028); the others hold demo activity only.
+  db.exec(`INSERT INTO handoff_messages(message_id,handoff_id,author,body,idempotency_key,created_at) SELECT 'm1',handoff_id,'customer','Hola','k1',1 FROM intake_handoffs LIMIT 1;
+    INSERT INTO support_assist_runs(request_id,session_hash,mode,protocol,created_at,version) VALUES ('00000000-0000-4000-8000-000000000001','${'a'.repeat(64)}','customer','p',1,'v');
+    INSERT INTO proactive_answers(customer_id,transaction_id,answered_by,answer,answered_at) VALUES ('demo-ana','demo-tx-001','customer','mine',1);
+    INSERT INTO admin_actions(ts,action,admin_session_ref,session_ref,request_id) VALUES (1,'act_as','aaaaaaaaaaaa','bbbbbbbbbbbb','r');`);
   const seed = ['customers', 'transactions', 'context_cards', 'sample_provenance'].map(t => rows(db, t));
   db.exec(readFileSync(new URL('../../scripts/reset-demo-activity.sql', import.meta.url), 'utf8'));
-  for (const table of [...TABLES, 'sessions', 'charge_views', 'report_feedback', 'handoff_status_history']) assert.equal(rows(db, table), 0, table);
+  for (const table of [...TABLES, 'sessions', 'charge_views', 'report_feedback', 'handoff_status_history', 'handoff_messages', 'support_assist_runs', 'proactive_answers', 'admin_actions']) assert.equal(rows(db, table), 0, table);
   assert.deepEqual(['customers', 'transactions', 'context_cards', 'sample_provenance'].map(t => rows(db, t)), seed);
   assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
   db.close();
