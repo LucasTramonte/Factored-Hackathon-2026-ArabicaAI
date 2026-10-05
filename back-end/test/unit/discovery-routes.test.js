@@ -59,3 +59,17 @@ test('a session revoked during the call discards the result, records stale and n
   const res = await discoverTransactions(req(), env, s, null, search({}));
   assert.equal(res.status, 401); assert.equal(finished.outcome, 'stale');
 });
+
+test('amount comparisons without currency ask for clarification in every language without searching', async () => {
+  const messages = { es:'Indica el comercio, la fecha o el monto del cargo.', pt:'Informe o estabelecimento, a data ou o valor da cobrança.', en:'Give the merchant, date or amount of the charge.' };
+  for (const [language, detail] of Object.entries(messages)) {
+    for (const amount_operator of ['eq', 'gt', 'gte', 'lt', 'lte']) {
+      const s = store(); s.searchOwnedTransactions = () => assert.fail('no cross-currency search');
+      const res = await discoverTransactions(req({ language }), env, s, null, search({ criteria:{ ...criteria, currency:null, amount_operator, amount:0 } }));
+      assert.equal(res.status, 422); assert.deepEqual(await res.json(), { detail });
+    }
+    const res = await discoverTransactions(req({ language }), env, store(), null,
+      search({ criteria:{ ...criteria, currency:null, amount_operator:null, amount:null } }));
+    assert.equal(res.status, 200, 'merchant/date searches do not require currency');
+  }
+});

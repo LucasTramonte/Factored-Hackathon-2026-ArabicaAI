@@ -48,6 +48,7 @@ export async function discoverTransactions(request, env, store, ctx, generate = 
   if (timedOut || !result.ok) { log(outcome); return fallback(); }
   const { intent, criteria, missing_fields, confidence } = result.value;
   if (!DISCOVERY_SEARCH_INTENTS.includes(intent)) { log(intent); return fail(422, NARROW[v.language]); }
+  if (criteria.amount_operator && !criteria.currency) { log('needs_clarification', { intent }); return fail(422, NARROW[v.language]); }
   let items;
   try { items = await store.searchOwnedTransactions(session.customer_id, criteria); }
   catch { log('search_failure', { intent }); return fallback(); }

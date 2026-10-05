@@ -102,3 +102,16 @@ test('LIKE wildcard characters in a hint are literal and cannot broaden the matc
   assert.deepEqual(await search({ merchant_hint: 'shop_' }), ['underscore']);
   assert.deepEqual(await search({ merchant_hint: 'shop\\' }), ['backslash']);
 });
+
+for (const split of ['development', 'acceptance']) {
+  test(`${split} corpus candidate IDs match the Worker lookup in order`, async t => {
+    const { db, insert, search } = setup(t);
+    const cases = readFileSync(new URL(`../../../evals/support_assist/discovery-${split}.jsonl`, import.meta.url), 'utf8').trim().split('\n').map(JSON.parse);
+    for (const row of cases.filter(row => row.expected.criteria)) {
+      db.exec('DELETE FROM transactions');
+      for (const tx of row.fixture_transactions) insert(tx.transaction_id, { merchant:tx.merchant_name, amount:tx.amount,
+        currency:tx.currency, date:tx.occurred_at, source:tx.source_occurred_at ?? null });
+      assert.deepEqual(await search(row.expected.criteria), row.expected_candidate_ids, row.id);
+    }
+  });
+}

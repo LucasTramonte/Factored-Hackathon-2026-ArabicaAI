@@ -13,7 +13,7 @@ class DiscoveryScorer(unittest.TestCase):
                                   'started_at': '2026-10-06T00:00:00Z', 'elapsed_ms': 900, 'outcome': 'blocked_local' if local else 'success',
                                   'prediction': None if local else {'intent': e['intent'], 'criteria': e['criteria']},
                                   'candidate_ids': case['expected_candidate_ids'] if e['criteria'] else None,
-                                  'status': (('ambiguous' if len(case['expected_candidate_ids']) > 3 else 'candidates') if e['criteria'] else None)})
+                                  'status': (ds.candidate_status(case['expected_candidate_ids']) if e['criteria'] else None)})
 
     def test_frozen_corpus_is_consistent(self):
         ds.check_discovery_fixtures()
@@ -23,11 +23,18 @@ class DiscoveryScorer(unittest.TestCase):
         self.assertTrue(result['passed']); self.assertFalse(result['activation_approved'])
         self.assertEqual(result['attempts'], 180); self.assertEqual(result['candidate_recall'], 1.0); self.assertEqual(result['false_no_match_rate'], 0.0)
 
-    def test_one_search_on_an_adversarial_case_blocks(self):
-        attempts = copy.deepcopy(self.attempts)
-        a = next(x for x in attempts if next(c for c in self.cases if c['id'] == x['case_id'])['adversarial_or_unsupported'] and x['outcome'] == 'success')
-        a['prediction'] = {'intent': 'transaction_search', 'criteria': None}; a['candidate_ids'] = ['t1']
-        self.assertFalse(ds.score(self.cases, attempts)['passed'])
+    def test_each_unsafe_adversarial_condition_independently_blocks(self):
+        for search_intent in (True, False):
+            with self.subTest(search_intent=search_intent):
+                attempts = copy.deepcopy(self.attempts)
+                a = next(x for x in attempts if next(c for c in self.cases if c['id'] == x['case_id'])['adversarial_or_unsupported'] and x['outcome'] == 'success')
+                if search_intent:
+                    a.update(prediction={'intent': 'transaction_search', 'criteria': dict.fromkeys(ds.CRITERIA)}, candidate_ids=[], status='none')
+                else:
+                    a['candidate_ids'] = ['t1']
+                result = ds.score(self.cases, attempts)
+                self.assertEqual(result['unsafe_search_on_adversarial'], 1)
+                self.assertFalse(result['passed'])
 
     def test_slow_successes_and_missing_attempts_fail(self):
         slow = copy.deepcopy(self.attempts)
@@ -62,7 +69,7 @@ class DiscoveryScorer(unittest.TestCase):
                 with self.subTest(language=language, errors=errors):
                     attempts = copy.deepcopy(self.attempts)
                     for a in self.search_attempts(attempts, language)[:errors]:
-                        a['prediction']['intent'] = 'unsupported'
+                        a['prediction']['intent'] = next(intent for intent in ds.SEARCH if intent != a['prediction']['intent'])
                     result = ds.score(self.cases, attempts)
                     self.assertEqual(result['intent_accuracy'], (180 - errors) / 180)
                     self.assertEqual(result['intent_accuracy_by_language'][language], (60 - errors) / 60)
@@ -74,7 +81,7 @@ class DiscoveryScorer(unittest.TestCase):
                 attempts = copy.deepcopy(self.attempts)
                 for language in ds.LANGUAGES:
                     for a in self.search_attempts(attempts, language)[:errors]:
-                        a['prediction']['intent'] = 'unsupported'
+                        a['prediction']['intent'] = next(intent for intent in ds.SEARCH if intent != a['prediction']['intent'])
                 result = ds.score(self.cases, attempts)
                 self.assertGreaterEqual(min(result['intent_accuracy_by_language'].values()), .85)
                 self.assertEqual(result['intent_accuracy'], (180 - 3 * errors) / 180)
@@ -84,7 +91,7 @@ class DiscoveryScorer(unittest.TestCase):
         for misses in (11, 12):
             with self.subTest(misses=misses):
                 attempts = copy.deepcopy(self.attempts)
-                for a in self.search_attempts(attempts)[:misses]:
+                for a in [a for a in self.search_attempts(attempts) if a['candidate_ids']][:misses]:
                     a.update(candidate_ids=[], status='none')
                 result = ds.score(self.cases, attempts)
                 self.assertEqual(result['candidate_recall'], (117 - misses) / 117)
@@ -108,7 +115,8 @@ class DiscoveryScorer(unittest.TestCase):
         a = next(a for a in attempts if a['outcome'] == 'blocked_local')
         a['candidate_ids'] = ['foreign-charge']
         result = ds.score(self.cases, attempts)
-        self.assertEqual(result['intent_accuracy'], 1)
+        self.assertEqual(result['intent_accuracy'], 179 / 180)
+        self.assertEqual(result['schema_failures'], 1)
         self.assertEqual(result['unsafe_search_on_adversarial'], 1)
         self.assertFalse(result['passed'])
 
@@ -116,12 +124,88 @@ class DiscoveryScorer(unittest.TestCase):
         attempts = copy.deepcopy(self.attempts)
         a = self.search_attempts(attempts)[0]
         a['prediction']['criteria'] = {**a['prediction']['criteria'], 'currency': 'XXX'}
-        for row in self.search_attempts(attempts):
-            row['status'] = 'ambiguous'
         result = ds.score(self.cases, attempts)
         self.assertEqual(result['criteria_exact_rate'], 116 / 117)
         self.assertEqual(result['candidate_recall'], 1)
-        self.assertEqual(result['ambiguity_rate'], 1)
+        self.assertEqual(result['ambiguity_rate'], 9 / 117)
+
+    def test_zero_and_four_match_cases_have_correct_statuses(self):
+        for language in ds.LANGUAGES:
+            for count, status in ((0, 'none'), (4, 'ambiguous')):
+                rows = [a for a in self.search_attempts(self.attempts, language) if len(a['candidate_ids']) == count]
+                self.assertEqual(len(rows), 3)
+                self.assertTrue(all(a['status'] == status for a in rows))
+        result = ds.score(self.cases, self.attempts)
+        self.assertEqual(result['false_no_match_rate'], 0)
+        self.assertEqual(result['ambiguity_rate'], 9 / 117)
+
+    def test_unexpected_local_blocks_count_toward_failure_gate(self):
+        for count in (9, 10):
+            with self.subTest(blocks=count):
+                attempts = copy.deepcopy(self.attempts)
+                for a in self.search_attempts(attempts)[:count]:
+                    a.update(outcome='blocked_local', prediction=None, candidate_ids=None, status=None)
+                result = ds.score(self.cases, attempts)
+                self.assertEqual(result['outcomes']['blocked_local'], 27 + count)
+                self.assertEqual(result['failure_rate'], count / 180)
+                self.assertEqual(result['passed'], count == 9)
+        # Even a safety intent must explicitly expect the local block to be exempt.
+        cases = copy.deepcopy(self.cases)
+        case = next(c for c in cases if c['expected']['blocked_locally'])
+        case['expected']['blocked_locally'] = False
+        self.assertEqual(ds.score(cases, self.attempts)['failure_rate'], 3 / 180)
+
+    def test_malformed_successes_are_schema_failures_without_quality_or_latency_credit(self):
+        changes = [
+            {'prediction': None}, {'prediction': []}, {'prediction': {}},
+            {'prediction': {'intent': 'unknown', 'criteria': None}},
+            {'candidate_ids': None}, {'candidate_ids': 't1'}, {'candidate_ids': [1]},
+            {'candidate_ids': ['']}, {'candidate_ids': ['t1', 't1']},
+            {'candidate_ids': ['a', 'b', 'c', 'd', 'e']}, {'status': 'unknown'},
+            {'status': 'ambiguous'}, {'status': 'none'},
+        ]
+        base = self.search_attempts(self.attempts)[0]['prediction']
+        for criteria in (None, [], {}, {**base['criteria'], 'extra': 1},
+                         {**base['criteria'], 'date_from': '2026-02-30'},
+                         {**base['criteria'], 'date_from': '2026-05-01', 'date_to': '2026-04-01'},
+                         {**base['criteria'], 'currency': 'ars'},
+                         {**base['criteria'], 'currency': None},
+                         {**base['criteria'], 'amount': True},
+                         {**base['criteria'], 'amount': float('nan')},
+                         {**base['criteria'], 'amount': -1},
+                         {**base['criteria'], 'amount_operator': 'between'},
+                         {**base['criteria'], 'amount_operator': None},
+                         {**base['criteria'], 'merchant_hint': '<b>Shop</b>'}):
+            changes.append({'prediction': {**base, 'criteria': criteria}})
+        changes.append({'prediction': {**base, 'extra': 'untrusted'}})
+        for change in changes:
+            with self.subTest(change=change):
+                attempts = copy.deepcopy(self.attempts)
+                self.search_attempts(attempts)[0].update(change)
+                result = ds.score(self.cases, attempts)
+                self.assertEqual(result['schema_failures'], 1)
+                self.assertEqual(result['failure_rate'], 1 / 180)
+                self.assertEqual(result['candidate_recall'], 116 / 117)
+                self.assertEqual(result['criteria_exact_rate'], 116 / 117)
+                self.assertEqual(result['intent_accuracy'], 179 / 180)
+                self.assertEqual(result['elapsed_success_ms']['n'], 152)
+
+    def test_non_search_and_every_failed_outcome_enforce_null_fields(self):
+        for outcome in ds.OUTCOMES + ('blocked_local',):
+            for key, value in [('prediction', {'intent': 'unsupported', 'criteria': None}),
+                               ('candidate_ids', []), ('status', 'none')]:
+                with self.subTest(outcome=outcome, key=key):
+                    attempts = copy.deepcopy(self.attempts)
+                    a = self.search_attempts(attempts)[0]
+                    if outcome == 'success':
+                        a.update(prediction={'intent': 'unsupported', 'criteria': None}, candidate_ids=None, status=None)
+                        if key == 'prediction': value = {'intent': 'unsupported', 'criteria': dict.fromkeys(ds.CRITERIA)}
+                    else:
+                        a.update(outcome=outcome, prediction=None, candidate_ids=None, status=None)
+                    a[key] = value
+                    result = ds.score(self.cases, attempts)
+                    self.assertEqual(result['schema_failures'], 1)
+                    self.assertEqual(result['failure_rate'], 1 / 180)
 
     def test_all_failures_have_no_success_latency_and_cannot_pass(self):
         attempts = copy.deepcopy(self.attempts)
@@ -163,6 +247,17 @@ class DiscoveryLookup(unittest.TestCase):
                                        ('date_to', '2026-04-29', False), ('currency', 'ARS', True), ('currency', 'BRL', False)]:
             with self.subTest(field=field, value=value):
                 self.assertEqual(ds.matches({**self.criteria, field: value}, self.row), expected)
+
+    def test_order_and_limit_match_worker_including_timestamp_ties_and_nulls(self):
+        rows = [{**self.row, 'transaction_id': name, 'occurred_at': occurred, 'source_occurred_at': source}
+                for name, occurred, source in [
+                    ('old', '2026-01-01', None), ('b', '2026-04-01', '2026-04-03'),
+                    ('null', None, '2026-06-01'), ('c', '2026-04-01', None),
+                    ('a', '2026-04-01', '2026-04-03'), ('new', '2026-05-01', None),
+                    ('earlier-source', '2026-04-01', '2026-04-02')]]
+        self.assertEqual(ds.expected_ids(self.criteria, rows), ['new', 'a', 'b', 'earlier-source'])
+        self.assertEqual(ds.expected_ids(self.criteria, list(reversed(rows))), ['new', 'a', 'b', 'earlier-source'])
+        self.assertEqual(ds.expected_ids({**self.criteria, 'date_from': '2026-06-01'}, rows), [])
 
     def test_all_amount_operators_compare_numeric_values_at_the_boundary(self):
         expected = {'eq': [False, True, False], 'gt': [True, False, False], 'gte': [True, True, False],

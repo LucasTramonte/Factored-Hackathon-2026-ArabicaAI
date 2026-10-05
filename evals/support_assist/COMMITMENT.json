@@ -7,9 +7,9 @@
     "acceptance.jsonl": "263af24bba6708d584c7f9aacfbc2056126ad770b0e8a4efa589dc67ebb66a96",
     "../../back-end/src/modules/intake/assist.js": "54bd1d3cc0c6aa464c02a66a09f9edb29153b1bf9551a1c3509db26614f9a35b",
     "../../back-end/src/modules/intake/assist-prompts.js": "50a750fe7e133bb6ad12b254a2852a7490d2d63ad5cc3ccf585131a8fb0616c9",
-    "discovery-development.jsonl": "32c1ffd00c477cf10ba99f5a54ffea1d1f4356ea9ed97c63844c2d26447ac789",
-    "discovery-acceptance.jsonl": "146548cc39939c6fea418b52f8d98f4455ae8607f591c07aa9cd078b9dcf1a19"
+    "discovery-development.jsonl": "b2c01d24feadb1bf51b132f6c97358f68187c7787aa812e06dd65c497a879da3",
+    "discovery-acceptance.jsonl": "24e13ab78e12ea3ab8022b6451ed4b404727409daf283c4275160620022a0d3a"
   },
   "amended_at": "2026-10-05T18:00:00Z",
-  "amendment": "Transaction discovery (support-discovery-v1) added to the shared transport files before any provider trial of any feature; reviewer and customer prompts, schemas, bounds and the reviewer/customer corpora are byte-identical to the 2026-10-05 freeze. Discovery corpus is template-generated synthetic ES/PT/EN text with deterministic expected candidates."
+  "amendment": "Transaction discovery (support-discovery-v1) added to the shared transport files before any provider trial of any feature; reviewer and customer prompts, schemas, bounds and the reviewer/customer corpora are byte-identical to the 2026-10-05 freeze. Discovery corpus is template-generated synthetic ES/PT/EN text with deterministic expected candidates. Discovery review correction: expected IDs now follow Worker ordering and LIMIT 4; acceptance cases 05 and 08 in each language cover zero and four matches. No provider-trial evidence is claimed."
 }

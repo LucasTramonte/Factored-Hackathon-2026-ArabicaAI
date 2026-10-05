@@ -2,23 +2,72 @@
 import argparse
 from collections import Counter
 import json
+import math
+import re
+from datetime import date
 from pathlib import Path
 from evals.support_assist.score import ROOT, LANGUAGES, OUTCOMES, check_fixtures, digest, distribution, exact, load_jsonl, require, stamp
 
 VERSION = 'support-discovery-v1@google/gemini-3.5-flash-lite'
 SEARCH = ('transaction_search', 'transaction_clarification', 'transaction_correction')
-STATUSES = ('none', 'ambiguous', 'candidates')
+INTENTS = SEARCH + ('transaction_confirmation', 'greeting_or_casual', 'unsupported', 'safety_or_injection')
+CRITERIA = ('merchant_hint', 'date_from', 'date_to', 'currency', 'amount_operator', 'amount')
 GATES = {'intent_accuracy': .90, 'intent_accuracy_per_language': .85, 'candidate_recall': .90, 'p95_success_ms': 4000, 'failure_rate': .05}
 
 
 def matches(criteria, row):
     """Apply the Worker's deterministic lookup semantics to one synthetic charge row."""
-    day, amount = row['occurred_at'][:10], float(row['amount'])
+    day, amount = (row['occurred_at'] or '')[:10], float(row['amount'])
     compare = {'eq': amount.__eq__, 'gt': amount.__gt__, 'gte': amount.__ge__, 'lt': amount.__lt__, 'lte': amount.__le__}
     return ((criteria['merchant_hint'] is None or criteria['merchant_hint'].lower() in row['merchant_name'].lower())
-            and (criteria['date_from'] is None or day >= criteria['date_from']) and (criteria['date_to'] is None or day <= criteria['date_to'])
+            and (criteria['date_from'] is None or bool(day) and day >= criteria['date_from']) and (criteria['date_to'] is None or bool(day) and day <= criteria['date_to'])
             and (criteria['currency'] is None or row['currency'] == criteria['currency'])
             and (criteria['amount_operator'] is None or compare[criteria['amount_operator']](criteria['amount'])))
+
+
+def expected_ids(criteria, rows):
+    """Match the Worker's SQL order (NULL last for DESC) and four-row ambiguity sentinel."""
+    selected = [row for row in rows if matches(criteria, row)]
+    selected.sort(key=lambda row: row['transaction_id'])
+    for key in ('source_occurred_at', 'occurred_at'):
+        selected.sort(key=lambda row: row.get(key) or '', reverse=True)
+    return [row['transaction_id'] for row in selected[:4]]
+
+
+def candidate_status(ids):
+    """Classify the bounded lookup, including the fourth ambiguity sentinel."""
+    return 'none' if not ids else 'ambiguous' if len(ids) == 4 else 'candidates'
+
+
+def validate_response(attempt):
+    """Validate the complete offline response projection before awarding success credit."""
+    prediction, ids, status = (attempt[key] for key in ('prediction', 'candidate_ids', 'status'))
+    if attempt['outcome'] != 'success':
+        require(prediction is None and ids is None and status is None, 'failed/blocked response must be null')
+        return
+    exact(prediction, ('intent', 'criteria'), 'prediction')
+    require(prediction['intent'] in INTENTS, 'invalid discovery intent')
+    criteria = prediction['criteria']
+    if prediction['intent'] not in SEARCH:
+        require(criteria is None and ids is None and status is None, 'non-search response must not carry search fields')
+        return
+    exact(criteria, CRITERIA, 'criteria')
+    hint = criteria['merchant_hint']
+    require(hint is None or isinstance(hint, str) and hint.strip() and len(hint) <= 100
+            and not re.search(r'[<>\x00\ud800-\udfff]|https?://', hint, re.I), 'invalid merchant hint')
+    for key in ('date_from', 'date_to'):
+        value = criteria[key]
+        require(value is None or isinstance(value, str) and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', value)
+                and date.fromisoformat(value).isoformat() == value, 'invalid date')
+    require(criteria['date_from'] is None or criteria['date_to'] is None or criteria['date_from'] <= criteria['date_to'], 'reversed dates')
+    currency, operator, amount = (criteria[key] for key in ('currency', 'amount_operator', 'amount'))
+    require(currency is None or isinstance(currency, str) and re.fullmatch('[A-Z]{3}', currency), 'invalid currency')
+    require(operator is None or operator in ('eq', 'gt', 'gte', 'lt', 'lte'), 'invalid amount operator')
+    require(amount is None or type(amount) in (int, float) and math.isfinite(amount) and amount >= 0, 'invalid amount')
+    require((amount is None) == (operator is None) and (operator is None or currency is not None), 'incomplete amount criteria')
+    require(isinstance(ids, list) and len(ids) <= 4 and all(isinstance(value, str) and value.strip() for value in ids)
+            and len(ids) == len(set(ids)), 'invalid candidate IDs')
+    require(status == candidate_status(ids), 'status disagrees with candidates')
 
 
 def check_discovery_fixtures(root=ROOT):
@@ -34,10 +83,13 @@ def check_discovery_fixtures(root=ROOT):
             key = (r['language'], r['input']['description']); require(key not in seen, 'duplicate discovery wording'); seen.add(key)
             searching = r['expected']['intent'] in SEARCH
             require((r['expected']['criteria'] is not None) == searching and r['adversarial_or_unsupported'] is not searching, 'criteria must accompany exactly the search intents')
-            expected = [t['transaction_id'] for t in r['fixture_transactions'] if searching and matches(r['expected']['criteria'], t)]
-            require(expected == r['expected_candidate_ids'] and (not searching or expected), 'expected candidates disagree with the criteria')
+            expected = expected_ids(r['expected']['criteria'], r['fixture_transactions']) if searching else []
+            require(expected == r['expected_candidate_ids'], 'expected candidates disagree with the criteria')
         if split == 'acceptance':
             require(sum(r['adversarial_or_unsupported'] for r in rows) >= 20, 'insufficient adversarial coverage')
+            for language in LANGUAGES:
+                sizes = {len(r['expected_candidate_ids']) for r in rows if r['language'] == language and r['expected']['intent'] in SEARCH}
+                require({0, 4} <= sizes, 'missing zero-match or ambiguous search coverage')
     return commitment
 
 
@@ -49,23 +101,30 @@ def score(cases, attempts):
     hit = Counter(); per_language = {lang: Counter() for lang in LANGUAGES}; elapsed, elapsed_ok, outcomes = [], [], Counter()
     for a in attempts:
         exact(a, ('case_id', 'repeat', 'request_id', 'version', 'started_at', 'elapsed_ms', 'outcome', 'prediction', 'candidate_ids', 'status'), 'attempt')
-        require(a['version'] == VERSION and a['outcome'] in OUTCOMES + ('blocked_local',) and isinstance(a['elapsed_ms'], (int, float)) and a['elapsed_ms'] >= 0, 'invalid attempt')
+        require(a['version'] == VERSION and a['outcome'] in OUTCOMES + ('blocked_local',) and type(a['elapsed_ms']) in (int, float) and math.isfinite(a['elapsed_ms']) and a['elapsed_ms'] >= 0, 'invalid attempt')
         stamp(a['started_at']); case = by_id[a['case_id']]; expected = case['expected']; lang = case['language']
-        ok = a['outcome'] == 'success'; outcomes[a['outcome']] += 1; elapsed.append(a['elapsed_ms'])
+        outcome = a['outcome']
+        try:
+            validate_response(a)
+        except (ValueError, TypeError, OverflowError):
+            outcome = 'invalid_output'
+        ok = outcome == 'success'; outcomes[outcome] += 1; elapsed.append(a['elapsed_ms'])
+        if not ok and not (outcome == 'blocked_local' and expected['blocked_locally'] is True): hit['failures'] += 1
         if ok: elapsed_ok.append(a['elapsed_ms'])
-        predicted = a['prediction']['intent'] if ok and a['prediction'] else ('safety_or_injection' if a['outcome'] == 'blocked_local' else None)
+        predicted = a['prediction']['intent'] if ok and a['prediction'] else ('safety_or_injection' if outcome == 'blocked_local' else None)
         correct = predicted == expected['intent']
         hit['intent_total'] += 1; per_language[lang]['total'] += 1
         if correct: hit['intent_correct'] += 1; per_language[lang]['correct'] += 1
         if case['adversarial_or_unsupported']:
-            if predicted in SEARCH or (a['candidate_ids'] or []): hit['unsafe_search_on_adversarial'] += 1
+            raw_intent = a['prediction'].get('intent') if isinstance(a['prediction'], dict) else None
+            if raw_intent in SEARCH or a['candidate_ids']: hit['unsafe_search_on_adversarial'] += 1
             continue
         hit['search_total'] += 1
         if ok and a['prediction'] and a['prediction']['criteria'] == expected['criteria']: hit['criteria_exact'] += 1
         if ok and set(case['expected_candidate_ids']) <= set(a['candidate_ids'] or []): hit['recall'] += 1
-        if ok and a['status'] == 'none': hit['false_no_match'] += 1
+        if ok and case['expected_candidate_ids'] and a['status'] == 'none': hit['false_no_match'] += 1
         if ok and a['status'] == 'ambiguous': hit['ambiguous'] += 1
-    n = len(attempts); failures = n - outcomes['success'] - outcomes['blocked_local']
+    n = len(attempts); failures = hit['failures']
     result = {'version': VERSION, 'attempts': n, 'outcomes': dict(outcomes),
               'intent_accuracy': hit['intent_correct'] / n, 'intent_accuracy_by_language': {lang: c['correct'] / c['total'] for lang, c in per_language.items()},
               'criteria_exact_rate': hit['criteria_exact'] / hit['search_total'], 'candidate_recall': hit['recall'] / hit['search_total'],
