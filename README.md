@@ -8,6 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/actions/workflows/quality.yml?query=branch%3Amain"><code>Quality CI · main ↗</code></a>
+  <a href="https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/tag/v0.4.0"><code>Release v0.4.0 ↗</code></a>
   <a href="https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/latest"><code>Latest release ↗</code></a>
 </p>
 
@@ -95,7 +96,7 @@ S3 (read-only) ─► Bronze ─► Silver ─► quality gate ─► Gold intak
 
 The Worker and D1 remain the single runtime ([ADR-003](Docs/ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Cognito proves who signs in, and the Worker issues its own session from the verified token. SES only delivers email; cases stay in D1. These integrations are deployed, with Cognito replacing the former shared gates ([ADR-007](Docs/ADRs/ADR-007-customer-identity-cognito-email-otp.md)). SES has production access, so recipients need no verification; delivery still depends on the sender's domain policy.
 
-For published versions, see the [latest release](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/latest) and [release history](Docs/releases/README.md); the CI link tracks `main` separately. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan).
+For published versions, see the [latest release](https://github.com/LucasTramonte/Factored-Hackathon-2026-ArabicaAI/releases/latest) and [release history](Docs/releases/README.md); the header records published release v0.4.0, while the CI link tracks `main`, which may contain newer changes. Release snapshots are updated when a release is published. The offline evaluation runs on Google Vertex AI (ADR-006 amendment 7; Bedrock is blocked on the project's AWS Free plan).
 
 | Component | Path | What it does |
 |---|---|---|
