@@ -1,0 +1,224 @@
+Captured UTC: 2026-10-05T01:28:21.113Z
+Source: production Worker Observability, fixed window 2026-10-04T01:00:00Z through 2026-10-05T01:00:00Z; dashboard boundary inclusion unspecified.
+Query: event = "request"; group by route; median(ms), p95(ms), count; limit100. No status/version/method exclusion.
+
+Query Builder
+
+Saved Queries
+Visualizations
+Add
+
+Median
+
+of
+
+N
+
+ms
+
+P95
+
+of
+
+N
+
+ms
+
+Count
+
+Filters
+Add
+S
+
+event
+
+request
+
+Group By
+Add
+S
+
+route
+
+Order By
+
+count
+
+in
+
+Descending
+
+order
+
+up to
+
+100
+
+results
+
+Save Query
+Run Query
+Visualizations
+Yesterday, 20:00 – Today, 20:00
+GMT-5
+You're on the free plan with 200K events per day. If you exceed your limit, your events will be sampled. Upgrade your plan.
+
+median(ms)
+
+Oct 3, 21:00
+Oct 3, 23:00
+Oct 4, 01:00
+Oct 4, 03:00
+Oct 4, 05:00
+Oct 4, 07:00
+Oct 4, 09:00
+Oct 4, 11:00
+Oct 4, 13:00
+Oct 4, 15:00
+Oct 4, 17:00
+Oct 4, 19:00
+0
+150
+300
+450
+600
+
+p95(ms)
+
+Oct 3, 21:00
+Oct 3, 23:00
+Oct 4, 01:00
+Oct 4, 03:00
+Oct 4, 05:00
+Oct 4, 07:00
+Oct 4, 09:00
+Oct 4, 11:00
+Oct 4, 13:00
+Oct 4, 15:00
+Oct 4, 17:00
+Oct 4, 19:00
+0
+500
+1k
+1.5k
+2k
+
+count
+
+Oct 3, 21:00
+Oct 3, 23:00
+Oct 4, 01:00
+Oct 4, 03:00
+Oct 4, 05:00
+Oct 4, 07:00
+Oct 4, 09:00
+Oct 4, 11:00
+Oct 4, 13:00
+Oct 4, 15:00
+Oct 4, 17:00
+Oct 4, 19:00
+0
+10
+20
+30
+40
+route
+median(ms)
+p95(ms)
+count
+healthz
+68
+276
+382
+/reports
+92
+116
+42
+document
+11
+124
+31
+/alerts
+90
+116
+25
+/transactions
+152
+176
+22
+/auth/me
+0
+141
+18
+/transactions/displayed
+112
+128
+15
+/auth/session
+162
+414
+13
+/intake/start
+117
+120
+9
+/intake/handoff/{reference}/suggestions
+88
+93
+9
+/agent/intakes
+88
+94
+8
+/reports/feedback
+113
+115
+8
+/demo/agent-session
+70
+301
+7
+/admin/customers
+97
+106
+7
+/reports/update
+159
+171
+7
+/intake/confirm
+462
+480
+5
+/agent/intake-detail
+153
+162
+5
+/intake/handoff/{reference}/messages
+98
+120
+5
+/agent/intake-messages
+87
+91
+5
+/intake/handoff
+364
+1,031
+4
+/intake/service-times
+89
+93
+3
+/alerts/answer
+108
+110
+2
+/admin/act-as
+201
+229
+2
+/auth/logout
+141
+141
+1

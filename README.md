@@ -23,7 +23,7 @@ The supplied LATAM banking data is synthetic. Its descriptive counts are not mea
 | [System design](Docs/deliverables/SYSTEM_DESIGN.md) · [Reading guide](Docs/README.md) | The story for evaluators and how it answers the challenge |
 | [Quick guide](#quick-guide) · [Demo runbook](Docs/Plans/intake-demo.md) | Try the service or start a local checkout |
 | [Evaluation](Docs/deliverables/EVALUATION.md) | Authored cases, denominators, leakage controls and limits |
-| [Cloudflare traffic evidence](Docs/Evidence/cloudflare-traffic.md) | Request and performance definitions; production export pending |
+| [Cloudflare traffic evidence](Docs/Evidence/cloudflare-traffic.md) | 964 invocations in a captured 24-hour window; timing evidence and limits |
 | [Data engineering](Docs/deliverables/DATA_ENGINEERING.md) · [Pipeline setup](#data-pipeline-start-here) | Quality, findings and reproducible data builds |
 | [Repository layout](#repository-layout) · [Architecture](#how-it-fits-together) | Code locations and the runtime |
 | [Common commands](#common-commands) · [Contributing](CONTRIBUTING.md) | Checks, review and release procedures |
