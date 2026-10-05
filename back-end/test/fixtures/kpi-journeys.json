@@ -223,7 +223,7 @@
         },
         {
           "do": "cant_find",
-          "details": "Lembro só do mercado. FACTS={\"merchant\":\"Mercado Demo\"}"
+          "details": "Lembro só do mercado. FACTS={\"merchant\":\"Mercado Central\"}"
         },
         {
           "do": "await_suggestions",
@@ -247,7 +247,7 @@
         },
         {
           "do": "cant_find",
-          "details": "Solo recuerdo el mercado. FACTS={\"merchant\":\"Mercado Demo\"}"
+          "details": "Solo recuerdo el mercado. FACTS={\"merchant\":\"Mercado Central\"}"
         },
         {
           "do": "await_suggestions",
