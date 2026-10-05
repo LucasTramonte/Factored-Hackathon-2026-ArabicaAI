@@ -4,7 +4,7 @@ Roberto, 28 September 2026. Adds two splits to `evals/intake/cases.json` (corpus
 
 ## V1-authored regression split: Andrés's V1 scenarios
 
-Source: `Docs/intake/v1_scenarios.md` (PR #9), 17 scenarios, 33 ES/PT phrases, authored without knowledge of the checklist rules. The phrases were authored without rule knowledge; the fixtures, mapping and gold below were done by Roberto and are pending Andrés/Lucas adjudication, which the contract requires before this counts as the independent set. Its failures are itemized below, so it is now exposed regression material, not a future blind holdout. Rules were not changed after scoring it. Do not tune on it.
+Source: `Docs/intake/v1_scenarios.md` (PR #9), 17 scenarios, 33 ES/PT phrases, authored without knowledge of the checklist rules. The phrases were authored without rule knowledge; the fixtures, mapping and gold below were done by Roberto and are pending current-team human adjudication, which the contract requires before this counts as the independent set. Its failures are itemized below, so it is now exposed regression material, not a future blind holdout. Rules were not changed after scoring it. Do not tune on it.
 
 Each phrase becomes one single-turn decision point. Andrés's outcome label is kept verbatim in `author_outcome`; the harness `gold.action` is the contract's vocabulary. Where the two disagree, the row says so.
 
