@@ -43,4 +43,9 @@ describe('AgentService', () => {
     await service.setStatus('p', 'in_review');
     expect(api.request).toHaveBeenCalledOnceWith('/agent/intake-status', { protocol: 'p', status: 'in_review' });
   });
+  it('includes the immutable explanation only when closing', async () => {
+    api.request.and.resolveTo({});
+    await service.setStatus('p', 'closed', 'Explanation');
+    expect(api.request).toHaveBeenCalledOnceWith('/agent/intake-status', { protocol: 'p', status: 'closed', closing_note: 'Explanation' });
+  });
 });

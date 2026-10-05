@@ -440,8 +440,9 @@
       "properties": {
         "items": {"type": "array", "maxItems": 20, "items": {
           "type": "object", "additionalProperties": false,
-          "required": ["protocol", "reference_short", "kind", "status", "next_step", "accepted_at", "transaction_id"],
+          "required": ["closing_note", "protocol", "reference_short", "kind", "status", "next_step", "accepted_at", "transaction_id"],
           "properties": {
+            "closing_note": {"type": ["string", "null"], "minLength": 1, "maxLength": 2000},
             "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
             "reference_short": {"type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$"},
             "kind": {"type": "string", "pattern": "^(complete|incomplete|technical)$"},
@@ -486,8 +487,9 @@
     },
     "agentIntakeDetail": {
       "type": "object", "additionalProperties": false,
-      "required": ["reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at", "first_opened_at", "reason", "language", "customer_statement", "customer_history", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "model_reading", "customer_suggestion", "scope"],
+      "required": ["closing_note", "reference_short", "protocol", "episode_id", "kind", "status", "tool_status", "destination", "priority", "urgency", "accepted_at", "first_opened_at", "reason", "language", "customer_statement", "customer_history", "verified_evidence", "actions_taken", "unresolved_questions", "history", "history_has_more", "model_reading", "customer_suggestion", "scope"],
       "properties": {
+        "closing_note": {"type": ["string", "null"], "minLength": 1, "maxLength": 2000},
         "reference_short": { "type": ["string", "null"], "pattern": "^AR-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}-[0-9ABCDEFGHJKMNPQRSTVWXYZ]{4}$" },
         "protocol": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
         "episode_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},

@@ -87,7 +87,7 @@ async function drive(journey, sessions, agent, done) {
     } else if (step.do === 'agent_open_late') {
       assert.ok(await withStore(store => store.findIntakeHandoff(out.protocol, Date.now() + step.hours * HOUR)), label);
     } else if (step.do === 'agent_status') {
-      assert.equal((await agent.call('/agent/intake-status', { protocol: out.protocol, status: step.status })).status, 200, label); out.status = step.status;
+      assert.equal((await agent.call('/agent/intake-status', { protocol: out.protocol, status: step.status, ...(step.status === 'closed' ? { closing_note: 'Review finished; contact the bank for help.' } : {}) })).status, 200, label); out.status = step.status;
     } else if (step.do === 'agent_mark') {
       assert.equal((await agent.call('/agent/suggestion-mark', { protocol: out.protocol, mark: step.mark })).status, 200, label);
     } else {

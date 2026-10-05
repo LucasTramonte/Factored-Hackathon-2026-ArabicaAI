@@ -50,6 +50,15 @@ export class AgentPage {
   readonly intakes = signal<AgentIntake[]>([]);
   readonly intakesHasMore = signal(false);
   readonly detail = signal<AgentIntakeDetail | null>(null);
+  /** Draft belongs only to the open review; the stored explanation is immutable. */
+  closingNote = '';
+  readonly closingInvalid = signal(false);
+
+  /** Same trimmed code-point bound as the API; no UTF-16 textarea maxlength. */
+  validClosingNote(): boolean {
+    const note = this.closingNote.trim();
+    return !/[\u0000\uD800-\uDFFF]/u.test(note) && [...note].length >= 1 && [...note].length <= 2000;
+  }
   /** The protocol whose detail is open or loading. */
   readonly openProtocol = signal<string | null>(null);
   private detailRequest = 0;
@@ -153,11 +162,15 @@ export class AgentPage {
 
   /** Take the next status step for the open report. On 409 someone else moved it: reload the detail and say so. Focus lands on the status text. */
   async advance(d: AgentIntakeDetail): Promise<void> {
-    if (this.busy() || d.status === 'closed') return;
+    if (this.busy() || d.status === 'closed' || this.detail()?.protocol !== d.protocol) return;
+    if (d.status === 'in_review' && !this.validClosingNote()) { this.closingInvalid.set(true); return; }
     this.busy.set(true);
     this.error.set('');
     try {
-      this.applyStatus(d.protocol, (await this.service.setStatus(d.protocol, d.status === 'received' ? 'in_review' : 'closed')).status);
+      const note = this.closingNote.trim();
+      const result = d.status === 'received' ? await this.service.setStatus(d.protocol, 'in_review') : await this.service.setStatus(d.protocol, 'closed', note);
+      this.applyStatus(d.protocol, result.status);
+      this.detail.update(x => x?.protocol === d.protocol && result.status === 'closed' ? { ...x, closing_note: note } : x);
     } catch (e) {
       if (!(e instanceof ApiError && e.status === 409)) this.fail(e);
       else try {
@@ -330,6 +343,8 @@ export class AgentPage {
     const request = ++this.detailRequest;
     this.trigger = trigger;
     this.openProtocol.set(protocol);
+    this.closingNote = '';
+    this.closingInvalid.set(false);
     this.detail.set(null);
     this.error.set('');
     try {
@@ -353,6 +368,8 @@ export class AgentPage {
     this.detailRequest++;
     this.openProtocol.set(null);
     this.detail.set(null);
+    this.closingNote = '';
+    this.closingInvalid.set(false);
     this.trigger?.focus();
     this.trigger = null;
   }
@@ -361,6 +378,8 @@ export class AgentPage {
     this.detailRequest++;
     this.error.set('');
     this.loaded.set(false);
+    this.closingNote = '';
+    this.closingInvalid.set(false);
     this.intakes.set([]);
     this.intakesHasMore.set(false);
     this.openProtocol.set(null);

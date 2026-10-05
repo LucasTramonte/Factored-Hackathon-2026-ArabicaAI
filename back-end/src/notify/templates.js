@@ -25,7 +25,7 @@ export const TEMPLATES = {
     in_review: { subject: 'Tu reporte {reference} está en revisión',
       body: 'Una persona está revisando tu reporte {reference}.\n\nTe avisaremos cuando termine la revisión.\n\n{urgent}' },
     closed: { subject: 'Terminó la revisión de tu reporte {reference}',
-      body: 'Una persona terminó de revisar tu reporte {reference}.\n\nEl banco te informará el resultado por su canal habitual.\n\n{urgent}' },
+      body: 'Una persona terminó de revisar tu reporte {reference}.\n\nAbre la app para leer la explicación de la revisión.\n\n{urgent}' },
     update: { subject: 'Estado de tu reporte {reference}',
       body: 'Estado actual de tu reporte {reference}: {status}\n\nTe avisaremos si cambia.\n\n{urgent}' }
   },
@@ -35,7 +35,7 @@ export const TEMPLATES = {
     in_review: { subject: 'Seu relato {reference} está em análise',
       body: 'Uma pessoa está analisando seu relato {reference}.\n\nAvisaremos quando a análise terminar.\n\n{urgent}' },
     closed: { subject: 'A análise do seu relato {reference} terminou',
-      body: 'Uma pessoa terminou de analisar seu relato {reference}.\n\nO banco informará o resultado pelo canal habitual.\n\n{urgent}' },
+      body: 'Uma pessoa terminou de analisar seu relato {reference}.\n\nAbra o app para ler a explicação da análise.\n\n{urgent}' },
     update: { subject: 'Status do seu relato {reference}',
       body: 'Status atual do seu relato {reference}: {status}\n\nAvisaremos se mudar.\n\n{urgent}' }
   },
@@ -45,7 +45,7 @@ export const TEMPLATES = {
     in_review: { subject: 'Your report {reference} is in review',
       body: 'A person is reviewing your report {reference}.\n\nWe will let you know when the review ends.\n\n{urgent}' },
     closed: { subject: 'The review of your report {reference} has ended',
-      body: 'A person finished reviewing your report {reference}.\n\nThe bank will contact you about the outcome through its usual channel.\n\n{urgent}' },
+      body: 'A person finished reviewing your report {reference}.\n\nOpen the app to read the review explanation.\n\n{urgent}' },
     update: { subject: 'Status of your report {reference}',
       body: 'Current status of your report {reference}: {status}\n\nWe will let you know if it changes.\n\n{urgent}' }
   }

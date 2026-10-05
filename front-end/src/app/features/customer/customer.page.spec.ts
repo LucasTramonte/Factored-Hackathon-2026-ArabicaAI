@@ -87,9 +87,9 @@ describe('CustomerPage', () => {
   it('reload and same-owner sign-out/sign-in restore saved references, independent progress and stored messages from the API', async () => {
     TestBed.inject(LangService).set('es');
     const saved: Report[] = [
-      { protocol: '99999999-8888-4777-8666-555555555555', reference_short: 'AR-AAAA-BBBB', kind: 'complete', status: 'received', next_step: 'review_pending', accepted_at: '2026-10-01T12:00:00Z', transaction_id: 'demo-tx-001' },
-      { protocol: '11111111-2222-4333-8444-555555555555', reference_short: 'AR-CCCC-DDDD', kind: 'incomplete', status: 'in_review', next_step: 'being_reviewed', accepted_at: '2026-10-02T12:00:00Z', transaction_id: null },
-      { protocol: '22222222-2222-4333-8444-555555555555', reference_short: 'AR-EEEE-FFFF', kind: 'technical', status: 'closed', next_step: 'closed_by_person', accepted_at: '2026-10-03T12:00:00Z', transaction_id: null }
+      { protocol: '99999999-8888-4777-8666-555555555555', reference_short: 'AR-AAAA-BBBB', kind: 'complete', status: 'received', closing_note: null, next_step: 'review_pending', accepted_at: '2026-10-01T12:00:00Z', transaction_id: 'demo-tx-001' },
+      { protocol: '11111111-2222-4333-8444-555555555555', reference_short: 'AR-CCCC-DDDD', kind: 'incomplete', status: 'in_review', closing_note: null, next_step: 'being_reviewed', accepted_at: '2026-10-02T12:00:00Z', transaction_id: null },
+      { protocol: '22222222-2222-4333-8444-555555555555', reference_short: 'AR-EEEE-FFFF', kind: 'technical', status: 'closed', closing_note: '<img src=x onerror=alert(1)> explicación', next_step: 'closed_by_person', accepted_at: '2026-10-03T12:00:00Z', transaction_id: null }
     ];
     service.reports.and.resolveTo({ items: saved, has_more: true });
     service.messages.and.resolveTo({ status: 'in_review', can_post: true, items: [
@@ -107,6 +107,8 @@ describe('CustomerPage', () => {
     expect(rows().map(r => r.textContent)).toEqual(saved.map(r => jasmine.stringMatching(r.reference_short!)));
     expect(rows()[0].textContent).toContain('Mercado');
     expect(el.textContent).toContain(p.t().moreReports);
+    expect(el.querySelector('.closing-explanation')?.textContent).toContain('<img src=x onerror=alert(1)> explicación');
+    expect(el.querySelector('.closing-explanation img')).toBeNull();
     await p.toggleMessages(saved[1].protocol); fixture.detectChanges();
     expect(el.querySelector('.message-agent')?.textContent).toContain('Necesitamos el recibo.');
     await p.signOut(); fixture.detectChanges();
@@ -273,7 +275,7 @@ describe('CustomerPage', () => {
     const pending = Promise.all([inner.loadReports(), inner.loadAlert()]);
     await page.signOut();
     expect([page.step(), page.client(), page.reports()]).toEqual(['login', '', null]);
-    release({ items: [{ protocol: 'p1', reference_short: 'AR-AAAA-BBBB', kind: 'complete', status: 'received', next_step: 'review_pending',
+    release({ items: [{ protocol: 'p1', reference_short: 'AR-AAAA-BBBB', kind: 'complete', status: 'received', closing_note: null, next_step: 'review_pending',
       accepted_at: '2026-10-01T00:00:00Z', transaction_id: 'demo-tx-001', urgency: 'normal' } as never], has_more: false });
     alertRelease({ alert: tx });
     await pending;
@@ -558,7 +560,7 @@ describe('CustomerPage', () => {
       accepted_at: '2026-09-30T12:00:00Z', replayed: false, actions_taken: ['owned_transaction_retrieved', 'customer_confirmation_recorded'],
       unresolved_questions: [], reference_short: 'AR-7K3M-2Q4X', next_step_code: 'await_human_review', urgency: 'normal' };
     const openReport: Report = { protocol: intakeReceipt.protocol, reference_short: 'AR-7K3M-2Q4X', kind: 'complete', status: 'received',
-      next_step: 'review_pending', accepted_at: intakeReceipt.accepted_at, transaction_id: 'demo-tx-001' };
+      closing_note: null, next_step: 'review_pending', accepted_at: intakeReceipt.accepted_at, transaction_id: 'demo-tx-001' };
     let lang: LangService;
 
     beforeEach(async () => {
@@ -886,7 +888,7 @@ describe('CustomerPage', () => {
         expect(page.suggestionMessage()).toBe(page.t().suggestStillPending);
         (Date.now as jasmine.Spy).and.callThrough();
         const saved: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete', status: 'received',
-          next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+          closing_note: null, next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
         page.reports.set({ items: [saved], has_more: false });
         service.suggestions.and.resolveTo(shown);
         page.reopenSuggestions(saved); await settle();
@@ -903,7 +905,7 @@ describe('CustomerPage', () => {
 
       it('ends the UI wait at 15 seconds even while its GET is unresolved, and ignores its late result', fakeAsync(() => {
         const saved: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete', status: 'received',
-          next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+          closing_note: null, next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
         page.reports.set({ items: [saved], has_more: false });
         let finish!: (list: typeof shown) => void;
         service.suggestions.and.returnValue(new Promise(resolve => finish = resolve));
@@ -919,7 +921,7 @@ describe('CustomerPage', () => {
 
       it('does not start a new GET when a delayed poll timer resumes beyond the deadline', fakeAsync(() => {
         const saved: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete', status: 'received',
-          next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+          closing_note: null, next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
         page.reports.set({ items: [saved], has_more: false }); page.suggestionPollMs = 1500;
         let now = 0; spyOn(Date, 'now').and.callFake(() => now);
         service.suggestions.and.resolveTo(pending);
@@ -964,7 +966,7 @@ describe('CustomerPage', () => {
 
       it('reopens a listed report through the owned endpoint without making another receipt, and ignores an old report response', async () => {
         const r: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete',
-          status: 'received', next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+          status: 'received', closing_note: null, next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
         const later = { ...r, protocol: 'other-report' };
         page.reports.set({ items: [r, later], has_more: false });
         let old!: (l: typeof shown) => void;
@@ -982,7 +984,7 @@ describe('CustomerPage', () => {
 
       it('an identity reset ignores both a late saved-report read and a late confirmation', async () => {
         const r: Report = { protocol: incomplete.protocol, reference_short: incomplete.reference_short, kind: 'incomplete',
-          status: 'received', next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
+          status: 'received', closing_note: null, next_step: 'review_pending', accepted_at: incomplete.accepted_at, transaction_id: null };
         page.reports.set({ items: [r], has_more: false });
         let old!: (l: typeof shown) => void;
         service.suggestions.and.returnValue(new Promise(resolve => old = resolve));
@@ -1216,7 +1218,7 @@ describe('CustomerPage', () => {
       page.chatConfirmed = true;
       await page.confirmCharge();
       expect(service.confirmIntake).toHaveBeenCalledTimes(1);
-      page.reports.set({ items: [{ ...openReport, status: 'closed', next_step: 'closed_by_person' }], has_more: false });
+      page.reports.set({ items: [{ ...openReport, status: 'closed', closing_note: null, next_step: 'closed_by_person' }], has_more: false });
       expect(page.choosable()).toEqual([tx]);
     });
 
@@ -1569,7 +1571,7 @@ describe('CustomerPage', () => {
     });
 
     const report = (kind: 'complete' | 'incomplete' | 'technical', ref: string | null, at = '2026-10-01T12:00:00Z', protocol = '99999999-8888-4777-8666-555555555555') =>
-      ({ protocol, reference_short: ref, kind, status: 'received', next_step: 'review_pending', accepted_at: at, transaction_id: null } as const);
+      ({ protocol, reference_short: ref, kind, status: 'received', closing_note: null, next_step: 'review_pending', accepted_at: at, transaction_id: null } as const);
     const rows = (el: HTMLElement) => [...el.querySelectorAll('.your-reports ul > li')].map(li => li.textContent?.replace(/\s+/g, ' ').trim() ?? '');
 
     it('after sign-in lists the server reports in server order (newest first), with reference, kind and status as text', async () => {
@@ -1720,7 +1722,7 @@ describe('CustomerPage', () => {
     describe('after a fresh sign-in, each charge row follows its server report', () => {
       const chip = (el: HTMLElement) => el.querySelector('.td-state .ar-chip')?.textContent?.replace(/\s+/g, ' ').trim();
       const listed = (status: 'received' | 'in_review' | 'closed') => service.reports.and.resolveTo({ items: [{ ...report('complete', 'AR-AAAA-BBBB'),
-        status, next_step: status === 'received' ? 'review_pending' : status === 'in_review' ? 'being_reviewed' : 'closed_by_person', transaction_id: 'demo-tx-001' }], has_more: false });
+        status, closing_note: null, next_step: status === 'received' ? 'review_pending' : status === 'in_review' ? 'being_reviewed' : 'closed_by_person', transaction_id: 'demo-tx-001' }], has_more: false });
 
       it('an open report shows its status and reference and no Report button; the chat does not offer the charge', async () => {
         listed('received');
@@ -1782,8 +1784,8 @@ describe('CustomerPage', () => {
 
     it('shows the status a person set: received, in review, closed; never resolved', async () => {
       service.reports.and.resolveTo({ items: [report('complete', 'AR-AAAA-BBBB'),
-        { ...report('complete', 'AR-CCCC-DDDD', undefined, '11111111-2222-4333-8444-555555555555'), status: 'in_review', next_step: 'being_reviewed' },
-        { ...report('complete', 'AR-EEEE-FFFF', undefined, '22222222-2222-4333-8444-555555555555'), status: 'closed', next_step: 'closed_by_person' }], has_more: false });
+        { ...report('complete', 'AR-CCCC-DDDD', undefined, '11111111-2222-4333-8444-555555555555'), status: 'in_review', closing_note: null, next_step: 'being_reviewed' },
+        { ...report('complete', 'AR-EEEE-FFFF', undefined, '22222222-2222-4333-8444-555555555555'), status: 'closed', closing_note: null, next_step: 'closed_by_person' }], has_more: false });
       const { el, p } = await home();
       const [received, inReview, closed] = rows(el);
       expect([...el.querySelectorAll('.your-reports .report-status .ar-chip')].map(c => c.textContent!.trim()))
@@ -1797,7 +1799,7 @@ describe('CustomerPage', () => {
     });
 
     describe('not resolved', () => {
-      const closed = (over: Partial<Report> = {}): Report => ({ ...report('complete', 'AR-CCCC-DDDD'), status: 'closed', next_step: 'closed_by_person', ...over });
+      const closed = (over: Partial<Report> = {}): Report => ({ ...report('complete', 'AR-CCCC-DDDD'), status: 'closed', closing_note: null, next_step: 'closed_by_person', ...over });
       const again = (el: HTMLElement) => [...el.querySelectorAll<HTMLButtonElement>('.your-reports li .report-again-btn')];
 
       it('only a closed report offers it, labelled with its reference', async () => {

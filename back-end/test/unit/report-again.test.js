@@ -33,7 +33,7 @@ async function setup(t) {
       ? { episode_id, transaction_id: 'tx-' + actor, customer_confirmed: true, idempotency_key: crypto.randomUUID() }
       : { episode_id, kind: 'incomplete', idempotency_key: crypto.randomUUID() }, actor);
     assert.equal(res.status, 201); const receipt = await res.json(); assertContract('intakeReceipt', receipt);
-    if (closed) for (const status of ['in_review', 'closed']) assert.equal((await call('/agent/intake-status', { protocol: receipt.protocol, status }, 'agent')).status, 200);
+    if (closed) for (const status of ['in_review', 'closed']) assert.equal((await call('/agent/intake-status', { protocol: receipt.protocol, status, ...(status === 'closed' ? { closing_note: 'Review finished; contact the bank for help.' } : {}) }, 'agent')).status, 200);
     return { episode_id, receipt, handoff: db.prepare('SELECT * FROM intake_handoffs WHERE episode_id=?').get(episode_id) };
   };
   return { db, store, call, source };

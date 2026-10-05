@@ -46,7 +46,7 @@ export async function closeReport(protocol) {
   const agent = client();
   await agent.call('/demo/agent-session', {});
   for (const status of ['in_review', 'closed']) {
-    const moved = await agent.call('/agent/intake-status', { protocol, status });
+    const moved = await agent.call('/agent/intake-status', { protocol, status, ...(status === 'closed' ? { closing_note: 'Review finished; contact the bank for help.' } : {}) });
     if (moved.status !== 200) throw new Error(`close ${protocol}: ${status} -> ${moved.status}`);
   }
 }

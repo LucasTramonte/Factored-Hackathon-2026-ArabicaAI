@@ -70,7 +70,7 @@ test('isolation: another customer reads and writes nothing on a report that is n
 test('a closed report is read-only for both sides', async () => {
   const { customer, agent, receipt } = await signedInReport();
   assert.equal((await agent.call('/agent/intake-messages', { protocol: receipt.protocol, body: 'Te escribimos por el canal del banco.', idempotency_key: uuid() })).status, 201);
-  for (const status of ['in_review', 'closed']) assert.equal((await agent.call('/agent/intake-status', { protocol: receipt.protocol, status })).status, 200);
+  for (const status of ['in_review', 'closed']) assert.equal((await agent.call('/agent/intake-status', { protocol: receipt.protocol, status, ...(status === 'closed' ? { closing_note: 'Review finished; please contact the bank if you still need help.' } : {}) })).status, 200);
   const closed = await customer.call(thread(receipt));
   assert.equal(closed.body.status, 'closed'); assert.equal(closed.body.can_post, false); assert.equal(closed.body.items.length, 1);
   assert.equal((await customer.call(thread(receipt), { body: 'Gracias', idempotency_key: uuid() })).status, 409);

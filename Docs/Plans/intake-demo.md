@@ -2,14 +2,15 @@
 
 ## What it does
 
-The V1 workflow ([ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)):
+The guided workflow ([ADR-002](../ADRs/ADR-002-v1-workflow-unrecognized-charge-intake.md)), extended by the reviewed customer lifecycle:
 
 1. A customer signs in with an email one-time code and sees only their own charges.
 2. They pick one, describe it and explicitly confirm.
 3. They get a reference once the case is stored.
-4. An agent, signed in with their own email code, reads the case.
+4. A human teammate, signed in separately as a reviewer, reads the report, sends a response and advances it to review.
+5. The reviewer finishes the review with an explanation; the customer reads it and can create a linked follow-up with “Todavía necesito ayuda”.
 
-The reference means "accepted for human review". It is not a fraud decision, a refund, a card block or a resolution. The MVP is deterministic, and no model is called. The runtime is one Cloudflare Worker with D1 ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Capacity and cost are covered in [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md).
+The reference means "accepted for human review". It is not a fraud decision, a refund, a card block or a resolution. The identified-charge flow is deterministic. For eligible missing-charge reports, [ADR-012](../ADRs/ADR-012-ai-online-only-where-evidence-shows.md) permits a model to read supplied details into facts and suggest only owned charges; the customer confirms or rejects them. Unavailable or unclear suggestions retain the human handoff. No model decides identity, ownership, status or financial action. The runtime is one Cloudflare Worker with D1 ([ADR-003](../ADRs/ADR-003-intake-single-runtime-worker-d1.md)). Capacity and cost are covered in [ADR-004](../ADRs/ADR-004-intake-capacity-and-cost.md).
 
 | Part | Path | Role |
 |---|---|---|
@@ -28,6 +29,43 @@ make intake-test           # Gold slice tests, Angular specs, Worker unit and in
 ```
 
 `make intake-test` builds the UI and runs the Worker against a throwaway local D1. For browsing, see [back-end/README.md](../../back-end/README.md).
+
+## Customer lifecycle rehearsal (2026-10-04)
+
+The [dated evidence](../Evidence/customer-clarity-lifecycle-2026-10-04.md) records the local authored API rehearsal and automated UI checks. These are regression evidence, not fresh tester findings or held-out extractor results. A local Chrome customer and separate in-app-browser reviewer rehearsal also verified saved progress, replies, plain-text explanation, passive refresh and linked follow-up. Three fresh testers and live SES/inbox verification remain **pending external**; deployed OTP and assistive-technology checks remain untested.
+
+### Human-operated demonstration protocol
+
+Use synthetic records in an isolated local database or the authorized demo. Preserve shared activity: never reset the shared demo to make a scenario fit. Keep a customer browser/profile, another customer's profile and an authorized reviewer profile separate; do not share cookies or one-time codes. A teammate operates the reviewer role; there is no automatic reviewer or timed closure.
+
+Repeat the following in Spanish and Portuguese, then smoke-check English. Record only aggregate checkpoint outcomes and language, never statements, closing explanations, customer identifiers, tokens or inbox addresses in evidence.
+
+1. Find an owned charge, report it with an explicit confirmation, and note the acknowledged reference. Retry the same submission key: it must recover the same reference. A failed write/read-back must not say it was saved.
+2. Use the missing-charge entry: provide sufficient details for an eligible suggestion, confirm one suggested owned charge; on another report reject the suggestions. Demonstrate no clear match and service-unavailable fallback separately. Both keep a saved human handoff; no suggested charge becomes verified bank evidence.
+3. In the separate reviewer session, open that report, send a response and move `received → in_review`. Return to the customer view and observe the actual response/progress update. Refresh manually and refocus the tab; hidden/offline tabs pause background refresh. A failed refresh preserves the last confirmed state and reports staleness.
+4. Enter “Explica qué se revisó y qué debe hacer el cliente” and choose **Enviar explicación y terminar revisión** (equivalent PT/EN labels). The state becomes `closed`, with the stored plain-text explanation. Missing/invalid new explanations return 422; previous closed/null reports show the legacy missing-explanation message. Finishing this demo review is no bank investigation, refund, card block, fraud finding or resolution.
+5. In the customer view read the latest reply and explanation. Closed messages are read-only. Choose **Todavía necesito ayuda** / **Ainda preciso de ajuda** / **I still need help**, submit a linked follow-up and check its new reference while the source stays closed.
+6. Reload, log out and sign back in using a fresh customer session. Recover complete, incomplete and technical reports and their original content, messages and progress. Use another customer's session to verify the reports and threads are absent; foreign references must look like missing references. The recent list holds 20 reports; the “more reports” notice means older reports remain stored, not that this phase offers unlimited navigation.
+7. Open Help and replay the tour: check Tab/Shift-Tab containment, Escape, focus return, scroll/resize, completion/skip persistence, and ES/PT/EN copy. Tour steps must not submit or answer a report. Manually confirm this on the assembled page and with assistive technology before claiming that coverage.
+
+### Status email checkpoints
+
+With authorization, request **one** report update to the user's own test inbox. A normal customer receives their own report; an administrator acting as a customer receives that report update at the administrator's address. Keep the report readable if email fails. Record each checkpoint separately:
+
+| Checkpoint | Required evidence | Current Task 6 status |
+|---|---|---|
+| Queued | Owned request returns 202 and corresponding reference-only outbox row | Demonstrated locally; unconfigured local sender skips |
+| Provider accepted | Authorized operator observes SES message id / outbox `sent` | Pending external; current Cloudflare account cannot access demo D1 |
+| Inbox received | User confirms receipt or authorized inbox read | Pending external; no test inbox receipt obtained |
+| Link recovery/privacy | Inspect generic reference/status/language template and token-free app link; open received link signed out, then sign in and recover only owned reports | Template unit checks pass; received-link browser check pending external |
+
+HTTP 202 means queued, and schema `sent` means SES accepted, neither means delivered. Do not include customer statement or closing explanation in email. Respect the five-minute queued/accepted cooldown, ten-second failed/skipped retry and server `Retry-After`; do not keep clicking to collect evidence.
+
+### Three fresh testers (pending external)
+
+A human organizer recruits at least three people unfamiliar with the interface; agents do not contact anyone. Give each a synthetic charge and only three tasks: find it, create a report, find the latest reviewer response. A human reviewer supplies the response through the app. Do not coach; record any intervention as help needed. Ask afterward who acts next and what “review finished” means. Use ES/PT across the sessions, recording language/device and whether they had seen the interface.
+
+For each task record completion (`completed`, `with help`, `not completed`), wrong-turn count, help-needed count and next-actor understanding (`correct`, `unclear`, `incorrect`). Publish only aggregate counts with the number of observed testers/tasks and the definition of each measure; keep personal/raw observations private. These are formative findings, never a population completion rate or causal improvement. At this record: **0 testers observed; study not run; no completion rate defined**.
 
 ## One-day dataset slice
 

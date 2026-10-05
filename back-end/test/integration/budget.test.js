@@ -330,7 +330,7 @@ test('guided endpoints and complete and incomplete customer episodes preserve me
   measured.confirmHigh = within('intakeConfirmHigh', high.metrics);
   assert.equal(high.metrics.rows_written, CEILING.intakeConfirmHigh[2], 'the urgent index entry and the received email were written');
   assert.equal((await agent.call('/agent/intake-status', { protocol: high.body.protocol, status: 'in_review' })).status, 200);
-  const closing = await agent.call('/agent/intake-status', { protocol: high.body.protocol, status: 'closed' });
+  const closing = await agent.call('/agent/intake-status', { protocol: high.body.protocol, status: 'closed', closing_note: 'Review finished; contact the bank for help.' });
   assert.equal(closing.status, 200); assertContract('intakeTransition', closing.body);
   measured.agentTransitionHigh = within('agentTransitionHigh', closing.metrics);
   assert.equal(closing.metrics.rows_written, CEILING.agentTransitionHigh[2], 'closing queued the email (D1 counts no write for leaving the partial index)');
@@ -465,7 +465,7 @@ test('AI suggestion routes and the after-response run stay within their D1 budge
   const mark = await agent.call('/agent/suggestion-mark', { protocol: handoff.body.protocol, mark: 'correct' });
   assert.equal(mark.status, 200); measured.suggestionMark = within('suggestionMark', mark.metrics);
   measured.suggestionMarkReplay = within('suggestionMark', (await agent.call('/agent/suggestion-mark', { protocol: handoff.body.protocol, mark: 'correct' })).metrics);
-  for (const status of ['in_review', 'closed']) assert.equal((await agent.call('/agent/intake-status', { protocol: handoff.body.protocol, status })).status, 200);
+  for (const status of ['in_review', 'closed']) assert.equal((await agent.call('/agent/intake-status', { protocol: handoff.body.protocol, status, ...(status === 'closed' ? { closing_note: 'Review finished; contact the bank for help.' } : {}) })).status, 200);
   // The after-response run (ctx.waitUntil) uses a store of its own, so it is measured here on a store-built pending run,
   // with Google faked in process: cap slot, pre-recorded call, the customer's purchases, and the outcome batch.
   const { withIntakeStore } = await import('../../scripts/intake-store.mjs');

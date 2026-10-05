@@ -91,9 +91,17 @@
             <span class="ar-field-label">{{ t().statusPrefix }}</span>
             <span #statusText id="intake-status" class="ar-chip" [class.ar-chip-ok]="d.status === 'closed'" tabindex="-1">{{ statusLabel(d.status) }}</span>
             @if (d.status !== 'closed') {
-              <button type="button" class="ar-btn status-action" (click)="advance(d)" [disabled]="busy()">{{ d.status === 'received' ? t().takeCase : t().closeReview }}</button>
+              <button type="button" class="ar-btn status-action" (click)="advance(d)" [disabled]="busy() || (d.status === 'in_review' && !validClosingNote())">{{ d.status === 'received' ? t().takeCase : t().closeReview }}</button>
             }
           </div>
+          @if (d.status === 'in_review') {
+            <label for="closing-note">{{ t().closingLabel }}</label>
+            <textarea class="ar-input" id="closing-note" rows="4" [(ngModel)]="closingNote" [disabled]="busy()" [attr.aria-invalid]="closingInvalid() && !validClosingNote()" aria-describedby="closing-note-help"></textarea>
+            <p id="closing-note-help" class="ar-caption">{{ t().closingHelp }}</p>
+          }
+          @if (d.status === 'closed') {
+            <section class="closing-explanation"><h3>{{ t().closingTitle }}</h3><p style="white-space: pre-wrap; overflow-wrap: anywhere">{{ d.closing_note ?? t().closingLegacy }}</p></section>
+          }
           <dl class="detail-meta">
             <div><dt>{{ t().reference }}</dt><dd class="ar-mono">{{ d.reference_short ?? d.protocol }}</dd></div>
             @if (d.reference_short) { <div><dt>{{ t().caseId }}</dt><dd class="ar-mono">{{ d.protocol }}</dd></div> }

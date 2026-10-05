@@ -23,9 +23,9 @@ export class AgentService {
     return this.api.request<AgentIntakeDetail>('/agent/intake-detail?protocol=' + encodeURIComponent(protocol));
   }
 
-  /** Move a report one step forward (received → in_review → closed); 409 when someone already moved it. */
-  setStatus(protocol: string, status: IntakeTransition['status']): Promise<IntakeTransition> {
-    return this.api.request<IntakeTransition>('/agent/intake-status', { protocol, status });
+  /** Move one step forward; closing requires an explanation. The same close/note replays; a different note is 409. */
+  setStatus(protocol: string, status: IntakeTransition['status'], closingNote?: string): Promise<IntakeTransition> {
+    return this.api.request<IntakeTransition>('/agent/intake-status', { protocol, status, ...(status === 'closed' ? { closing_note: closingNote } : {}) });
   }
 
   /** Mark the charge a customer confirmed from a suggestion as correct or wrong; the first mark stands (409 on a different one). */

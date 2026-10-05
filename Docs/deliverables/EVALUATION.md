@@ -240,6 +240,12 @@ These come from separate streams and are never pooled with the frozen result.
 
 **Report-request latency:** the target is p95 below 2,000 ms. The only timed evidence is one `POST /intake/confirm` at 1,268 ms and one `POST /intake/start` at 368 ms, from an older version. **The target is not demonstrated.** [`summarize_worker_latency.py`](../../scripts/summarize_worker_latency.py) summarizes a future authorized export.
 
+**Customer clarity and lifecycle rehearsal (2026-10-04):** [local authored evidence](../Evidence/customer-clarity-lifecycle-2026-10-04.md) exercises identified-charge, missing-charge suggestion, no-match/provider-failure fallback, separate reviewer response, explained closure, sign-out/fresh-session recovery and linked follow-up in ES/PT, with an English smoke check. The Worker and disposable local D1 are real; token issuer/provider and UI-service fixtures are controlled test seams. This establishes regression behavior only, with no new held-out claim for v1 or v2, no latency target claim and no bank outcome. Frozen v1 results above remain unchanged.
+
+- Fresh formative testers: **0 observed; study not run**. Task completion, wrong turns, help needed and next-actor understanding have no observed denominator; no population rate is reported. The [demo protocol](../Plans/intake-demo.md#three-fresh-testers-pending-external) specifies at least three fresh testers.
+- Local separate-browser actions verified Spanish identified-charge review/closure, Portuguese missing-charge suggestion and linked follow-up, passive progress/reply refresh, reload and new simulated sign-in, with English label smoke and another customer’s isolated view. The tour’s Tab containment and Escape were exercised locally. Deployed OTP recovery and assistive-technology review remain untested.
+- Status email: local queue/ownership/cooldown and generic token-free template checks are recorded separately from SES acceptance and inbox receipt. Live provider acceptance, inbox receipt and opening the received link remain **pending external**: the current Cloudflare account cannot access demo D1 and no inbox receipt was obtained.
+
 ## Reproducing and where to look
 
 The frozen run, the custodian's commands (the run is not repeated for this version):

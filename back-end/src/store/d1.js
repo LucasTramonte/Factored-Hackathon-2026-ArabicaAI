@@ -572,7 +572,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     // ponytail: reads ~1 + 2 rows per episode of the customer (all states) then a temp sort; LIMIT does not cap it.
     // Upgrade: an index on handoffs keyed by customer and accepted_at, which needs a customer column there.
     listCustomerHandoffs: (customerId, limit) => all(
-      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,h.kind,h.status,h.accepted_at,c.transaction_id '
+      'SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.reference_short,h.kind,h.status,h.closing_note,h.accepted_at,c.transaction_id '
       + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
       + 'LEFT JOIN cases c ON c.case_id=h.complete_case_id AND c.customer_id=e.customer_id AND c.customer_confirmed=1 '
       + "WHERE e.customer_id=? AND e.state=h.kind||'_handoff' "
@@ -632,7 +632,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
         ['UPDATE intake_handoffs AS h SET first_opened_at=? WHERE first_opened_at IS NULL AND ' + match
           + " AND EXISTS(SELECT 1 FROM intake_episodes e WHERE e.episode_id=h.episode_id AND e.state=h.kind||'_handoff')", now, protocol, protocol],
         ['SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.episode_id,h.kind,h.tool_status,'
-          + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status,h.first_opened_at,h.evidence_json,h.actions_json,h.questions_json,'
+          + 'h.destination,h.priority,h.urgency,h.accepted_at,h.reference_short,h.status,h.closing_note,h.first_opened_at,h.evidence_json,h.actions_json,h.questions_json,'
           + 'e.customer_statement,e.language,' + REASON + ',t.transaction_id AS verified_transaction_id,'
           + 'r.producer AS model_version,COALESCE(r.llm_calls,0) AS llm_calls,sc.choice AS suggestion_choice,sm.mark AS suggestion_mark,'
           + 'st.transaction_id AS suggested_transaction_id,st.occurred_at AS suggested_occurred_at,st.source_occurred_at AS suggested_source_occurred_at,'
@@ -664,13 +664,13 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     },
     /**
      * Move one acknowledged handoff (public ``protocol``) from ``from`` to ``to`` in one atomic batch: a history row,
-     * the customer's ``to`` email (when they have a target) and the status change, each guarded by ``status=from``.
+     * the customer's ``to`` email (when they have a target), status and immutable closing note, each guarded by ``status=from``.
      * The email statement runs before the update, so ``status`` still equal to ``from`` while the ``to`` history row
      * exists can only mean this batch inserted it: a replay or a concurrent loser queues nothing. Returns the final
-     * ``{ status, changed_at, customer_id, language, reference }`` (null when no acknowledged handoff matches) and the
+     * ``{ status, closing_note, changed_at, customer_id, language, reference }`` (null when no acknowledged handoff matches) and the
      * queued ``emailId`` or null.
      */
-    transitionHandoff: async ({ protocol, from, to, now, agentSessionRef, emailId }) => {
+    transitionHandoff: async ({ protocol, from, to, closingNote = null, now, agentSessionRef, emailId }) => {
       const target = '(SELECT h.handoff_id FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
         + "WHERE (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?)) AND e.state=h.kind||'_handoff')";
       const results = await batch([
@@ -682,8 +682,8 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + 'AND EXISTS(SELECT 1 FROM handoff_status_history WHERE handoff_id=h.handoff_id AND status=?) '
           + "AND e.language IN ('es','pt','en') AND EXISTS(SELECT 1 FROM notification_targets WHERE customer_id=e.customer_id) RETURNING message_id",
           emailId, now, to, protocol, protocol, from, to],
-        ['UPDATE intake_handoffs SET status=? WHERE handoff_id=' + target + ' AND status=?', to, protocol, protocol, from],
-        ['SELECT h.status,(SELECT changed_at FROM handoff_status_history WHERE handoff_id=h.handoff_id AND status=h.status) AS changed_at,'
+        ['UPDATE intake_handoffs SET status=?,closing_note=? WHERE handoff_id=' + target + ' AND status=?', to, closingNote, protocol, protocol, from],
+        ['SELECT h.status,h.closing_note,(SELECT changed_at FROM handoff_status_history WHERE handoff_id=h.handoff_id AND status=h.status) AS changed_at,'
           + 'e.customer_id,e.language,COALESCE(h.reference_short,h.complete_case_id,h.handoff_id) AS reference '
           + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE h.handoff_id=' + target, protocol, protocol]
       ]);

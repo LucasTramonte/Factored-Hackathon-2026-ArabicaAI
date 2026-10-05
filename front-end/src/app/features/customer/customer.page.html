@@ -221,6 +221,7 @@
                     <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm update-btn" (click)="requestUpdate(r.protocol)" [attr.aria-disabled]="updateUnavailable(r.protocol)" [attr.aria-busy]="updating() === r.protocol"
                       [attr.aria-label]="t().updateMe + ': ' + (r.reference_short ?? r.protocol)">{{ updating() === r.protocol ? t().updateWorking : t().updateMe }}</button>
                     @if (r.status === 'closed') {
+                      <section class="closing-explanation"><h3>{{ t().closingTitle }}</h3><p style="white-space: pre-wrap; overflow-wrap: anywhere">{{ r.closing_note ?? t().closingLegacy }}</p></section>
                       <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm report-again-btn" (click)="reportAgain(r)" [disabled]="!!frozen()"
                         [attr.aria-label]="t().reportAgain + ': ' + (r.reference_short ?? r.protocol)">{{ t().reportAgain }}</button>
                     }
@@ -244,7 +245,7 @@
                       @if (threadFailed()) { <p class="ar-caption" role="status">{{ t().refreshFailed }}</p> }
                       @if (threadChecked(); as checked) { <p class="ar-caption">{{ t().lastChecked }}: {{ checked | date:'HH:mm:ss' }}</p> }
                       <app-message-thread viewer="customer" idPrefix="customer-messages" [scope]="r.protocol" [thread]="thread()" [sending]="messageSending() === r.protocol"
-                        [failed]="messageFailed() || (threadFailed() ? t().refreshFailed : '')" [sent]="messagesSent()" (send)="sendMessage($event)" />
+                        [failed]="messageFailed() || threadRefreshError()" [sent]="messagesSent()" (send)="sendMessage($event)" />
                     }</li>
                 }</ul>
                 @if (reports()!.has_more) { <span class="ar-caption">{{ t().moreReports }}</span> }
