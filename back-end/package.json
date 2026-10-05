@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test \"test/unit/*.test.js\" && node test/run-local.mjs",
+    "test": "node --test \"test/unit/*.test.js\" && node --test test/assist-accounting.mjs && node test/run-local.mjs",
     "dev": "wrangler dev",
     "deploy": "node scripts/predeploy.mjs && wrangler deploy",
     "prepare-assets": "node scripts/prepare-assets.mjs",

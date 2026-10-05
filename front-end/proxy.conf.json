@@ -42,5 +42,17 @@
   "/healthz": {
     "target": "http://127.0.0.1:8787",
     "secure": false
+  },
+  "/agent/intake-messages": {
+    "target": "http://127.0.0.1:8787",
+    "secure": false
+  },
+  "/agent/intake-assist": {
+    "target": "http://127.0.0.1:8787",
+    "secure": false
+  },
+  "/agent/suggestion-mark": {
+    "target": "http://127.0.0.1:8787",
+    "secure": false
   }
 }

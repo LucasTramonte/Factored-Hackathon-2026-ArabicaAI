@@ -53,3 +53,26 @@
 ## Why not Cloud Run for observability
 
 Cloudflare provides the logs, traces and metrics this needs, on the plan we have. Moving would add a second runtime (ADR-003) and a migration from D1 to Cloud SQL, with its own data copy, the day before submission, to gain what three files and two GCP resources already give. Reopen if the logs need more than 3 days of retention or a SIEM export (Logpush needs a paid plan), or if a regulator requires the runtime in GCP.
+
+## Reviewer assistance UI (implemented; activation pending)
+
+In the agent report detail, **Prepare reply** requests a transient AI summary, missing-information checklist and unsaved draft. It does not send or change status. **Use draft in message** requires confirmation before replacing unsent text, then the reviewer edits and explicitly uses the existing **Send message**. Only that human send persists; it carries the generation's status/message-count snapshot.
+
+A 409 retains editable text and blocks assisted sending. **Refresh report context**, then prepare/apply a fresh draft or explicitly confirm manual review of the refreshed context and retained text. Closed reports remain read-only. Report/session/language changes discard AI state and late responses; disabled assistance or provider errors leave manual messaging available. All controls/copy support ES/PT/EN; omitted conversation is labeled only when `context_truncated` is true. Do not record summary, draft, message or statement bodies in logs or telemetry.
+
+The reviewer switch remains default-off. Synthetic local loopback-provider UI checks establish workflow behavior only; dedicated model-quality evaluation, ADR review, live pilot/spending approval and activation approval remain pending.
+
+## Support-assist pilot and controlled activation (pending external)
+
+Both `ASSIST_REVIEWER_ENABLED` and `ASSIST_CUSTOMER_ENABLED` remain absent/off in production; exactly `1` enables each independently. [Dedicated evaluation](../../evals/support_assist/README.md) and [aggregate local evidence](../Evidence/support-assist-pilot.md) do not authorize activation. Do not interpret the existing extractor's `suggestion_run` logs, model metrics or cost as support-assist evidence.
+
+After a person approves scope/spending, review the exact frozen bundle and label audit before a synthetic-only live pilot. Pace actual calls within shared 200/UTC day and five/session/feature/rolling minute, counting development, timeouts and abandoned slots. 360 acceptance + 60 development require at least three UTC days, plus any other reserved calls. Never bypass these caps. Preserve reviewed private outputs outside logs, then score the full run and inspect its provenance/approval references. Human reply/handling timing is measured separately from automated status and generation; no observed operator timing exists yet.
+
+Use existing Worker request logs for status/latency grouped by route-table keys `/agent/intake-assist` and `/intake/handoff/{reference}/assist`; raw references never enter route labels. Assistant accounting lives in bounded `support_assist_runs`: outcome, elapsed, known input/output tokens, unknown usage, one-call count and bundle version. No dedicated support model-output log or general export endpoint was added. A person's authorized metadata inspection/export must exclude UUID/session-hash/report-reference linkage from public aggregates. Reserved rows with no terminal result remain conservatively unknown; existing bounded idle housekeeping marks old reservations abandoned and removes metadata older than seven days (at most 100 per invocation). Confirm that existing sweep runs often enough; these features create no scheduler. Missing tokens are not zero cost; timed-out provider work can still be billed.
+
+Human release checklist, still unperformed:
+
+1. Inspect ADR/data scope, frozen labels/hashes, complete reviewed live safety/quality/performance/cost evidence, operator pilot and PR; separately approve each assistant switch. Normal green-main deployment applies additive migration 0030 before Worker release. No agent runs remote migrations, changes IAM, deploys, merges or activates.
+2. On the actual production URL, record deployment SHA and matching frontend assets; verify login/OTP/logo and ES/PT/EN email requests, owned customer message persistence, waiting/status, explicit reviewer edit/send, reply, closure/follow-up, source/identity isolation and each approved switch. Retain aggregate evidence and exact UTC observation bounds. Local screenshots do not prove production behavior or email receipt.
+3. Observe route errors/latency and dedicated usage/cost by feature. Any reviewed safety failure blocks the affected feature immediately; successful generation p95 > 8 s, failed/timeout share > 5%, deadline violation or spend beyond approved allowance requires investigation and disabling that feature. Report sample size/window and all failures; the existing provider alerts may also cover the extractor and are not a dedicated support gate.
+4. A person disables only the failing assistant switch and confirms the production configuration/deployment. Recheck manual messages, factual status and existing extraction. Preserve private failure evidence; no automatic banking action, closure or model retry is introduced. Re-enable only after human review and explicit approval.

@@ -6,15 +6,21 @@ import { fail, json } from '../../http.js';
 import { MESSAGES_PER_REPORT } from '../../store/d1.js';
 import { UUID } from './validation.js';
 
+/** Exact monotonic report snapshot used to reject stale assisted sends. */
+export const validSnapshot = v => v !== null && typeof v === 'object' && !Array.isArray(v)
+  && Object.keys(v).sort().join() === 'message_count,status' && ['received','in_review','closed'].includes(v.status)
+  && Number.isInteger(v.message_count) && v.message_count >= 0 && v.message_count <= MESSAGES_PER_REPORT;
+
 /** Characters a message may hold after trimming, in code points. */
 export const MESSAGE_MAX = 2000;
 
 /**
- * ``{ value: { body, key } }`` for exactly ``{ body, idempotency_key }`` (plus ``protocol`` when ``withProtocol``), or
+ * ``{ value: { body, key } }`` for exactly ``{ body, idempotency_key }`` (plus ``protocol`` and optional ``expected_snapshot`` when ``withProtocol``), or
  * ``{ error }`` (422). The body is well-formed Unicode without U+0000, trimmed, 1–2000 code points.
  */
 export function validateMessage(value, { withProtocol = false } = {}) {
-  const keys = withProtocol ? 'body,idempotency_key,protocol' : 'body,idempotency_key';
+  const assisted = withProtocol && Object.hasOwn(value ?? {}, 'expected_snapshot');
+  const keys = withProtocol ? (assisted ? 'body,expected_snapshot,idempotency_key,protocol' : 'body,idempotency_key,protocol') : 'body,idempotency_key';
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).sort().join() !== keys) {
     return { error: fail(422, `Provide exactly ${keys.replaceAll(',', ', ')}`) };
   }
@@ -24,7 +30,8 @@ export function validateMessage(value, { withProtocol = false } = {}) {
   const body = value.body.trim();
   const length = [...body].length;
   if (length < 1 || length > MESSAGE_MAX) return { error: fail(422, `Write a message of 1–${MESSAGE_MAX} characters`) };
-  return { value: { body, key: value.idempotency_key.toLowerCase(), protocol: value.protocol?.toLowerCase() } };
+  if (assisted && !validSnapshot(value.expected_snapshot)) return { error: fail(422, 'Provide a valid expected_snapshot') };
+  return { value: { expectedSnapshot: assisted ? value.expected_snapshot : undefined, body, key: value.idempotency_key.toLowerCase(), protocol: value.protocol?.toLowerCase() } };
 }
 
 /** The served shape of one stored message: who wrote it and when, never which agent session. */
@@ -41,6 +48,7 @@ export const threadJson = ({ status, items }) => ({ status, can_post: status !==
 export function postOutcome(found, messageId, body) {
   if (!found) return fail(404, 'Report not found');
   if (!found.message) {
+    if (found.stale) return fail(409, 'This report changed; refresh before sending');
     return found.status === 'closed' ? fail(409, 'This report is closed; messages are read-only')
       : fail(409, `This report already has ${MESSAGES_PER_REPORT} messages`);
   }

@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const SUPPORTED = new Set(['type', 'const', 'pattern', 'minLength', 'maxLength', 'required', 'properties',
-  'additionalProperties', 'items', 'maxItems', '$ref', 'description']);
+  'additionalProperties', 'items', 'maxItems', '$ref', 'description', 'enum', 'minimum', 'maximum', 'uniqueItems', 'anyOf']);
 const schemaPath = resolve(import.meta.dirname, '../../../front-end/contracts/intake-api.schema.json');
 export const contract = JSON.parse(readFileSync(schemaPath, 'utf8'));
 
@@ -23,9 +23,15 @@ function check(schema, value, path, errors) {
   for (const key of Object.keys(schema)) {
     if (!SUPPORTED.has(key)) throw new Error(`Unsupported schema keyword ${key} at ${path}`);
   }
+  if (schema.anyOf && !schema.anyOf.some(branch => { const found = []; check(branch, value, path, found); return found.length === 0; })) errors.push(`${path}: no matching anyOf branch`);
   if (schema.$ref) {
     const name = schema.$ref.replace('#/$defs/', '');
     return check(contract.$defs[name], value, path, errors);
+  }
+  if (schema.enum && !schema.enum.includes(value)) errors.push(`${path}: unexpected enum value`);
+  if (typeof value === 'number') {
+    if (schema.minimum !== undefined && value < schema.minimum) errors.push(`${path}: below ${schema.minimum}`);
+    if (schema.maximum !== undefined && value > schema.maximum) errors.push(`${path}: above ${schema.maximum}`);
   }
   if ('const' in schema && value !== schema.const) errors.push(`${path}: expected ${JSON.stringify(schema.const)}`);
   if (schema.type) {
@@ -43,6 +49,7 @@ function check(schema, value, path, errors) {
     if (schema.pattern && !new RegExp(schema.pattern, 'u').test(value)) errors.push(`${path}: does not match ${schema.pattern}`);
   }
   if (Array.isArray(value)) {
+    if (schema.uniqueItems && new Set(value.map(item => JSON.stringify(item))).size !== value.length) errors.push(`${path}: duplicate items`);
     if (schema.maxItems !== undefined && value.length > schema.maxItems) errors.push(`${path}: more than ${schema.maxItems} items`);
     if (schema.items) value.forEach((item, i) => check(schema.items, item, `${path}[${i}]`, errors));
   }

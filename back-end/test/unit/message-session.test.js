@@ -70,3 +70,21 @@ for (const change of ['revoked', 'expired', 'swapped', 'wrong actor']) {
     assert.equal(agent.message.body, 'Respuesta', 'agent storage still needs no customer session');
   });
 }
+
+for (const change of ['revoked', 'expired', 'wrong actor']) {
+  test(`a ${change} agent session blocks insert and idempotent readback inside the message batch`, async t => {
+    const { db, store, call, receipt } = await setup(t);
+    assert.equal((await call('/demo/agent-session', {})).status, 200);
+    const body = { protocol: receipt.protocol, body: 'Respuesta humana', idempotency_key: crypto.randomUUID() };
+    assert.equal((await call('/agent/intake-messages', body)).status, 201);
+    const selected = { ...store, postMessage: async args => {
+      assert.match(args.sessionHash, /^[a-f0-9]{64}$/);
+      if (change === 'revoked') db.prepare('DELETE FROM sessions WHERE token_hash=?').run(args.sessionHash);
+      if (change === 'expired') db.prepare('UPDATE sessions SET expires_at=? WHERE token_hash=?').run(args.now, args.sessionHash);
+      if (change === 'wrong actor') db.prepare("UPDATE sessions SET actor='customer',customer_id='demo-ana' WHERE token_hash=?").run(args.sessionHash);
+      return store.postMessage(args);
+    } };
+    assert.equal((await call('/agent/intake-messages', body, selected)).status, 404);
+    assert.equal(db.prepare('SELECT count(*) n FROM handoff_messages').get().n, 1);
+  });
+}

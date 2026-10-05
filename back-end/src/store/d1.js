@@ -210,6 +210,41 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     return { handoff, replayed: handoff?.handoff_id !== handoffId };
   };
   return {
+    /** Atomically reserve one UUID under the shared 200/day and session-feature 5/minute caps; failures retain slots and the original prompt/model version. */
+    reserveAssist: async ({ requestId, sessionHash, mode, protocol, now, version, customerId = null }) => {
+      if (!EPISODE_CURSOR.test(requestId) || !/^[0-9a-f]{64}$/.test(sessionHash) || !['reviewer', 'customer'].includes(mode)
+        || !EPISODE_CURSOR.test(protocol) || !Number.isSafeInteger(now) || now < 0
+        || typeof version !== 'string' || !version || version.length > 160) throw new Error('Invalid assistance reservation');
+      const day = Math.floor(now / 86400000) * 86400000;
+      const [inserted, existing] = await batch([
+        ['INSERT INTO support_assist_runs(request_id,session_hash,mode,protocol,created_at,version) SELECT ?,?,?,?,?,? '
+          + 'WHERE NOT EXISTS(SELECT 1 FROM support_assist_runs WHERE request_id=?) '
+          + 'AND (SELECT COUNT(*) FROM (SELECT 1 FROM support_assist_runs WHERE created_at>=? AND created_at<? LIMIT 200))<200 '
+          + 'AND (SELECT COUNT(*) FROM (SELECT 1 FROM support_assist_runs WHERE session_hash=? AND mode=? AND created_at>? AND created_at<=? LIMIT 5))<5 '
+          + (customerId === null ? '' : "AND EXISTS(SELECT 1 FROM sessions s JOIN intake_episodes e ON e.customer_id=s.customer_id JOIN customers c ON c.customer_id=e.customer_id JOIN intake_handoffs h USING(episode_id) WHERE s.token_hash=? AND s.actor='customer' AND s.expires_at>? AND s.customer_id=? AND c.source='fictitious' AND e.state=h.kind||'_handoff' AND (h.complete_case_id=? OR (h.complete_case_id IS NULL AND h.handoff_id=?))) ")
+          + 'RETURNING request_id', requestId, sessionHash, mode, protocol, now, version, requestId, day, day + 86400000, sessionHash, mode, now - 60000, now, ...(customerId === null ? [] : [sessionHash, now, customerId, protocol, protocol])],
+        ['SELECT request_id FROM support_assist_runs WHERE request_id=? AND changes()=0', requestId]
+      ]);
+      return inserted.results.length ? 'reserved' : existing.results.length ? 'duplicate' : 'limited';
+    },
+    /** Finish metadata once; an abandoned run cannot be resurrected or have its retained usage erased. */
+    finishAssist: async ({ requestId, outcome, latencyMs, usage, version }) => {
+      if (!EPISODE_CURSOR.test(requestId) || !['success','timeout','provider_error','auth_error','invalid_output','config_error','stale'].includes(outcome)
+        || !Number.isSafeInteger(latencyMs) || latencyMs < 0 || typeof version !== 'string' || !version || version.length > 160
+        || !usage || !['llm_calls','known_input_tokens','known_output_tokens','usage_unavailable_calls'].every(k=>Number.isSafeInteger(usage[k]) && usage[k]>=0)
+        || usage.llm_calls > 1 || usage.usage_unavailable_calls > usage.llm_calls) throw new Error('Invalid assistance outcome');
+      await all('UPDATE support_assist_runs SET outcome=?,latency_ms=?,llm_calls=?,known_input_tokens=?,known_output_tokens=?,usage_unavailable_calls=? '
+        + 'WHERE request_id=? AND outcome IS NULL AND version=?', outcome, latencyMs, usage.llm_calls, usage.known_input_tokens, usage.known_output_tokens, usage.usage_unavailable_calls, requestId, version);
+    },
+    /** One indexed bounded sweep: abandon at most 100 older-than-ten-minute runs; delete at most 100 older-than-seven-day rows. */
+    sweepAssistRuns: async ({ now, limit = 100 }) => {
+      if (!Number.isSafeInteger(now) || now < 0 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid closure bounds');
+      const [closed, deleted] = await batch([
+        ["UPDATE support_assist_runs SET outcome='abandoned' WHERE request_id IN (SELECT request_id FROM support_assist_runs WHERE outcome IS NULL AND created_at<? ORDER BY created_at LIMIT ?) RETURNING request_id", now - 600000, limit],
+        ['DELETE FROM support_assist_runs WHERE request_id IN (SELECT request_id FROM support_assist_runs WHERE created_at<? ORDER BY created_at LIMIT ?) RETURNING request_id', now - 7 * 86400000, limit]
+      ]);
+      return { abandoned: closed.results.length, deleted: deleted.results.length };
+    },
     metrics: () => ({ ...totals }),
     ping: () => all('SELECT 1 AS ok'),
     /** ``'fictitious'``, ``'dataset'`` or ``null`` when the customer isn't loaded (migration 0006). */
@@ -756,6 +791,27 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     serviceTiming: () => all(
       'SELECT version,published_on,metric,unit,p50,p90,n,missing,negative,population,subcategory,window_start,window_end_exclusive,source '
       + 'FROM service_timing WHERE version=(SELECT version FROM service_timing ORDER BY published_on DESC,version DESC LIMIT 1) ORDER BY metric'),
+    /** Read-only, case-local synthetic context; no opened marker, history, identity or transaction projection. */
+    findReviewerContext: async protocol => {
+      const [where, params] = messageScope(null, protocol, '');
+      return first('SELECT h.status,h.first_opened_at,e.customer_statement,c.source,'
+        + '(SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id) AS message_count,'
+        + "(SELECT json_group_array(json_object('author',author,'body',body)) FROM (SELECT author,body FROM handoff_messages "
+        + 'WHERE handoff_id=h.handoff_id ORDER BY created_at,rowid LIMIT 50)) AS messages_json '
+        + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) JOIN customers c ON c.customer_id=e.customer_id WHERE ' + where, ...params);
+    },
+    /** Ownership-scoped synthetic eligibility and bounded snapshot; no statement, message bodies or transactions. */
+    findCustomerAssist: async ({ customerId, protocol, short = '' }) => {
+      const [where, params] = messageScope(customerId, protocol, short);
+      return first('SELECT COALESCE(h.complete_case_id,h.handoff_id) AS protocol,h.status,c.source,(SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id) AS message_count '
+        + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) JOIN customers c ON c.customer_id=e.customer_id WHERE ' + where, ...params);
+    },
+    /** Read the current monotonic snapshot without loading content or writing reviewer markers. */
+    assistSnapshot: async protocol => {
+      const [where, params] = messageScope(null, protocol, '');
+      return first('SELECT h.status,(SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id) AS message_count '
+        + 'FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE ' + where, ...params);
+    },
     /**
      * One report's message thread (migration 0028, ADR-015), oldest first, at most ``MESSAGES_PER_REPORT`` + 1 rows so an
      * overflow is visible. ``customerId`` scopes it to that customer's own acknowledged report (a protocol or a short
@@ -774,22 +830,28 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     /**
      * Post one message in one statement: only on an acknowledged report that isn't closed and has fewer than
      * ``MESSAGES_PER_REPORT`` messages, once per (report, author, idempotency key). Then read back what that key holds.
-     * Customer writes and readbacks both require the supplied session to remain live and owned by that customer.
+     * Customer writes/readbacks require a live owned session; route-supplied agent sessions are checked too.
+     * An optional expectedSnapshot constrains the insert atomically, while readback still replays an earlier same-key message.
      * Resolves null when the report isn't found for this caller, else ``{ status, total, message }`` (``message`` null when
      * nothing was stored for the key: closed or full).
      */
-    postMessage: async ({ customerId = null, protocol, short = '', author, body, key, now, agentSessionRef = null, messageId, sessionHash }) => {
+    postMessage: async ({ customerId = null, protocol, short = '', author, body, key, now, agentSessionRef = null, messageId, sessionHash, expectedSnapshot }) => {
       let [where, params] = messageScope(customerId, protocol, short);
       if (customerId !== null) {
         where += " AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='customer' AND customer_id=? AND expires_at>?)";
         params = [...params, sessionHash, customerId, now];
+      } else if (sessionHash) {
+        where += " AND EXISTS(SELECT 1 FROM sessions WHERE token_hash=? AND actor='agent' AND expires_at>?)";
+        params = [...params, sessionHash, now];
       }
+      const snapshotPredicate = expectedSnapshot ? ' AND h.status=? AND (SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id)=? ' : '';
       const [, read] = await batch([
         ['INSERT INTO handoff_messages(message_id,handoff_id,author,body,idempotency_key,created_at,agent_session_ref) '
           + 'SELECT ?,h.handoff_id,?,?,?,?,? FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) WHERE ' + where
           + " AND h.status<>'closed' AND (SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id)<? "
-          + 'ON CONFLICT(handoff_id,author,idempotency_key) DO NOTHING',
-          messageId, author, body, key, now, agentSessionRef, ...params, MESSAGES_PER_REPORT],
+          + snapshotPredicate + 'ON CONFLICT(handoff_id,author,idempotency_key) DO NOTHING',
+          messageId, author, body, key, now, agentSessionRef, ...params, MESSAGES_PER_REPORT,
+          ...(expectedSnapshot ? [expectedSnapshot.status, expectedSnapshot.message_count] : [])],
         ['SELECT h.status,(SELECT count(*) FROM handoff_messages WHERE handoff_id=h.handoff_id) AS total,'
           + 'm.message_id,m.author,m.body,m.created_at FROM intake_handoffs h JOIN intake_episodes e USING(episode_id) '
           + 'LEFT JOIN handoff_messages m ON m.handoff_id=h.handoff_id AND m.author=? AND m.idempotency_key=? WHERE ' + where,
@@ -797,7 +859,7 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
       const row = read.results[0];
       if (!row) return null;
       const { status, total, message_id, created_at } = row;
-      return { status, total, message: message_id ? { message_id, author: row.author, body: row.body, created_at } : null };
+      return { status, total, stale: !!expectedSnapshot && (status !== expectedSnapshot.status || total !== expectedSnapshot.message_count), message: message_id ? { message_id, author: row.author, body: row.body, created_at } : null };
     },
     /** Count the call before it runs as one call with unknown usage, so a Worker stopped mid-call never makes it free. */
     startSuggestionCall: ({ handoffId, producer }) => all(

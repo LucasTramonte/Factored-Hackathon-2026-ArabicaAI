@@ -46,4 +46,10 @@ describe('CustomerService guided intake', () => {
     expect(api.request.calls.allArgs()).toEqual([['/transactions?lang=pt'],
       ['/transactions/displayed', { view_ref: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' }]]);
   });
+  it('sends only current question, selected language and explicit UUID to the owned route', async () => {
+    const api=jasmine.createSpyObj<ApiService>('ApiService',['request']);api.request.and.resolveTo({});TestBed.configureTestingModule({providers:[{provide:ApiService,useValue:api}]});
+    await TestBed.inject(CustomerService).assist('AR-AAAA-BBBB','Current question','pt','request-uuid');
+    expect(api.request.calls.mostRecent().args).toEqual(['/intake/handoff/AR-AAAA-BBBB/assist',{question:'Current question',language:'pt',request_id:'request-uuid'}]);
+  });
+
 });

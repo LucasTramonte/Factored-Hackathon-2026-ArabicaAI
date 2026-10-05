@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/http/api.service';
-import { AgentIntakeDetail, AgentIntakeList, AgentSession, IntakeTransition, MessageThread, ReportMessage, Role, SuggestionMark, SuggestionMarkValue } from '../../shared/models/intake.model';
+import { AgentIntakeDetail, AgentIntakeList, AgentSession, IntakeTransition, MessageThread, ReportMessage, Role, AssistSnapshot, ReviewerAssist, IntakeLang, SuggestionMark, SuggestionMarkValue } from '../../shared/models/intake.model';
 
 /** Agent calls: a separate session, read-only views and the one status step a person takes. Nothing refunds, blocks or decides. */
 @Injectable({ providedIn: 'root' })
@@ -38,8 +38,13 @@ export class AgentService {
     return this.api.request<MessageThread>('/agent/intake-messages?protocol=' + encodeURIComponent(protocol));
   }
 
+  /** One explicit request prepares suggestions only; the server owns the case context. */
+  prepareReply(protocol: string, language: IntakeLang, requestId: string): Promise<ReviewerAssist> {
+    return this.api.request<ReviewerAssist>('/agent/intake-assist', { protocol, language, request_id: requestId });
+  }
+
   /** Write to the customer; the same ``key`` on a retry stores one message (409 once the report is closed). */
-  postMessage(protocol: string, body: string, key: string): Promise<ReportMessage> {
-    return this.api.request<ReportMessage>('/agent/intake-messages', { protocol, body, idempotency_key: key });
+  postMessage(protocol: string, body: string, key: string, snapshot?: AssistSnapshot): Promise<ReportMessage> {
+    return this.api.request<ReportMessage>('/agent/intake-messages', { protocol, body, idempotency_key: key, ...(snapshot ? { expected_snapshot: snapshot } : {}) });
   }
 }

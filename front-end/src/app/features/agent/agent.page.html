@@ -144,8 +144,30 @@
             </section>
           }
 
+          <section class="reviewer-assist ar-panel" aria-labelledby="reviewer-assist-title">
+            <h3 id="reviewer-assist-title">{{ t().assistTitle }}</h3>
+            <p class="ar-small">{{ t().assistNotice }}</p>
+            <div class="assist-actions">
+              <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm assist-prepare" (click)="prepareReply()" [attr.aria-disabled]="assistBusy() || d.status === 'closed' || messageSending() === d.protocol" [disabled]="d.status === 'closed'">{{ t().assistPrepare }}</button>
+              <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm" (click)="refreshReplyContext()" [attr.aria-disabled]="assistBusy()">{{ t().assistRefresh }}</button>
+            </div>
+            <p role="status" class="ar-small">{{ assistBusy() ? t().working : '' }}</p>
+            @if (assistFailed()) { <p role="alert" class="ar-small">{{ assistFailed() }}</p> }
+            @if (assistance(); as a) {
+              <h4>{{ t().assistSummary }}</h4><p class="assist-text">{{ a.summary }}</p>
+              <h4>{{ t().assistMissing }}</h4>
+              <ul>@for (field of a.missing_fields; track field) { <li>{{ assistField(field) }}</li> } @empty { <li>{{ t().none }}</li> }</ul>
+              @if (a.context_truncated) { <p class="ar-caption">{{ t().assistTruncated }}</p> }
+              <h4>{{ t().assistDraft }}</h4><p class="assist-text" [attr.lang]="a.language">{{ a.draft }}</p>
+              <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm assist-apply" (click)="applyReply()" [disabled]="!thread()?.can_post">{{ t().assistApply }}</button>
+            }
+            @if (assistedStale()) {
+              <p role="alert" class="ar-small">{{ t().assistStale }}</p>
+              <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm" (click)="reviewManually()" [disabled]="!contextRefreshed() || !thread()?.can_post">{{ t().assistManualReview }}</button>
+            }
+          </section>
           <app-message-thread viewer="agent" idPrefix="agent-messages" [scope]="d.protocol" [thread]="thread()" [sending]="messageSending() === d.protocol"
-            [failed]="messageFailed()" [sent]="messagesSent()" (send)="sendMessage($event)" />
+            [failed]="messageFailed()" [sent]="messagesSent()" [acceptedDraft]="composerDraft()" [sendBlocked]="assistedStale()" (send)="sendMessage($event)" />
           <h3>{{ t().statement }}</h3>
           <p class="case-statement" [attr.lang]="d.language">{{ d.customer_statement }}</p>
 

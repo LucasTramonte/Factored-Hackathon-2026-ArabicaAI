@@ -28,6 +28,13 @@ describe('MessageThreadView', () => {
     expect(render(THREAD, 'agent').el.querySelectorAll('.message')[0].textContent).toContain('You');
   });
 
+  for (const [lang, title] of [['es', 'Mensajes con el equipo de revisión'], ['pt', 'Mensagens com a equipe de análise'], ['en', 'Messages with the review team']] as const) {
+    it(`labels the customer human thread in ${lang}`, () => {
+      const { fixture, el } = render(THREAD); TestBed.inject(LangService).set(lang); fixture.detectChanges();
+      expect(el.querySelector('h3')?.textContent).toBe(title); fixture.destroy();
+    });
+  }
+
   it('emits the trimmed text, refuses an empty one with an alert, and clears the draft once the page reports it sent', () => {
     const { fixture, el, c } = render(THREAD);
     const sent: string[] = [];
@@ -70,4 +77,19 @@ describe('MessageThreadView', () => {
     expect(el.querySelector('.messages-readonly')?.textContent).toBe(c.t()[status === 'closed' ? 'messagesClosed' : 'messagesFull']);
     el.querySelector<HTMLButtonElement>('.message-send')!.click(); c.submit(); expect(sent).toEqual([]); fixture.destroy();
   });
+  it('seeds only an explicitly accepted matching-scope version, preserves edits on the same version and discards invalidated AI text', () => {
+    const { fixture, c } = render(THREAD, 'agent');
+    fixture.componentRef.setInput('scope', 'report-a'); fixture.detectChanges();
+    c.draft = 'Manual work';
+    fixture.componentRef.setInput('acceptedDraft', { body: 'Foreign draft', scope: 'report-b', version: 1 }); fixture.detectChanges();
+    expect(c.draft).toBe('Manual work');
+    fixture.componentRef.setInput('acceptedDraft', { body: 'Accepted by the person', scope: 'report-a', version: 2 }); fixture.detectChanges();
+    expect(c.draft).toBe('Accepted by the person'); c.draft = 'Human edited';
+    fixture.componentRef.setInput('acceptedDraft', { body: 'Same version', scope: 'report-a', version: 2 }); fixture.detectChanges();
+    expect(c.draft).toBe('Human edited');
+    fixture.componentRef.setInput('acceptedDraft', null); fixture.detectChanges(); expect(c.draft).toBe('');
+    c.draft = 'Ordinary manual work'; fixture.componentRef.setInput('sendBlocked', true); fixture.detectChanges();
+    const sent: string[] = []; c.send.subscribe(body => sent.push(body)); c.submit(); expect(sent).toEqual([]); expect(c.draft).toBe('Ordinary manual work');
+  });
+
 });

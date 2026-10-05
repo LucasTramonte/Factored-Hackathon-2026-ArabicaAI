@@ -2,7 +2,7 @@ import { Component, effect, inject, input, output, untracked } from '@angular/co
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LangService } from '../i18n/lang.service';
-import { MessageThread } from '../models/intake.model';
+import { MessageThread, MessageDraft } from '../models/intake.model';
 
 /**
  * One report's messages between the customer and the agent (ADR-015), shared by both views. Presentational: the page
@@ -15,7 +15,7 @@ import { MessageThread } from '../models/intake.model';
   imports: [DatePipe, FormsModule],
   template: `
     <section class="message-thread" [attr.aria-labelledby]="idPrefix() + '-title'">
-      <h3 [id]="idPrefix() + '-title'">{{ t().messagesTitle }}</h3>
+      <h3 [id]="idPrefix() + '-title'">{{ viewer() === 'customer' ? t().messagesTeamTitle : t().messagesTitle }}</h3>
       <ol class="messages" role="log" aria-live="polite">
         @for (m of thread()?.items ?? []; track m.message_id) {
           <li [class]="'message message-' + m.author + (m.author === viewer() ? ' message-mine' : '')">
@@ -31,7 +31,7 @@ import { MessageThread } from '../models/intake.model';
         <label class="ar-field" [for]="idPrefix() + '-draft'"><span class="ar-field-label">{{ t().messageLabel }}</span></label>
         <textarea class="ar-textarea" [id]="idPrefix() + '-draft'" [(ngModel)]="draft" rows="3" maxlength="2000" [readOnly]="!thread()?.can_post"
           [attr.aria-invalid]="empty ? true : null" [attr.aria-describedby]="empty || failed() ? idPrefix() + '-error' : null"></textarea>
-        <div class="report-actions"><button type="button" class="ar-btn ar-btn-sm message-send" (click)="submit()" [disabled]="!thread()?.can_post" [attr.aria-disabled]="sending() || !thread()?.can_post">{{ t().messageSend }}</button></div>
+        <div class="report-actions"><button type="button" class="ar-btn ar-btn-sm message-send" (click)="submit()" [disabled]="!thread()?.can_post || sendBlocked()" [attr.aria-disabled]="sending() || !thread()?.can_post || sendBlocked()">{{ retry() ? t().messageRetry : t().messageSend }}</button></div>
       }
       @if (thread() && !thread()!.can_post) {
         <p class="ar-caption messages-readonly">{{ thread()!.status === 'closed' ? t().messagesClosed : t().messagesFull }}</p>
@@ -56,20 +56,36 @@ export class MessageThreadView {
   readonly idPrefix = input('messages');
   readonly sending = input(false);
   readonly failed = input('');
+  readonly retry = input(false);
   /** Bumped by the page after a successful post on this report, which clears the draft. */
   readonly sent = input(0);
   /** The report shown (its protocol): a different report never inherits the previous one's draft. */
   readonly scope = input('');
   readonly send = output<string>();
+  /** Parent explicitly accepted this version, confirming any unsent-text replacement first. Null invalidates only an applied AI draft. */
+  readonly acceptedDraft = input<MessageDraft | null>(null);
+  readonly sendBlocked = input(false);
+  private acceptedVersion: number | null = null;
   draft = '';
   empty = false;
 
   constructor() {
-    effect(() => { this.sent(); this.scope(); untracked(() => { this.draft = ''; this.empty = false; }); });
+    effect(() => { this.sent(); this.scope(); untracked(() => { this.draft = ''; this.empty = false; this.acceptedVersion = null; }); });
+    effect(() => {
+      const seed = this.acceptedDraft();
+      const scope = this.scope();
+      untracked(() => {
+        if (seed?.scope === scope && seed.version !== this.acceptedVersion) {
+          this.draft = seed.body; this.empty = false; this.acceptedVersion = seed.version;
+        } else if (!seed && this.acceptedVersion !== null) {
+          this.draft = ''; this.acceptedVersion = null;
+        }
+      });
+    });
   }
 
   submit(): void {
-    if (this.sending() || !this.thread()?.can_post) return;
+    if (this.sending() || this.sendBlocked() || !this.thread()?.can_post) return;
     const body = this.draft.trim();
     this.empty = !body;
     if (body) this.send.emit(body);

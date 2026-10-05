@@ -11,7 +11,7 @@ import { CustomerPicker } from '../../shared/customer-picker/customer-picker.com
 import { MessageThreadView } from '../../shared/messages/message-thread.component';
 import { ApiError } from '../../core/http/api.service';
 import { CustomerSession, Identity, IntakeConfirmBody, IntakeHandoffBody, IntakeLang, IntakeReceipt, IntakeStart, IntakeStartBody,
-  MessageThread, REASONS, REASON_LABEL, Reason, Report, ReportList, ServiceTimes, SuggestedCharge, SuggestionAnswer, SuggestionList, Transaction } from '../../shared/models/intake.model';
+  CustomerAssist, MessageDraft, MessageThread, REASONS, REASON_LABEL, Reason, Report, ReportList, ServiceTimes, SuggestedCharge, SuggestionAnswer, SuggestionList, Transaction } from '../../shared/models/intake.model';
 import { CustomerService } from './customer.service';
 import { CognitoService } from '../../core/auth/cognito.service';
 import { AgentService } from '../agent/agent.service';
@@ -254,6 +254,19 @@ export class CustomerPage implements OnInit, OnDestroy {
     || (this.known()?.display_name ?? '').replace(/\s*\(demo\)$/, ''));
 
   constructor() {
+    effect(() => { this.client(); this.roles(); this.lang.lang(); this.openThread(); this.clearQuestionHelp(); });
+    effect(() => {
+      const answer = this.questionAnswer();
+      if (answer && !this.questionSnapshotMatches(answer.result)) { this.questionAnswer.set(null); this.questionError.set(this.t().customerAssistUnavailable); }
+    });
+    effect(() => {
+      const language = this.lang.lang();
+      if (language === this.statusCheckLanguage) return;
+      this.statusCheckLanguage = language;
+      this.statusCheckWatch++;
+      this.statusExplanation.set(null);
+      this.statusChecking.set(null);
+    });
     // Move focus to the receipt, the choose step (it replaces the focused Send button), the details field (it replaces the
     // focused "can't find" button) and the chat heading when each appears; the heading is last, so opening the panel focuses it.
     for (const name of ['codeField', 'intakeReceiptEl', 'chooseStep', 'detailsField', 'chatPanel'] as const) {
@@ -775,6 +788,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   private stopThreadRefresh(): void {
+    this.clearQuestionHelp();
+    this.statusCheckWatch++; this.statusExplanation.set(null); this.statusChecking.set(null); this.messageSaved.set(null);
     this.threadWatch++; clearTimeout(this.threadTimer); this.threadAbort?.abort();
     this.threadAbort = null; this.threadRead = null; this.threadDelay = 30000; this.threadStarted = -Infinity; this.threadRetryAt = 0;
     this.threadChecked.set(null); this.threadFailed.set(false); this.agentReplyNotice.set(false);
@@ -807,6 +822,94 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly messageSending = signal<string | null>(null);
   readonly messageFailed = signal('');
   readonly messagesSent = signal(0);
+  readonly messageSaved = signal<string | null>(null);
+  readonly statusChecking = signal<string | null>(null);
+  readonly statusExplanation = signal<{ protocol: string; report: Report | null; checked: number | null; failed: boolean } | null>(null);
+  private statusCheckWatch = 0;
+  private statusCheckLanguage = this.lang.lang();
+
+  /** Read only the owned report list; receipt time is not a status-change timestamp. */
+  async checkReportStatus(protocol: string): Promise<void> {
+    if (this.statusChecking() || !this.client() || this.destroyed || !this.reports()?.items.some(r => r.protocol === protocol)) return;
+    const generation = this.generation, watch = this.threadWatch, language = this.lang.lang(), check = ++this.statusCheckWatch;
+    this.statusCheckLanguage = language;
+    this.statusChecking.set(protocol);
+    this.statusExplanation.set(null);
+    if (this.canRefresh()) await this.loadReports();
+    if (generation !== this.generation || watch !== this.threadWatch || language !== this.lang.lang() || check !== this.statusCheckWatch) return;
+    const report = this.reports()?.items.find(r => r.protocol === protocol) ?? null;
+    this.statusExplanation.set({ protocol, report, checked: this.reportsChecked(),
+      failed: this.reportsFailed() || !report || !this.canRefresh() });
+    this.statusChecking.set(null);
+  }
+
+  /** Approved process copy selected by the persisted report state, never a promised outcome. */
+  statusHelp(report: Report): string {
+    return this.t()[report.status === 'closed' ? 'statusClosedHelp' : report.status === 'in_review' ? 'statusReviewHelp' : 'statusReceivedHelp'];
+  }
+  readonly assistBusy = signal(false);
+  readonly questionError = signal('');
+  readonly questionAnswer = signal<{result: CustomerAssist; report: Report; checked: number; question: string} | null>(null);
+  readonly acceptedQuestion = signal<MessageDraft | null>(null);
+  assistQuestion = '';
+  private assistWatch = 0;
+  private questionVersion = 0;
+  private readonly customerComposer = viewChild(MessageThreadView);
+
+  private questionScope(): string { return JSON.stringify([this.generation,this.threadWatch,this.openThread(),this.client(),this.roles(),this.lang.lang()]); }
+  private clearQuestionHelp(): void { this.assistWatch++; this.assistBusy.set(false); this.questionAnswer.set(null); this.questionError.set(''); this.acceptedQuestion.set(null); this.assistQuestion = ''; }
+  private questionSnapshotMatches(result: CustomerAssist): boolean {
+    const report = this.reports()?.items.find(r => r.protocol === this.openThread()), thread = this.thread();
+    return !!report && !!thread && report.status === result.snapshot.status && thread.status === result.snapshot.status && thread.items.length === result.snapshot.message_count;
+  }
+
+  /** One deliberate classification followed by new owned report/thread reads; mismatch never triggers generation retry. */
+  async askReportQuestion(): Promise<void> {
+    const protocol = this.openThread(), question = this.assistQuestion.trim(), language = this.lang.lang();
+    if (!protocol || this.assistBusy() || !this.canRefresh()) return;
+    if (!question || [...question].length > 2000) { this.questionError.set(this.t().customerAssistEmpty); return; }
+    const scope = this.questionScope(), watch = ++this.assistWatch;
+    const current = () => scope === this.questionScope() && watch === this.assistWatch && !this.destroyed;
+    this.assistBusy.set(true); this.questionAnswer.set(null); this.questionError.set('');
+    try {
+      const result = await this.service.assist(protocol,question,language,crypto.randomUUID());
+      if (!current()) return;
+      // Settle earlier polls before starting the reads that validate this returned snapshot.
+      await Promise.all([this.reportRead,this.threadRead]);
+      if (!current() || !this.canRefresh()) return;
+      await Promise.all([this.loadReports(),this.loadThread()]);
+      if (!current()) return;
+      const report = this.reports()?.items.find(r => r.protocol === protocol);
+      if (result.language !== language || this.reportsFailed() || this.threadFailed() || !report || !this.questionSnapshotMatches(result)) {
+        this.questionError.set(this.t().customerAssistUnavailable); return;
+      }
+      this.questionAnswer.set({result,report,checked:Date.now(),question});
+    } catch (e) {
+      if (current()) { this.questionError.set(this.t().customerAssistUnavailable); if (e instanceof ApiError && e.status === 401) { this.clearQuestionHelp(); this.pauseUnauthorized(); } }
+    } finally { if (current()) this.assistBusy.set(false); }
+  }
+
+  /** Closed reports always use their stored closure/follow-up flow; only approved localized process copy is rendered. */
+  questionHelp(): string {
+    const answer = this.questionAnswer(); if (!answer) return '';
+    if (answer.report.status === 'closed' || ['status','next_step'].includes(answer.result.intent)) return this.statusHelp(answer.report);
+    return this.t()[answer.result.intent === 'provide_details' ? 'customerAssistDetails' : 'customerAssistHuman'];
+  }
+  /** Translate only the approved field identifier; provider prose is never rendered. */
+  questionField(): string {
+    const field = this.questionAnswer()?.result.field;
+    return field ? this.t()[({merchant:'merchant',amount:'amount',currency:'assistCurrency',date:'date',description:'describe'} as const)[field]] : '';
+  }
+
+  /** Explicitly copy the customer's accepted question into the existing composer; human Send remains separate. */
+  useQuestionDetails(): void {
+    const answer = this.questionAnswer(), protocol = this.openThread();
+    if (!answer || !protocol || !this.questionSnapshotMatches(answer.result) || !this.thread()?.can_post || answer.result.intent !== 'provide_details') return;
+    if (this.customerComposer()?.draft.trim() && !window.confirm(this.t().customerAssistReplace)) return;
+    this.acceptedQuestion.set({body:answer.question,scope:protocol,version:++this.questionVersion});
+    afterNextRender(() => this.host.nativeElement.querySelector<HTMLElement>('#customer-messages-draft')?.focus(), {injector:this.injector});
+  }
+
   /** Per report, one key per message text: a retry of the same text reuses it (one stored message); new text gets a new key. */
   private readonly messageKeys = new Map<string, { body: string; key: string }>();
 
@@ -826,14 +929,14 @@ export class CustomerPage implements OnInit, OnDestroy {
     let key = this.messageKeys.get(protocol);
     if (key?.body !== body) this.messageKeys.set(protocol, key = { body, key: crypto.randomUUID() });
     this.messageSending.set(protocol);
-    this.messageFailed.set('');
+    this.messageFailed.set(''); this.messageSaved.set(null);
     // The result belongs to the report that posted; if the customer opened another one meanwhile, it touches nothing there.
     const g = this.generation, watch = this.threadWatch;
     const stillOpen = () => g === this.generation && watch === this.threadWatch && this.openThread() === protocol;
     try {
       await this.service.postMessage(protocol, body, key.key);
       this.messageKeys.delete(protocol);
-      if (stillOpen()) this.messagesSent.update(n => n + 1);
+      if (stillOpen()) { this.messagesSent.update(n => n + 1); this.messageSaved.set(protocol); }
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) this.messageKeys.delete(protocol);
       if (stillOpen()) this.messageFailed.set(messageErrorText(this.t(), e));

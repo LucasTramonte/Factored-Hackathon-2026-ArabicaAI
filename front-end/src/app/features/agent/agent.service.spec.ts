@@ -48,4 +48,14 @@ describe('AgentService', () => {
     await service.setStatus('p', 'closed', 'Explanation');
     expect(api.request).toHaveBeenCalledOnceWith('/agent/intake-status', { protocol: 'p', status: 'closed', closing_note: 'Explanation' });
   });
+  it('generates once with exactly server-context selectors and adds a snapshot only for an assisted human send', async () => {
+    api.request.and.resolveTo({});
+    await service.prepareReply('p', 'pt', 'uuid');
+    expect(api.request.calls.mostRecent().args).toEqual(['/agent/intake-assist', { protocol: 'p', language: 'pt', request_id: 'uuid' }]);
+    await service.postMessage('p', 'Human edited', 'key', { status: 'received', message_count: 2 });
+    expect(api.request.calls.mostRecent().args).toEqual(['/agent/intake-messages', { protocol: 'p', body: 'Human edited', idempotency_key: 'key', expected_snapshot: { status: 'received', message_count: 2 } }]);
+    await service.postMessage('p', 'Manual', 'key2');
+    expect(api.request.calls.mostRecent().args).toEqual(['/agent/intake-messages', { protocol: 'p', body: 'Manual', idempotency_key: 'key2' }]);
+  });
+
 });

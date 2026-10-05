@@ -218,6 +218,22 @@
                       <li [class.done]="done" [class.current]="i === at" [attr.aria-current]="i === at ? 'step' : null">@if (done) { <span aria-hidden="true">✓</span><span class="sr-only">{{ t().stepDone }}: </span> }{{ t()[statusChip[s]] }}</li>
                     }</ol>
                     @if (reportsFailed()) { <p class="ar-caption report-stale">{{ t().refreshFailed }}</p> }
+                    <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm status-check-btn" (click)="checkReportStatus(r.protocol)" [attr.aria-disabled]="statusChecking() !== null"
+                      [attr.aria-busy]="statusChecking() === r.protocol" [attr.aria-label]="t().checkReportStatus + ': ' + (r.reference_short ?? r.protocol)">{{ statusChecking() === r.protocol ? t().working : t().checkReportStatus }}</button>
+                    @if (statusExplanation()?.protocol === r.protocol) {
+                      @let answer = statusExplanation()!;
+                      <section class="status-explanation" role="status" aria-live="polite">
+                        <h4>{{ t().automaticStatus }}</h4>
+                        @if (answer.failed) { <p>{{ answer.report ? t().refreshFailed : t().statusUnavailable }}</p> }
+                        @if (answer.report; as saved) {
+                          <p><strong>{{ t()[statusChip[saved.status]] }}</strong>. {{ statusHelp(saved) }}</p>
+                          @if (saved.status === 'closed') { <p class="status-closing">{{ saved.closing_note ?? t().closingLegacy }}</p> }
+                          <p class="ar-caption status-source-time">{{ t().reportReceivedAt }}: {{ saved.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</p>
+                          <p class="ar-caption">{{ t().statusUpdateUnavailable }}</p>
+                        }
+                        @if (answer.checked; as checked) { <p class="ar-caption status-checked">{{ t().statusCheckedAt }}: {{ checked | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</p> }
+                      </section>
+                    }
                     <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm update-btn" (click)="requestUpdate(r.protocol)" [attr.aria-disabled]="updateUnavailable(r.protocol)" [attr.aria-busy]="updating() === r.protocol"
                       [attr.aria-label]="t().updateMe + ': ' + (r.reference_short ?? r.protocol)">{{ updating() === r.protocol ? t().updateWorking : t().updateMe }}</button>
                     @if (r.status === 'closed') {
@@ -233,19 +249,40 @@
                       [attr.aria-expanded]="openThread() === r.protocol" [attr.aria-label]="t().messagesTitle + ': ' + (r.reference_short ?? r.protocol)">{{ t().messagesTitle }}</button>
                     <span class="ar-caption" role="status">@if (updateNote()?.protocol === r.protocol) { {{ updateNote()!.text }} }</span>
                     @if (openThread() === r.protocol) {
-                      <div class="open-report-progress"><span class="ar-mono">{{ r.reference_short ?? r.protocol }}</span>
-                        <ol class="report-progress" [attr.aria-label]="t().reportProgress">@for (s of progressSteps; track s) {
-                          <li [class.current]="s === r.status" [attr.aria-current]="s === r.status ? 'step' : null">{{ t()[statusChip[s]] }}</li>
-                        }</ol>
-                        <p class="ar-caption">@switch (r.status) { @case ('in_review') { {{ t().statusInReview }} } @case ('closed') { {{ t().statusClosed }} } @default { {{ t().nextStepReview }} } }</p>
-                        @if (reportsFailed()) { <p class="ar-caption">{{ t().refreshFailed }}</p> }
-                      </div>
                       <p role="status">{{ agentReplyNotice() ? t().agentReply : '' }}</p>
                       @if (agentReplyNotice()) { <button type="button" class="link-btn" (click)="agentReplyNotice.set(false)">{{ t().dismissUpdate }}</button> }
                       @if (threadFailed()) { <p class="ar-caption" role="status">{{ t().refreshFailed }}</p> }
                       @if (threadChecked(); as checked) { <p class="ar-caption">{{ t().lastChecked }}: {{ checked | date:'HH:mm:ss' }}</p> }
+                      @if (messageSaved() === r.protocol) { <p class="message-saved" role="status">{{ t().messageSaved }}</p> }
+                      @if (r.status !== 'closed' && thread()?.status !== 'closed' && thread()?.items?.at(-1)?.author === 'customer') {
+                        <p class="ar-caption messages-waiting" role="status">{{ t().messagesWaiting }}</p>
+                      }
+                      <section class="customer-assist ar-panel" aria-labelledby="customer-assist-title">
+                        <h3 id="customer-assist-title">{{ t().customerAssistTitle }}</h3>
+                        <p class="ar-caption" id="customer-assist-notice">{{ t().customerAssistNotice }}</p>
+                        <label for="customer-assist-question">{{ t().customerAssistQuestion }}</label>
+                        <textarea id="customer-assist-question" aria-describedby="customer-assist-notice" class="ar-textarea" [(ngModel)]="assistQuestion" rows="2" maxlength="2000" [readOnly]="assistBusy()"></textarea>
+                        <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm" (click)="askReportQuestion()" [disabled]="assistBusy()" [attr.aria-busy]="assistBusy()">{{ t().customerAssistAsk }}</button>
+                        @if (questionError()) { <p role="status">{{ questionError() }}</p> }
+                        @if (questionAnswer(); as answer) {
+                          <div class="customer-assist-answer" role="status">
+                            <p>{{ questionHelp() }} {{ answer.report.status !== 'closed' ? questionField() : '' }}</p>
+                            @if (answer.result.intent === 'status' || answer.result.intent === 'next_step') {
+                              <p><strong>{{ t()[statusChip[answer.report.status]] }}</strong></p>
+                              <p class="ar-caption">{{ t().reportReceivedAt }}: {{ answer.report.accepted_at | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</p>
+                              <p class="ar-caption">{{ t().statusUpdateUnavailable }}</p>
+                            }
+                            @if (answer.report.status === 'closed') { <p class="status-closing">{{ answer.report.closing_note ?? t().closingLegacy }}</p> }
+                            <p class="ar-caption">{{ t().statusCheckedAt }}: {{ answer.checked | date:'yyyy-MM-dd HH:mm:ss':'UTC' }} {{ t().utc }}</p>
+                            @if (answer.result.intent === 'provide_details' && answer.report.status !== 'closed' && thread()?.can_post) {
+                              <button type="button" class="ar-btn ar-btn-secondary ar-btn-sm" (click)="useQuestionDetails()">{{ t().customerAssistSend }}</button>
+                            }
+                          </div>
+                        }
+                      </section>
+                      <p class="ar-caption">{{ t().customerSavedMessages }}</p>
                       <app-message-thread viewer="customer" idPrefix="customer-messages" [scope]="r.protocol" [thread]="thread()" [sending]="messageSending() === r.protocol"
-                        [failed]="messageFailed() || threadRefreshError()" [sent]="messagesSent()" (send)="sendMessage($event)" />
+                        [acceptedDraft]="acceptedQuestion()" [retry]="!!messageFailed()" [failed]="messageFailed() || threadRefreshError()" [sent]="messagesSent()" (send)="sendMessage($event)" />
                     }</li>
                 }</ul>
                 @if (reports()!.has_more) { <span class="ar-caption">{{ t().moreReports }}</span> }
