@@ -181,6 +181,8 @@ Report `thumbs_up / respondents` with both counts and `respondents / reports` be
 | Auditor | `auditor` | no (403) | no (403) | no | `test/integration/audit.test.js`: reads `GET /audit/events` with its token; customer and agent tokens are 403 |
 | Anyone else | not enrolled | no code is sent (Cognito's generic answer; the client says it could not send) | same | — | `cognito.service.spec.ts`: "maps each Cognito error type to a status, never to AWS text" (401) |
 
+`POST /reports/update` accepts `{ protocol, language? }`, where `language` is `es`, `pt` or `en`. The client sends the current interface language for that requested email. Older clients that omit it use the report’s original language. Automatic receipt and review-status emails continue using the language chosen when the report was created; requesting an email does not change the report language or reset its cooldown.
+
 While acting, "email me an update" (`POST /reports/update`) goes to the admin's own address on file and counts against the admin's own 5-minute window; review-status emails go only to the customer's own address, so an acted-as customer without one gets none.
 
 The sign-in never reveals whether an address exists (`--prevent-user-existence-errors`, `scripts/cognito/setup.sh`). The pool accepts only admin-created users. Enrolment, removal, troubleshooting and the full identity model are in the [auth runbook](../Docs/Plans/auth-runbook.md).

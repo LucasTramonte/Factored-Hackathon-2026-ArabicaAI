@@ -94,9 +94,9 @@ export class CustomerService {
     return this.api.request('/reports/feedback', { protocol, easy });
   }
 
-  /** Queue a status email for one own report (202; 409 no email; 429 another request is queued or recently accepted). */
+  /** Queue a status email in the current interface language for one own report (202; 409 no email; 429 another request is queued or recently accepted). */
   requestUpdate(protocol: string): Promise<{ queued: true }> {
-    return this.api.request<{ queued: true }>('/reports/update', { protocol });
+    return this.api.request<{ queued: true }>('/reports/update', { protocol, language: this.lang.lang() });
   }
 
   startIntake(body: IntakeStartBody): Promise<IntakeStart> {
