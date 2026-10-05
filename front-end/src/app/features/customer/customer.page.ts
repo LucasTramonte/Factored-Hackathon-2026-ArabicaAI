@@ -186,7 +186,13 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly receiptTitle = computed(() => { const r = this.intakeReceipt(); return r ? this.t()[RECEIPT_TITLE[r.kind]] : ''; });
   readonly faqs = Object.keys(FAQ) as (keyof typeof FAQ)[];
   /** A charge whose newest server report is still open is not offered again (the server refuses it with 409). */
-  readonly choosable = computed(() => this.transactions().filter(tx => (this.reportOf(tx.transaction_id)?.status ?? 'closed') === 'closed'));
+  /** A charge chosen from outside the loaded page: a search result or the bank alert's charge. Forgotten by ``clearChat``. */
+  readonly extraCharge = signal<Transaction | null>(null);
+  readonly choosable = computed(() => {
+    const extra = this.extraCharge(), list = this.transactions();
+    const all = extra && !list.some(t => t.transaction_id === extra.transaction_id) ? [...list, extra] : list;
+    return all.filter(tx => (this.reportOf(tx.transaction_id)?.status ?? 'closed') === 'closed');
+  });
   readonly statusChip = STATUS_CHIP;
   /** The steps a report moves through, in order; a person moves it forward one step at a time. */
   readonly progressSteps = ['received', 'in_review', 'closed'] as const;
@@ -215,6 +221,9 @@ export class CustomerPage implements OnInit, OnDestroy {
   readonly discovery = signal<TransactionDiscovery | null>(null);
   readonly discoveryBusy = signal(false);
   readonly discoveryError = signal<'narrow' | 'unavailable' | null>(null);
+  /** The server answered 503: discovery is switched off (or unavailable) for this session, so the button goes away. */
+  // ponytail: learned from the first 503, not from config; a config read would need an API change.
+  readonly discoveryOff = signal(false);
   choice = '';
   chatConfirmed = false;
   private bootTimer: ReturnType<typeof setTimeout> | undefined;
@@ -479,7 +488,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     }
     this.alert.set(null);
     if (answer === 'mine') this.alertNote.set(this.t().alertThanks);
-    else this.openChat(tx.transaction_id);
+    else { this.openChat(tx.transaction_id); this.extraCharge.set(tx); } // after openChat: a restart clears the chat
   }
 
   /**
@@ -1151,13 +1160,18 @@ export class CustomerPage implements OnInit, OnDestroy {
     try {
       const found = await this.service.discoverTransactions(description, this.reportLang(), episode.episode_id, crypto.randomUUID());
       if (this.episode()?.episode_id === episode.episode_id) this.discovery.set(found);
-    } catch (error) { this.discoveryError.set(error instanceof ApiError && error.status === 422 ? 'narrow' : 'unavailable'); }
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 503) this.discoveryOff.set(true);
+      this.discoveryError.set(error instanceof ApiError && error.status === 422 ? 'narrow' : 'unavailable');
+    }
     finally { this.discoveryBusy.set(false); }
   }
 
-  /** Selecting a returned candidate still requires the existing explicit confirmation checkbox. */
+  /** Selecting a returned candidate still requires the existing explicit confirmation checkbox; the normal choose step shows it. */
   useDiscovery(transactionId: string): void {
-    if (!this.discovery()?.items.some(i => i.transaction_id === transactionId)) return;
+    const tx = this.discovery()?.items.find(i => i.transaction_id === transactionId);
+    if (!tx) return;
+    this.extraCharge.set(tx); this.general.set(false);
     this.choice = transactionId; this.chatConfirmed = false; this.asking.set(false);
     this.log.update(l => [...l, { from:'bot', key:'chatChoose' }]);
   }
@@ -1225,6 +1239,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   }
 
   private clearChat(): void {
+    this.extraCharge.set(null);
     this.previousProtocol.set(null);
     this.frozen.set(null);
     this.episode.set(null);

@@ -162,4 +162,54 @@ describe('Customer transaction discovery', () => {
     expect(fresh.componentInstance.discovery()).toBeNull(); expect(fresh.componentInstance.discoveryBusy()).toBeFalse();
     fresh.destroy();
   });
+
+  it('labels the button as an AI search in every language, and hides it for the session once the server answers 503', async () => {
+    for (const language of ['es', 'pt', 'en'] as const) {
+      page.lang.set(language); fixture.detectChanges();
+      const button = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(b => b.textContent!.trim() === page.t().discoverySearch);
+      expect(button).withContext(language).toBeDefined();
+      expect(page.t().discoverySearch).not.toBe(page.t().recent);
+    }
+    service.discoverTransactions.and.rejectWith(new ApiError(503));
+    await page.discover(); fixture.detectChanges();
+    expect(page.discoveryOff()).toBeTrue();
+    const text = (fixture.nativeElement as HTMLElement).textContent!;
+    expect(text).toContain(page.t().discoveryUnavailable);
+    expect(text).not.toContain(page.t().discoverySearch);
+  });
+
+  it('keeps the button for a deliberate retry after a failure that is not 503', async () => {
+    service.discoverTransactions.and.rejectWith(new ApiError(500));
+    await page.discover();
+    expect(page.discoveryOff()).toBeFalse(); expect(page.discoveryError()).toBe('unavailable');
+  });
+
+  it('from the Help entry, a picked search result shows the normal choose step and can be confirmed', async () => {
+    page.transactions.set([]); page.general.set(true); page.discovery.set(result);
+    page.useDiscovery(tx.transaction_id); page.chatConfirmed = true;
+    expect(page.general()).toBeFalse();
+    fixture.detectChanges();
+    const radios = (fixture.nativeElement as HTMLElement).querySelectorAll('input[name="chat-choice"]');
+    expect(radios.length).toBe(1); expect(radios[0].closest('label')!.textContent).toContain(tx.merchant_name);
+    service.confirmIntake.and.returnValue(new Promise(() => undefined));
+    void page.confirmCharge();
+    expect(page.chatError()).not.toBe(page.t().chatChooseValidation);
+    expect(service.confirmIntake).toHaveBeenCalledOnceWith(jasmine.objectContaining({ transaction_id: tx.transaction_id, customer_confirmed: true }));
+  });
+
+  it('a search result outside the loaded page of charges is choosable, and a cleared chat forgets it', () => {
+    page.transactions.set([]); page.discovery.set(result);
+    page.useDiscovery(tx.transaction_id);
+    expect(page.choosable().map(t => t.transaction_id)).toEqual([tx.transaction_id]);
+    (page as unknown as { clearChat(): void }).clearChat();
+    expect(page.choosable()).toEqual([]);
+  });
+
+  it("the alert charge is choosable after \"I don't recognize it\" even when it is not in the loaded page", async () => {
+    page.transactions.set([]); page.episode.set(null); page.asking.set(false); page.alert.set(tx);
+    (service as unknown as { answerAlert: jasmine.Spy }).answerAlert = jasmine.createSpy('answerAlert').and.resolveTo(undefined);
+    await page.answerAlert('report');
+    expect(page.choosable().map(t => t.transaction_id)).toEqual([tx.transaction_id]);
+    expect(page.choice).toBe(tx.transaction_id);
+  });
 });
