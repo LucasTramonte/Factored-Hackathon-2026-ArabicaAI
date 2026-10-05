@@ -26,7 +26,8 @@ export async function discoverTransactions(request, env, store, ctx, generate = 
   const episode = await store.findIntake(session.customer_id, v.episode_id.toLowerCase());
   if (!episode) return fail(404, 'Report not found');
   const fallback = () => fail(503, FALLBACK[v.language]);
-  if (!assistEnabled(env, 'discovery') || await store.customerSource(session.customer_id) !== 'fictitious') return fallback();
+  // Fictitious and dataset customers alike (ADR-016, issue #141): the lookup below reads only the session customer's rows.
+  if (!assistEnabled(env, 'discovery')) return fallback();
   const log = (outcome, extra = {}) => logEvent('transaction_discovery', { outcome, language: v.language, ms: Date.now() - started, ...extra });
   if (obviousInjection(v.description)) { log('safety_or_injection', { blocked: 'local' }); return fail(422, NARROW[v.language]); }
   const requestId = v.request_id.toLowerCase(), sessionHash = await tokenHash(readCookies(request)[COOKIE.customer]);
@@ -38,7 +39,8 @@ export async function discoverTransactions(request, env, store, ctx, generate = 
   if (remaining <= 0) controller.abort();
   const timer = setTimeout(() => controller.abort(), Math.max(0, remaining));
   let result;
-  try { result = await generate(env, { mode: 'discovery', language: v.language, input: { description: v.description } }, { signal: controller.signal }); }
+  // today is the UTC date: no customer time zone is stored, so late evening in LATAM already reads as the next day.
+  try { result = await generate(env, { mode: 'discovery', language: v.language, input: { description: v.description, today: new Date(started).toISOString().slice(0, 10) } }, { signal: controller.signal }); }
   finally { clearTimeout(timer); }
   const live = (await requireSession(request, store, 'customer'))?.customer_id === session.customer_id;
   const timedOut = controller.signal.aborted || Date.now() - started >= ASSIST_TIMEOUT_MS;

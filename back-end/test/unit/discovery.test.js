@@ -9,7 +9,7 @@ const extraction = (criteria = {}, extra = {}) => ({ intent: 'transaction_search
   criteria: { ...emptyCriteria, ...criteria }, missing_fields: [], confidence: 0.9, ...extra });
 const parse = value => parseAssist('discovery', JSON.stringify(value));
 
-for (const operator of ['eq', 'gt', 'gte', 'lt', 'lte']) {
+for (const operator of ['eq', 'approx', 'gt', 'gte', 'lt', 'lte']) {
   test(`discovery preserves ${operator}, including zero and fractional amounts`, () => {
     for (const amount of [0, 0.01, 85000]) {
       const value = extraction({ merchant_hint: 'Streaming', date_from: '2026-04-01', date_to: '2026-04-30',

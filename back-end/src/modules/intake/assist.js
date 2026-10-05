@@ -9,7 +9,7 @@ export const ASSIST_MODEL = 'google/gemini-3.5-flash-lite';
 /** Version of both dedicated prompts, schemas, bounds and the chosen provider identifier. */
 export const ASSIST_VERSION = 'support-assist-v1@google/gemini-3.5-flash-lite';
 /** Discovery is accounted under the customer feature; this version string tells its rows apart. */
-export const DISCOVERY_VERSION = 'support-discovery-v1@google/gemini-3.5-flash-lite';
+export const DISCOVERY_VERSION = 'support-discovery-v2@google/gemini-3.5-flash-lite';
 const object = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const exact = (v, keys) => object(v) && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
 const text = (v, max, empty = false) => typeof v === 'string' && v.isWellFormed() && !v.includes('\0')
@@ -73,7 +73,7 @@ export async function runAssist(env, { mode, language, input }, { fetcher = fetc
   try {
     context = mode === 'reviewer' ? boundedReviewerInput(input)
       : mode === 'customer' && text(input?.question, 2000) ? { question: input.question, intents: INTENTS, fields: FIELDS }
-        : mode === 'discovery' && text(input?.description, 2000) ? { description: input.description, intents: DISCOVERY_INTENTS, operators: DISCOVERY_OPERATORS } : invalid();
+        : mode === 'discovery' && text(input?.description, 2000) && /^\d{4}-\d{2}-\d{2}$/.test(input?.today) ? { description: input.description, today: input.today, intents: DISCOVERY_INTENTS, operators: DISCOVERY_OPERATORS } : invalid();
   } catch { return fail('config_error'); }
   const config = credentialConfig(env);
   const origin = testOrigin(env);

@@ -20,12 +20,12 @@ test('the model sees only the description; candidates are the owner\'s stored ch
   assert.equal(response.status, 200); assertContract('transactionDiscovery', response.body);
   assert.equal(response.body.status, 'candidates'); assert.deepEqual(response.body.items.map(i => i.transaction_id).sort(), ['demo-tx-001', 'demo-tx-005', 'demo-tx-006']);
   assert.ok(response.body.items.every(i => Number(i.amount) > 100));
-  const input = (await received()).at(-1); assert.deepEqual(Object.keys(input).sort(), ['description', 'intents', 'language', 'operators']);
+  const input = (await received()).at(-1); assert.deepEqual(Object.keys(input).sort(), ['description', 'intents', 'language', 'operators', 'today']); assert.equal(input.today, new Date().toISOString().slice(0, 10));
   const none = await customer.call(PATH, payload(episode, 'Nada DISCOVER={"merchant_hint":"Cafe"}')); assert.equal(none.status, 200); assert.equal(none.body.status, 'none'); assert.deepEqual(none.body.items, []);
   const wild = await customer.call(PATH, payload(episode, 'Wildcards DISCOVER={"merchant_hint":"%"}')); assert.equal(wild.status, 200); assert.equal(wild.body.status, 'none', 'LIKE wildcards in a hint are literal');
   const broad = await customer.call(PATH, payload(episode, 'Todo DISCOVER={"merchant_hint":null}')); assert.equal(broad.status, 200); assert.equal(broad.body.status, 'ambiguous'); assert.equal(broad.body.items.length, 3);
 });
-test('authentication, exact body, method/path policy, foreign or missing episode, dataset source', async () => {
+test('authentication, exact body, method/path policy, foreign or missing episode', async () => {
   const { customer, episode } = await fixture();
   for (const cookie of ['', 'demo_session=' + '0'.repeat(64), 'demo_session=' + process.env.EXPIRED_TOKEN]) assert.equal((await fetch(base + PATH, { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify(payload(episode)) })).status, 401);
   const agent = client(); await agent.call('/demo/agent-session', {});
@@ -42,8 +42,19 @@ test('authentication, exact body, method/path policy, foreign or missing episode
   const own = await foreign.customer.call(PATH, payload(foreign.episode, 'Mercado DISCOVER={"merchant_hint":"Mercado"}'));
   assert.equal(own.status, 200); assert.equal(own.body.status, 'none', 'another customer never sees demo-ana\'s Mercado charge');
   assert.equal((await received()).length, before + 1);
-  const dataset = await fixture('CLI-COHORT-4');
-  assert.equal((await dataset.customer.call(PATH, payload(dataset.episode))).status, 503); assert.equal((await received()).length, before + 1);
+});
+test('dataset customers discover only their own charges, dated by the source timestamp (issue #141)', async () => {
+  const one = await fixture('CLI-COHORT-1');
+  const own = await one.customer.call(PATH, payload(one.episode, 'Shop in June DISCOVER={"merchant_hint":"Shop","date_from":"2026-06-01","date_to":"2026-06-30","currency":"USD","amount_operator":"approx","amount":10}'));
+  assert.equal(own.status, 200); assertContract('transactionDiscovery', own.body);
+  assert.deepEqual(own.body.items.map(i => i.transaction_id), ['cohort-tx-1']); assert.equal(own.body.items[0].occurred_at, null);
+  const foreign = await one.customer.call(PATH, payload(one.episode, 'Tienda DISCOVER={"merchant_hint":"Tienda"}'));
+  assert.equal(foreign.status, 200); assert.equal(foreign.body.status, 'none', "CLI-COHORT-2's Tienda charge is never returned");
+  const all = await one.customer.call(PATH, payload(one.episode, 'Todo DISCOVER={"merchant_hint":null}'));
+  assert.deepEqual(all.body.items.map(i => i.transaction_id), ['cohort-tx-1'], 'an empty search still reads only the session customer');
+  const empty = await fixture('CLI-COHORT-4');
+  const nothing = await empty.customer.call(PATH, payload(empty.episode, 'Shop DISCOVER={"merchant_hint":"Shop"}'));
+  assert.equal(nothing.status, 200); assert.equal(nothing.body.status, 'none');
 });
 test('one request id reserves one call; a burst retains five slots shared with the customer feature', async () => {
   const { customer, episode } = await fixture(); const body = payload(episode); const before = (await received()).length;

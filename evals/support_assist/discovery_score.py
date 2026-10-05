@@ -4,22 +4,54 @@ from collections import Counter
 import json
 import math
 import re
+import unicodedata
 from datetime import date
 from pathlib import Path
 from evals.support_assist.score import ROOT, LANGUAGES, OUTCOMES, check_fixtures, digest, distribution, exact, load_jsonl, require, stamp
 
-VERSION = 'support-discovery-v1@google/gemini-3.5-flash-lite'
+VERSION = 'support-discovery-v2@google/gemini-3.5-flash-lite'
 SEARCH = ('transaction_search', 'transaction_clarification', 'transaction_correction')
 INTENTS = SEARCH + ('transaction_confirmation', 'greeting_or_casual', 'unsupported', 'safety_or_injection')
 CRITERIA = ('merchant_hint', 'date_from', 'date_to', 'currency', 'amount_operator', 'amount')
 GATES = {'intent_accuracy': .90, 'intent_accuracy_per_language': .85, 'candidate_recall': .90, 'p95_success_ms': 4000, 'failure_rate': .05}
 
 
+CONCEPTS = json.loads((Path(__file__).resolve().parents[2] / 'back-end' / 'src' / 'config' / 'merchant-concepts.json').read_text(encoding='utf-8'))
+GENERIC = frozenset(CONCEPTS['generic'])
+MERCHANTS = [(name, frozenset(words)) for name, words in CONCEPTS['merchants'].items()]
+
+
+def _norm(text):
+    """``matcher.js`` ``norm``: casefold, NFKD without combining marks, stripped."""
+    return ''.join(ch for ch in unicodedata.normalize('NFKD', text.casefold()) if not unicodedata.combining(ch)).strip()
+
+
+def _words(text):
+    return [w for w in re.split(r'[\W_]+', text) if len(w) > 1]
+
+
+def merchant_match(hint):
+    """``merchant-hint.js`` ``merchantMatch``: the literal substring, the non-generic words and the covering merchants."""
+    literal = hint.lower()
+    words = list(dict.fromkeys(w for w in _words(literal) if _norm(w) not in GENERIC))
+    concepts = list(dict.fromkeys(w for w in _words(_norm(hint)) if w not in GENERIC))
+    names = [name for name, known in MERCHANTS if all(w in known for w in concepts)] if concepts else []
+    return literal, words if 1 < len(words) <= 8 else [], names
+
+
+def merchant_matches(hint, merchant_name):
+    """True when any of the Worker's three merchant alternatives holds for one stored name."""
+    literal, words, names = merchant_match(hint)
+    stored = ''.join(ch.lower() if ch.isascii() else ch for ch in merchant_name)  # SQLite lower() and LIKE fold ASCII only
+    return literal in stored or bool(words) and all(w in stored for w in words) or merchant_name in names
+
+
 def matches(criteria, row):
     """Apply the Worker's deterministic lookup semantics to one synthetic charge row."""
-    day, amount = (row['occurred_at'] or '')[:10], float(row['amount'])
-    compare = {'eq': amount.__eq__, 'gt': amount.__gt__, 'gte': amount.__ge__, 'lt': amount.__lt__, 'lte': amount.__le__}
-    return ((criteria['merchant_hint'] is None or criteria['merchant_hint'].lower() in row['merchant_name'].lower())
+    day, amount = (row['occurred_at'] or row.get('source_occurred_at') or '')[:10], float(row['amount'])
+    compare = {'eq': amount.__eq__, 'gt': amount.__gt__, 'gte': amount.__ge__, 'lt': amount.__lt__, 'lte': amount.__le__,
+               'approx': lambda stated: abs(amount - stated) * 10 <= stated}
+    return ((criteria['merchant_hint'] is None or merchant_matches(criteria['merchant_hint'], row['merchant_name']))
             and (criteria['date_from'] is None or bool(day) and day >= criteria['date_from']) and (criteria['date_to'] is None or bool(day) and day <= criteria['date_to'])
             and (criteria['currency'] is None or row['currency'] == criteria['currency'])
             and (criteria['amount_operator'] is None or compare[criteria['amount_operator']](criteria['amount'])))
@@ -62,7 +94,7 @@ def validate_response(attempt):
     require(criteria['date_from'] is None or criteria['date_to'] is None or criteria['date_from'] <= criteria['date_to'], 'reversed dates')
     currency, operator, amount = (criteria[key] for key in ('currency', 'amount_operator', 'amount'))
     require(currency is None or isinstance(currency, str) and re.fullmatch('[A-Z]{3}', currency), 'invalid currency')
-    require(operator is None or operator in ('eq', 'gt', 'gte', 'lt', 'lte'), 'invalid amount operator')
+    require(operator is None or operator in ('eq', 'approx', 'gt', 'gte', 'lt', 'lte'), 'invalid amount operator')
     require(amount is None or type(amount) in (int, float) and math.isfinite(amount) and amount >= 0, 'invalid amount')
     require((amount is None) == (operator is None) and (operator is None or currency is not None), 'incomplete amount criteria')
     require(isinstance(ids, list) and len(ids) <= 4 and all(isinstance(value, str) and value.strip() for value in ids)

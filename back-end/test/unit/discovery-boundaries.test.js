@@ -47,7 +47,7 @@ for (const count of [0, 1, 3, 4]) {
     assert.deepEqual(store.searchOwnedTransactions.mock.calls[0].arguments, ['demo-ana', extracted.criteria]);
     assert.equal(store.findSession.mock.callCount(), 2);
     assert.deepEqual(generate.mock.calls.map(call => call.arguments[1]), [
-      { mode: 'discovery', language: 'en', input: { description: input.description } }
+      { mode: 'discovery', language: 'en', input: { description: input.description, today: new Date().toISOString().slice(0, 10) } }
     ]);
     assert.ok(generate.mock.calls[0].arguments[2].signal instanceof AbortSignal);
     assert.equal(store.reserveAssist.mock.callCount(), 1); assert.equal(store.finishAssist.mock.callCount(), 1);
@@ -98,21 +98,28 @@ test('2000 Unicode code points and all supported languages reach the model intac
     const { store, generate } = setup(t);
     const description = '😀'.repeat(2000);
     assert.equal((await discoverTransactions(request({ ...input, description, language }), env, store, null, generate)).status, 200);
-    assert.deepEqual(generate.mock.calls[0].arguments[1], { mode: 'discovery', language, input: { description } });
+    assert.deepEqual(generate.mock.calls[0].arguments[1], { mode: 'discovery', language, input: { description, today: new Date().toISOString().slice(0, 10) } });
   }
 });
 
-test('default-off and non-fictitious customers never generate or search', async t => {
+test('default-off never generates or searches', async t => {
   for (const flag of [undefined, '0', 'true', true, 1]) {
     const { store, generate } = setup(t);
     assert.equal((await discoverTransactions(request(), { ASSIST_DISCOVERY_ENABLED: flag }, store, null, generate)).status, 503);
     assert.equal(generate.mock.callCount(), 0); assert.equal(store.customerSource.mock.callCount(), 0);
     assert.equal(store.searchOwnedTransactions.mock.callCount(), 0);
   }
-  for (const source of ['dataset', null]) {
-    const { store, generate } = setup(t); store.customerSource.mock.mockImplementation(async () => source);
-    assert.equal((await discoverTransactions(request(), env, store, null, generate)).status, 503);
-    assert.equal(generate.mock.callCount(), 0); assert.equal(store.searchOwnedTransactions.mock.callCount(), 0);
+});
+
+test('fictitious and dataset customers alike search only their own session customer id (issue #141)', async t => {
+  for (const [customer, source] of [['demo-sofia', 'fictitious'], ['CLI-COHORT-4', 'dataset'], ['CLI-UNKNOWN', null]]) {
+    const { store, generate } = setup(t, [tx(1)]);
+    store.findSession.mock.mockImplementation(async () => ({ customer_id: customer }));
+    store.customerSource.mock.mockImplementation(async () => source);
+    assert.equal((await discoverTransactions(request(), env, store, null, generate)).status, 200, customer);
+    assert.equal(store.customerSource.mock.callCount(), 0, 'the customer source is no longer a discovery gate');
+    assert.deepEqual(store.searchOwnedTransactions.mock.calls.map(call => call.arguments[0]), [customer]);
+    assert.deepEqual(store.findIntake.mock.calls.map(call => call.arguments[0]), [customer]);
   }
 });
 

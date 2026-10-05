@@ -115,3 +115,87 @@ for (const split of ['development', 'acceptance']) {
     }
   });
 }
+
+/** Sofía's full inventory (seeds/fictitious.json, issue #141) plus another customer's identical Streaming Music charge. */
+function sofia(t) {
+  const s = setup(t);
+  for (const [id, merchant, amount, date] of [['demo-tx-031', 'Boutique Moda', '2980.00', '2026-10-02T16:40'], ['demo-tx-030', 'Streaming Music', '24.90', '2026-09-30T03:00'],
+    ['demo-tx-029', 'Restaurante El Buen Sabor', '112.00', '2026-09-27T20:16'], ['demo-tx-028', 'Restaurante El Buen Sabor', '112.00', '2026-09-27T20:15'],
+    ['demo-tx-027', 'Mercado Central', '64.30', '2026-09-24T09:10']]) s.insert(id, { merchant, amount, currency: 'BRL', date: date + ':00+00:00' });
+  s.insert('foreign-030', { owner: 'other', merchant: 'Streaming Music', amount: '24.90', currency: 'BRL', date: '2026-09-30T03:00:00+00:00' });
+  return s;
+}
+const none = { merchant_hint: null, date_from: null, date_to: null, currency: null, amount_operator: null, amount: null };
+
+test('Sofía: exact, case, word order and described merchant all reach demo-tx-030 (issue #141)', async t => {
+  const { search } = sofia(t);
+  for (const merchant_hint of ['Streaming Music', 'streaming music', 'STREAMING MUSIC', 'Streaming music', 'music streaming',
+    'music streaming subscription', 'streaming subscription', 'Streaming']) {
+    assert.deepEqual(await search({ ...none, merchant_hint }), ['demo-tx-030'], merchant_hint);
+  }
+});
+
+test('Sofía: merchant with amount, with date, and with both identifies the unique charge in ES, PT and EN', async t => {
+  const { search } = sofia(t);
+  const about25 = { currency: 'BRL', amount_operator: 'approx', amount: 25 }, endOfSeptember = { date_from: '2026-09-25', date_to: '2026-09-30' };
+  for (const merchant_hint of ['music streaming subscription', 'music service', 'música', 'suscripción de música', 'assinatura de música']) {
+    assert.deepEqual(await search({ ...none, merchant_hint, ...about25 }), ['demo-tx-030'], merchant_hint + ' + amount');
+    assert.deepEqual(await search({ ...none, merchant_hint, ...endOfSeptember }), ['demo-tx-030'], merchant_hint + ' + date');
+    assert.deepEqual(await search({ ...none, merchant_hint, ...about25, ...endOfSeptember }), ['demo-tx-030'], merchant_hint + ' + both');
+  }
+  assert.deepEqual(await search({ ...none, ...about25 }), ['demo-tx-030'], 'about 25 BRL alone is already specific for Sofía');
+  assert.deepEqual(await search({ ...none, merchant_hint: 'music', currency: 'BRL', amount_operator: 'eq', amount: 25 }), [], 'exactly 25 stays exact');
+});
+
+test('generic or unrelated words never select an unrelated merchant; repeated matches stay for the customer to choose', async t => {
+  const { search } = sofia(t);
+  assert.deepEqual(await search({ ...none, merchant_hint: 'restaurant' }), ['demo-tx-029', 'demo-tx-028'], 'the duplicate pair, newest first');
+  for (const merchant_hint of ['subscription', 'charge', 'payment', 'Spotify', 'music restaurant', 'cinema']) {
+    assert.deepEqual(await search({ ...none, merchant_hint }), [], merchant_hint);
+  }
+});
+
+test('approx keeps stored amounts within 10% of the stated amount, boundaries included', async t => {
+  const { insert, search } = setup(t);
+  for (const [id, amount] of [['low-out', '22.49'], ['low-in', '22.50'], ['near', '24.90'], ['high-in', '27.50'], ['high-out', '27.51']]) insert(id, { amount });
+  assert.deepEqual((await search({ amount_operator: 'approx', amount: 25 })).sort(), ['high-in', 'low-in', 'near']);
+});
+
+test('a described merchant never crosses owners and its values stay bound parameters', async t => {
+  const { store, calls } = sofia(t);
+  assert.deepEqual((await store.searchOwnedTransactions('other', { ...none, merchant_hint: 'music streaming subscription' })).map(r => r.transaction_id), ['foreign-030']);
+  assert.deepEqual(await store.searchOwnedTransactions('missing', { ...none, merchant_hint: 'music streaming subscription' }), []);
+  assert.ok(!/music|streaming/i.test(calls.at(-1).sql), 'hint words and merchant names are parameters, not SQL');
+  assert.equal(calls.at(-1).params[0], 'missing');
+});
+
+test('every shared merchant-hint case matches exactly its expected names in SQL (parity with discovery_score.py)', async t => {
+  const { db, insert, search } = setup(t);
+  const { merchants, cases } = JSON.parse(readFileSync(new URL('../fixtures/merchant-hints.json', import.meta.url), 'utf8'));
+  for (const { hint, expected } of cases) {
+    db.exec('DELETE FROM transactions');
+    merchants.forEach((merchant, i) => insert('m' + String(i).padStart(2, '0'), { merchant }));
+    const ids = await search({ merchant_hint: hint });
+    assert.ok(expected.length < 4, 'cases stay under the ambiguity sentinel');
+    assert.deepEqual(ids.map(id => merchants[Number(id.slice(1))]).sort(), [...expected].sort(), hint);
+  }
+});
+
+test('the concept list covers exactly the dataset merchant vocabulary with normalized, non-generic words', async () => {
+  const concepts = JSON.parse(readFileSync(new URL('../../src/config/merchant-concepts.json', import.meta.url), 'utf8'));
+  const { VOCABULARY } = await import('../../src/modules/intake/ai-transport.js');
+  const { norm } = await import('../../src/modules/intake/matcher.js');
+  assert.deepEqual(Object.keys(concepts.merchants).sort(), Object.keys(VOCABULARY.merchants).sort());
+  for (const [merchant, words] of Object.entries(concepts.merchants)) {
+    assert.ok(words.length > 0, merchant);
+    for (const w of words) { assert.equal(norm(w), w, w); assert.ok(!concepts.generic.includes(w), w); }
+  }
+  for (const w of concepts.generic) assert.equal(norm(w), w, w);
+});
+
+test('dataset charges, stored with only the source timestamp, still match a date range on the day the customer sees', async t => {
+  const { insert, search } = setup(t);
+  insert('dataset-in', { date: null, source: '2026-09-30T21:39:00', merchant: 'Streaming Music', amount: '24.90', currency: 'BRL' });
+  insert('dataset-out', { date: null, source: '2026-10-01T00:10:00', merchant: 'Streaming Music', amount: '24.90', currency: 'BRL' });
+  assert.deepEqual(await search({ merchant_hint: 'music streaming', date_from: '2026-09-25', date_to: '2026-09-30', currency: 'BRL', amount_operator: 'approx', amount: 25 }), ['dataset-in']);
+});

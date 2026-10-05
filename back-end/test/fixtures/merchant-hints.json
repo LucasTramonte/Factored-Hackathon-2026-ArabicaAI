@@ -1,0 +1,307 @@
+{
+ "_doc": "Merchant-hint cases shared by back-end/test/unit/merchant-hint.test.js and evals/support_assist/test_discovery_score.py, so the Worker lookup and the offline scorer agree (issue #141). Each case lists, in merchant order, every name a hint must match; all other names must not match. Reviewed by hand, not generated as truth. Literal matching folds ASCII case only, as SQLite does, so 'Óptica' reaches the vocabulary's Óptica Visión through its concept but not the invented 'Óptica Sur'.",
+ "merchants": [
+  "Cine Premium",
+  "Conciertos Live",
+  "Streaming Music",
+  "Teatro Nacional",
+  "Mercado Central",
+  "Restaurante El Buen Sabor",
+  "Super Ahorro",
+  "Tienda Don José",
+  "Clínica Médica",
+  "Farmacia Salud",
+  "Laboratorio Central",
+  "Óptica Visión",
+  "Boutique Moda",
+  "Centro Comercial",
+  "Ferretería",
+  "Tienda General",
+  "Cable TV",
+  "Empresa Telefónica",
+  "Internet Plus",
+  "Servicios Públicos",
+  "Estación de Servicio",
+  "Gasolinera Express",
+  "Taxi Seguro",
+  "Uber",
+  "Streaming Sur",
+  "Restaurante Lima",
+  "Farmácia Popular",
+  "Music Streaming Co",
+  "Supermercado Norte",
+  "50% off",
+  "Óptica Sur"
+ ],
+ "cases": [
+  {
+   "hint": "Streaming Music",
+   "expected": [
+    "Streaming Music",
+    "Music Streaming Co"
+   ]
+  },
+  {
+   "hint": "streaming music",
+   "expected": [
+    "Streaming Music",
+    "Music Streaming Co"
+   ]
+  },
+  {
+   "hint": "STREAMING MUSIC",
+   "expected": [
+    "Streaming Music",
+    "Music Streaming Co"
+   ]
+  },
+  {
+   "hint": "Streaming music",
+   "expected": [
+    "Streaming Music",
+    "Music Streaming Co"
+   ]
+  },
+  {
+   "hint": "Streaming",
+   "expected": [
+    "Streaming Music",
+    "Streaming Sur",
+    "Music Streaming Co"
+   ]
+  },
+  {
+   "hint": "music streaming",
+   "expected": [
+    "Streaming Music",
+    "Music Streaming Co"
+   ]
+  },
+  {
+   "hint": "music streaming subscription",
+   "expected": [
+    "Streaming Music",
+    "Music Streaming Co"
+   ]
+  },
+  {
+   "hint": "streaming subscription",
+   "expected": [
+    "Streaming Music"
+   ]
+  },
+  {
+   "hint": "music service",
+   "expected": [
+    "Conciertos Live",
+    "Streaming Music"
+   ]
+  },
+  {
+   "hint": "música",
+   "expected": [
+    "Conciertos Live",
+    "Streaming Music"
+   ]
+  },
+  {
+   "hint": "suscripción de música",
+   "expected": [
+    "Conciertos Live",
+    "Streaming Music"
+   ]
+  },
+  {
+   "hint": "assinatura de música",
+   "expected": [
+    "Conciertos Live",
+    "Streaming Music"
+   ]
+  },
+  {
+   "hint": "servicio de streaming de música",
+   "expected": [
+    "Streaming Music"
+   ]
+  },
+  {
+   "hint": "restaurant",
+   "expected": [
+    "Restaurante El Buen Sabor",
+    "Restaurante Lima"
+   ]
+  },
+  {
+   "hint": "restaurante",
+   "expected": [
+    "Restaurante El Buen Sabor",
+    "Restaurante Lima"
+   ]
+  },
+  {
+   "hint": "Restaurante Lima",
+   "expected": [
+    "Restaurante Lima"
+   ]
+  },
+  {
+   "hint": "dinner",
+   "expected": [
+    "Restaurante El Buen Sabor"
+   ]
+  },
+  {
+   "hint": "supermarket",
+   "expected": [
+    "Mercado Central",
+    "Super Ahorro"
+   ]
+  },
+  {
+   "hint": "supermercado",
+   "expected": [
+    "Mercado Central",
+    "Super Ahorro",
+    "Supermercado Norte"
+   ]
+  },
+  {
+   "hint": "farmácia",
+   "expected": [
+    "Farmacia Salud",
+    "Farmácia Popular"
+   ]
+  },
+  {
+   "hint": "pharmacy",
+   "expected": [
+    "Farmacia Salud"
+   ]
+  },
+  {
+   "hint": "Farmacia Salud",
+   "expected": [
+    "Farmacia Salud"
+   ]
+  },
+  {
+   "hint": "subscription",
+   "expected": []
+  },
+  {
+   "hint": "charge",
+   "expected": []
+  },
+  {
+   "hint": "tienda",
+   "expected": [
+    "Tienda Don José",
+    "Tienda General"
+   ]
+  },
+  {
+   "hint": "Tienda Don José",
+   "expected": [
+    "Tienda Don José"
+   ]
+  },
+  {
+   "hint": "don jose",
+   "expected": [
+    "Tienda Don José"
+   ]
+  },
+  {
+   "hint": "gas",
+   "expected": [
+    "Estación de Servicio",
+    "Gasolinera Express"
+   ]
+  },
+  {
+   "hint": "central",
+   "expected": [
+    "Mercado Central",
+    "Laboratorio Central"
+   ]
+  },
+  {
+   "hint": "uber ride",
+   "expected": [
+    "Uber"
+   ]
+  },
+  {
+   "hint": "movie theater",
+   "expected": [
+    "Cine Premium"
+   ]
+  },
+  {
+   "hint": "theater",
+   "expected": [
+    "Cine Premium",
+    "Teatro Nacional"
+   ]
+  },
+  {
+   "hint": "Spotify",
+   "expected": []
+  },
+  {
+   "hint": "music restaurant",
+   "expected": []
+  },
+  {
+   "hint": "50%",
+   "expected": [
+    "50% off"
+   ]
+  },
+  {
+   "hint": "concert tickets",
+   "expected": [
+    "Conciertos Live"
+   ]
+  },
+  {
+   "hint": "movie tickets",
+   "expected": [
+    "Cine Premium"
+   ]
+  },
+  {
+   "hint": "taxi ride",
+   "expected": [
+    "Taxi Seguro"
+   ]
+  },
+  {
+   "hint": "gas station",
+   "expected": [
+    "Estación de Servicio",
+    "Gasolinera Express"
+   ]
+  },
+  {
+   "hint": "doctor appointment",
+   "expected": [
+    "Clínica Médica"
+   ]
+  },
+  {
+   "hint": "Central Restaurant",
+   "expected": []
+  },
+  {
+   "hint": "Óptica",
+   "expected": [
+    "Óptica Visión"
+   ]
+  },
+  {
+   "hint": "optica sur",
+   "expected": []
+  }
+ ]
+}

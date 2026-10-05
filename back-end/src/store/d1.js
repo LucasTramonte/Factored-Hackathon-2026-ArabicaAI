@@ -7,6 +7,7 @@
  * A batch is one round trip and one atomic transaction.
  */
 import { SESSION_MS, tokenHash } from '../auth/session.js';
+import { merchantMatch } from '../modules/intake/merchant-hint.js';
 
 /** Export cursors are server-minted episode ids: lowercase RFC 4122 UUIDs, so text order matches the keyset. */
 const EPISODE_CURSOR = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -894,14 +895,28 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
           + 'ORDER BY occurred_at DESC,source_occurred_at DESC,transaction_id LIMIT ?', customerId, SUGGESTION_PURCHASES]]);
       return { country: customer.results[0]?.country ?? null, purchases: purchases.results };
     },
-    /** Deterministic, owner-scoped discovery lookup. Criteria are validated upstream; SQL parameters never contain model SQL. */
+    /**
+     * Deterministic, owner-scoped discovery lookup. Criteria are validated upstream; SQL parameters never contain model SQL.
+     * A merchant hint matches as a literal substring, as all its non-generic words in any order, or as a vocabulary
+     * merchant whose concepts cover it (merchant-hint.js). ``approx`` keeps amounts within 10% of the stated one, as matcher.js does.
+     * Dates compare the day the customer is shown: ``occurred_at``, or for dataset charges (stored without it) the
+     * timezone-free ``source_occurred_at``.
+     */
     searchOwnedTransactions: async (customerId, criteria) => {
       const c = criteria ?? {}, clauses = ['customer_id=?'], values = [customerId];
-      if (c.merchant_hint) { clauses.push("lower(merchant_name) LIKE ? ESCAPE '\\'"); values.push('%' + c.merchant_hint.toLowerCase().replace(/[\\%_]/g, '\\$&') + '%'); }
-      if (c.date_from) { clauses.push('substr(occurred_at,1,10)>=?'); values.push(c.date_from); }
-      if (c.date_to) { clauses.push('substr(occurred_at,1,10)<=?'); values.push(c.date_to); }
+      if (c.merchant_hint) {
+        const m = merchantMatch(c.merchant_hint), like = "lower(merchant_name) LIKE ? ESCAPE '\\'";
+        const pattern = w => '%' + w.replace(/[\\%_]/g, '\\$&') + '%', any = [like];
+        values.push(pattern(m.literal));
+        if (m.words.length) { any.push('(' + m.words.map(() => like).join(' AND ') + ')'); values.push(...m.words.map(pattern)); }
+        if (m.names.length) { any.push('merchant_name IN (' + m.names.map(() => '?').join(',') + ')'); values.push(...m.names); }
+        clauses.push(any.length > 1 ? '(' + any.join(' OR ') + ')' : like);
+      }
+      if (c.date_from) { clauses.push('substr(coalesce(occurred_at,source_occurred_at),1,10)>=?'); values.push(c.date_from); }
+      if (c.date_to) { clauses.push('substr(coalesce(occurred_at,source_occurred_at),1,10)<=?'); values.push(c.date_to); }
       if (c.currency) { clauses.push('currency=?'); values.push(c.currency); }
-      if (c.amount_operator) { clauses.push('CAST(amount AS REAL) ' + ({eq:'=',gt:'>',gte:'>=',lt:'<',lte:'<='}[c.amount_operator]) + ' ?'); values.push(c.amount); }
+      if (c.amount_operator === 'approx') { clauses.push('abs(CAST(amount AS REAL) - ?) * 10 <= ?'); values.push(c.amount, c.amount); }
+      else if (c.amount_operator) { clauses.push('CAST(amount AS REAL) ' + ({eq:'=',gt:'>',gte:'>=',lt:'<',lte:'<='}[c.amount_operator]) + ' ?'); values.push(c.amount); }
       return all('SELECT transaction_id,merchant_name,amount,currency,occurred_at,source_occurred_at FROM transactions WHERE ' + clauses.join(' AND ')
         + ' ORDER BY occurred_at DESC,source_occurred_at DESC,transaction_id LIMIT 4', ...values);
     },

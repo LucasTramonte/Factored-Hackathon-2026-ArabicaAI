@@ -1,0 +1,41 @@
+{
+  "_doc": "Merchant concepts for bounded transaction discovery (issue #141, ADR-016 amendment). One entry per merchant of the closed dataset vocabulary (ai-transport.js VOCABULARY, same 24 names): the normalized words (casefold, no accents) a customer may use for it in ES, PT or EN. A hint selects a merchant only when every one of its non-generic words is a concept of that merchant, so one overlapping word never reaches an unrelated merchant. 'generic' words describe any charge and are ignored. Read by back-end/src/modules/intake/merchant-hint.js and evals/support_assist/discovery_score.py; no customer data.",
+  "generic": [
+    "a", "an", "and", "the", "of", "at", "in", "on", "for", "to", "with", "my", "some", "or",
+    "de", "del", "do", "da", "dos", "das", "el", "la", "los", "las", "lo", "en", "em", "no", "na", "nos", "nas",
+    "con", "com", "para", "por", "y", "e", "o", "un", "una", "uno", "um", "uma", "mi", "meu", "minha", "mis", "meus",
+    "subscription", "subscriptions", "suscripcion", "suscripciones", "assinatura", "assinaturas",
+    "monthly", "mensual", "mensal", "plan", "plano",
+    "charge", "charges", "cargo", "cargos", "cobro", "cobros", "cobranca", "cobrancas",
+    "payment", "payments", "pago", "pagos", "pagamento", "pagamentos", "purchase", "purchases", "compra", "compras",
+    "service", "services", "servicio", "servicios", "servico", "servicos",
+    "store", "shop", "tienda", "loja", "company", "empresa", "merchant", "comercio", "estabelecimento",
+    "app", "online", "account", "cuenta", "conta", "bill", "factura", "fatura", "something", "algo", "thing", "cosa", "coisa"
+  ],
+  "merchants": {
+    "Cine Premium": ["cine", "cinema", "movie", "movies", "theater", "theatre", "ticket", "tickets", "entrada", "entradas", "ingresso", "ingressos", "film", "films", "pelicula", "peliculas", "filme", "filmes", "premium"],
+    "Conciertos Live": ["concierto", "conciertos", "concert", "concerts", "show", "shows", "live", "music", "musica", "ticket", "tickets", "entrada", "entradas", "ingresso", "ingressos"],
+    "Streaming Music": ["streaming", "stream", "music", "musica"],
+    "Teatro Nacional": ["teatro", "theater", "theatre", "nacional", "national", "ticket", "tickets", "entrada", "entradas", "ingresso", "ingressos"],
+    "Mercado Central": ["mercado", "market", "central", "grocery", "groceries", "supermercado", "supermarket"],
+    "Restaurante El Buen Sabor": ["restaurante", "restaurantes", "restaurant", "restaurants", "buen", "sabor", "dinner", "lunch", "cena", "almuerzo", "jantar", "almoco"],
+    "Super Ahorro": ["super", "ahorro", "grocery", "groceries", "supermercado", "supermarket"],
+    "Tienda Don José": ["don", "jose"],
+    "Clínica Médica": ["clinica", "clinic", "medica", "medico", "medical", "doctor", "consulta", "appointment", "cita"],
+    "Farmacia Salud": ["farmacia", "pharmacy", "drugstore", "salud", "medicine", "medicamento", "medicamentos", "remedio", "remedios"],
+    "Laboratorio Central": ["laboratorio", "laboratory", "lab", "central", "exame", "exames", "examen", "examenes", "exam", "exams"],
+    "Óptica Visión": ["optica", "optician", "optical", "vision", "glasses", "eyeglasses", "gafas", "lentes", "oculos"],
+    "Boutique Moda": ["boutique", "moda", "fashion", "clothes", "clothing", "ropa", "roupa"],
+    "Centro Comercial": ["centro", "comercial", "mall", "shopping"],
+    "Ferretería": ["ferreteria", "hardware", "tools", "herramientas", "ferramentas"],
+    "Tienda General": ["general"],
+    "Cable TV": ["cable", "tv", "television", "televisao"],
+    "Empresa Telefónica": ["telefonica", "telefono", "telefone", "phone", "telephone", "mobile", "celular"],
+    "Internet Plus": ["internet", "wifi", "broadband", "plus"],
+    "Servicios Públicos": ["publicos", "public", "utilities", "utility", "water", "agua", "electricity", "electricidad", "luz", "energia"],
+    "Estación de Servicio": ["estacion", "station", "gasolina", "fuel", "gas", "combustible", "combustivel", "posto"],
+    "Gasolinera Express": ["gasolinera", "station", "gasolina", "fuel", "gas", "combustible", "combustivel", "posto", "express"],
+    "Taxi Seguro": ["taxi", "cab", "seguro", "ride", "rides"],
+    "Uber": ["uber", "ride", "rides", "rideshare"]
+  }
+}
