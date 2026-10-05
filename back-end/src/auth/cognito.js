@@ -55,7 +55,7 @@ export async function bearerClaims(request, env, verify = verifyIdToken) {
   const token = BEARER.exec(request.headers.get('Authorization') || '')?.[1];
   if (!token || token.length > 4096) return { error: fail(422, 'Provide the sign-in token') };
   try {
-    return { claims: await verify(token, { jwks: jwksFor(env), issuer: issuerFor(env), clientId: env.COGNITO_CLIENT_ID }) };
+    return { claims: await verify(token, { jwks: jwksFor(env), issuer: issuerFor(env), clientId: env.COGNITO_CLIENT_IDS ?? env.COGNITO_CLIENT_ID }) };
   } catch (e) {
     if (e instanceof TypeError || JWKS_DOWN.has(e?.code)) return { error: fail(503, 'Sign-in is unavailable') };
     return { error: fail(401, 'Sign-in could not be verified') };

@@ -363,7 +363,7 @@ export class CustomerPage implements OnInit, OnDestroy {
     this.busy.set(true);
     this.error.set('');
     try {
-      await this.cognito.requestCode(this.email.trim());
+      await this.cognito.requestCode(this.email.trim(), this.lang.lang());
       this.codeSent.set(true);
     } catch (e) {
       this.error.set(this.signInError(e, 'errSendCode'));

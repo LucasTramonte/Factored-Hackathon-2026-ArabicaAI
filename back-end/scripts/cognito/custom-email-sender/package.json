@@ -1,0 +1,1 @@
+{"name":"arabica-cognito-email-sender","private":true,"type":"module","engines":{"node":">=22"},"scripts":{"test":"node --test sender.test.mjs","package":"sh package.sh"},"dependencies":{"@aws-crypto/client-node":"4.2.1"}}

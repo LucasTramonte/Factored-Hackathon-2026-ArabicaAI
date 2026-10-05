@@ -213,7 +213,7 @@ export class AgentPage {
     this.busy.set(true);
     this.error.set('');
     try {
-      await this.cognito.requestCode(this.email.trim());
+      await this.cognito.requestCode(this.email.trim(), this.lang.lang());
       this.codeSent.set(true);
       afterNextRender(() => this.focusSignIn(), { injector: this.injector });
     } catch (e) {

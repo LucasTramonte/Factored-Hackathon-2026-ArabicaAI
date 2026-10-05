@@ -343,6 +343,17 @@ describe('AgentPage', () => {
       expect([page.loaded(), page.error()]).toEqual([true, '']);
     });
 
+    it('passes the selected language for request and resend', async () => {
+      production();
+      const lang = TestBed.inject(LangService);
+      page.email = ' ana@example.com ';
+      lang.set('pt'); await page.requestCode();
+      lang.set('en'); await page.requestCode();
+      expect(cognito.requestCode.calls.allArgs()).toEqual([['ana@example.com', 'pt'], ['ana@example.com', 'en']]);
+      expect(lang.t().codeHelp).toContain('Your ArabicaAI code');
+      lang.set('pt'); expect(lang.t().codeHelp).toContain('Seu código ArabicaAI');
+    });
+
     it('goes email → code → queue, sending the ID token to the agent session and focusing the queue', async () => {
       document.body.appendChild(el());
       production();
@@ -350,7 +361,7 @@ describe('AgentPage', () => {
       await page.requestCode();
       fixture.detectChanges();
       await fixture.whenStable();
-      expect(cognito.requestCode).toHaveBeenCalledOnceWith('agent@example.com');
+      expect(cognito.requestCode).toHaveBeenCalledOnceWith('agent@example.com', TestBed.inject(LangService).lang());
       expect(el().querySelector('#agent-email')).toBeNull();
       expect(document.activeElement).toBe(el().querySelector('#agent-code'));
       expect(el().querySelector('#agent-code-sent')!.textContent).toContain('agent@example.com');
