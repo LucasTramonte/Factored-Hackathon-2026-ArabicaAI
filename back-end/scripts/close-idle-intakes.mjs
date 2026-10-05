@@ -46,7 +46,9 @@ export async function closeIdleIntakes(store, { now = Date.now(), limit = 100, m
     suggestionsAbandoned += runs.length;
     if (runs.length < limit) break;
   }
-  return { closed, pages, complete: !remaining, cutoff: new Date(now).toISOString(), suggestions_abandoned: suggestionsAbandoned, metrics: store.metrics() };
+  // Assistance cleanup runs once per invocation: never more than 100 expired metadata records per sweep.
+  const assist = await store.sweepAssistRuns({ now, limit });
+  return { assist_abandoned: assist.abandoned, assist_deleted: assist.deleted, closed, pages, complete: !remaining, cutoff: new Date(now).toISOString(), suggestions_abandoned: suggestionsAbandoned, metrics: store.metrics() };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

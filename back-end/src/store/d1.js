@@ -210,6 +210,39 @@ export function createStore(db, { shortReference = newShortReference } = {}) {
     return { handoff, replayed: handoff?.handoff_id !== handoffId };
   };
   return {
+    /** Atomically reserve one UUID under the shared 200/day and session-feature 5/minute caps; failures retain slots. */
+    reserveAssist: async ({ requestId, sessionHash, mode, protocol, now }) => {
+      if (!EPISODE_CURSOR.test(requestId) || !/^[0-9a-f]{64}$/.test(sessionHash) || !['reviewer', 'customer'].includes(mode)
+        || !EPISODE_CURSOR.test(protocol) || !Number.isSafeInteger(now) || now < 0) throw new Error('Invalid assistance reservation');
+      const day = Math.floor(now / 86400000) * 86400000;
+      const [inserted, existing] = await batch([
+        ['INSERT INTO support_assist_runs(request_id,session_hash,mode,protocol,created_at) SELECT ?,?,?,?,? '
+          + 'WHERE NOT EXISTS(SELECT 1 FROM support_assist_runs WHERE request_id=?) '
+          + 'AND (SELECT COUNT(*) FROM (SELECT 1 FROM support_assist_runs WHERE created_at>=? AND created_at<? LIMIT 200))<200 '
+          + 'AND (SELECT COUNT(*) FROM (SELECT 1 FROM support_assist_runs WHERE session_hash=? AND mode=? AND created_at>? AND created_at<=? LIMIT 5))<5 '
+          + 'RETURNING request_id', requestId, sessionHash, mode, protocol, now, requestId, day, day + 86400000, sessionHash, mode, now - 60000, now],
+        ['SELECT request_id FROM support_assist_runs WHERE request_id=? AND changes()=0', requestId]
+      ]);
+      return inserted.results.length ? 'reserved' : existing.results.length ? 'duplicate' : 'limited';
+    },
+    /** Finish metadata once; an abandoned run cannot be resurrected or have its retained usage erased. */
+    finishAssist: async ({ requestId, outcome, latencyMs, usage, version }) => {
+      if (!EPISODE_CURSOR.test(requestId) || !['success','timeout','provider_error','auth_error','invalid_output','config_error','stale'].includes(outcome)
+        || !Number.isSafeInteger(latencyMs) || latencyMs < 0 || typeof version !== 'string' || !version || version.length > 160
+        || !usage || !['llm_calls','known_input_tokens','known_output_tokens','usage_unavailable_calls'].every(k=>Number.isSafeInteger(usage[k]) && usage[k]>=0)
+        || usage.llm_calls > 1 || usage.usage_unavailable_calls > usage.llm_calls) throw new Error('Invalid assistance outcome');
+      await all('UPDATE support_assist_runs SET outcome=?,latency_ms=?,llm_calls=?,known_input_tokens=?,known_output_tokens=?,usage_unavailable_calls=?,version=? '
+        + 'WHERE request_id=? AND outcome IS NULL', outcome, latencyMs, usage.llm_calls, usage.known_input_tokens, usage.known_output_tokens, usage.usage_unavailable_calls, version, requestId);
+    },
+    /** One indexed bounded sweep: abandon at most 100 older-than-ten-minute runs; delete at most 100 older-than-seven-day rows. */
+    sweepAssistRuns: async ({ now, limit = 100 }) => {
+      if (!Number.isSafeInteger(now) || now < 0 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error('Invalid closure bounds');
+      const [closed, deleted] = await batch([
+        ["UPDATE support_assist_runs SET outcome='abandoned' WHERE request_id IN (SELECT request_id FROM support_assist_runs WHERE outcome IS NULL AND created_at<? ORDER BY created_at LIMIT ?) RETURNING request_id", now - 600000, limit],
+        ['DELETE FROM support_assist_runs WHERE request_id IN (SELECT request_id FROM support_assist_runs WHERE created_at<? ORDER BY created_at LIMIT ?) RETURNING request_id', now - 7 * 86400000, limit]
+      ]);
+      return { abandoned: closed.results.length, deleted: deleted.results.length };
+    },
     metrics: () => ({ ...totals }),
     ping: () => all('SELECT 1 AS ok'),
     /** ``'fictitious'``, ``'dataset'`` or ``null`` when the customer isn't loaded (migration 0006). */
