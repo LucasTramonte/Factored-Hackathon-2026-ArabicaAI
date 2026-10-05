@@ -314,3 +314,14 @@ export interface MessageThread {
   can_post: boolean;
   items: ReportMessage[];
 }
+
+/** Monotonic report state used to reject a stale reviewed reply. */
+export interface AssistSnapshot { status: HandoffStatus; message_count: number }
+export type AssistField = 'merchant' | 'amount' | 'currency' | 'date' | 'description';
+/** Transient AI suggestions; never persisted as human messages. */
+export interface ReviewerAssist {
+  summary: string; missing_fields: AssistField[]; draft: string; language: IntakeLang;
+  snapshot: AssistSnapshot; context_truncated: boolean;
+}
+/** Seeded only by explicit reviewer acceptance into the shared composer. */
+export interface MessageDraft { body: string; scope: string; version: number }

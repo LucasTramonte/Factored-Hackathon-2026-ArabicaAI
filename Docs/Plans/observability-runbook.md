@@ -53,3 +53,11 @@
 ## Why not Cloud Run for observability
 
 Cloudflare provides the logs, traces and metrics this needs, on the plan we have. Moving would add a second runtime (ADR-003) and a migration from D1 to Cloud SQL, with its own data copy, the day before submission, to gain what three files and two GCP resources already give. Reopen if the logs need more than 3 days of retention or a SIEM export (Logpush needs a paid plan), or if a regulator requires the runtime in GCP.
+
+## Reviewer assistance UI (implemented; activation pending)
+
+In the agent report detail, **Prepare reply** requests a transient AI summary, missing-information checklist and unsaved draft. It does not send or change status. **Use draft in message** requires confirmation before replacing unsent text, then the reviewer edits and explicitly uses the existing **Send message**. Only that human send persists; it carries the generation's status/message-count snapshot.
+
+A 409 retains editable text and blocks assisted sending. **Refresh report context**, then prepare/apply a fresh draft or explicitly confirm manual review of the refreshed context and retained text. Closed reports remain read-only. Report/session/language changes discard AI state and late responses; disabled assistance or provider errors leave manual messaging available. All controls/copy support ES/PT/EN; omitted conversation is labeled only when `context_truncated` is true. Do not record summary, draft, message or statement bodies in logs or telemetry.
+
+The reviewer switch remains default-off. Synthetic local loopback-provider UI checks establish workflow behavior only; dedicated model-quality evaluation, ADR review, live pilot/spending approval and activation approval remain pending.

@@ -1,4 +1,4 @@
-import { Component, ElementRef, Injector, afterNextRender, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, Injector, afterNextRender, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Title } from '@angular/platform-browser';
 import { DatePipe } from '@angular/common';
@@ -12,7 +12,7 @@ import { LangService, STATUS_CHIP, Strings, checkText, errorText, messageErrorTe
 import { LangSwitch } from '../../shared/i18n/lang-switch.component';
 import { Mark } from '../../shared/mark/mark.component';
 import { MessageThreadView } from '../../shared/messages/message-thread.component';
-import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind, REASON_LABEL, Reason, SuggestionMarkValue, MessageThread } from '../../shared/models/intake.model';
+import { AgentIntake, AgentIntakeDetail, HandoffStatus, IntakeKind, REASON_LABEL, Reason, SuggestionMarkValue, MessageThread, ReviewerAssist, MessageDraft, AssistSnapshot, AssistField } from '../../shared/models/intake.model';
 import { AgentService } from './agent.service';
 import { CustomerService } from '../customer/customer.service';
 
@@ -77,6 +77,14 @@ export class AgentPage {
     // The route title is static, so the tab title follows the interface language here.
     const title = inject(Title);
     effect(() => title.setTitle(`ArabicaAI · ${this.t().agentTitle}`));
+    effect(() => { this.lang.lang(); this.roles(); untracked(() => this.clearAssistance()); });
+    effect(() => {
+      const snapshot = this.replySnapshot();
+      const d = this.detail(); const thread = this.thread();
+      if (snapshot && d && thread && (snapshot.status !== d.status || snapshot.status !== thread.status || snapshot.message_count !== thread.items.length)) {
+        untracked(() => this.assistedStale.set(true));
+      }
+    });
     // An agent session is already open in this tab (an admin signed in on the customer view, or came back here): load the queue.
     if (this.roles().length) void this.refresh();
     else void this.restore();
@@ -304,33 +312,137 @@ export class AgentPage {
   /** Per report, one key per message text: a retry of the same text reuses it (one stored message); new text gets a new key. */
   private readonly messageKeys = new Map<string, { body: string; key: string }>();
 
+  readonly assistance = signal<ReviewerAssist | null>(null);
+  readonly assistBusy = signal(false);
+  readonly assistFailed = signal('');
+  readonly composerDraft = signal<MessageDraft | null>(null);
+  readonly replySnapshot = signal<AssistSnapshot | null>(null);
+  readonly assistedStale = signal(false);
+  readonly contextRefreshed = signal(false);
+  private assistRequest = 0;
+  private draftVersion = 0;
+  private readonly composer = viewChild(MessageThreadView);
+
+  private assistScope(): string {
+    return `${this.detailRequest}:${this.detail()?.protocol}:${this.lang.lang()}:${this.roles().join(',')}`;
+  }
+
+  /** Forget transient AI state and invalidate outstanding requests; manual text stays in the composer. */
+  private clearAssistance(): void {
+    this.assistRequest++;
+    this.assistance.set(null); this.assistBusy.set(false); this.assistFailed.set('');
+    this.composerDraft.set(null); this.replySnapshot.set(null); this.assistedStale.set(false); this.contextRefreshed.set(false);
+  }
+
+  /** Generate only; one deliberate click gets one request id and never sends a message. */
+  async prepareReply(): Promise<void> {
+    const d = this.detail();
+    if (!d || d.status === 'closed' || !this.roles().length || this.assistBusy() || this.messageSending() === d.protocol) return;
+    const scope = this.assistScope(), request = ++this.assistRequest;
+    this.assistBusy.set(true); this.assistFailed.set(''); this.assistance.set(null);
+    try {
+      const result = await this.service.prepareReply(d.protocol, this.lang.lang(), crypto.randomUUID());
+      if (scope !== this.assistScope() || request !== this.assistRequest) return;
+      const thread = this.thread();
+      if (result.language !== this.lang.lang() || result.snapshot.status !== this.detail()?.status || !thread || result.snapshot.status !== thread.status || result.snapshot.message_count !== thread.items.length) {
+        this.assistFailed.set(this.t().assistStale); return;
+      }
+      this.assistance.set(result);
+    } catch (e) {
+      if (scope !== this.assistScope() || request !== this.assistRequest) return;
+      if (e instanceof ApiError && e.status === 401) this.fail(e);
+      else this.assistFailed.set(e instanceof ApiError && e.status === 409 ? this.t().assistStale : e instanceof ApiError && e.status === 429 ? this.t().errTooMany : this.t().assistUnavailable);
+    } finally {
+      if (scope === this.assistScope() && request === this.assistRequest) this.assistBusy.set(false);
+    }
+  }
+
+  /** Explicitly accept the suggestion; confirm any replacement of unsent composer text. */
+  applyReply(): void {
+    const result = this.assistance(), d = this.detail(), thread = this.thread();
+    if (!result || result.language !== this.lang.lang() || !d || !thread?.can_post || result.snapshot.status !== d.status || result.snapshot.status !== thread.status || result.snapshot.message_count !== thread.items.length) return;
+    if (this.composer()?.draft.trim() && !window.confirm(this.t().assistReplace)) return;
+    this.composerDraft.set({ body: result.draft, scope: d.protocol, version: ++this.draftVersion });
+    this.replySnapshot.set(result.snapshot); this.assistedStale.set(false); this.contextRefreshed.set(false);
+    afterNextRender(() => this.host.nativeElement.querySelector<HTMLTextAreaElement>('#agent-messages-draft')?.focus(), { injector: this.injector });
+  }
+
+  /** Re-read status and messages without replacing unsent text; stale sends remain blocked pending review. */
+  async refreshReplyContext(): Promise<void> {
+    const protocol = this.detail()?.protocol, scope = this.assistScope();
+    if (!protocol || this.assistBusy()) return;
+    this.assistBusy.set(true); this.contextRefreshed.set(false); this.assistFailed.set('');
+    try {
+      const detail = await this.service.intakeDetail(protocol);
+      const thread = await this.service.messages(protocol);
+      if (scope !== this.assistScope()) return;
+      this.detail.set(detail); this.thread.set(thread); this.assistance.set(null); this.contextRefreshed.set(true);
+    } catch (e) {
+      if (scope === this.assistScope()) {
+        if (e instanceof ApiError && e.status === 401) this.fail(e);
+        else this.assistFailed.set(this.t().assistUnavailable);
+      }
+    } finally { if (scope === this.assistScope()) this.assistBusy.set(false); }
+  }
+
+  /** A person has rechecked the refreshed report and retained text; resume the ordinary manual send. */
+  reviewManually(): void {
+    if (!this.contextRefreshed() || !this.thread()?.can_post) return;
+    this.replySnapshot.set(null); this.assistedStale.set(false); this.contextRefreshed.set(false);
+    afterNextRender(() => this.host.nativeElement.querySelector<HTMLTextAreaElement>('#agent-messages-draft')?.focus(), { injector: this.injector });
+  }
+
+  /** Translate the fixed AI missing-information vocabulary, never arbitrary provider markup. */
+  assistField(field: AssistField): string {
+    return this.t()[{ merchant: 'merchant', amount: 'amount', currency: 'assistCurrency', date: 'date', description: 'describe' }[field] as keyof Strings];
+  }
+
   /** Read the thread; a reload after a post keeps the current thread and any error on screen until it answers. */
   private async loadMessages(protocol: string): Promise<void> {
+    const scope = this.assistScope();
     try {
       const thread = await this.service.messages(protocol);
-      if (this.detail()?.protocol === protocol) this.thread.set(thread);
+      if (scope === this.assistScope()) this.thread.set(thread);
     } catch (e) {
-      if (this.detail()?.protocol === protocol) this.messageFailed.set(errorText(this.t(), e));
+      if (scope === this.assistScope()) {
+        if (e instanceof ApiError && e.status === 401) this.fail(e);
+        else this.messageFailed.set(errorText(this.t(), e));
+      }
     }
   }
 
   /** Post the agent's message to the customer on the open report, then show the stored thread. */
   async sendMessage(body: string): Promise<void> {
     const protocol = this.detail()?.protocol;
-    if (!protocol || this.messageSending() === protocol) return;
+    if (!protocol || this.messageSending() === protocol || this.assistedStale()) return;
     let key = this.messageKeys.get(protocol);
     if (key?.body !== body) this.messageKeys.set(protocol, key = { body, key: crypto.randomUUID() });
+    const expected = this.replySnapshot();
+    const thread = this.thread();
+    if (expected && (!thread || expected.status !== this.detail()?.status || expected.status !== thread.status || expected.message_count !== thread.items.length)) {
+      this.assistedStale.set(true); return;
+    }
     this.messageSending.set(protocol);
     this.messageFailed.set('');
     // The result belongs to the report that posted; if the agent opened another one meanwhile, it touches nothing there.
-    const stillOpen = () => this.detail()?.protocol === protocol;
+    const scope = this.assistScope();
+    const stillOpen = () => this.assistScope() === scope;
     try {
-      await this.service.postMessage(protocol, body, key.key);
+      const snapshot = this.replySnapshot();
+      if (snapshot) await this.service.postMessage(protocol, body, key.key, snapshot);
+      else await this.service.postMessage(protocol, body, key.key);
       this.messageKeys.delete(protocol);
-      if (stillOpen()) this.messagesSent.update(n => n + 1);
+      if (stillOpen()) { this.messagesSent.update(n => n + 1); this.clearAssistance(); }
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) this.messageKeys.delete(protocol);
-      if (stillOpen()) this.messageFailed.set(messageErrorText(this.t(), e));
+      if (stillOpen()) {
+        if (e instanceof ApiError && e.status === 401) this.fail(e);
+        else {
+          if (e instanceof ApiError && e.status === 409 && this.replySnapshot()) { this.assistedStale.set(true); this.contextRefreshed.set(false); this.assistance.set(null); }
+          this.messageFailed.set(this.assistedStale() ? '' : messageErrorText(this.t(), e));
+          if (this.assistedStale()) afterNextRender(() => this.host.nativeElement.querySelector<HTMLTextAreaElement>('#agent-messages-draft')?.focus(), { injector: this.injector });
+        }
+      }
     } finally {
       if (this.messageSending() === protocol) this.messageSending.set(null);
     }
@@ -341,6 +453,7 @@ export class AgentPage {
     // Each request gets a number; only the latest may change the panel, even for the same protocol
     // (a double click whose first request fails must not hide the second one's detail).
     const request = ++this.detailRequest;
+    this.clearAssistance();
     this.trigger = trigger;
     this.openProtocol.set(protocol);
     this.closingNote = '';
@@ -366,6 +479,7 @@ export class AgentPage {
   /** Close the detail and return focus to the button that opened it. */
   close(): void {
     this.detailRequest++;
+    this.clearAssistance();
     this.openProtocol.set(null);
     this.detail.set(null);
     this.closingNote = '';
@@ -376,6 +490,7 @@ export class AgentPage {
 
   private reset(): void {
     this.detailRequest++;
+    this.clearAssistance();
     this.error.set('');
     this.loaded.set(false);
     this.closingNote = '';
