@@ -9,12 +9,12 @@ import { IntakeReceipt } from '../../shared/models/intake.model';
 describe('CustomerPage focus', () => {
   let previousTourPreference: string | null;
   beforeEach(() => {
-    previousTourPreference = localStorage.getItem('arabica.customer-tour.v1');
-    localStorage.setItem('arabica.customer-tour.v1', 'dismissed'); // These existing flow checks represent a returning browser.
+    previousTourPreference = localStorage.getItem('arabica.customer-tour.v2');
+    localStorage.setItem('arabica.customer-tour.v2', 'dismissed'); // These existing flow checks represent a returning browser.
   });
   afterEach(() => {
-    if (previousTourPreference === null) localStorage.removeItem('arabica.customer-tour.v1');
-    else localStorage.setItem('arabica.customer-tour.v1', previousTourPreference);
+    if (previousTourPreference === null) localStorage.removeItem('arabica.customer-tour.v2');
+    else localStorage.setItem('arabica.customer-tour.v2', previousTourPreference);
   });
   it('leaves focus alone on first render, then moves it to each new step heading', async () => {
     const service = jasmine.createSpyObj('CustomerService', ['identities', 'signIn', 'transactions', 'reports'], { client: signal(''), card: signal(null), roles: signal([]) }); // untyped: only what this flow calls

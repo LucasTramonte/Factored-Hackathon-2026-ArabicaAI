@@ -11,7 +11,7 @@ describe('Customer bounded refresh', () => {
   let visible: DocumentVisibilityState, online: boolean;
   let service: jasmine.SpyObj<CustomerService>;
   beforeEach(() => {
-    localStorage.setItem('arabica.customer-tour.v1', 'dismissed');
+    localStorage.setItem('arabica.customer-tour.v2', 'dismissed');
     visible = 'visible'; online = true;
     spyOnProperty(document, 'visibilityState', 'get').and.callFake(() => visible);
     spyOnProperty(navigator, 'onLine', 'get').and.callFake(() => online);
@@ -24,7 +24,7 @@ describe('Customer bounded refresh', () => {
     TestBed.configureTestingModule({ imports: [CustomerPage], providers: [provideRouter([]), { provide: CustomerService, useValue: service },
       { provide: CognitoService, useValue: { forget: () => undefined } }] });
   });
-  afterEach(() => localStorage.removeItem('arabica.customer-tour.v1'));
+  afterEach(() => localStorage.removeItem('arabica.customer-tour.v2'));
   function home() {
     const fixture = TestBed.createComponent(CustomerPage); document.body.append(fixture.nativeElement); fixture.detectChanges();
     const page = fixture.componentInstance; page.identity = 'demo-ana'; void page.login(); flushMicrotasks(); fixture.detectChanges();

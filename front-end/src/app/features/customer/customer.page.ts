@@ -87,7 +87,8 @@ export class CustomerPage implements OnInit, OnDestroy {
   private offerTour(): void {
     if (this.tourOffered || this.step() !== 'home') return;
     this.tourOffered = true;
-    try { if (['dismissed', 'complete'].includes(localStorage.getItem('arabica.customer-tour.v1') ?? '')) return; }
+    // v2 (2026-10-05): a fresh key so every browser is offered the tour again before judging.
+    try { if (['dismissed', 'complete'].includes(localStorage.getItem('arabica.customer-tour.v2') ?? '')) return; }
     catch { /* Storage is optional; this page still offers only once. */ }
     if (!this.alert() && !this.chatOpen()) { this.prepareTourTarget(); this.tour.set('welcome'); }
   }
@@ -109,7 +110,7 @@ export class CustomerPage implements OnInit, OnDestroy {
   endTour(complete = false): void {
     this.tour.set(null);
     this.tourOffered = true;
-    try { localStorage.setItem('arabica.customer-tour.v1', complete ? 'complete' : 'dismissed'); }
+    try { localStorage.setItem('arabica.customer-tour.v2', complete ? 'complete' : 'dismissed'); }
     catch { /* Current page session already suppresses another automatic offer. */ }
   }
 
