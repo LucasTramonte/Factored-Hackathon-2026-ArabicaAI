@@ -255,6 +255,7 @@ body { min-height: 100%; }
 .tr-last .td { border-bottom: 0; }
 .td-merchant { flex-wrap: nowrap; gap: 12px; }
 .td-merchant .name { font: 500 15px/20px var(--font-sans); overflow-wrap: anywhere; }
+.td-merchant > :last-child { flex: 1 1 0; } /* the name column shrinks and wraps instead of dropping under the tile at 320px */
 .td-date, .mono-meta { font: 400 12px/16px var(--font-mono); color: var(--ink-muted); overflow-wrap: anywhere; }
 .td-amount { justify-content: flex-end; text-align: right; white-space: nowrap; font: 500 15px/20px var(--font-mono); }
 .right { text-align: right; }
@@ -317,4 +318,9 @@ body { min-height: 100%; }
   .box-head, .box-body { padding-left: 16px; padding-right: 16px; }
   .ar-sidebar .ar-nav a { padding: 0 10px; white-space: nowrap; } .ar-sidebar .ar-nav svg { display: none; } /* the label alone keeps the header on one row */
   .agent-page { padding: 20px 16px 40px; }
+}
+/* Touch: compact controls keep their look but reach 44px (2.5.5); link buttons grow their hit area without moving. */
+@media (pointer: coarse) {
+  .ar-btn-sm, .ar-btn-icon { min-height: 44px; } .ar-btn-icon { width: 44px; height: 44px; } .ar-seg button { min-height: 40px; }
+  .link-btn { padding: 12px 0; margin: -12px 0; }
 }

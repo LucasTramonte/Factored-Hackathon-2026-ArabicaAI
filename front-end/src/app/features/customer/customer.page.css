@@ -71,3 +71,5 @@
 .status-explanation { margin: 8px 0; padding: 12px; background: var(--surface-sunken); border-radius: var(--radius-md); overflow-wrap: anywhere; }
 .status-explanation p { margin: 4px 0; }
 .status-closing { white-space: pre-wrap; }
+/* The AI help panel is a flex column: its one button keeps its own width instead of stretching to the panel. */
+.customer-assist .ar-btn { align-self: flex-start; }
