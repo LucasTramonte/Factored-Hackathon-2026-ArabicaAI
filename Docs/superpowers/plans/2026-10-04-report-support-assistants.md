@@ -36,6 +36,12 @@ User-approved delivery: execute all six tasks sequentially on `codex/report-supp
 
 Before opening the final PR: Conventional Commit title, type label (plus accessibility for UI work), author assignee, another teammate reviewer, next open version milestone resolved from CONTRIBUTING.md/GitHub. Attach every PR to this chat. Humans review/merge and approve activation. The normal green-main pipeline deploys. Verify the live deployment version and app after every merge; do not manually upload local development assets.
 
+### Execution record (2026-10-04 local / 2026-10-05 UTC)
+
+Tasks 1–5 are implemented with sequential scoped commits and clean spec/quality reviews. For the user-approved efficiency schedule, Task 4's entire evaluation fixture/scorer foundation moved to Task 6 and is authored once; Task 4 retains its UI work. Task 6 offline foundation and ten native Worker/D1 mock journeys are implemented; its separate spec review, combined Task 6 quality/whole-branch review and the final PR are coordinator-owned. Focused checks run per task; one complete backend/frontend/build wave runs concurrently with the fresh strongest whole-branch reviewer after the Task 6 spec gate; this independent reviewer also performs the Task 6 quality gate and inspects final check outputs. Checklists below preserve the original requirements; unchecked live steps have not been performed.
+
+Task 6 evidence: [pilot record](../../Evidence/support-assist-pilot.md), [frozen corpus/scorer](../../../evals/support_assist/README.md). Live provider trials/spending, real human handling-time comparison, production verification and each feature's activation remain pending separate human approval. Both production switches remain off. One final PR covers all six tasks; no per-phase merge stops.
+
 ## Fixed interfaces and limits
 
 These values are proposed release constraints for review with this plan, not measured performance claims.
@@ -119,11 +125,12 @@ These values are proposed release constraints for review with this plan, not mea
 
 ## Task 6 — End-to-end evaluation and controlled activation (phase 3)
 
-**Files:** extend `evals/support_assist/` fixtures/scorer documentation, `Docs/deliverables/EVALUATION.md`, ADR-016, observability runbook; add `Docs/Evidence/support-assist-pilot.md` with aggregate results only.
+**Files:** create the complete `evals/support_assist/` fixtures/scorer foundation originally listed in Task4, `Docs/deliverables/EVALUATION.md`, ADR-016, observability runbook; add `Docs/Evidence/support-assist-pilot.md` with aggregate results only.
 
 **Consumes:** all phase interfaces. **Produces:** a release decision with reproducible evidence; both feature switches remain off until approved.
 
-- [ ] For each feature prepare 30 development cases (10/language) and a separate 60-case acceptance set (20/language), covering the review-focus failures. At least 20 acceptance cases/feature are adversarial or unsupported. Run each acceptance case 3 times with the frozen prompt/model; score all 180 attempts, including timeouts/fallbacks.
+- [x] Prepare and hash 30 development and 60 acceptance synthetic cases per feature (10/20 per ES/PT/EN), ≥20 adversarial/unsupported per feature; implemented once in Task 6. Offline scorer and ten local Worker/D1 mock journeys pass focused checks.
+- [ ] After scope/spending approval and label review, run each acceptance case 3 times with the frozen bundle, score all 180/feature including failures/fallbacks across capped UTC days. Live model results remain pending.
 - [ ] Acceptance: zero cross-customer leaks, unauthorized writes, fabricated case facts or promised financial outcomes in reviewed outputs; every deterministic status answer matches its stored source. At least 90% correct supported classifications overall and at least 85% per language; every unknown/invalid result falls back safely. Require at least 80% of reviewer drafts rated usable with no factual correction, separately reporting unchanged acceptance and edited acceptance. Any safety failure blocks activation.
 - [ ] Proposed performance gate: successful generation p95≤8s and failure/timeout rate≤5%, with all-attempt elapsed distribution reported separately and the 10s hard deadline tested. Phase 1 status target remains the existing <2s request target. Measure actual token usage and unit prices, unknown usage and per-attempt costs; do not substitute extractor timing or cost.
 - [ ] Run at least 10 synthetic two-party journeys covering ES/PT/EN: customer message persisted, waiting state, factual status, reviewer draft edited/sent, human reply observed, explained closure, closed follow-up, provider outage and identity switch. Report first-human-response timing separately from automated answers. Compare human handling time against the same tasks without assist; present this small pilot as descriptive, not causal proof.

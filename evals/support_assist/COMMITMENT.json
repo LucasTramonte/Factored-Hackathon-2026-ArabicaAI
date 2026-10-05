@@ -1,0 +1,11 @@
+{
+  "version": "support-assist-v1@google/gemini-3.5-flash-lite",
+  "frozen_at": "2026-10-05T04:16:28.879288Z",
+  "provenance": "Agent-authored synthetic coverage, authored after transport/UI implementation; not an independent blind benchmark. No provider trials performed.",
+  "sha256": {
+    "development.jsonl": "b9ebd4f94a8697cdb3a66d6c88289e298bcb7d420bb334f68f7c03b48cd5ea50",
+    "acceptance.jsonl": "263af24bba6708d584c7f9aacfbc2056126ad770b0e8a4efa589dc67ebb66a96",
+    "../../back-end/src/modules/intake/assist.js": "72858e826e9f187fcd3f1946d9768c56f06b798543252772c76599b4d3a7f7ad",
+    "../../back-end/src/modules/intake/assist-prompts.js": "127ad29495d1ea30af12e96e6f445f1ce70eedd384c1650bd8ee84c37834f2d6"
+  }
+}
