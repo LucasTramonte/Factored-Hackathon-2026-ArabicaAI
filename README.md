@@ -5,9 +5,9 @@
 <h1 align="center">ArabicaAI · Factored Hackathon 2026</h1>
 
 <p align="center">
-  <a href="https://youtu.be/DyXbzO_Tph4"><img src="https://img.youtube.com/vi/DyXbzO_Tph4/maxresdefault.jpg" alt="ArabicaAI product video" width="720"></a>
+  <a href="https://youtu.be/gui4jGoXYBE"><img src="https://img.youtube.com/vi/gui4jGoXYBE/maxresdefault.jpg" alt="ArabicaAI product video" width="720"></a>
   <br>
-  <a href="https://youtu.be/DyXbzO_Tph4"><strong>Watch the product video (YouTube)</strong></a>
+  <a href="https://youtu.be/gui4jGoXYBE"><strong>Watch the product video (YouTube)</strong></a>
 </p>
 
 <p align="center">Unrecognized-charge intake in Spanish, Portuguese and English.</p>
@@ -22,10 +22,21 @@ Customers report a card charge they don't recognize, confirm their own transacti
 
 The supplied LATAM banking data is synthetic. Its descriptive counts are not measured bank outcomes.
 
+## For judges: how to get in
+
+The [live demo](https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/) has no password. You sign in with a one-time code sent to your email, and **your email must be enrolled first**.
+
+1. Open the [sign-in screen](https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/) and enter your email.
+2. **If you get "This email is not enrolled in the demo"**, choose **"Evaluating this project and have no access? Request it"** just below the form. Enter your email (name and note are optional) and send it.
+3. The team enrols your email and replies to you. Then go back to step 1: a code arrives in your inbox, and you're in.
+
+You'll be signed in on a **fictitious demo customer** whose charges are invented. Nothing in the demo refunds money or blocks a card. From there you can also open the reviewer (agent) view and switch to other demo customers. For the walkthrough, see the [demo runbook](Docs/Plans/intake-demo.md); for how access works, see [auth runbook section 11](Docs/Plans/auth-runbook.md#11-evaluator-access).
+
 ## Quick navigation
 
 | Start here | What you will find |
 |---|---|
+| [For judges: how to get in](#for-judges-how-to-get-in) | Sign in to the live demo, or request access if your email isn't enrolled |
 | [System design](Docs/deliverables/SYSTEM_DESIGN.md) · [Reading guide](Docs/README.md) | The story for evaluators and how it answers the challenge |
 | [Quick guide](#quick-guide) · [Demo runbook](Docs/Plans/intake-demo.md) | Try the service or start a local checkout |
 | [Evaluation](Docs/deliverables/EVALUATION.md) | Authored cases, denominators, leakage controls and limits |
@@ -38,9 +49,7 @@ The supplied LATAM banking data is synthetic. Its descriptive counts are not mea
 
 The repository is private; CI and release links require repository access and show the current GitHub state.
 
-**Try the [live demo](https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/):** customers, agents and evaluators sign in with an email one-time code from Amazon Cognito. Ask the team to enrol your email; see the [auth runbook](Docs/Plans/auth-runbook.md) and [demo runbook](Docs/Plans/intake-demo.md).
-
-> **Evaluators: requesting access.** Judges are assigned at random, so we may not have enrolled your email yet. On the [sign-in screen](https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/), choose **"Evaluating this project and have no access? Request it"**, then enter your email (a name and a note are optional) and send it. The team enrols your email and replies to you, after which you sign in with a one-time code sent to that address. You are enrolled on a **fictitious demo customer**: its charges are invented, the rest of the demo uses the organizers' synthetic dataset, and nothing refunds money or blocks a card. As an evaluator you can also open the reviewer view and switch to other demo customers. Details are in [section 11 of the auth runbook](Docs/Plans/auth-runbook.md#11-evaluator-access).
+**Try the [live demo](https://factored-hackathon-2026-arabicaai.lucas-tramonte.workers.dev/):** customers, agents and evaluators sign in with an email one-time code from Amazon Cognito. Judges who aren't enrolled yet: follow [For judges: how to get in](#for-judges-how-to-get-in).
 
 1. **Customer:** report an unrecognized charge, select your own transaction or choose “I can't find it,” and keep the saved reference.
 2. **Reviewer:** sign in with an enrolled reviewer account to inspect the agent queue and update the review status; see the [demo runbook](Docs/Plans/intake-demo.md) for the walkthrough.
